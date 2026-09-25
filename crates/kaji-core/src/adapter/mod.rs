@@ -1,7 +1,8 @@
 //! Source-format adapters.
 //!
-//! The codegen core only consumes [`crate::Api`]. For now, OpenAPI is adapted
-//! from the compiler's existing Go sidecar output. Replacing that sidecar with
-//! a native Rust OpenAPI parser later will not change generator plugins.
+//! The codegen core only consumes [`crate::Api`]. The native OpenAPI adapter
+//! is the standalone production path; the sidecar reader remains available as
+//! a migration adapter for existing compiler integrations.
 
+pub mod openapi;
 pub mod openapi_sidecar;

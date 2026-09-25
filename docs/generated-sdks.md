@@ -147,7 +147,7 @@ exports, product helpers, or a small wrapper around the generated class.
 
 ## Per-operation documentation
 
-The OpenAPI sidecar preserves request examples under the normalized API model.
-That gives Relevate Docs and future package README generation the same source
-for operation examples. Today, rely on the generated package README plus the
-Docs operation page for the precise request examples.
+Kaji preserves OpenAPI operation metadata and extensions in its normalized
+Rust AST. This gives documentation tooling and future package README generation
+the same source contract as SDK generation. Today, rely on the generated
+package README and the source OpenAPI operation for precise request examples.

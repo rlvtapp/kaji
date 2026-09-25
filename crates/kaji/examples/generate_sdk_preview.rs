@@ -1,37 +1,27 @@
-//! Generates a complete multi-language Kaji SDK preview from sidecar output.
+//! Generates a complete multi-language Kaji SDK preview from an OpenAPI file.
 
 use std::env;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
-use kaji::{ProfileSet, generate_openapi};
+use kaji::{ProfileSet, generate_openapi_file};
 
 fn main() -> Result<()> {
     let mut arguments = env::args_os().skip(1);
-    let sidecar = arguments
+    let openapi = arguments
         .next()
         .map(PathBuf::from)
-        .context("usage: generate_sdk_preview <sidecar-output> <output-dir> [name] [version]")?;
+        .context("usage: generate_sdk_preview <openapi.json|openapi.yaml> <output-dir>")?;
     let output = arguments
         .next()
         .map(PathBuf::from)
-        .context("usage: generate_sdk_preview <sidecar-output> <output-dir> [name] [version]")?;
-    let name = arguments
-        .next()
-        .and_then(|value| value.into_string().ok())
-        .unwrap_or_else(|| "Example API".into());
-    let version = arguments
-        .next()
-        .and_then(|value| value.into_string().ok())
-        .unwrap_or_else(|| "0.1.0".into());
+        .context("usage: generate_sdk_preview <openapi.json|openapi.yaml> <output-dir>")?;
     if arguments.next().is_some() {
-        bail!("usage: generate_sdk_preview <sidecar-output> <output-dir> [name] [version]");
+        bail!("usage: generate_sdk_preview <openapi.json|openapi.yaml> <output-dir>");
     }
 
-    let tree = generate_openapi(
-        &sidecar,
-        name,
-        version,
+    let tree = generate_openapi_file(
+        &openapi,
         ProfileSet::new("sdks")
             .rust()
             .typescript_fetch()

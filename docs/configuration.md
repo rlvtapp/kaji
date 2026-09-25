@@ -1,6 +1,6 @@
 # Configuration reference
 
-`ProfileSet` is the friendly, first-party configuration API. It is a typed
+`ProfileSet` is the first-party configuration API. It is a typed
 Rust builder: there is no JavaScript runtime, config discovery, or hidden
 plugin order. Calling a target method more than once is safe—it only emits one
 package for that target.
@@ -56,7 +56,8 @@ the operation that validates and renders the entire set.
 | `.mock_server_options(...)` | Set the generated mock image and port. |
 | `.build()` | Inspect the underlying `SdkProfile` values for the core Rust/TypeScript targets. It does not render packages and does not include external native plugin targets. |
 
-For normal use, pass the builder directly to `generate` or `generate_openapi`.
+For normal use, pass the builder directly to `generate`, `generate_openapi`,
+or `generate_openapi_file`.
 `build()` is primarily useful to an integration that is composing the
 lower-level core generator itself.
 
@@ -192,6 +193,11 @@ let tree = generate_sdks(
 `kaji::custom(profile)` is a small identity helper for passing an advanced
 `SdkProfile` through code that otherwise works with first-party profiles. It
 does not register a new `ProfileSet` target by itself.
+
+For direct OpenAPI JSON/YAML input at the core layer, use
+`kaji_core::generate_openapi_document_sdks`. The first-party `kaji` crate
+offers `generate_openapi` and `generate_openapi_file` for all maintained
+language targets and should be preferred for multi-language releases.
 
 ## What Kaji does not configure yet
 

@@ -1,11 +1,11 @@
 # Getting started
 
-Kaji is a Rust library today—not a CLI and not a Node package. You give it a
-normalized API model (normally the output of Relevate Docs' existing OpenAPI
-sidecar), select the packages you want, then materialize the returned files.
+Kaji is a Rust library today—not a CLI and not a Node package. It parses an
+OpenAPI 3.0/3.1 JSON or YAML document natively, selects the requested packages,
+and returns the generated files for materialization.
 
-For a friend trying Kaji from this repository, add the two workspace crates to
-their Rust project with paths that point at their clone:
+Until the crates are published, use path dependencies that point at a Kaji
+clone:
 
 ```toml
 [dependencies]
@@ -17,22 +17,20 @@ kaji-core = { path = "../Kaji/crates/kaji-core" }
 Kaji requires Rust 1.85 or newer. The generated SDKs have their own native
 toolchain requirements; see [generated SDKs](generated-sdks.md).
 
-## Generate from the Docs OpenAPI sidecar
+## Generate from an OpenAPI document
 
-This is the usual Relevate integration. Run the Docs compiler's existing Go
-OpenAPI sidecar first, then hand its completed output directory to Kaji.
+`generate_openapi_file` is the normal entry point for a checked-in
+`openapi.yaml` or `openapi.json`. Kaji reads the document directly.
 
 ```rust
 use std::path::Path;
 
 use anyhow::Result;
-use kaji::{ProfileSet, generate_openapi};
+use kaji::{ProfileSet, generate_openapi_file};
 
 fn main() -> Result<()> {
-    let artifacts = generate_openapi(
-        Path::new(".cache/openapi-sidecar"),
-        "Relevate Email",
-        "2026.9.25",
+    let artifacts = generate_openapi_file(
+        Path::new("openapi.yaml"),
         ProfileSet::new("sdk")
             .rust()
             .typescript_fetch()
@@ -68,14 +66,15 @@ generated/
     mock-server/
 ```
 
-`generate_openapi` reads `operations.json`, `operations-order.json`, the
-operation files below `operations/`, optional `schemas.json`, and optional
-`security-schemes.json` from that sidecar directory. It keeps declared
-security, request/response schemas, examples, and Kaji extensions intact.
+`generate_openapi_file` reads JSON or YAML, validates that the document is
+OpenAPI 3.0 or 3.1, and preserves component schemas, request/response media,
+security schemes, OpenAPI extensions, and operation metadata in Kaji's native
+Rust AST. `generate_openapi` accepts the document bytes directly when the spec
+comes from memory, an HTTP response, or another storage system.
 
-## Generate from your own Rust adapter
+## Generate from an existing Rust adapter
 
-If your project already has a `kaji_core::Api`, skip the sidecar:
+If an integration already has a `kaji_core::Api`, pass it directly:
 
 ```rust
 use anyhow::Result;

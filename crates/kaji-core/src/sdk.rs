@@ -212,6 +212,17 @@ pub fn generate_sdks_with_security_catalog(
     Ok(result)
 }
 
+/// Parses a standalone OpenAPI 3.0/3.1 JSON or YAML document and generates
+/// the requested core Rust/TypeScript profiles. First-party multi-language
+/// releases should normally use `kaji::generate_openapi` instead.
+pub fn generate_openapi_document_sdks(
+    document: impl AsRef<[u8]>,
+    profiles: &[SdkProfile],
+) -> Result<GeneratedTree> {
+    let document = crate::adapter::openapi::parse_openapi(document)?;
+    generate_sdks_with_security_catalog(&document.api, profiles, Some(&document.security_schemes))
+}
+
 fn require_one_typescript_transport(profile: &SdkProfile) -> Result<()> {
     if profile.transports.len() != 1
         || !matches!(
@@ -1295,10 +1306,9 @@ fn render_security_types(security_schemes: Option<&SecuritySchemeCatalog>) -> St
     )
 }
 
-/// Loads any completed OpenAPI sidecar output and generates the requested SDK
-/// profiles. This is the production bridge from the existing Go OpenAPI
-/// parser to language-first SDK generation; it contains no API or product
-/// naming assumptions.
+/// Migration adapter: loads completed OpenAPI sidecar output and generates the
+/// requested SDK profiles. New standalone callers should use
+/// [`generate_openapi_document_sdks`] instead.
 pub fn generate_openapi_sdks(
     sidecar_output: &Path,
     name: impl Into<String>,

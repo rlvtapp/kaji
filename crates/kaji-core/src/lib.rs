@@ -13,6 +13,9 @@ pub mod plugins;
 pub mod sdk;
 pub mod semantics;
 
+pub use adapter::openapi::{
+    OpenApiDocument, parse_openapi, parse_openapi_file, parse_openapi_value,
+};
 pub use ast::{
     AdditionalProperties, Api, Discriminator, Field, HttpMethod, OAuthFlow, Operation,
     OperationMediaType, OperationParameter, OperationRequestBody, OperationResponse, Schema,
@@ -37,7 +40,8 @@ pub use mocking::{
 pub use plugin::{CodegenPlugin, GeneratorConfig, generate};
 pub use sdk::{
     SdkClientStyle, SdkLanguage, SdkProfile, SdkStyle, SdkSurface, SdkTransport,
-    generate_openapi_sdks, generate_sdks, generate_sdks_with_security_catalog,
+    generate_openapi_document_sdks, generate_openapi_sdks, generate_sdks,
+    generate_sdks_with_security_catalog,
 };
 pub use semantics::{
     AuthAlternative, AuthScheme, DeclaredError, OperationSemantics, PaginationHint,
