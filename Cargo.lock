@@ -114,6 +114,7 @@ dependencies = [
  "kaji-plugin-php",
  "kaji-plugin-python",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]

@@ -27,7 +27,7 @@ Go, Python, PHP, Java, .NET, and Elixir.
 | `crates/kaji-core` | AST, OpenAPI sidecar adapter, generation engine, SDK and mock primitives |
 | `crates/kaji` | First-party profile builder and standalone mock-server package |
 | `crates/plugins/*` | Native SDK package generators by language |
-| `docs/` | Architecture and contract-mocking notes |
+| `docs/` | Architecture, contract-mocking, and SDK-verification notes |
 
 ## Quick start
 
@@ -64,7 +64,13 @@ language used by a generated SDK. See [docs/mocking.md](docs/mocking.md).
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+# Runs the generated Go/Python SDKs against a local contract mock.
+cargo test -p kaji --test sdk_to_mock_contract -- --ignored
 ```
+
+Generated output is protected by an approved all-target snapshot, and the
+first live SDK contract suite exercises the generated Go and Python clients.
+See [docs/verification.md](docs/verification.md) for the coverage model.
 
 ## Inspiration
 

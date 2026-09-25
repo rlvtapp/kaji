@@ -19,3 +19,5 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      - name: Run generated SDK contract suite
+        run: cargo test -p kaji --test sdk_to_mock_contract -- --ignored
