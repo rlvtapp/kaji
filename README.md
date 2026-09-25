@@ -20,6 +20,16 @@ Go, Python, PHP, Java, .NET, and Elixir.
   every generated SDK can test against one local service.
 - Exposes a small Rust plugin API and a target-neutral AST for new generators.
 
+## Start here
+
+| Read | When you need it |
+| --- | --- |
+| [Getting started](docs/getting-started.md) | Generate packages from the Docs sidecar or a Rust `Api`. |
+| [Configuration reference](docs/configuration.md) | Every target, package, TypeScript, and mock-server option. |
+| [Generated SDKs](docs/generated-sdks.md) | Raw versus full SDK output, client shapes, and language requirements. |
+| [Contract mocking](docs/mocking.md) | Run the Docker mock and add `x-kaji-mock` / pagination behavior. |
+| [SDK verification](docs/verification.md) | Snapshot and live-contract CI coverage. |
+
 ## Workspace
 
 | Path | Purpose |
@@ -49,14 +59,6 @@ let artifacts = generate(
 `artifacts` contains isolated packages per SDK target plus
 `artifacts/mock-server`. Materialize the returned `GeneratedTree` in your
 build pipeline, then run the mock package with Docker Compose.
-
-## Contract mocks
-
-OpenAPI responses provide deterministic happy paths. Add `x-kaji-mock` to an
-operation for named conditional cases—such as rate limits, validation failures,
-or delayed responses. The generated fixtures are static YAML that
-[`httpmock`](https://httpmock.rs/) can run in Docker, independently of the
-language used by a generated SDK. See [docs/mocking.md](docs/mocking.md).
 
 ## Development
 
