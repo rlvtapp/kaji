@@ -1594,7 +1594,7 @@ mod tests {
     }
 
     #[test]
-    fn generated_retry_runtime_compiles_offline() {
+    fn generated_retry_runtime_compiles() {
         let api = Api {
             name: "Compile API".into(),
             version: "1.0.0".into(),
@@ -1764,7 +1764,7 @@ async fn retries_safe_requests_and_only_hooks_the_final_outcome() {
         .unwrap();
 
         let status = Command::new("cargo")
-            .args(["test", "--offline", "--quiet"])
+            .args(["test", "--quiet"])
             .current_dir(temp.path())
             .status()
             .expect("cargo should be available for generated SDK tests");
