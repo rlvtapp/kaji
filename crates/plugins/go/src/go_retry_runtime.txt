@@ -1,0 +1,208 @@
+
+// RetryConfig controls safe retries performed by the generated client.
+// A nil ClientConfig.Retry uses three attempts, a 250ms initial delay, and an
+// 8s maximum delay. Set MaxAttempts to 1 to make requests single-attempt.
+type RetryConfig struct {
+	MaxAttempts  int
+	InitialDelay time.Duration
+	MaxDelay     time.Duration
+}
+
+type retryConfig struct {
+	maxAttempts  int
+	initialDelay time.Duration
+	maxDelay     time.Duration
+}
+
+func normalizeRetry(config *RetryConfig) retryConfig {
+	result := retryConfig{maxAttempts: 3, initialDelay: 250 * time.Millisecond, maxDelay: 8 * time.Second}
+	if config == nil {
+		return result
+	}
+	if config.MaxAttempts > 0 {
+		result.maxAttempts = config.MaxAttempts
+	}
+	if config.InitialDelay > 0 {
+		result.initialDelay = config.InitialDelay
+	}
+	if config.MaxDelay > 0 {
+		result.maxDelay = config.MaxDelay
+	}
+	if result.maxDelay < result.initialDelay {
+		result.maxDelay = result.initialDelay
+	}
+	return result
+}
+
+func canRetry(request *http.Request) bool {
+	switch request.Method {
+	case http.MethodGet, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	case http.MethodPost:
+		return request.Header.Get("Idempotency-Key") != ""
+	default:
+		return false
+	}
+}
+
+func isRetryableStatus(status int) bool {
+	switch status {
+	case http.StatusRequestTimeout, http.StatusTooManyRequests, http.StatusInternalServerError,
+		http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return true
+	default:
+		return false
+	}
+}
+
+func (config retryConfig) delay(response *http.Response, attempt int) time.Duration {
+	if response != nil {
+		if retryAfter, ok := parseRetryAfter(response.Header.Get("Retry-After")); ok {
+			return retryAfter
+		}
+	}
+	delay := config.initialDelay
+	for retry := 1; retry < attempt && delay < config.maxDelay; retry++ {
+		if delay > config.maxDelay/2 {
+			return config.maxDelay
+		}
+		delay *= 2
+	}
+	return delay
+}
+
+func parseRetryAfter(value string) (time.Duration, bool) {
+	if seconds, err := strconv.Atoi(strings.TrimSpace(value)); err == nil && seconds >= 0 {
+		return time.Duration(seconds) * time.Second, true
+	}
+	if when, err := http.ParseTime(value); err == nil {
+		if delay := time.Until(when); delay > 0 {
+			return delay, true
+		}
+	}
+	return 0, false
+}
+
+func waitForRetry(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+func replayRequest(request *http.Request) (*http.Request, error) {
+	retry := request.Clone(request.Context())
+	if request.GetBody == nil {
+		if request.Body == nil || request.Body == http.NoBody {
+			return retry, nil
+		}
+		return nil, fmt.Errorf("kaji: cannot retry a request whose body cannot be replayed")
+	}
+	body, err := request.GetBody()
+	if err != nil {
+		return nil, fmt.Errorf("kaji: replay request body: %w", err)
+	}
+	retry.Body = body
+	return retry, nil
+}
+
+func (client *Client) doWithRetry(request *http.Request, destination any) error {
+	retryAllowed := canRetry(request)
+	for attempt := 1; ; attempt++ {
+		response, err := client.httpClient.Do(request)
+		if err != nil {
+			if !retryAllowed || attempt >= client.retry.maxAttempts || request.Context().Err() != nil {
+				return fmt.Errorf("kaji: execute request: %w", err)
+			}
+			if err := waitForRetry(request.Context(), client.retry.delay(nil, attempt)); err != nil {
+				return fmt.Errorf("kaji: execute request: %w", err)
+			}
+			request, err = replayRequest(request)
+			if err != nil {
+				return err
+			}
+			continue
+		}
+
+		if response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {
+			defer response.Body.Close()
+			if destination == nil || response.StatusCode == http.StatusNoContent {
+				return nil
+			}
+			if bytesDestination, ok := destination.(*[]byte); ok {
+				body, err := io.ReadAll(response.Body)
+				if err != nil { return fmt.Errorf("kaji: read binary response: %w", err) }
+				*bytesDestination = body
+				return nil
+			}
+			if textDestination, ok := destination.(*string); ok {
+				body, err := io.ReadAll(response.Body)
+				if err != nil { return fmt.Errorf("kaji: read text response: %w", err) }
+				*textDestination = string(body)
+				return nil
+			}
+			if err := json.NewDecoder(response.Body).Decode(destination); err != nil && err != io.EOF {
+				return fmt.Errorf("kaji: decode response: %w", err)
+			}
+			return nil
+		}
+
+		if retryAllowed && isRetryableStatus(response.StatusCode) && attempt < client.retry.maxAttempts {
+			delay := client.retry.delay(response, attempt)
+			response.Body.Close()
+			if err := waitForRetry(request.Context(), delay); err != nil {
+				return fmt.Errorf("kaji: execute request: %w", err)
+			}
+			request, err = replayRequest(request)
+			if err != nil {
+				return err
+			}
+			continue
+		}
+
+		body, _ := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+		response.Body.Close()
+		return &kajiAPIError{StatusCode: response.StatusCode, Body: body, ContentType: response.Header.Get("Content-Type")}
+	}
+}
+
+// stream returns an open Server-Sent Events response body. Callers must close it.
+// It uses the same retry policy before the stream is established; once bytes are
+// flowing, reconnect policy belongs to the consuming application.
+func (client *Client) stream(request *http.Request) (io.ReadCloser, error) {
+	retryAllowed := canRetry(request)
+	for attempt := 1; ; attempt++ {
+		response, err := client.httpClient.Do(request)
+		if err != nil {
+			if !retryAllowed || attempt >= client.retry.maxAttempts || request.Context().Err() != nil {
+				return nil, fmt.Errorf("kaji: execute request: %w", err)
+			}
+			if err := waitForRetry(request.Context(), client.retry.delay(nil, attempt)); err != nil {
+				return nil, fmt.Errorf("kaji: execute request: %w", err)
+			}
+			request, err = replayRequest(request)
+			if err != nil { return nil, err }
+			continue
+		}
+		if response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {
+			return response.Body, nil
+		}
+		if retryAllowed && isRetryableStatus(response.StatusCode) && attempt < client.retry.maxAttempts {
+			delay := client.retry.delay(response, attempt)
+			response.Body.Close()
+			if err := waitForRetry(request.Context(), delay); err != nil {
+				return nil, fmt.Errorf("kaji: execute request: %w", err)
+			}
+			request, err = replayRequest(request)
+			if err != nil { return nil, err }
+			continue
+		}
+		body, _ := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+		response.Body.Close()
+		return nil, &kajiAPIError{StatusCode: response.StatusCode, Body: body, ContentType: response.Header.Get("Content-Type")}
+	}
+}

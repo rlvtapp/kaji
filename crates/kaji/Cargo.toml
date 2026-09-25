@@ -1,0 +1,22 @@
+[package]
+name = "kaji"
+version = "0.1.0"
+edition = "2024"
+description = "Multi-language OpenAPI SDK generation profiles"
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+anyhow = "1.0.102"
+kaji-core = { path = "../kaji-core" }
+kaji-plugin-go = { path = "../plugins/go" }
+kaji-plugin-python = { path = "../plugins/python" }
+kaji-plugin-php = { path = "../plugins/php" }
+kaji-plugin-java = { path = "../plugins/java" }
+kaji-plugin-dotnet = { path = "../plugins/dotnet" }
+kaji-plugin-elixir = { path = "../plugins/elixir" }
+
+[dev-dependencies]
+serde_json = "1.0.138"
