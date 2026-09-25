@@ -1594,6 +1594,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "builds a generated SDK in a nested Cargo workspace; run in release verification"]
     fn generated_retry_runtime_compiles_offline() {
         let api = Api {
             name: "Compile API".into(),
