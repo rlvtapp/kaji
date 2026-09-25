@@ -1,0 +1,30 @@
+{
+  "name": "kaji",
+  "version": "0.0.0",
+  "description": "Future compatibility facade for @relevate/kaji.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rlvtapp/kaji.git"
+  },
+  "homepage": "https://github.com/rlvtapp/kaji#readme",
+  "bugs": {
+    "url": "https://github.com/rlvtapp/kaji/issues"
+  },
+  "keywords": [
+    "openapi",
+    "sdk",
+    "codegen",
+    "kaji"
+  ],
+  "files": [
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
