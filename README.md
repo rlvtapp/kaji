@@ -1,9 +1,10 @@
 # Kaji
 
-Kaji is a Rust-native OpenAPI toolkit for generating polished, idiomatic SDKs
-and contract mocks. It parses OpenAPI 3.0/3.1 JSON and YAML directly, keeps the
-generator core independent of JavaScript, and lets one API contract produce
-packages for Rust, TypeScript, Go, Python, PHP, Java, .NET, and Elixir.
+Kaji is a Rust SDK-generation toolkit for producing polished, idiomatic SDKs
+and contract mocks. It embeds its OpenAPI 3.0/3.1 compiler as Go source under
+`openapi/`, keeps generation independent of JavaScript, and lets one API
+contract produce packages for Rust, TypeScript, Go, Python, PHP, Java, .NET,
+and Elixir.
 
 > Kaji is pre-1.0. The public workspace is ready for collaboration; package
 > publication and the stable configuration format are intentionally still in
@@ -24,7 +25,8 @@ packages for Rust, TypeScript, Go, Python, PHP, Java, .NET, and Elixir.
 
 | Read | When you need it |
 | --- | --- |
-| [Getting started](docs/getting-started.md) | Generate packages from an OpenAPI document or a Rust `Api`. |
+| [Getting started](docs/getting-started.md) | Compile an OpenAPI document and generate packages. |
+| [OpenAPI compiler](docs/openapi-compiler.md) | The embedded Go compiler, artifacts, and standalone command. |
 | [Configuration reference](docs/configuration.md) | Every target, package, TypeScript, and mock-server option. |
 | [Generated SDKs](docs/generated-sdks.md) | Raw versus full SDK output, client shapes, and language requirements. |
 | [Contract mocking](docs/mocking.md) | Run the Docker mock and add `x-kaji-mock` / pagination behavior. |
@@ -34,20 +36,32 @@ packages for Rust, TypeScript, Go, Python, PHP, Java, .NET, and Elixir.
 
 | Path | Purpose |
 | --- | --- |
-| `crates/kaji-core` | AST, native OpenAPI adapter, generation engine, SDK and mock primitives |
+| `openapi/` | Embedded Go OpenAPI compiler and its conformance tests |
+| `crates/kaji-core` | AST, artifact adapter, generation engine, SDK and mock primitives |
 | `crates/kaji` | First-party profile builder and standalone mock-server package |
 | `crates/plugins/*` | Native SDK package generators by language |
 | `docs/` | Architecture, contract-mocking, and SDK-verification notes |
 
 ## Quick start
 
+First compile the source document into Kaji artifacts:
+
+```sh
+cd openapi
+go run . --out ../.kaji/openapi ../openapi.yaml
+```
+
+Then generate the requested packages from Rust:
+
 ```rust
 use anyhow::Result;
-use kaji::{ProfileSet, generate_openapi_file};
+use kaji::{ProfileSet, generate_openapi};
 
 fn main() -> Result<()> {
-    let artifacts = generate_openapi_file(
-        "openapi.yaml",
+    let artifacts = generate_openapi(
+        std::path::Path::new(".kaji/openapi"),
+        "Example API",
+        "1.0.0",
         ProfileSet::new("artifacts")
             .rust()
             .typescript_fetch()
@@ -59,8 +73,8 @@ fn main() -> Result<()> {
 }
 ```
 
-This writes isolated packages below `generated/artifacts`, including
-`generated/artifacts/mock-server`. Run the mock package with Docker Compose.
+The Rust call then writes isolated packages below `generated/artifacts`,
+including `generated/artifacts/mock-server`.
 
 ## Development
 

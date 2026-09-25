@@ -147,7 +147,8 @@ exports, product helpers, or a small wrapper around the generated class.
 
 ## Per-operation documentation
 
-Kaji preserves OpenAPI operation metadata and extensions in its normalized
-Rust AST. This gives documentation tooling and future package README generation
-the same source contract as SDK generation. Today, rely on the generated
-package README and the source OpenAPI operation for precise request examples.
+The embedded compiler preserves OpenAPI operation metadata and extensions in
+Kaji's normalized Rust AST. This gives documentation tooling and future package
+README generation the same source contract as SDK generation. Today, rely on
+the generated package README and the source OpenAPI operation for precise
+request examples.

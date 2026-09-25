@@ -4,3 +4,8 @@
 *.swp
 .idea/
 .vscode/
+
+# Generated while building the embedded Go OpenAPI compiler.
+/openapi/.build/
+/openapi/.gocache/
+/openapi/.gomodcache/

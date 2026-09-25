@@ -17,7 +17,7 @@ use kaji_plugin_go::generate_go_sdk_with_style;
 use kaji_plugin_java::generate_java_sdk_with_style;
 use kaji_plugin_php::generate_php_sdk_with_style;
 use kaji_plugin_python::generate_python_sdk_with_style;
-use std::{fs, path::Path};
+use std::path::Path;
 
 mod mock_server;
 
@@ -436,41 +436,23 @@ fn typescript_style_guide(api: &Api, options: &TypeScriptOptions) -> String {
     )
 }
 
-/// Parses an OpenAPI 3.0/3.1 JSON or YAML document with Kaji's native Rust
-/// adapter and generates all selected SDK packages.
-pub fn generate_openapi(document: impl AsRef<[u8]>, profiles: ProfileSet) -> Result<GeneratedTree> {
-    let document = kaji_core::parse_openapi(document)?;
-    generate_with_security_catalog(&document.api, profiles, Some(&document.security_schemes))
-}
-
-/// Reads a standalone OpenAPI JSON or YAML file, then generates all selected
-/// SDK packages. This is the preferred filesystem entry point for integrations.
-pub fn generate_openapi_file(
-    path: impl AsRef<Path>,
-    profiles: ProfileSet,
-) -> Result<GeneratedTree> {
-    let path = path.as_ref();
-    generate_openapi(fs::read(path).map_err(anyhow::Error::from)?, profiles)
-}
-
-/// Migration adapter for callers that still have completed compiler-sidecar
-/// output. New standalone integrations should use [`generate_openapi`] or
-/// [`generate_openapi_file`] instead.
-pub fn generate_openapi_sidecar(
-    sidecar_output: &Path,
+/// Generates all selected SDK packages from artifacts emitted by Kaji's
+/// embedded Go OpenAPI compiler (`openapi/`).
+pub fn generate_openapi(
+    compiler_output: &Path,
     name: impl Into<String>,
     version: impl Into<String>,
     profiles: ProfileSet,
 ) -> Result<GeneratedTree> {
     let api = kaji_core::adapter::openapi_sidecar::load_operations(
-        sidecar_output,
+        compiler_output,
         name.into(),
         version.into(),
     )?;
-    let security_schemes_path = sidecar_output.join("security-schemes.json");
+    let security_schemes_path = compiler_output.join("security-schemes.json");
     let security_schemes = security_schemes_path
         .exists()
-        .then(|| kaji_core::adapter::openapi_sidecar::load_security_schemes(sidecar_output))
+        .then(|| kaji_core::adapter::openapi_sidecar::load_security_schemes(compiler_output))
         .transpose()?;
     generate_with_security_catalog(&api, profiles, security_schemes.as_ref())
 }
@@ -633,27 +615,5 @@ mod tests {
     #[test]
     fn an_empty_target_set_is_rejected() {
         assert!(ProfileSet::new("sdks").build().is_err());
-    }
-
-    #[test]
-    fn standalone_openapi_json_generates_without_a_sidecar() {
-        let document = br##"{
-          "openapi": "3.1.0",
-          "info": { "title": "Standalone API", "version": "1.0.0" },
-          "paths": {
-            "/health": {
-              "get": {
-                "operationId": "health",
-                "responses": { "200": { "description": "healthy" } }
-              }
-            }
-          }
-        }"##;
-        let tree = generate_openapi(document, ProfileSet::new("sdk").typescript_fetch()).unwrap();
-        assert!(
-            tree.get("sdk/typescript-fetch/client.ts")
-                .unwrap()
-                .contains("health")
-        );
     }
 }

@@ -1,8 +1,8 @@
 # Getting started
 
-Kaji is a Rust library today—not a CLI and not a Node package. It parses an
-OpenAPI 3.0/3.1 JSON or YAML document natively, selects the requested packages,
-and returns the generated files for materialization.
+Kaji has two local pieces: the embedded Go OpenAPI compiler in `openapi/`, and
+the Rust SDK generator crates. Compile an OpenAPI 3.0/3.1 JSON or YAML document
+into Kaji artifacts, select packages, then materialize the generated files.
 
 Until the crates are published, use path dependencies that point at a Kaji
 clone:
@@ -17,20 +17,33 @@ kaji-core = { path = "../Kaji/crates/kaji-core" }
 Kaji requires Rust 1.85 or newer. The generated SDKs have their own native
 toolchain requirements; see [generated SDKs](generated-sdks.md).
 
-## Generate from an OpenAPI document
+## Compile an OpenAPI document
 
-`generate_openapi_file` is the normal entry point for a checked-in
-`openapi.yaml` or `openapi.json`. Kaji reads the document directly.
+The checked-in Go module is Kaji's OpenAPI compiler. Run it from the repository
+root; it accepts JSON or YAML and writes a deterministic artifact directory.
+
+```sh
+cd openapi
+go run . --out ../.kaji/openapi ../openapi.yaml
+```
+
+The output contains normalized operation documents, component schemas, and
+security scheme metadata. It is an internal Kaji boundary, not a dependency on
+Relevate Docs or another repository.
+
+## Generate SDK packages
 
 ```rust
 use std::path::Path;
 
 use anyhow::Result;
-use kaji::{ProfileSet, generate_openapi_file};
+use kaji::{ProfileSet, generate_openapi};
 
 fn main() -> Result<()> {
-    let artifacts = generate_openapi_file(
-        Path::new("openapi.yaml"),
+    let artifacts = generate_openapi(
+        Path::new(".kaji/openapi"),
+        "Relevate Email",
+        "2026.9.25",
         ProfileSet::new("sdk")
             .rust()
             .typescript_fetch()
@@ -66,11 +79,9 @@ generated/
     mock-server/
 ```
 
-`generate_openapi_file` reads JSON or YAML, validates that the document is
-OpenAPI 3.0 or 3.1, and preserves component schemas, request/response media,
-security schemes, OpenAPI extensions, and operation metadata in Kaji's native
-Rust AST. `generate_openapi` accepts the document bytes directly when the spec
-comes from memory, an HTTP response, or another storage system.
+`generate_openapi` reads the local compiler artifacts. It preserves component
+schemas, request/response media, security schemes, examples, extensions, and
+operation metadata in Kaji's Rust AST without requiring a Go service at runtime.
 
 ## Generate from an existing Rust adapter
 

@@ -212,17 +212,6 @@ pub fn generate_sdks_with_security_catalog(
     Ok(result)
 }
 
-/// Parses a standalone OpenAPI 3.0/3.1 JSON or YAML document and generates
-/// the requested core Rust/TypeScript profiles. First-party multi-language
-/// releases should normally use `kaji::generate_openapi` instead.
-pub fn generate_openapi_document_sdks(
-    document: impl AsRef<[u8]>,
-    profiles: &[SdkProfile],
-) -> Result<GeneratedTree> {
-    let document = crate::adapter::openapi::parse_openapi(document)?;
-    generate_sdks_with_security_catalog(&document.api, profiles, Some(&document.security_schemes))
-}
-
 fn require_one_typescript_transport(profile: &SdkProfile) -> Result<()> {
     if profile.transports.len() != 1
         || !matches!(
