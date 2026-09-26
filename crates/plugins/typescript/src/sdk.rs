@@ -1,40 +1,19 @@
-//! Language-first SDK generation profiles.
-//!
-//! This layer deliberately has no product-specific knowledge. Any caller that
-//! has normalized an OpenAPI document into [`Api`] can request one or more
-//! SDKs. A product API is only an input document
-//! plus a set of profiles.
-
+//! TypeScript SDK layout, runtime, facade and typed renderer options.
+use crate::clients::{StructuredTypeScriptAxios, StructuredTypeScriptFetch};
+use crate::models::StructuredTypeScriptModels;
+use crate::render::{TypeScriptAxios, TypeScriptFetch, TypeScriptModels, TypeScriptPackage};
 use anyhow::{Result, bail};
+use kaji_core::{
+    Api, CodegenPlugin, GeneratedFile, GeneratedTree, GeneratorConfig, Operation, SdkClientStyle,
+    SecuritySchemeCatalog, generate,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
-use std::path::Path;
-
-use crate::plugins::rust::{RustModels, RustPackage, RustReqwest};
-use crate::plugins::typescript::{
-    TypeScriptAxios, TypeScriptFetch, TypeScriptModels, TypeScriptPackage,
-};
-use crate::plugins::typescript_clients::{StructuredTypeScriptAxios, StructuredTypeScriptFetch};
-use crate::plugins::typescript_models::StructuredTypeScriptModels;
-use crate::{
-    Api, CodegenPlugin, GeneratedFile, GeneratedTree, GeneratorConfig, Operation,
-    SecuritySchemeCatalog, generate,
-};
-
-/// Stable SDK languages exposed by the Rust-native generation API.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SdkLanguage {
-    Rust,
-    TypeScript,
-}
-
 /// A transport implementation selected within one language profile.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SdkTransport {
-    Reqwest,
     Fetch,
     Axios,
 }
@@ -62,21 +41,6 @@ pub enum SdkSurface {
     Client,
 }
 
-/// Public instantiated-client layout. TypeScript retains direct function
-/// exports in both modes; native language plugins use the same choice to emit
-/// either their flat idiomatic client or a resource-namespaced facade.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SdkClientStyle {
-    /// `client.createMessage(...)` (or its native-language equivalent).
-    Flat,
-    /// `client.messages.create(...)` (or its native-language equivalent),
-    /// using OpenAPI tags first and stable path-derived namespaces when a spec
-    /// has no tags.
-    #[default]
-    Namespaced,
-}
-
 /// One independently generated SDK package.
 ///
 /// `output_dir` is mandatory so multiple language targets can be generated
@@ -85,7 +49,6 @@ pub enum SdkClientStyle {
 /// runtime to generation.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SdkProfile {
-    pub language: SdkLanguage,
     pub output_dir: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub package_name: Option<String>,
@@ -113,23 +76,8 @@ fn default_group_by_tag() -> bool {
 }
 
 impl SdkProfile {
-    pub fn rust(output_dir: impl Into<String>) -> Self {
-        Self {
-            language: SdkLanguage::Rust,
-            output_dir: output_dir.into(),
-            package_name: None,
-            client_name: None,
-            client_style: SdkClientStyle::Namespaced,
-            transports: vec![SdkTransport::Reqwest],
-            style: SdkStyle::Native,
-            surface: SdkSurface::Client,
-            group_by_tag: false,
-        }
-    }
-
     pub fn typescript(output_dir: impl Into<String>) -> Self {
         Self {
-            language: SdkLanguage::TypeScript,
             output_dir: output_dir.into(),
             package_name: None,
             client_name: None,
@@ -142,76 +90,35 @@ impl SdkProfile {
     }
 }
 
-/// Generates every requested SDK from a single language-neutral API model.
-pub fn generate_sdks(api: &Api, profiles: &[SdkProfile]) -> Result<GeneratedTree> {
-    generate_sdks_with_security_catalog(api, profiles, None)
-}
-
-/// Generates SDK packages with the optional reusable OpenAPI security-scheme
-/// catalog.  The catalog is intentionally a separate argument: callers with
-/// a pre-existing `Api` retain the exact historical output, while the Docs
-/// Compiler sidecar can opt into named, per-operation credentials.
-pub fn generate_sdks_with_security_catalog(
+/// Generates a TypeScript package using the maintained renderer family.
+pub fn generate_sdk(
     api: &Api,
-    profiles: &[SdkProfile],
+    profile: &SdkProfile,
     security_schemes: Option<&SecuritySchemeCatalog>,
 ) -> Result<GeneratedTree> {
-    let mut result = GeneratedTree::default();
-    for profile in profiles {
-        let config = profile_config(profile)?;
-        let tree = match profile.language {
-            SdkLanguage::Rust => {
-                require_exact_transports(profile, &[SdkTransport::Reqwest])?;
-                let models = RustModels;
-                let client = RustReqwest;
-                let package = RustPackage;
-                generate(
-                    api,
-                    &[
-                        (&models, config.clone()),
-                        (&client, config.clone()),
-                        (&package, config),
-                    ],
-                )?
-            }
-            SdkLanguage::TypeScript => {
-                if profile.transports.is_empty() {
-                    bail!("TypeScript SDK profiles need at least one transport")
-                }
-                if profile
-                    .transports
-                    .iter()
-                    .any(|transport| matches!(transport, SdkTransport::Reqwest))
-                {
-                    bail!("Reqwest is only available for Rust SDK profiles")
-                }
-                if profile.style == SdkStyle::Structured {
-                    require_one_typescript_transport(profile)?;
-                    generate_structured_typescript_sdk(api, profile, config, security_schemes)?
-                } else {
-                    let models = TypeScriptModels;
-                    let package = TypeScriptPackage;
-                    let fetch = TypeScriptFetch;
-                    let axios = TypeScriptAxios;
-                    let mut plugins: Vec<(&dyn CodegenPlugin, GeneratorConfig)> =
-                        vec![(&models, config.clone()), (&package, config.clone())];
-                    if profile.transports.contains(&SdkTransport::Fetch) {
-                        plugins.push((&fetch, config.clone()));
-                    }
-                    if profile.transports.contains(&SdkTransport::Axios) {
-                        plugins.push((&axios, config));
-                    }
-                    generate(api, &plugins)?
-                }
-            }
-        };
-        for (path, contents) in tree.iter() {
-            result.insert(GeneratedFile::new(path, contents)?)?;
-        }
+    let config = profile_config(profile)?;
+    if profile.transports.is_empty() {
+        bail!("TypeScript SDK profiles need at least one transport");
     }
-    Ok(result)
+    if profile.style == SdkStyle::Structured {
+        require_one_typescript_transport(profile)?;
+        generate_structured_typescript_sdk(api, profile, config, security_schemes)
+    } else {
+        let models = TypeScriptModels;
+        let package = TypeScriptPackage;
+        let fetch = TypeScriptFetch;
+        let axios = TypeScriptAxios;
+        let mut plugins: Vec<(&dyn CodegenPlugin, GeneratorConfig)> =
+            vec![(&models, config.clone()), (&package, config.clone())];
+        if profile.transports.contains(&SdkTransport::Fetch) {
+            plugins.push((&fetch, config.clone()));
+        }
+        if profile.transports.contains(&SdkTransport::Axios) {
+            plugins.push((&axios, config));
+        }
+        generate(api, &plugins)
+    }
 }
-
 fn require_one_typescript_transport(profile: &SdkProfile) -> Result<()> {
     if profile.transports.len() != 1
         || !matches!(
@@ -272,7 +179,6 @@ fn generate_structured_typescript_sdk(
             || axios.generate(&sdk_api, &config),
             |catalog| axios.generate_with_named_security_catalog(&sdk_api, &config, catalog),
         ),
-        SdkTransport::Reqwest => unreachable!("validated above"),
     }?;
     for file in client_files {
         tree.insert(file)?;
@@ -309,7 +215,11 @@ fn generate_structured_typescript_sdk(
     )?)?;
     tree.insert(GeneratedFile::new(
         format!("{root}/package.json"),
-        kaji_package(&sdk_api, profile.transports[0])?,
+        kaji_package(
+            &sdk_api,
+            profile.transports[0],
+            profile.package_name.as_deref(),
+        )?,
     )?)?;
     tree.insert(GeneratedFile::new(
         format!("{root}/README.md"),
@@ -885,11 +795,11 @@ fn sdk_client_name(api_name: &str) -> String {
     }
 }
 
-fn operation_tag_directory(operation: &crate::Operation) -> String {
+fn operation_tag_directory(operation: &Operation) -> String {
     sdk_namespace(operation)
 }
 
-fn operation_tag_directory_if_present(operation: &crate::Operation) -> Option<String> {
+fn operation_tag_directory_if_present(operation: &Operation) -> Option<String> {
     operation
         .annotations
         .get("tags")
@@ -900,8 +810,10 @@ fn operation_tag_directory_if_present(operation: &crate::Operation) -> Option<St
         .filter(|tag| !tag.is_empty())
 }
 
-fn kaji_package(api: &Api, transport: SdkTransport) -> Result<String> {
-    let package_name = kaji_package_name(api, transport);
+fn kaji_package(api: &Api, transport: SdkTransport, name: Option<&str>) -> Result<String> {
+    let package_name = name
+        .map(str::to_owned)
+        .unwrap_or_else(|| kaji_package_name(api, transport));
     let mut package = serde_json::json!({
         "name": package_name,
         "version": package_version(&api.version),
@@ -925,13 +837,15 @@ fn kaji_package_name(api: &Api, transport: SdkTransport) -> String {
         match transport {
             SdkTransport::Fetch => "fetch",
             SdkTransport::Axios => "axios",
-            SdkTransport::Reqwest => unreachable!(),
         }
     )
 }
 
 fn kaji_readme(api: &Api, profile: &SdkProfile) -> String {
-    let package_name = kaji_package_name(api, profile.transports[0]);
+    let package_name = profile
+        .package_name
+        .clone()
+        .unwrap_or_else(|| kaji_package_name(api, profile.transports[0]));
     let client_name = profile
         .client_name
         .clone()
@@ -1269,7 +1183,6 @@ export const withUnwrap = <T>(promise: Promise<T>): Unwrappable<T> => Object.ass
 "#
             )
         }
-        SdkTransport::Reqwest => unreachable!("not a TypeScript transport"),
     }
 }
 
@@ -1293,28 +1206,6 @@ fn render_security_types(security_schemes: Option<&SecuritySchemeCatalog>) -> St
     format!(
         "export interface SecurityCredentials {{\n{fields}\n}}\nexport type SecurityDescriptor = {{ id?: string; type: 'apiKey' | 'http' | 'oauth2'; name?: string; in?: 'header' | 'query' | 'cookie'; scheme?: string; scopes?: string[] }}\nexport class ApiError extends Error {{\n  constructor(public readonly status: number, public readonly body: unknown) {{ super(`Request failed: ${{status}}`) }}\n}}"
     )
-}
-
-/// Migration adapter: loads completed OpenAPI sidecar output and generates the
-/// requested SDK profiles. New standalone callers should use
-/// [`generate_openapi_document_sdks`] instead.
-pub fn generate_openapi_sdks(
-    sidecar_output: &Path,
-    name: impl Into<String>,
-    version: impl Into<String>,
-    profiles: &[SdkProfile],
-) -> Result<GeneratedTree> {
-    let api = crate::adapter::openapi_sidecar::load_operations(
-        sidecar_output,
-        name.into(),
-        version.into(),
-    )?;
-    let security_schemes_path = sidecar_output.join("security-schemes.json");
-    let security_schemes = security_schemes_path
-        .exists()
-        .then(|| crate::adapter::openapi_sidecar::load_security_schemes(sidecar_output))
-        .transpose()?;
-    generate_sdks_with_security_catalog(&api, profiles, security_schemes.as_ref())
 }
 
 fn pascal_identifier(value: &str) -> String {
@@ -1395,10 +1286,9 @@ fn profile_config(profile: &SdkProfile) -> Result<GeneratorConfig> {
     let clients = profile
         .transports
         .iter()
-        .filter_map(|transport| match transport {
-            SdkTransport::Fetch => Some("fetch"),
-            SdkTransport::Axios => Some("axios"),
-            SdkTransport::Reqwest => None,
+        .map(|transport| match transport {
+            SdkTransport::Fetch => "fetch",
+            SdkTransport::Axios => "axios",
         })
         .collect::<Vec<_>>();
     if !clients.is_empty() {
@@ -1407,28 +1297,13 @@ fn profile_config(profile: &SdkProfile) -> Result<GeneratorConfig> {
     Ok(config)
 }
 
-fn require_exact_transports(profile: &SdkProfile, allowed: &[SdkTransport]) -> Result<()> {
-    if profile.transports.is_empty()
-        || profile
-            .transports
-            .iter()
-            .any(|transport| !allowed.contains(transport))
-    {
-        bail!("Rust SDK profiles currently support the reqwest transport")
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
-    use std::fs;
-
     use super::*;
-    use crate::{
-        HttpMethod, Operation, OperationMediaType, OperationRequestBody, Schema, SchemaKind,
-        SchemaValue, SecurityRequirement, SecurityScheme, SecuritySchemeKind,
+    use kaji_core::{
+        HttpMethod, OperationMediaType, OperationRequestBody, SecurityRequirement, SecurityScheme,
+        SecuritySchemeKind,
     };
-
     #[test]
     fn structured_typescript_sdk_uses_named_catalog_credentials() {
         let api = Api {
@@ -1457,9 +1332,9 @@ mod tests {
             }],
         };
 
-        let tree = generate_sdks_with_security_catalog(
+        let tree = generate_sdk(
             &api,
-            &[SdkProfile::typescript("sdk/typescript")],
+            &SdkProfile::typescript("sdk/typescript"),
             Some(&catalog),
         )
         .unwrap();
@@ -1630,97 +1505,6 @@ mod tests {
             panic!("URL pagination should be recognized")
         };
         assert_eq!(pagination.next_url_path, "$.links.next");
-    }
-
-    #[test]
-    fn one_openapi_model_generates_isolated_rust_and_typescript_sdks() {
-        let api = Api {
-            name: "Example API".into(),
-            version: "1.0.0".into(),
-            schemas: vec![Schema::new("Message", SchemaValue::new(SchemaKind::String))],
-            operations: vec![Operation {
-                id: "sendMessage".into(),
-                method: HttpMethod::Post,
-                path: "/messages".into(),
-                response_type: "Message".into(),
-                request_type: Some("Message".into()),
-                ..Operation::default()
-            }],
-            ..Api::default()
-        };
-        let tree = generate_sdks(
-            &api,
-            &[
-                SdkProfile::rust("sdk/rust"),
-                SdkProfile {
-                    transports: vec![SdkTransport::Fetch, SdkTransport::Axios],
-                    style: SdkStyle::Native,
-                    ..SdkProfile::typescript("sdk/typescript")
-                },
-            ],
-        )
-        .unwrap();
-        assert!(tree.get("sdk/rust/src/client.rs").is_some());
-        assert!(tree.get("sdk/typescript/fetch.ts").is_some());
-        assert!(tree.get("sdk/typescript/axios.ts").is_some());
-        assert!(tree.get("sdk/typescript/package.json").is_some());
-    }
-
-    #[test]
-    fn profiles_reject_a_transport_for_the_wrong_language() {
-        let error = generate_sdks(
-            &Api::default(),
-            &[SdkProfile {
-                language: SdkLanguage::Rust,
-                output_dir: "sdk/rust".into(),
-                package_name: None,
-                client_name: None,
-                client_style: SdkClientStyle::Flat,
-                surface: SdkSurface::Raw,
-                transports: vec![SdkTransport::Fetch],
-                style: SdkStyle::Native,
-                group_by_tag: false,
-            }],
-        )
-        .unwrap_err();
-        assert!(error.to_string().contains("reqwest"));
-    }
-
-    #[test]
-    fn sidecar_openapi_output_uses_the_same_language_profiles() {
-        let directory = tempfile::tempdir().unwrap();
-        fs::write(
-            directory.path().join("operations.json"),
-            r#"{"GET /messages":"get_messages.json"}"#,
-        )
-        .unwrap();
-        fs::write(
-            directory.path().join("operations-order.json"),
-            r#"["GET /messages"]"#,
-        )
-        .unwrap();
-        fs::create_dir(directory.path().join("operations")).unwrap();
-        fs::write(
-            directory.path().join("operations/get_messages.json"),
-            r#"{"path":"/messages","method":"GET","responses":[]}"#,
-        )
-        .unwrap();
-        let tree = generate_openapi_sdks(
-            directory.path(),
-            "Any API",
-            "1.0.0",
-            &[SdkProfile::typescript("sdk/typescript")],
-        )
-        .unwrap();
-        assert!(
-            tree.get("sdk/typescript/clients/messages/getMessages.ts")
-                .is_some()
-        );
-        let client = tree.get("sdk/typescript/client.ts").unwrap();
-        assert!(client.contains("export class Any"));
-        assert!(client.contains("class MessagesClient"));
-        assert!(client.contains("readonly get: typeof getMessages"));
-        assert!(!client.contains("bind()"));
     }
 
     #[test]

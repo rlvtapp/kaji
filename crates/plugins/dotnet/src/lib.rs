@@ -1368,3 +1368,6 @@ mod tests {
         assert!(client.contains("TryDeserializeError<Contact>(error.ResponseBody)"));
     }
 }
+
+mod package;
+pub use package::{DotNet, PackageExt, Sdk, Settings, package, sdk};

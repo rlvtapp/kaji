@@ -3,6 +3,8 @@ resolver = "3"
 members = [
     "crates/kaji-core",
     "crates/kaji",
+    "crates/plugins/rust",
+    "crates/plugins/typescript",
     "crates/plugins/go",
     "crates/plugins/python",
     "crates/plugins/php",

@@ -113,6 +113,9 @@ dependencies = [
  "kaji-plugin-java",
  "kaji-plugin-php",
  "kaji-plugin-python",
+ "kaji-plugin-rust",
+ "kaji-plugin-typescript",
+ "serde",
  "serde_json",
  "tempfile",
 ]
@@ -183,6 +186,26 @@ dependencies = [
  "kaji-core",
  "serde_json",
  "tempfile",
+]
+
+[[package]]
+name = "kaji-plugin-rust"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "kaji-core",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "kaji-plugin-typescript"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "kaji-core",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

@@ -1503,3 +1503,6 @@ mod tests {
         assert!(mix.contains("extra_applications: [:logger, :inets]"));
     }
 }
+
+mod package;
+pub use package::{Elixir, PackageExt, Sdk, Settings, package, sdk};

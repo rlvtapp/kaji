@@ -2322,3 +2322,6 @@ func TestKajiURLPagerRejectsCrossOriginContinuation(t *testing.T) {
         assert!(client.contains("func (service *AuthCheckResourceService) AuthCheck("));
     }
 }
+
+mod package;
+pub use package::{Go, PackageExt, Sdk, Settings, package, sdk};

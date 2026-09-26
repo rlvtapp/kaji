@@ -1,29 +1,51 @@
 //! First-party SDK target presets.
 //!
 //! This crate is the stable composition layer above `kaji-core`.
-//! Generator implementations stay in their own plugin crates (or, during the
-//! initial migration, in `kaji-core::plugins`); profiles decide which
+//! Generator implementations stay in their own plugin crates; profiles decide which
 //! implementations form a publishable SDK package and where each package is
 //! written.
 
 use anyhow::{Result, bail};
-use kaji_core::{
-    Api, GeneratedFile, GeneratedTree, SdkClientStyle, SdkProfile, SdkSurface, SdkTransport,
-    SecuritySchemeCatalog, generate_sdks_with_security_catalog,
-};
-use kaji_plugin_dotnet::generate_dotnet_sdk_with_style;
-use kaji_plugin_elixir::generate_elixir_sdk_with_style;
-use kaji_plugin_go::generate_go_sdk_with_style;
-use kaji_plugin_java::generate_java_sdk_with_style;
-use kaji_plugin_php::generate_php_sdk_with_style;
-use kaji_plugin_python::generate_python_sdk_with_style;
+use kaji_core::{Api, GeneratedFile, GeneratedTree, SecuritySchemeCatalog};
 use std::path::Path;
 
 mod mock_server;
 
 pub use mock_server::MockServerOptions;
 
-pub use kaji_core::{SdkLanguage as Language, SdkStyle as Style, SdkTransport as Transport};
+pub mod legacy_sdk;
+pub use kaji_core::SdkClientStyle;
+pub use kaji_core::engine::{Common, Package};
+use kaji_core::engine::{Language as PackageLanguage, Packages};
+pub use kaji_plugin_dotnet as dotnet;
+pub use kaji_plugin_elixir as elixir;
+pub use kaji_plugin_go as go;
+pub use kaji_plugin_java as java;
+pub use kaji_plugin_php as php;
+pub use kaji_plugin_python as python;
+pub use kaji_plugin_rust as rust;
+pub use kaji_plugin_typescript::{self as ts, TypeScriptOptions};
+pub use legacy_sdk::{SdkLanguage as Language, SdkStyle as Style, SdkTransport as Transport};
+pub use legacy_sdk::{
+    SdkProfile, SdkSurface, SdkTransport, generate_openapi_sdks, generate_sdks,
+    generate_sdks_with_security_catalog,
+};
+
+pub mod prelude {
+    pub use crate::{Common, Package, ProfileSet};
+    pub use kaji_core::engine::{
+        Contract, Handle, Language, Meta, Plugin, PluginContext, Provision, Requirement,
+    };
+    pub use kaji_core::{GeneratedFile, SdkClientStyle};
+    pub use kaji_plugin_dotnet::PackageExt as _;
+    pub use kaji_plugin_elixir::PackageExt as _;
+    pub use kaji_plugin_go::PackageExt as _;
+    pub use kaji_plugin_java::PackageExt as _;
+    pub use kaji_plugin_php::PackageExt as _;
+    pub use kaji_plugin_python::PackageExt as _;
+    pub use kaji_plugin_rust::PackageExt as _;
+    pub use kaji_plugin_typescript::PackageExt as _;
+}
 
 /// A maintained first-party SDK target. Each selected target writes one
 /// independently publishable package under the profile-set output root.
@@ -41,44 +63,6 @@ pub enum Target {
     /// A language-neutral, standalone HTTP mock service derived from the
     /// OpenAPI contract. The generated package can be used by every SDK.
     MockServer,
-}
-
-/// User-facing controls for generated TypeScript SDK packages.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TypeScriptOptions {
-    pub client_name: Option<String>,
-    pub client_style: SdkClientStyle,
-    pub surface: SdkSurface,
-    pub group_by_tag: bool,
-}
-
-impl Default for TypeScriptOptions {
-    fn default() -> Self {
-        Self {
-            client_name: None,
-            client_style: SdkClientStyle::Namespaced,
-            surface: SdkSurface::Client,
-            group_by_tag: true,
-        }
-    }
-}
-
-impl TypeScriptOptions {
-    /// Direct models and operation functions, without an instantiated client.
-    pub fn raw() -> Self {
-        Self {
-            surface: SdkSurface::Raw,
-            ..Self::default()
-        }
-    }
-
-    /// A product-style flat client, e.g. `client.createContact(...)`.
-    pub fn flat_client() -> Self {
-        Self {
-            client_style: SdkClientStyle::Flat,
-            ..Self::default()
-        }
-    }
 }
 
 impl Target {
@@ -158,10 +142,10 @@ fn configured_typescript_profile(output_dir: String, options: &TypeScriptOptions
 /// Builds a consistent multi-language SDK release from maintained targets.
 ///
 /// The API deliberately selects packages rather than individual generators:
-/// Fetch and Axios are distinct installable TypeScript packages, while a
-/// future language plugin only needs to add another [`Target`] variant.
-#[derive(Clone, Debug)]
+/// Fetch and Axios can be distinct installable TypeScript packages. Community
+/// languages integrate through [`Self::package`] without extending [`Target`].
 pub struct ProfileSet {
+    packages: Packages,
     root: String,
     targets: Vec<Target>,
     typescript: TypeScriptOptions,
@@ -177,6 +161,7 @@ pub struct ProfileSet {
 impl ProfileSet {
     pub fn new(output_root: impl Into<String>) -> Self {
         Self {
+            packages: Packages::new(),
             root: output_root.into(),
             targets: Vec::new(),
             typescript: TypeScriptOptions::default(),
@@ -188,6 +173,18 @@ impl ProfileSet {
             elixir: PackageOptions::default(),
             mock_server: MockServerOptions::default(),
         }
+    }
+
+    /// Adds a typed first-party or community package.
+    pub fn package<L: PackageLanguage>(mut self, package: Package<L>) -> Self {
+        self.packages = self.packages.package(package);
+        self
+    }
+
+    /// Shared defaults, overridden by package and explicit plugin settings.
+    pub fn common(mut self, common: Common) -> Self {
+        self.packages = self.packages.common(common);
+        self
     }
 
     /// Adds a target once. Calling this repeatedly is idempotent.
@@ -288,6 +285,9 @@ impl ProfileSet {
     /// set. This is useful when callers add their own Rust-native profiles.
     pub fn build(self) -> Result<Vec<SdkProfile>> {
         self.validate()?;
+        if !self.packages.is_empty() {
+            bail!("build() exposes legacy profiles only; use generate() for typed packages");
+        }
         let Self {
             root,
             targets,
@@ -302,10 +302,11 @@ impl ProfileSet {
     }
 
     fn validate(&self) -> Result<()> {
+        GeneratedFile::new(&self.root, "")?;
         if self.root.trim_matches('/').is_empty() {
             bail!("SDK profile output root cannot be empty")
         }
-        if self.targets.is_empty() {
+        if self.targets.is_empty() && self.packages.is_empty() {
             bail!("SDK profile set must select at least one target")
         }
         Ok(())
@@ -324,6 +325,7 @@ fn generate_with_security_catalog(
 ) -> Result<GeneratedTree> {
     profiles.validate()?;
     let ProfileSet {
+        packages,
         root,
         targets,
         typescript,
@@ -335,105 +337,132 @@ fn generate_with_security_catalog(
         elixir,
         mock_server,
     } = profiles;
-    let root = root.trim_matches('/');
-    let native_profiles = targets
-        .iter()
-        .filter_map(|target| target.profile(root, &typescript))
-        .collect::<Vec<_>>();
-    let mut tree = if native_profiles.is_empty() {
-        GeneratedTree::default()
-    } else {
-        generate_sdks_with_security_catalog(api, &native_profiles, security_schemes)?
-    };
-    for target in &targets {
-        match target {
-            Target::Rust => tree.insert(GeneratedFile::new(
-                format!("{root}/rust/STYLE_GUIDE.md"),
-                rust_style_guide(api),
-            )?)?,
+    let mut packages = packages;
+    let wants_mock = targets.contains(&Target::MockServer);
+    for target in targets {
+        packages = match target {
+            Target::Rust => packages.package(rust::package("rust").with(rust::sdk())),
             Target::TypeScriptFetch | Target::TypeScriptAxios => {
-                tree.insert(GeneratedFile::new(
-                    format!("{root}/{}/STYLE_GUIDE.md", target.directory()),
-                    typescript_style_guide(api, &typescript),
-                )?)?
+                let mut plugin = ts::sdk().group_by_tag(typescript.group_by_tag);
+                if target == Target::TypeScriptAxios {
+                    plugin = plugin.axios();
+                }
+                if typescript.surface == SdkSurface::Raw {
+                    plugin = plugin.raw();
+                }
+                if typescript.client_style == SdkClientStyle::Flat {
+                    plugin = plugin.flat();
+                }
+                if let Some(name) = &typescript.client_name {
+                    plugin = plugin.client_name(name);
+                }
+                packages.package(ts::package(target.directory()).with(plugin))
             }
-            Target::Go
-            | Target::Python
-            | Target::Php
-            | Target::Java
-            | Target::DotNet
-            | Target::Elixir => {}
-            Target::MockServer => {}
+            Target::Go => {
+                let plugin = if go.client_style == SdkClientStyle::Flat {
+                    go::sdk().flat()
+                } else {
+                    go::sdk()
+                };
+                packages.package(
+                    go::package("go")
+                        .settings(go::Settings {
+                            package_name: go.package_name.clone(),
+                        })
+                        .with(plugin),
+                )
+            }
+            Target::Python => {
+                let plugin = if python.client_style == SdkClientStyle::Flat {
+                    python::sdk().flat()
+                } else {
+                    python::sdk()
+                };
+                packages.package(
+                    python::package("python")
+                        .settings(python::Settings {
+                            package_name: python.package_name.clone(),
+                        })
+                        .with(plugin),
+                )
+            }
+            Target::Php => {
+                let plugin = if php.client_style == SdkClientStyle::Flat {
+                    php::sdk().flat()
+                } else {
+                    php::sdk()
+                };
+                packages.package(
+                    php::package("php")
+                        .settings(php::Settings {
+                            package_name: php.package_name.clone(),
+                        })
+                        .with(plugin),
+                )
+            }
+            Target::Java => {
+                let plugin = if java.client_style == SdkClientStyle::Flat {
+                    java::sdk().flat()
+                } else {
+                    java::sdk()
+                };
+                packages.package(
+                    java::package("java")
+                        .settings(java::Settings {
+                            package_name: java.package_name.clone(),
+                        })
+                        .with(plugin),
+                )
+            }
+            Target::DotNet => {
+                let plugin = if dotnet.client_style == SdkClientStyle::Flat {
+                    dotnet::sdk().flat()
+                } else {
+                    dotnet::sdk()
+                };
+                packages.package(
+                    dotnet::package("dotnet")
+                        .settings(dotnet::Settings {
+                            package_name: dotnet.package_name.clone(),
+                        })
+                        .with(plugin),
+                )
+            }
+            Target::Elixir => {
+                let plugin = if elixir.client_style == SdkClientStyle::Flat {
+                    elixir::sdk().flat()
+                } else {
+                    elixir::sdk()
+                };
+                packages.package(
+                    elixir::package("elixir")
+                        .settings(elixir::Settings {
+                            package_name: elixir.package_name.clone(),
+                        })
+                        .with(plugin),
+                )
+            }
+            Target::MockServer => packages,
+        };
+    }
+    let generated = packages.generate(api, security_schemes)?;
+    let mut tree = GeneratedTree::default();
+    for (path, contents) in generated.iter() {
+        let file = GeneratedFile::new(Path::new(&root).join(path), contents)?;
+        if generated.preserves_existing(path) {
+            tree.insert_custom(file)?;
+        } else {
+            tree.insert(file)?;
         }
     }
-    for target in targets {
-        match target {
-            Target::Go => tree.append(generate_go_sdk_with_style(
-                api,
-                &format!("{root}/go"),
-                go.package_name.as_deref(),
-                go.client_style,
-            )?)?,
-            Target::Python => tree.append(generate_python_sdk_with_style(
-                api,
-                &format!("{root}/python"),
-                python.package_name.as_deref(),
-                python.client_style,
-            )?)?,
-            Target::Php => tree.append(generate_php_sdk_with_style(
-                api,
-                &format!("{root}/php"),
-                php.package_name.as_deref(),
-                php.client_style,
-            )?)?,
-            Target::Java => tree.append(generate_java_sdk_with_style(
-                api,
-                &format!("{root}/java"),
-                java.package_name.as_deref(),
-                java.client_style,
-            )?)?,
-            Target::DotNet => tree.append(generate_dotnet_sdk_with_style(
-                api,
-                &format!("{root}/dotnet"),
-                dotnet.package_name.as_deref(),
-                dotnet.client_style,
-            )?)?,
-            Target::Elixir => tree.append(generate_elixir_sdk_with_style(
-                api,
-                &format!("{root}/elixir"),
-                elixir.package_name.as_deref(),
-                elixir.client_style,
-            )?)?,
-            Target::MockServer => tree.append(mock_server::generate(
-                api,
-                &format!("{root}/mock-server"),
-                &mock_server,
-            )?)?,
-            Target::Rust | Target::TypeScriptFetch | Target::TypeScriptAxios => {}
-        }
+    if wants_mock {
+        tree.append(mock_server::generate(
+            api,
+            &format!("{}/mock-server", root.trim_matches('/')),
+            &mock_server,
+        )?)?;
     }
     Ok(tree)
-}
-
-fn rust_style_guide(api: &Api) -> String {
-    format!(
-        "# {} Rust SDK style guide\n\nThis package provides Kaji's resource-first Rust client: `client.contacts().list().await`. Direct `Client` operation methods remain available for compatibility. Path-parameter operations accept a completed path; typed path and query input structs are the next Rust-surface enhancement.\n",
-        api.name
-    )
-}
-
-fn typescript_style_guide(api: &Api, options: &TypeScriptOptions) -> String {
-    let selected = match options.surface {
-        SdkSurface::Raw => "raw exports",
-        SdkSurface::Client => match options.client_style {
-            SdkClientStyle::Flat => "flat instantiated client",
-            SdkClientStyle::Namespaced => "namespaced instantiated client",
-        },
-    };
-    format!(
-        "# {} TypeScript SDK style guide\n\nThis package selected the **{selected}** surface. Generated models and direct operation exports remain available in every mode.\n\n- `SdkSurface::Raw`: direct models and operation functions only.\n- `SdkClientStyle::Flat`: `client.createContact(...)`.\n- `SdkClientStyle::Namespaced`: `client.contacts.create(...)`.\n\nConfigure the package with `TypeScriptOptions` in `kaji`.\n",
-        api.name
-    )
 }
 
 /// Generates all selected SDK packages from artifacts emitted by Kaji's
@@ -457,9 +486,8 @@ pub fn generate_openapi(
     generate_with_security_catalog(&api, profiles, security_schemes.as_ref())
 }
 
-/// Exposes the underlying typed profile for advanced native composition. New
-/// target crates should normally offer a [`Target`] variant or an equivalent
-/// preset builder rather than ask consumers to construct plugin lists.
+/// Compatibility helper for the original SDK profile API. New plugins should
+/// implement `Plugin<L>` and compose through [`ProfileSet::package`].
 pub fn custom(profile: SdkProfile) -> SdkProfile {
     profile
 }

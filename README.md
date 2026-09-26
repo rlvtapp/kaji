@@ -28,6 +28,7 @@ and Elixir.
 | [Getting started](docs/getting-started.md) | Compile an OpenAPI document and generate packages. |
 | [OpenAPI compiler](docs/openapi-compiler.md) | The embedded Go compiler, artifacts, and standalone command. |
 | [Configuration reference](docs/configuration.md) | Every target, package, TypeScript, and mock-server option. |
+| [Typed plugin packages (experimental)](docs/typed-plugins.md) | Language-scoped composition, shared defaults, contracts, and migration boundaries. |
 | [Generated SDKs](docs/generated-sdks.md) | Raw versus full SDK output, client shapes, and language requirements. |
 | [Contract mocking](docs/mocking.md) | Run the Docker mock and add `x-kaji-mock` / pagination behavior. |
 | [SDK verification](docs/verification.md) | Snapshot and live-contract CI coverage. |

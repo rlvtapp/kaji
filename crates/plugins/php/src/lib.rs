@@ -1805,3 +1805,6 @@ mod tests {
         assert!(resource.contains("public function searchPages(): \\Generator"));
     }
 }
+
+mod package;
+pub use package::{PackageExt, Php, Sdk, Settings, package, sdk};

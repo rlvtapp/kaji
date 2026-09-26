@@ -3,15 +3,15 @@
 pub mod adapter;
 pub mod ast;
 pub mod conformance;
+pub mod engine;
 pub mod files;
 pub mod filters;
 pub mod httpmock;
 pub mod manifest;
 pub mod mocking;
 pub mod plugin;
-pub mod plugins;
-pub mod sdk;
 pub mod semantics;
+pub mod style;
 
 pub use ast::{
     AdditionalProperties, Api, Discriminator, Field, HttpMethod, OAuthFlow, Operation,
@@ -35,12 +35,9 @@ pub use mocking::{
     extract_operation_mock_scenarios,
 };
 pub use plugin::{CodegenPlugin, GeneratorConfig, generate};
-pub use sdk::{
-    SdkClientStyle, SdkLanguage, SdkProfile, SdkStyle, SdkSurface, SdkTransport,
-    generate_openapi_sdks, generate_sdks, generate_sdks_with_security_catalog,
-};
 pub use semantics::{
     AuthAlternative, AuthScheme, DeclaredError, OperationSemantics, PaginationHint,
     PaginationSource, RequestBodyKind, RetryClass, SdkSemantics, StreamingKind, analyze_operation,
     analyze_sdk_semantics,
 };
+pub use style::SdkClientStyle;

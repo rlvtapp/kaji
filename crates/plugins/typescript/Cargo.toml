@@ -1,0 +1,15 @@
+[package]
+name = "kaji-plugin-typescript"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "TypeScript SDK generators and typed package integration for Kaji"
+publish = false
+
+[dependencies]
+anyhow = "1.0.102"
+kaji-core = { path = "../../kaji-core" }
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.138"

@@ -6,8 +6,8 @@
 use anyhow::{Result, bail};
 use serde_json::Value;
 
-use crate::ast::{Api, Operation, SecuritySchemeCatalog, SecuritySchemeKind};
-use crate::{CodegenPlugin, GeneratedFile, GeneratorConfig};
+use kaji_core::ast::{Api, Operation, SecuritySchemeCatalog, SecuritySchemeKind};
+use kaji_core::{CodegenPlugin, GeneratedFile, GeneratorConfig};
 
 const ESLINT_HEADER: &str = "/* eslint-disable no-alert, no-console */\n\n";
 
@@ -902,7 +902,7 @@ fn lower_camel_identifier(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{HttpMethod, SecurityRequirement, SecurityScheme, SecuritySchemeKind};
+    use kaji_core::ast::{HttpMethod, SecurityRequirement, SecurityScheme, SecuritySchemeKind};
 
     fn operation(id: &str, method: HttpMethod, path: &str) -> Operation {
         Operation {

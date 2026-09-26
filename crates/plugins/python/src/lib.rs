@@ -2086,3 +2086,6 @@ mod tests {
         );
     }
 }
+
+mod package;
+pub use package::{PackageExt, Python, Sdk, Settings, package, sdk};

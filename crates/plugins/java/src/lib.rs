@@ -1969,3 +1969,6 @@ mod tests {
         assert!(!client.contains("listContactsPages("));
     }
 }
+
+mod package;
+pub use package::{Java, PackageExt, Sdk, Settings, package, sdk};

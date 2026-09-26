@@ -66,6 +66,10 @@ impl GeneratedTree {
         self.files.get(path.as_ref()).map(String::as_str)
     }
 
+    pub fn preserves_existing(&self, path: impl AsRef<Path>) -> bool {
+        self.preserve_existing.contains(path.as_ref())
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = (&Path, &str)> {
         self.files
             .iter()
