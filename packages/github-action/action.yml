@@ -1,0 +1,34 @@
+name: Kaji generate
+description: Generate Kaji SDKs from an OpenAPI contract in GitHub Actions.
+author: Relevate
+branding:
+  icon: box
+  color: purple
+
+inputs:
+  config:
+    description: Path to kaji.json relative to working-directory.
+    required: false
+    default: kaji.json
+  version:
+    description: npm version or dist-tag for @relevate/kaji.
+    required: false
+    default: latest
+  working-directory:
+    description: Directory in which Kaji runs.
+    required: false
+    default: .
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+    - name: Generate SDKs
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        KAJI_CONFIG: ${{ inputs.config }}
+        KAJI_VERSION: ${{ inputs.version }}
+      run: npx --yes "@relevate/kaji@$KAJI_VERSION" generate --config "$KAJI_CONFIG"

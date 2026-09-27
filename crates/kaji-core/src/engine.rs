@@ -158,9 +158,51 @@ pub trait Language: Send + Sync + Sized + 'static {
     }
 }
 
+/// A plugin's point in the package generation lifecycle.
+///
+/// Generation plugins run first. Post plugins run after every generation
+/// plugin and the language finalizer, so they can add derived artifacts after
+/// a package's normal output has been assembled.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PluginPhase {
+    #[default]
+    Generate,
+    Post,
+}
+
+/// Shorthand for selecting a plugin execution phase.
+///
+/// [`Enforce::Post`] is intended for plugins that consume or augment the
+/// completed generated package. Override [`Plugin::phase`] when selecting a
+/// phase dynamically is more appropriate than this shorthand.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Enforce {
+    #[default]
+    Default,
+    Post,
+}
+
+impl Enforce {
+    pub const fn phase(self) -> PluginPhase {
+        match self {
+            Self::Default => PluginPhase::Generate,
+            Self::Post => PluginPhase::Post,
+        }
+    }
+}
+
 pub trait Plugin<L: Language>: Send + Sync + 'static {
     fn kind(&self) -> &'static str;
     fn meta(&self) -> &Meta;
+    /// Selects the plugin lifecycle phase. The default honors [`Self::enforce`]
+    /// so a post plugin only needs to override that shorthand.
+    fn phase(&self) -> PluginPhase {
+        self.enforce().phase()
+    }
+    /// Phase shorthand. Existing plugins remain generation plugins.
+    fn enforce(&self) -> Enforce {
+        Enforce::Default
+    }
     fn requires(&self) -> Vec<Requirement> {
         Vec::new()
     }
@@ -324,6 +366,7 @@ impl<L: Language> Package<L> {
 
 struct Plan {
     order: Vec<usize>,
+    phases: Vec<PluginPhase>,
     bindings: Vec<Bindings>,
     provisions: Vec<Vec<Provision>>,
 }
@@ -342,11 +385,13 @@ impl<L: Language> Package<L> {
         checked_path(Path::new(&self.dir))?;
         let mut instances = BTreeMap::new();
         let mut providers: HashMap<TypeId, Vec<usize>> = HashMap::new();
+        let mut phases = Vec::new();
         let mut provisions = Vec::new();
         for (index, plugin) in self.plugins.iter().enumerate() {
             if instances.insert(plugin.meta().id, index).is_some() {
                 bail!("duplicate plugin instance: {}", self.label(index));
             }
+            phases.push(plugin.phase());
             let supplied = plugin.provides();
             let mut seen = BTreeSet::new();
             for contract in &supplied {
@@ -413,10 +458,30 @@ impl<L: Language> Package<L> {
                     bail!("{} requires {} twice", self.label(index), req.contract.name);
                 }
                 if let Some(selected) = selected {
+                    if phases[index] == PluginPhase::Generate
+                        && phases[selected] == PluginPhase::Post
+                    {
+                        bail!(
+                            "{} requires {} from {}, but generation plugins cannot depend on post plugins",
+                            self.label(index),
+                            req.contract.name,
+                            self.label(selected),
+                        );
+                    }
                     dependencies[index].insert(selected);
                 }
             }
             bindings.push(bound);
+        }
+        // A post plugin observes a completed package. Make the phase boundary
+        // explicit in the dependency graph, while retaining normal contract
+        // ordering between post plugins themselves.
+        for (index, phase) in phases.iter().enumerate() {
+            if *phase == PluginPhase::Post {
+                dependencies[index].extend(phases.iter().enumerate().filter_map(
+                    |(other, phase)| (*phase == PluginPhase::Generate).then_some(other),
+                ));
+            }
         }
         let mut order = Vec::new();
         let mut completed = BTreeSet::new();
@@ -439,6 +504,7 @@ impl<L: Language> Package<L> {
         }
         Ok(Plan {
             order,
+            phases,
             bindings,
             provisions,
         })
@@ -463,55 +529,62 @@ impl<L: Language> Package<L> {
         let mut tree = GeneratedTree::default();
         let mut owners = BTreeMap::new();
         let mut contracts = Contracts::new();
-        for index in plan.order {
-            let plugin = &self.plugins[index];
-            let mut publications = HashMap::new();
-            let mut cx = PluginContext {
-                api,
-                semantics: &semantics,
-                security_schemes: catalog,
-                common: &common,
-                settings: &self.settings,
-                inputs: Inputs {
-                    contracts: &contracts,
-                    bindings: &plan.bindings[index],
-                },
-                workspace: &mut workspace,
-                files: Emitter {
-                    tree: &mut tree,
-                    owners: &mut owners,
-                    owner: self.label(index),
-                },
-                publications: &mut publications,
-                declared: &plan.provisions[index],
-            };
-            plugin
-                .generate(&mut cx)
-                .with_context(|| format!("generate {}", self.label(index)))?;
-            for provision in &plan.provisions[index] {
-                if !publications.contains_key(&provision.type_id) {
-                    bail!(
-                        "{} did not publish declared contract {}",
-                        self.label(index),
-                        provision.name
-                    );
+        for phase in [PluginPhase::Generate, PluginPhase::Post] {
+            for &index in &plan.order {
+                if plan.phases[index] != phase {
+                    continue;
+                }
+                let plugin = &self.plugins[index];
+                let mut publications = HashMap::new();
+                let mut cx = PluginContext {
+                    api,
+                    semantics: &semantics,
+                    security_schemes: catalog,
+                    common: &common,
+                    settings: &self.settings,
+                    inputs: Inputs {
+                        contracts: &contracts,
+                        bindings: &plan.bindings[index],
+                    },
+                    workspace: &mut workspace,
+                    files: Emitter {
+                        tree: &mut tree,
+                        owners: &mut owners,
+                        owner: self.label(index),
+                    },
+                    publications: &mut publications,
+                    declared: &plan.provisions[index],
+                };
+                plugin
+                    .generate(&mut cx)
+                    .with_context(|| format!("generate {}", self.label(index)))?;
+                for provision in &plan.provisions[index] {
+                    if !publications.contains_key(&provision.type_id) {
+                        bail!(
+                            "{} did not publish declared contract {}",
+                            self.label(index),
+                            provision.name
+                        );
+                    }
+                }
+                for (key, value) in publications {
+                    contracts.insert((plugin.meta().id, key), value);
                 }
             }
-            for (key, value) in publications {
-                contracts.insert((plugin.meta().id, key), value);
+            if phase == PluginPhase::Generate {
+                L::finalize(&mut FinalizeContext {
+                    api,
+                    common: &common,
+                    settings: &self.settings,
+                    workspace: &mut workspace,
+                    files: Emitter {
+                        tree: &mut tree,
+                        owners: &mut owners,
+                        owner: format!("{} finalizer", L::NAME),
+                    },
+                })?;
             }
         }
-        L::finalize(&mut FinalizeContext {
-            api,
-            common: &common,
-            settings: &self.settings,
-            workspace: &mut workspace,
-            files: Emitter {
-                tree: &mut tree,
-                owners: &mut owners,
-                owner: format!("{} finalizer", L::NAME),
-            },
-        })?;
         let mut output = GeneratedTree::default();
         let dir = checked_path(Path::new(&self.dir))?;
         for (file, custom) in tree.into_files() {

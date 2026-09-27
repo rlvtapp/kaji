@@ -237,9 +237,10 @@ fn json_config_generates_sdks_and_all_selected_artifacts() {
     let manifest: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(output.join("web/package.json")).unwrap())
             .unwrap();
-    assert_eq!(manifest["dependencies"]["zod"], "^3.0.0", "{manifest}");
+    assert_eq!(manifest["dependencies"]["zod"], "^4.0.0", "{manifest}");
     assert_eq!(manifest["dependencies"]["@tanstack/react-query"], "^5.0.0");
     assert_eq!(manifest["dependencies"]["msw"], "^2.0.0");
+    assert_eq!(manifest["devDependencies"]["cypress"], "^15.0.0");
 }
 
 #[test]

@@ -4,7 +4,7 @@ For a command-line workflow without writing Rust configuration, use the
 [CLI guide](cli.md). This guide covers native package composition.
 
 Kaji has a bundled Go OpenAPI compiler and Rust SDK generators. Compile a local
-OpenAPI 3.0/3.1 JSON or YAML document once, then generate as many packages as
+Swagger 2.0 or OpenAPI 3.0/3.1 JSON or YAML document once, then generate as many packages as
 needed from its artifacts.
 
 ## Add dependencies

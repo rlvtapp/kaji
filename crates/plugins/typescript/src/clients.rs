@@ -143,16 +143,7 @@ fn render_operation(
     security_schemes: Option<&SecuritySchemeCatalog>,
 ) -> String {
     if is_event_stream(operation) {
-        return render_event_stream_operation(operation, throw_on_error);
-    }
-    if let Some(content_type) = request_content_type(operation) {
-        return render_content_type_operation(operation, throw_on_error, content_type);
-    }
-    if let Some(security) = render_security(operation, security_schemes) {
-        return render_security_operation(operation, throw_on_error, &security);
-    }
-    if let Some(styles) = render_parameter_styles(operation) {
-        return render_styled_operation(operation, throw_on_error, &styles);
+        return render_event_stream_operation(operation, throw_on_error, security_schemes);
     }
     let function_name = lower_camel_identifier(&operation.id);
     let type_name = pascal_identifier(&operation.id);
@@ -160,27 +151,28 @@ fn render_operation(
     let link_path = operation.path.replace('{', ":").replace('}', "");
     let method = operation.method.as_str();
 
-    // Kaji's printer keeps a complete request/result expression on one line
-    // only when it fits its print width.  Make that decision before rendering
-    // so byte parity does not depend on a host formatter.
-    let source = format!(
-        "{ESLINT_HEADER}import type {{ Options, Unwrappable, RequestResult }} from './.kaji/client'\nimport type {{ {type_name}Options, {type_name}Responses }} from './{type_name}'\nimport {{ client, withUnwrap }} from './.kaji/client'\n\n/**\n * {{@link {link_path}}}\n */\nexport function {function_name}<ThrowOnError extends boolean = {throw_on_error}>(\n  options: Options<{type_name}Options, ThrowOnError>,\n): Unwrappable<RequestResult<{type_name}Responses, ThrowOnError>> {{\n  const {{ client: request = client, ...config }} = options\n\n  return withUnwrap(\n    request({{ method: '{method}', url: '{}', ...config, throwOnError: config.throwOnError ?? {throw_on_error} }}) as Promise<\n      RequestResult<{type_name}Responses, ThrowOnError>\n    >,\n  )\n}}\n",
-        operation.path,
-    );
-    let expanded = format!(
-        "request({{ method: '{method}', url: '{}', ...config, throwOnError: config.throwOnError ?? {throw_on_error} }}) as Promise<\n      RequestResult<{type_name}Responses, ThrowOnError>\n    >,",
-        operation.path,
-    );
-    let compact = format!(
-        "request({{ method: '{method}', url: '{}', ...config, throwOnError: config.throwOnError ?? {throw_on_error} }}) as Promise<RequestResult<{type_name}Responses, ThrowOnError>> ,",
+    // These concerns deliberately compose. Older generation selected the
+    // first matching branch (form body *or* security *or* styles), silently
+    // losing metadata when an operation used more than one OpenAPI feature.
+    let mut metadata = String::new();
+    if let Some(content_type) = request_content_type(operation) {
+        metadata.push_str(&format!(
+            "      contentType: {{ request: '{content_type}' }},\n"
+        ));
+    }
+    if let Some(styles) = render_parameter_styles(operation) {
+        metadata.push_str(&format!("      styles: {styles},\n"));
+    }
+    if let Some(form_encodings) = render_form_encodings(operation) {
+        metadata.push_str(&format!("      formEncodings: {form_encodings},\n"));
+    }
+    if let Some(security) = render_security(operation, security_schemes) {
+        metadata.push_str(&format!("      security: {security},\n"));
+    }
+    format!(
+        "{ESLINT_HEADER}import type {{ Options, Unwrappable, RequestResult }} from './.kaji/client'\nimport type {{ {type_name}Options, {type_name}Responses }} from './{type_name}'\nimport {{ client, withUnwrap }} from './.kaji/client'\n\n/**\n * {{@link {link_path}}}\n */\nexport function {function_name}<ThrowOnError extends boolean = {throw_on_error}>(\n  options: Options<{type_name}Options, ThrowOnError>,\n): Unwrappable<RequestResult<{type_name}Responses, ThrowOnError>> {{\n  const {{ client: request = client, ...config }} = options\n\n  return withUnwrap(\n    request({{\n      method: '{method}',\n      url: '{}',\n{metadata}      ...config,\n      throwOnError: config.throwOnError ?? {throw_on_error},\n    }}) as Promise<RequestResult<{type_name}Responses, ThrowOnError>>,\n  )\n}}\n",
         operation.path,
     )
-    .replace(">> ,", ">>,");
-    if compact.len() + 4 <= 160 {
-        source.replace(&expanded, &compact)
-    } else {
-        source
-    }
 }
 
 /// Preserves explicit OpenAPI parameter serialization metadata for Kaji's
@@ -218,32 +210,14 @@ fn render_parameter_styles(operation: &Operation) -> Option<String> {
     (!groups.is_empty()).then(|| format!("{{ {} }}", groups.join(", ")))
 }
 
-fn render_styled_operation(operation: &Operation, throw_on_error: bool, styles: &str) -> String {
-    let function_name = lower_camel_identifier(&operation.id);
-    let type_name = pascal_identifier(&operation.id);
-    let throw_on_error = if throw_on_error { "true" } else { "false" };
-    let link_path = operation.path.replace('{', ":").replace('}', "");
-    let method = operation.method.as_str();
-    format!(
-        "{ESLINT_HEADER}import type {{ Options, Unwrappable, RequestResult }} from './.kaji/client'\nimport type {{ {type_name}Options, {type_name}Responses }} from './{type_name}'\nimport {{ client, withUnwrap }} from './.kaji/client'\n\n/**\n * {{@link {link_path}}}\n */\nexport function {function_name}<ThrowOnError extends boolean = {throw_on_error}>(\n  options: Options<{type_name}Options, ThrowOnError>,\n): Unwrappable<RequestResult<{type_name}Responses, ThrowOnError>> {{\n  const {{ client: request = client, ...config }} = options\n\n  return withUnwrap(\n    request({{\n      method: '{method}',\n      url: '{}',\n      styles: {styles},\n      ...config,\n      throwOnError: config.throwOnError ?? {throw_on_error},\n    }}) as Promise<RequestResult<{type_name}Responses, ThrowOnError>>,\n  )\n}}\n",
-        operation.path,
-    )
-}
-
-fn render_security_operation(
-    operation: &Operation,
-    throw_on_error: bool,
-    security: &str,
-) -> String {
-    let function_name = lower_camel_identifier(&operation.id);
-    let type_name = pascal_identifier(&operation.id);
-    let throw_on_error = if throw_on_error { "true" } else { "false" };
-    let link_path = operation.path.replace('{', ":").replace('}', "");
-    let method = operation.method.as_str();
-    format!(
-        "{ESLINT_HEADER}import type {{ Options, Unwrappable, RequestResult }} from './.kaji/client'\nimport type {{ {type_name}Options, {type_name}Responses }} from './{type_name}'\nimport {{ client, withUnwrap }} from './.kaji/client'\n\n/**\n * {{@link {link_path}}}\n */\nexport function {function_name}<ThrowOnError extends boolean = {throw_on_error}>(\n  options: Options<{type_name}Options, ThrowOnError>,\n): Unwrappable<RequestResult<{type_name}Responses, ThrowOnError>> {{\n  const {{ client: request = client, ...config }} = options\n\n  return withUnwrap(\n    request({{\n      method: '{method}',\n      url: '{}',\n      security: {security},\n      ...config,\n      throwOnError: config.throwOnError ?? {throw_on_error},\n    }}) as Promise<RequestResult<{type_name}Responses, ThrowOnError>>,\n  )\n}}\n",
-        operation.path,
-    )
+/// Carries OpenAPI's multipart/urlencoded Encoding Object to the transport.
+/// The compiler stores it as an annotation so non-TypeScript targets do not
+/// need a JavaScript-shaped form-data type in the shared AST.
+fn render_form_encodings(operation: &Operation) -> Option<String> {
+    operation
+        .annotations
+        .get("kaji.request_body_encodings")
+        .and_then(|value| serde_json::to_string(value).ok())
 }
 
 /// Converts declared OpenAPI OR-of-AND requirements without guessing scheme kinds.
@@ -325,32 +299,33 @@ fn render_security_scheme(scheme_name: &str, catalog: Option<&SecuritySchemeCata
 
 /// Kaji routes Server-Sent Events through the event-stream client helper,
 /// selected from the response media type rather than an operation-name rule.
-fn render_event_stream_operation(operation: &Operation, throw_on_error: bool) -> String {
-    let function_name = lower_camel_identifier(&operation.id);
-    let type_name = pascal_identifier(&operation.id);
-    let throw_on_error = if throw_on_error { "true" } else { "false" };
-    let link_path = operation.path.replace('{', ":").replace('}', "");
-    let method = operation.method.as_str();
-    format!(
-        "{ESLINT_HEADER}import type {{ Options, EventStreamResult, SuccessOf }} from './.kaji/client'\nimport type {{ {type_name}Options, {type_name}Responses }} from './{type_name}'\nimport {{ client, toEventStream }} from './.kaji/client'\n\n/**\n * {{@link {link_path}}}\n */\nexport function {function_name}<ThrowOnError extends boolean = {throw_on_error}>(\n  options: Options<{type_name}Options, ThrowOnError> = {{}},\n): Promise<EventStreamResult<SuccessOf<{type_name}Responses>>> {{\n  const {{ client: request = client, ...config }} = options\n\n  return toEventStream<SuccessOf<{type_name}Responses>>(\n    request({{ method: '{method}', url: '{}', responseType: 'stream', ...config, throwOnError: config.throwOnError ?? {throw_on_error} }}),\n  )\n}}\n",
-        operation.path,
-    )
-}
-
-/// Kaji keeps request bodies in `Options`, but emits a content-type hint for
-/// forms so the bundled serializer can choose FormData rather than JSON.
-fn render_content_type_operation(
+fn render_event_stream_operation(
     operation: &Operation,
     throw_on_error: bool,
-    content_type: &str,
+    security_schemes: Option<&SecuritySchemeCatalog>,
 ) -> String {
     let function_name = lower_camel_identifier(&operation.id);
     let type_name = pascal_identifier(&operation.id);
     let throw_on_error = if throw_on_error { "true" } else { "false" };
     let link_path = operation.path.replace('{', ":").replace('}', "");
     let method = operation.method.as_str();
+    let mut metadata = String::new();
+    if let Some(content_type) = request_content_type(operation) {
+        metadata.push_str(&format!(
+            "      contentType: {{ request: '{content_type}' }},\n"
+        ));
+    }
+    if let Some(styles) = render_parameter_styles(operation) {
+        metadata.push_str(&format!("      styles: {styles},\n"));
+    }
+    if let Some(form_encodings) = render_form_encodings(operation) {
+        metadata.push_str(&format!("      formEncodings: {form_encodings},\n"));
+    }
+    if let Some(security) = render_security(operation, security_schemes) {
+        metadata.push_str(&format!("      security: {security},\n"));
+    }
     format!(
-        "{ESLINT_HEADER}import type {{ Options, Unwrappable, RequestResult }} from './.kaji/client'\nimport type {{ {type_name}Options, {type_name}Responses }} from './{type_name}'\nimport {{ client, withUnwrap }} from './.kaji/client'\n\n/**\n * {{@link {link_path}}}\n */\nexport function {function_name}<ThrowOnError extends boolean = {throw_on_error}>(\n  options: Options<{type_name}Options, ThrowOnError>,\n): Unwrappable<RequestResult<{type_name}Responses, ThrowOnError>> {{\n  const {{ client: request = client, ...config }} = options\n\n  return withUnwrap(\n    request({{\n      method: '{method}',\n      url: '{}',\n      contentType: {{ request: '{content_type}' }},\n      ...config,\n      throwOnError: config.throwOnError ?? {throw_on_error},\n    }}) as Promise<RequestResult<{type_name}Responses, ThrowOnError>>,\n  )\n}}\n",
+        "{ESLINT_HEADER}import type {{ Options, EventStreamResult, SuccessOf }} from './.kaji/client'\nimport type {{ {type_name}Options, {type_name}Responses }} from './{type_name}'\nimport {{ client, toEventStream }} from './.kaji/client'\n\n/**\n * {{@link {link_path}}}\n */\nexport function {function_name}<ThrowOnError extends boolean = {throw_on_error}>(\n  options: Options<{type_name}Options, ThrowOnError> = {{}},\n): Promise<EventStreamResult<SuccessOf<{type_name}Responses>>> {{\n  const {{ client: request = client, ...config }} = options\n\n  return toEventStream<SuccessOf<{type_name}Responses>>(\n    request({{\n      method: '{method}',\n      url: '{}',\n      responseType: 'stream',\n{metadata}      ...config,\n      throwOnError: config.throwOnError ?? {throw_on_error},\n    }}),\n  )\n}}\n",
         operation.path,
     )
 }
@@ -529,5 +504,67 @@ mod tests {
             source.contains("[{ id: 'query_key', type: 'apiKey', name: 'api_key', in: 'query'")
         );
         assert!(source.contains("id: 'oauth', type: 'oauth2'"));
+    }
+
+    #[test]
+    fn operation_composes_media_styles_and_security_metadata() {
+        let mut operation = operation("updatePet", HttpMethod::Post, "/pets/{petId}");
+        operation.parameters.push(kaji_core::OperationParameter {
+            name: "petId".into(),
+            location: "path".into(),
+            required: true,
+            schema: None,
+            description: None,
+            annotations: std::collections::BTreeMap::from([(
+                "style".into(),
+                serde_json::json!("matrix"),
+            )]),
+        });
+        operation.request_body = Some(kaji_core::OperationRequestBody {
+            required: true,
+            description: None,
+            media_types: vec![kaji_core::OperationMediaType {
+                content_type: "multipart/form-data".into(),
+                schema: None,
+            }],
+        });
+        operation.annotations.insert(
+            "kaji.request_body_encodings".into(),
+            serde_json::json!({
+                "multipart/form-data": {
+                    "metadata": {
+                        "contentType": "application/json",
+                        "explode": false,
+                        "headers": {
+                            "X-Part-Id": {
+                                "required": true,
+                                "style": "simple",
+                                "schema_definition": { "type": "string" }
+                            }
+                        }
+                    }
+                }
+            }),
+        );
+        operation.security = vec![SecurityRequirement {
+            schemes: [("cookie".into(), Vec::new())].into_iter().collect(),
+        }];
+        let catalog = SecuritySchemeCatalog {
+            schemes: vec![SecurityScheme {
+                name: "cookie".into(),
+                description: None,
+                kind: SecuritySchemeKind::ApiKey {
+                    name: Some("session".into()),
+                    location: Some("cookie".into()),
+                },
+            }],
+        };
+        let source = render_operation(&operation, true, Some(&catalog));
+        assert!(source.contains("contentType: { request: 'multipart/form-data' }"));
+        assert!(source.contains("formEncodings: {\"multipart/form-data\":{\"metadata\":{\"contentType\":\"application/json\",\"explode\":false,\"headers\":{\"X-Part-Id\":{\"required\":true,\"schema_definition\":{\"type\":\"string\"},\"style\":\"simple\"}}}}}"));
+        assert!(source.contains("styles: { path: { petId: { style: 'matrix' } } }"));
+        assert!(source.contains(
+            "security: [[{ id: 'cookie', type: 'apiKey', name: 'session', in: 'cookie' }]]"
+        ));
     }
 }

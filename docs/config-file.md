@@ -122,7 +122,7 @@ Set exactly one source field:
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `input` | One of `input`/`artifacts` | A local OpenAPI 3.0/3.1 YAML/JSON file or an `https://`/`http://` URL. Remote documents are downloaded into Kaji's private compiler workspace, then handled exactly like local input. |
+| `input` | One of `input`/`artifacts` | A local Swagger 2.0 or OpenAPI 3.0/3.1 YAML/JSON file, or an `https://`/`http://` URL. Remote documents are downloaded into Kaji's private compiler workspace, then handled exactly like local input. |
 | `artifacts` | One of `input`/`artifacts` | Existing Kaji compiler artifact directory for a faster repeat generation. |
 | `name` | No | API display name; defaults to `API`. |
 | `version` | No | Generated package version; defaults to `0.1.0`. |
@@ -225,8 +225,9 @@ Their shared fields are:
 | `group_by_tag` | `true` | Must match the SDK layout when hooks import its operation modules. |
 
 When Kaji owns the package manifest through `sdk`, it adds dependencies for
-Zod, TanStack, SWR, Faker, and MSW. Cypress configuration and framework peer
-dependencies remain application-owned. See [auxiliary generators](auxiliary-generators.md)
+Zod, TanStack, SWR, Faker, and MSW, plus Cypress as a development dependency
+when selected. Cypress configuration and framework peer dependencies remain
+application-owned. See [auxiliary generators](auxiliary-generators.md)
 for behavioral limitations and framework-specific setup.
 
 ### Documentation and mock packages

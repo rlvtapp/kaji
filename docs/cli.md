@@ -5,9 +5,9 @@ small Node launcher, not a JavaScript implementation of the generator. Platform
 packages contain two executables: `kaji` (Rust) and `kaji-openapi` (the embedded Go
 OpenAPI compiler). No Rust or Go installation is required for npm users.
 
-The npm packages are prepared in this repository but must be released before
-registry installation is available. Nothing in this document claims they have
-already been published.
+The npm facade is published as `@relevate/kaji`. It chooses the matching
+platform package and launches the native executable. Rust and Go are only
+needed when building Kaji itself from source.
 
 ## Local source build
 
@@ -111,8 +111,8 @@ guide](auxiliary-generators.md) for framework dependencies and limits.
 
 When Kaji also owns that TypeScript package through its `sdk` plugin, selecting
 Zod, TanStack, SWR, Faker, or MSW adds the matching runtime dependency to its
-`package.json`. Cypress project setup and framework peer dependencies remain
-the application's responsibility. Artifact-only TypeScript output intentionally
+`package.json`; selecting Cypress adds it as a development dependency. Cypress
+project setup and framework peer dependencies remain the application's responsibility. Artifact-only TypeScript output intentionally
 does not invent a package manifest.
 
 `--language all` remains a direct-mode shortcut for the eight bundled SDK

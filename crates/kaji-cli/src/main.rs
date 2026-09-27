@@ -3,7 +3,7 @@ use std::env;
 use std::ffi::OsString;
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitCode};
+use std::process::{Command, ExitCode, Stdio};
 use std::time::Instant;
 
 use anyhow::{Context, Result, bail};
@@ -15,6 +15,8 @@ use kaji::{SdkClientStyle, dotnet, elixir, go, java, mock, php, prelude::*, pyth
 use kaji_core::{Api, GeneratedFile, GeneratedTree};
 use serde::Deserialize;
 
+mod mcp;
+
 const HELP: &str = "Kaji — native multi-language OpenAPI SDK generator
 
 Usage:
@@ -23,6 +25,8 @@ Usage:
   kaji generate --config <file>
   kaji generate <openapi-file> --output <directory> --language <target>...
   kaji generate --artifacts <directory> --output <directory> --language <target>...
+  kaji mcp <openapi-file> --base-url <url>
+  kaji mcp generator
   kaji languages
   kaji --version
 
@@ -47,6 +51,12 @@ Generate options (direct mode):
   -h, --help                          Show help
 
 Targets: rust, typescript, go, python, php, java, dotnet, elixir
+
+MCP commands:
+  mcp                                   Serve an OpenAPI document as MCP tools over stdio
+      --base-url <url>                  API origin used when a tool is called (required)
+      --openapi-compiler <file>         Override bundled kaji-openapi executable
+  mcp generator                         Serve Kaji generation controls as MCP tools over stdio
 
 Each target is written to its own subdirectory. Generated files are overwritten;
 custom starter files and unrelated files are preserved. Input must be a local file.
@@ -81,6 +91,13 @@ struct Generate {
     compiler: Option<PathBuf>,
     jobs: usize,
     color: ColorChoice,
+}
+
+#[derive(Debug)]
+struct Mcp {
+    source: PathBuf,
+    base_url: String,
+    compiler: Option<PathBuf>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -457,6 +474,8 @@ enum Action {
     Version,
     Languages,
     Init(Init),
+    Mcp(Mcp),
+    McpGenerator,
     Generate(Box<Generate>),
 }
 
@@ -473,6 +492,9 @@ fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Action> {
     }
     if command == "init" {
         return parse_init(args);
+    }
+    if command == "mcp" {
+        return parse_mcp(args);
     }
     if command == "languages" {
         if args.next().is_some() {
@@ -641,6 +663,55 @@ fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Action> {
         bail!("TypeScript options require a TypeScript target")
     }
     Ok(Action::Generate(Box::new(options)))
+}
+
+fn parse_mcp(args: impl IntoIterator<Item = OsString>) -> Result<Action> {
+    let collected = args.into_iter().collect::<Vec<_>>();
+    if collected.len() == 1 && collected[0] == "generator" {
+        return Ok(Action::McpGenerator);
+    }
+    let mut source = None;
+    let mut base_url = None;
+    let mut compiler = None;
+    let mut args = collected.into_iter();
+    while let Some(argument) = args.next() {
+        let flag = argument.to_string_lossy();
+        if flag == "--help" || flag == "-h" {
+            return Ok(Action::Help);
+        }
+        if !flag.starts_with('-') {
+            if source.replace(PathBuf::from(argument)).is_some() {
+                bail!("mcp accepts exactly one OpenAPI file")
+            }
+            continue;
+        }
+        if !matches!(flag.as_ref(), "--base-url" | "--openapi-compiler") {
+            bail!("unknown mcp option {flag}; run kaji --help")
+        }
+        let value = args
+            .next()
+            .with_context(|| format!("{flag} requires a value"))?;
+        if flag == "--base-url" {
+            let value = value
+                .into_string()
+                .map_err(|_| anyhow::anyhow!("--base-url requires UTF-8 text"))?;
+            let parsed =
+                reqwest::Url::parse(&value).context("--base-url must be an absolute URL")?;
+            if !matches!(parsed.scheme(), "http" | "https") {
+                bail!("--base-url must use http or https")
+            }
+            base_url = Some(value.trim_end_matches('/').to_owned());
+        } else {
+            compiler = Some(value.into());
+        }
+    }
+    let source = source.context("mcp requires an OpenAPI file")?;
+    let base_url = base_url.context("mcp requires --base-url")?;
+    Ok(Action::Mcp(Mcp {
+        source,
+        base_url,
+        compiler,
+    }))
 }
 
 fn parse_init(args: impl IntoIterator<Item = OsString>) -> Result<Action> {
@@ -1191,7 +1262,7 @@ fn add_typescript_artifact_dependencies(
             .plugins
             .iter()
             .filter_map(|plugin| match plugin.name.as_str() {
-                "zod" => Some(("zod", "^3.0.0")),
+                "zod" => Some(("zod", "^4.0.0")),
                 "tanstack-react-query" => Some(("@tanstack/react-query", "^5.0.0")),
                 "tanstack-vue-query" => Some(("@tanstack/vue-query", "^5.0.0")),
                 "swr" => Some(("swr", "^2.0.0")),
@@ -1200,7 +1271,19 @@ fn add_typescript_artifact_dependencies(
                 _ => None,
             })
             .collect::<Vec<_>>();
-        if dependencies.is_empty() {
+        let dev_dependencies = package
+            .plugins
+            .iter()
+            .filter_map(|plugin| match plugin.name.as_str() {
+                // Cypress is test-only, but the generated `.cy.ts` file is
+                // included by the package's strict TypeScript build. Owning
+                // this type dependency makes an explicitly selected Cypress
+                // plugin compile without asking consumers to guess it.
+                "cypress" => Some(("cypress", "^15.0.0")),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        if dependencies.is_empty() && dev_dependencies.is_empty() {
             continue;
         }
         let path = Path::new(".").join(&package.path).join("package.json");
@@ -1214,21 +1297,28 @@ fn add_typescript_artifact_dependencies(
         let object = manifest
             .as_object_mut()
             .expect("Kaji TypeScript manifests are JSON objects");
-        let entries = object
-            .entry("dependencies")
-            .or_insert_with(|| serde_json::json!({}))
-            .as_object_mut()
-            .context("generated TypeScript manifest dependencies must be an object")?;
-        for (name, version) in dependencies {
-            if let Some(existing) = entries.get(name).and_then(serde_json::Value::as_str) {
-                if existing != version {
-                    bail!(
-                        "generated TypeScript manifest {} already declares {name} as {existing}, not {version}",
-                        path.display()
-                    );
+        for (field, dependencies) in [
+            ("dependencies", dependencies),
+            ("devDependencies", dev_dependencies),
+        ] {
+            let entries = object
+                .entry(field)
+                .or_insert_with(|| serde_json::json!({}))
+                .as_object_mut()
+                .with_context(|| {
+                    format!("generated TypeScript manifest {field} must be an object")
+                })?;
+            for (name, version) in dependencies {
+                if let Some(existing) = entries.get(name).and_then(serde_json::Value::as_str) {
+                    if existing != version {
+                        bail!(
+                            "generated TypeScript manifest {} already declares {name} as {existing}, not {version}",
+                            path.display()
+                        );
+                    }
                 }
+                entries.insert(name.into(), serde_json::Value::String(version.into()));
             }
-            entries.insert(name.into(), serde_json::Value::String(version.into()));
         }
         tree.replace(GeneratedFile::new(
             path,
@@ -1320,6 +1410,34 @@ fn write_sdk(artifacts: &Path, options: &Generate, reporter: &Reporter) -> Resul
     Ok(())
 }
 
+fn serve_mcp(options: Mcp) -> Result<()> {
+    let source = std::fs::canonicalize(&options.source)
+        .with_context(|| format!("cannot read OpenAPI source {}", options.source.display()))?;
+    if !source.is_file() {
+        bail!("OpenAPI source must be a file")
+    }
+    let temporary = tempfile::tempdir().context("cannot create compiler working directory")?;
+    let helper = compiler_path(options.compiler)?;
+    let status = Command::new(&helper)
+        .arg("--out")
+        .arg(temporary.path())
+        .arg(&source)
+        // MCP reserves stdout for newline-delimited JSON-RPC messages. The
+        // compiler's progress summary must never corrupt that transport.
+        .stdout(Stdio::null())
+        .status()
+        .with_context(|| format!("cannot start OpenAPI compiler {}", helper.display()))?;
+    if !status.success() {
+        bail!("OpenAPI compiler failed ({status})")
+    }
+    let api = kaji_core::adapter::openapi_sidecar::load_operations(
+        temporary.path(),
+        "API".into(),
+        "0.1.0".into(),
+    )?;
+    mcp::serve(api, &options.base_url)
+}
+
 fn main() -> ExitCode {
     let action = match parse(env::args_os().skip(1)) {
         Ok(action) => action,
@@ -1342,6 +1460,8 @@ fn main() -> ExitCode {
             Ok(())
         }
         Action::Init(init) => init_config(init),
+        Action::Mcp(options) => serve_mcp(options),
+        Action::McpGenerator => mcp::serve_generator(),
         Action::Generate(options) => generate(*options),
     };
     match result {
@@ -1413,6 +1533,15 @@ mod tests {
         assert_eq!(options.color, ColorChoice::Always);
         assert!(ColorChoice::Always.enabled());
         assert!(!ColorChoice::Never.enabled());
+    }
+
+    #[test]
+    fn selects_the_generator_control_mcp_server() {
+        assert!(matches!(
+            parse(arguments("mcp generator")).unwrap(),
+            Action::McpGenerator
+        ));
+        assert!(parse(arguments("mcp generator extra")).is_err());
     }
 
     #[test]

@@ -30,10 +30,33 @@ type BodyDoc struct {
 // MediaTypeDoc is the shared lossless representation of a request or response
 // content entry for downstream SDK generators.
 type MediaTypeDoc struct {
-	ContentType      string        `json:"content_type"`
-	Schema           []SchemaField `json:"schema,omitempty"`
-	SchemaDefinition any           `json:"schema_definition,omitempty"`
-	ExampleJSON      string        `json:"example_json,omitempty"`
+	ContentType      string                     `json:"content_type"`
+	Schema           []SchemaField              `json:"schema,omitempty"`
+	SchemaDefinition any                        `json:"schema_definition,omitempty"`
+	ExampleJSON      string                     `json:"example_json,omitempty"`
+	Encoding         map[string]FormEncodingDoc `json:"encoding,omitempty"`
+}
+
+// FormEncodingDoc retains OpenAPI's per-property Encoding Object for multipart
+// and urlencoded request bodies. It deliberately contains only transport
+// behavior; property schemas remain in MediaTypeDoc.SchemaDefinition.
+type FormEncodingDoc struct {
+	ContentType   string `json:"contentType,omitempty"`
+	Headers       map[string]FormHeaderDoc `json:"headers,omitempty"`
+	Style         string `json:"style,omitempty"`
+	Explode       *bool  `json:"explode,omitempty"`
+	AllowReserved bool   `json:"allowReserved,omitempty"`
+}
+
+// FormHeaderDoc retains the Header Object attached to one multipart part.
+// Runtime-specific renderers can expose its schema without reparsing OpenAPI.
+type FormHeaderDoc struct {
+	Required         bool `json:"required,omitempty"`
+	Style            string `json:"style,omitempty"`
+	Explode          bool `json:"explode,omitempty"`
+	AllowReserved    bool `json:"allowReserved,omitempty"`
+	SchemaDefinition any `json:"schema_definition,omitempty"`
+	ExampleJSON      string `json:"example_json,omitempty"`
 }
 
 // SecurityRequirementDoc preserves the names and scopes from one OpenAPI

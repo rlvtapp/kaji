@@ -68,11 +68,59 @@ const contact = await client.contacts.get({ path: { contactId: "contact_123" } }
 The full client owns its configured base URL, credentials, retries, hooks, and
 operation binding. It is the ergonomic choice for most SDK consumers.
 
+TypeScript full clients also expose their configured `transport`. This is useful
+when a generated framework helper calls the raw operation functions: pass
+`client: sdk.transport`, rather than constructing a second HTTP client.
+
+```ts
+const sdk = new RelevateEmail({ baseUrl: "https://api.relevate.example" });
+const query = useGetContact({ client: sdk.transport, path: { contactId: "contact_123" } });
+```
+
 Path, query, header, and body values use the generated operation's grouped
 options rather than a completed URL. Ordinary TypeScript operations resolve to
 the decoded response body; `.unwrap()` returns the same underlying promise,
 not a separate result envelope. Streaming operations have a separate stream
 result surface.
+
+### TypeScript transport and validation controls
+
+The Fetch and Axios runtimes preserve declared parameter styles for path,
+query, header, and cookie values, select the operation's request media type,
+and return a status-discriminated response envelope internally. By default,
+non-2xx responses throw `ApiError`; pass `throwOnError: false` when the caller
+needs to inspect declared success and error responses by `status`.
+
+Each result also exposes the actual `contentType`. When a response status has
+multiple declared representations, `contentType` narrows `data` to that media
+type's generated shape. Multipart and urlencoded bodies additionally honor
+OpenAPI's per-property `encoding` settings for content type, style, explode,
+and reserved characters.
+
+Use `codecs` for representations the runtime cannot safely parse by itself,
+such as XML or YAML. A codec may supply `encode` and/or `decode` and is keyed
+by media type (with `*/*` as a fallback):
+
+```ts
+const client = createClient({
+  codecs: {
+    'application/xml': { decode: xml => parseXml(xml), encode: value => toXml(value) },
+  },
+})
+```
+
+Runtime validation is opt-in and uses the Standard Schema V1 interface, so it
+does not require a direct Zod dependency. Generate `zod.ts` alongside the SDK,
+then install its per-operation request or response validator globally or for a
+single call:
+
+```ts
+import { kajiOperationSchemas } from './zod'
+
+const client = createClient({
+  validation: { response: kajiOperationSchemas.getContact.responses['200']['application/json'] },
+})
+```
 Names and exact request fields in these examples depend on your OpenAPI document.
 
 ### Full-client layouts

@@ -11,7 +11,7 @@ cd openapi
 go run . --out ../.kaji/openapi ../openapi.yaml
 ```
 
-The final argument can be an OpenAPI 3.0/3.1 JSON or YAML file. `--out` is the
+The final argument can be a Swagger 2.0 or OpenAPI 3.0/3.1 JSON or YAML file. `--out` is the
 artifact directory consumed by `kaji::generate_openapi`.
 
 ```sh

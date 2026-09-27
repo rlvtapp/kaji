@@ -22,6 +22,35 @@ Use `generate_openapi(path, name, version, release)` for the artifacts emitted
 by the bundled Go compiler. For an in-memory API with named security requirements,
 pass its definitions to `generate_with_security_catalog`.
 
+## Custom input adapters
+
+`kaji_core::Adapter` is the input extension point. It returns an `AdaptedApi`
+containing Kaji's neutral `Api` plus its named security catalog, so language
+plugins remain independent of the source format:
+
+```rust
+use anyhow::Result;
+use kaji::{ProfileSet, generate_with_adapter, ts};
+use kaji_core::{AdaptedApi, Adapter, Api, SecuritySchemeCatalog};
+
+struct CompanyContract;
+
+impl Adapter for CompanyContract {
+    fn adapt(&self) -> Result<AdaptedApi> {
+        Ok(AdaptedApi::new(Api::default(), SecuritySchemeCatalog::default()))
+    }
+}
+
+let tree = generate_with_adapter(
+    &CompanyContract,
+    ProfileSet::new("sdk").package(ts::package("typescript").with(ts::sdk())),
+)?;
+```
+
+The bundled OpenAPI path is an `OpenApiSidecar` adapter and remains available
+through `generate_openapi`. Output extension remains language plugins; there is
+no separate output-parser interface to implement.
+
 The prelude imports language package extension traits. Set package identity with
 `.name(...)`, shared defaults with `.common(...)`, and individual generator
 options on `.with(language::sdk()...)`.
