@@ -65,18 +65,10 @@ jobs:
       - name: Pack scoped launcher
         working-directory: packages/cli
         run: npm pack --ignore-scripts
-      - name: Pack optional facade
-        working-directory: packages/npm
-        run: npm pack --ignore-scripts
       - uses: actions/upload-artifact@v4
         with:
           name: scoped-launcher
           path: packages/cli/*.tgz
-          if-no-files-found: error
-      - uses: actions/upload-artifact@v4
-        with:
-          name: unscoped-facade
-          path: packages/npm/*.tgz
           if-no-files-found: error
 
   publish:
@@ -96,10 +88,6 @@ jobs:
         with:
           name: scoped-launcher
           path: release-artifacts/scoped-launcher
-      - uses: actions/download-artifact@v4
-        with:
-          name: unscoped-facade
-          path: release-artifacts/unscoped-facade
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -109,7 +97,6 @@ jobs:
         run: |
           tag="${GITHUB_REF_NAME#v}"
           test "$tag" = "$(node -p "require('./packages/cli/package.json').version")"
-          test "$tag" = "$(node -p "require('./packages/npm/package.json').version")"
       - name: Publish native packages
         run: |
           for package in release-artifacts/native/*.tgz; do
@@ -117,5 +104,3 @@ jobs:
           done
       - name: Publish scoped launcher
         run: npm publish release-artifacts/scoped-launcher/*.tgz --access public
-      - name: Publish optional facade
-        run: npm publish release-artifacts/unscoped-facade/*.tgz --access public
