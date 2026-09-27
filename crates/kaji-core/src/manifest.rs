@@ -54,5 +54,5 @@ impl GeneratedManifest {
 
 fn sha256(contents: &str) -> String {
     let digest = Sha256::digest(contents.as_bytes());
-    format!("{digest:x}")
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
