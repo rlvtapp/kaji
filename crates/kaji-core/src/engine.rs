@@ -233,29 +233,23 @@ impl Emitter<'_> {
         Ok(())
     }
     pub fn append(&mut self, tree: GeneratedTree) -> Result<()> {
-        for (path, contents) in tree.iter() {
-            self.insert(
-                GeneratedFile::new(path, contents)?,
-                tree.preserves_existing(path),
-            )?;
+        for (file, custom) in tree.into_files() {
+            self.insert(file, custom)?;
         }
         Ok(())
     }
 
     /// Adapts a renderer with its own output prefix while retaining create-once files.
     pub fn append_from(&mut self, tree: GeneratedTree, prefix: &Path) -> Result<()> {
-        for (path, contents) in tree.iter() {
-            let relative = path.strip_prefix(prefix).with_context(|| {
+        for (file, custom) in tree.into_files() {
+            let relative = file.path.strip_prefix(prefix).with_context(|| {
                 format!(
                     "renderer output {} is outside {}",
-                    path.display(),
+                    file.path.display(),
                     prefix.display()
                 )
             })?;
-            self.insert(
-                GeneratedFile::new(relative, contents)?,
-                tree.preserves_existing(path),
-            )?;
+            self.insert(GeneratedFile::new(relative, file.contents)?, custom)?;
         }
         Ok(())
     }
@@ -458,11 +452,13 @@ impl<L: Language> Package<L> {
     ) -> Result<GeneratedTree> {
         let plan = self.resolve()?;
         let common = common.overlay(&self.common);
-        let mut api = api.clone();
-        if let Some(version) = &common.package_version {
-            api.version.clone_from(version);
-        }
-        let semantics = analyze_sdk_semantics(&api, catalog);
+        let overridden = common.package_version.as_ref().map(|version| {
+            let mut copy = api.clone();
+            copy.version.clone_from(version);
+            copy
+        });
+        let api = overridden.as_ref().unwrap_or(api);
+        let semantics = analyze_sdk_semantics(api, catalog);
         let mut workspace = L::Workspace::default();
         let mut tree = GeneratedTree::default();
         let mut owners = BTreeMap::new();
@@ -471,7 +467,7 @@ impl<L: Language> Package<L> {
             let plugin = &self.plugins[index];
             let mut publications = HashMap::new();
             let mut cx = PluginContext {
-                api: &api,
+                api,
                 semantics: &semantics,
                 security_schemes: catalog,
                 common: &common,
@@ -506,7 +502,7 @@ impl<L: Language> Package<L> {
             }
         }
         L::finalize(&mut FinalizeContext {
-            api: &api,
+            api,
             common: &common,
             settings: &self.settings,
             workspace: &mut workspace,
@@ -518,9 +514,9 @@ impl<L: Language> Package<L> {
         })?;
         let mut output = GeneratedTree::default();
         let dir = checked_path(Path::new(&self.dir))?;
-        for (path, contents) in tree.iter() {
-            let file = GeneratedFile::new(dir.join(path), contents)?;
-            if tree.preserves_existing(path) {
+        for (file, custom) in tree.into_files() {
+            let file = GeneratedFile::new(dir.join(file.path), file.contents)?;
+            if custom {
                 output.insert_custom(file)?;
             } else {
                 output.insert(file)?;

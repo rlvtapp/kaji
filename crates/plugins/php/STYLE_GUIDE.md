@@ -1,13 +1,17 @@
 # PHP SDK client styles
 
-Kaji supports two public styles:
+Select the style on the SDK plugin:
 
-- `SdkClientStyle::Flat` preserves direct operations such as
-  `$client->getContact($id)`.
-- `SdkClientStyle::Namespaced` additionally exports resource accessors such as
-  `$client->contacts()->get($id)`. Direct operations remain available for
-  incremental migration.
+```rust
+use kaji::{php, prelude::*};
 
-Use `generate_php_sdk_with_style(api, output_dir, package_name, style)` to
-choose. Each generated package also contains this choice in its own
-`STYLE_GUIDE.md`.
+let package = php::package("php")
+    .with(php::sdk().namespaced()); // Default; use .flat() for direct methods.
+```
+
+Namespaced clients use `$client->contacts()->get(...)`; flat clients use
+`$client->getContact(...)`.
+Direct operation methods also remain available on namespaced clients.
+Actual signatures depend on the operation's declared parameters and body.
+
+The generated package's own `STYLE_GUIDE.md` records the selected surface.

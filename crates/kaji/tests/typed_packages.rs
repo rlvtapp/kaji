@@ -1,5 +1,5 @@
 mod support;
-use kaji::{dotnet, elixir, go, java, php, prelude::*, python, rust, ts};
+use kaji::{prelude::*, ts};
 
 struct CommunityConsumer {
     meta: Meta,
@@ -61,79 +61,11 @@ fn community_consumer_uses_real_types_and_shared_package_dependencies() {
 }
 
 #[test]
-fn typed_packages_match_all_existing_language_outputs_byte_for_byte() {
-    let api = support::sdk_contract_api();
-    let old = kaji::generate(
-        &api,
-        ProfileSet::new("sdk")
-            .rust()
-            .typescript_fetch()
-            .typescript_axios()
-            .go()
-            .python()
-            .php()
-            .java()
-            .dotnet()
-            .elixir(),
-    )
-    .unwrap();
-    let new = kaji::generate(
-        &api,
-        ProfileSet::new("sdk")
-            .package(rust::package("rust").with(rust::sdk()))
-            .package(ts::package("typescript-fetch").with(ts::sdk().fetch()))
-            .package(ts::package("typescript-axios").with(ts::sdk().axios()))
-            .package(go::package("go").with(go::sdk()))
-            .package(python::package("python").with(python::sdk()))
-            .package(php::package("php").with(php::sdk()))
-            .package(java::package("java").with(java::sdk()))
-            .package(dotnet::package("dotnet").with(dotnet::sdk()))
-            .package(elixir::package("elixir").with(elixir::sdk())),
-    )
-    .unwrap();
-    for (path, contents) in old.iter() {
-        assert_eq!(
-            Some(contents),
-            new.get(path),
-            "different file: {}",
-            path.display()
-        );
-        assert_eq!(
-            old.preserves_existing(path),
-            new.preserves_existing(path),
-            "preservation: {}",
-            path.display()
-        );
-    }
-    assert_eq!(old.iter().count(), new.iter().count());
-}
-
-#[test]
-fn typescript_variants_keep_raw_flat_namespaced_and_grouping_output() {
+fn typescript_variants_generate_raw_or_client_with_local_options() {
     for axios in [false, true] {
         for raw in [false, true] {
             for flat in [false, true] {
                 for group in [false, true] {
-                    let mut old = ProfileSet::new("sdk");
-                    old = if axios {
-                        old.typescript_axios()
-                    } else {
-                        old.typescript_fetch()
-                    };
-                    old = old.typescript_options(ts::TypeScriptOptions {
-                        client_name: Some("Acme".into()),
-                        client_style: if flat {
-                            SdkClientStyle::Flat
-                        } else {
-                            SdkClientStyle::Namespaced
-                        },
-                        surface: if raw {
-                            ts::SdkSurface::Raw
-                        } else {
-                            ts::SdkSurface::Client
-                        },
-                        group_by_tag: group,
-                    });
                     let mut sdk = ts::sdk().client_name("Acme").group_by_tag(group);
                     if axios {
                         sdk = sdk.axios();
@@ -144,17 +76,15 @@ fn typescript_variants_keep_raw_flat_namespaced_and_grouping_output() {
                     if flat {
                         sdk = sdk.flat();
                     }
-                    let dir = if axios {
-                        "typescript-axios"
-                    } else {
-                        "typescript-fetch"
-                    };
-                    let new = ProfileSet::new("sdk").package(ts::package(dir).with(sdk));
-                    let api = support::sdk_contract_api();
-                    assert_eq!(
-                        kaji::generate(&api, old).unwrap(),
-                        kaji::generate(&api, new).unwrap()
-                    );
+                    let tree = kaji::generate(
+                        &support::sdk_contract_api(),
+                        ProfileSet::new("sdk").package(ts::package("ts").with(sdk)),
+                    )
+                    .unwrap();
+                    assert_eq!(tree.get("sdk/ts/client.ts").is_some(), !raw);
+                    let manifest = tree.get("sdk/ts/package.json").unwrap();
+                    assert_eq!(manifest.contains("\"axios\""), axios);
+                    assert!(tree.get("sdk/ts/.kaji/client.ts").is_some());
                 }
             }
         }

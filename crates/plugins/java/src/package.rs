@@ -53,7 +53,7 @@ impl Plugin<Java> for Sdk {
         &self.meta
     }
     fn generate(&self, cx: &mut PluginContext<'_, Java>) -> Result<()> {
-        cx.files.append(crate::generate_java_sdk_with_style(
+        cx.files.append(crate::render_sdk(
             cx.api,
             ".",
             cx.settings.package_name.as_deref(),

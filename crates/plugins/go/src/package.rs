@@ -28,14 +28,21 @@ impl PackageExt for Package<Go> {
 pub struct Sdk {
     meta: Meta,
     client_style: Option<SdkClientStyle>,
+    jobs: usize,
 }
 pub fn sdk() -> Sdk {
     Sdk {
         meta: Meta::new(),
         client_style: None,
+        jobs: 0,
     }
 }
 impl Sdk {
+    /// Maximum rendering workers. Zero uses bounded automatic parallelism.
+    pub fn jobs(mut self, jobs: usize) -> Self {
+        self.jobs = jobs;
+        self
+    }
     pub fn flat(mut self) -> Self {
         self.client_style = Some(SdkClientStyle::Flat);
         self
@@ -53,13 +60,14 @@ impl Plugin<Go> for Sdk {
         &self.meta
     }
     fn generate(&self, cx: &mut PluginContext<'_, Go>) -> Result<()> {
-        cx.files.append(crate::generate_go_sdk_with_style(
+        cx.files.append(crate::render_sdk(
             cx.api,
             ".",
             cx.settings.package_name.as_deref(),
             self.client_style
                 .or(cx.common.client_style)
                 .unwrap_or(SdkClientStyle::Namespaced),
+            self.jobs,
         )?)
     }
 }

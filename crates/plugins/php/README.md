@@ -1,11 +1,31 @@
 # Kaji PHP plugin
 
-Generates PHP 8.2+ SDK packages from Kaji's neutral API model. The default
-`generate_php_sdk` API keeps the direct-operation client surface for backwards
-compatibility. Use `generate_php_sdk_with_style` when selecting a public
-surface explicitly.
+`kaji-plugin-php` renders SDK packages from Kaji's neutral API model,
+using a PHP 8.2+ PSR-18/PSR-7 client. All generation runs in Rust.
 
-See [STYLE_GUIDE.md](STYLE_GUIDE.md) for the generated SDK shapes.
+```rust
+use kaji::{php, prelude::*};
+
+let release = ProfileSet::new("sdk")
+    .package(php::package("php")
+        .name("email-sdk")
+        .with(php::sdk()));
+let tree = kaji::generate(&api, release)?;
+tree.write_to("generated")?;
+```
+
+SDKs are namespaced by default. Choose `php::sdk().flat()` or
+`.namespaced()` explicitly, or supply a shared `Common` default.
+Namespaced clients expose accessors such as `$client->contacts()->get(...)`;
+flat clients use `$client->getContact(...)`. See [STYLE_GUIDE.md](STYLE_GUIDE.md).
+
+When depending on this plugin without the `kaji` facade, import
+`kaji_plugin_php::PackageExt` and compose its package through
+`kaji_core::engine::Packages`. Supply a security catalog when your API
+declares named security schemes.
+
+See [configuration](../../../docs/configuration.md) for every generation option
+and the generated package's README for exact operation signatures.
 
 The generated PSR-18 client safely retries transient transport failures and
 HTTP `408`, `429`, and `5xx` responses. It retries idempotent methods by

@@ -1,31 +1,33 @@
 # Kaji Go plugin
 
-`kaji-plugin-go` renders a native Go API package from Kaji's neutral
-`kaji_core::Api` model. It emits Go models, a configurable HTTP client,
-typed operation request types, and a `go.mod` without requiring a JavaScript
-runtime.
+`kaji-plugin-go` renders SDK packages from Kaji's neutral API model,
+using a standard-library HTTP client. All generation runs in Rust.
 
 ```rust
-let tree = kaji_plugin_go::generate_go_sdk(&api, "sdks/go", Some("email"))?;
+use kaji::{go, prelude::*};
+
+let release = ProfileSet::new("sdk")
+    .package(go::package("go")
+        .name("email")
+        .with(go::sdk()));
+let tree = kaji::generate(&api, release)?;
 tree.write_to("generated")?;
 ```
 
-For a product-style resource facade, select it explicitly while preserving
-the direct generated operations for migration:
+SDKs are namespaced by default. Choose `go::sdk().flat()` or
+`.namespaced()` explicitly, or supply a shared `Common` default.
+Namespaced clients expose resources such as `client.Contacts.Get(ctx, input)`;
+flat clients use direct operations such as `client.GetContact(ctx, input)`.
+Go always emits split model and operation files. Configure bounded rendering
+parallelism with `go::sdk().jobs(4)`; see [large specs](../../../docs/large-specs.md).
 
-```rust
-use kaji_core::SdkClientStyle;
+When depending on this plugin without the `kaji` facade, import
+`kaji_plugin_go::PackageExt` and compose its package through
+`kaji_core::engine::Packages`. Supply a security catalog when your API
+declares named security schemes.
 
-let tree = kaji_plugin_go::generate_go_sdk_with_style(
-    &api,
-    "sdks/go",
-    Some("email"),
-    SdkClientStyle::Namespaced,
-)?;
-```
-
-This initializes resource fields such as `client.Contacts.Get(ctx, input)`.
-The default `SdkClientStyle::Flat` remains `client.GetContact(ctx, input)`.
+See [configuration](../../../docs/configuration.md) for every generation option
+and the generated package's README for exact operation signatures.
 
 The generated package has no third-party dependencies. Configure it with
 `ClientConfig { BaseURL, APIKey, APIKeyHeader, APIKeyPrefix, HTTPClient, Retry }` and

@@ -1,12 +1,17 @@
 # Java SDK client styles
 
-Kaji supports two public styles:
+Select the style on the SDK plugin:
 
-- `SdkClientStyle::Flat` keeps operations on `Client`, for example
-  `client.getContact(input)`.
-- `SdkClientStyle::Namespaced` additionally exports resource accessors, for
-  example `client.contacts().get(input)`. Direct operations remain available
-  for source-compatible migration.
+```rust
+use kaji::{java, prelude::*};
 
-Use `generate_java_sdk_with_style(api, output_dir, package_name, style)` to
-choose. Each generated package includes its selected style in `STYLE_GUIDE.md`.
+let package = java::package("java")
+    .with(java::sdk().namespaced()); // Default; use .flat() for direct methods.
+```
+
+Namespaced clients use `client.contacts().get(input)`; flat clients use
+`client.getContact(input)`.
+Direct operation methods also remain available on namespaced clients.
+Actual signatures depend on the operation's declared parameters and body.
+
+The generated package's own `STYLE_GUIDE.md` records the selected surface.

@@ -1,13 +1,19 @@
 # kaji
 
-`kaji` is reserved as the future unscoped compatibility facade for
-[`@relevate/kaji`](https://www.npmjs.com/package/@relevate/kaji).
+Optional unscoped command-line facade for `@relevate/kaji`:
 
-This initial `0.0.0` release intentionally exports no runtime API. Kaji's
-OpenAPI compiler and SDK generators are currently distributed from this
-repository as Rust and Go source. When the scoped JavaScript package is
-published, this package will forward to it so existing `kaji` references have
-a stable upgrade path.
+```sh
+npx @relevate/kaji generate ./openapi.yaml --output ./sdk --language go,typescript
+```
+
+This source package forwards to the scoped CLI without implementing generation.
+The scoped package selects a prebuilt Rust executable and bundled Go OpenAPI
+compiler. End users need Node, not Rust or Go toolchains.
+
+Neither this source directory nor its version number implies npm availability.
+Publish the platform packages and `@relevate/kaji` first. Publishing this optional
+facade additionally requires npm to approve the unscoped `kaji` name; the scoped
+CLI works independently of that approval.
 
 Source and documentation: <https://github.com/rlvtapp/kaji>
 

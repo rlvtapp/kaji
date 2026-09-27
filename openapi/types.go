@@ -1,19 +1,17 @@
 package main
 
 type OperationDoc struct {
-	Kind        string   `json:"kind,omitempty"`
-	Name        string   `json:"name,omitempty"`
-	OperationID string   `json:"operation_id,omitempty"`
-	Path        string   `json:"path"`
-	Method      string   `json:"method"`
-	Summary     string   `json:"summary,omitempty"`
-	Description string   `json:"description,omitempty"`
-	Deprecated  bool     `json:"deprecated,omitempty"`
-	Hidden      bool     `json:"hidden,omitempty"`
-	Auth        *AuthDoc `json:"auth,omitempty"`
+	Kind        string `json:"kind,omitempty"`
+	Name        string `json:"name,omitempty"`
+	OperationID string `json:"operation_id,omitempty"`
+	Path        string `json:"path"`
+	Method      string `json:"method"`
+	Summary     string `json:"summary,omitempty"`
+	Description string `json:"description,omitempty"`
+	Deprecated  bool   `json:"deprecated,omitempty"`
+	Hidden      bool   `json:"hidden,omitempty"`
 	// SecurityRequirements is the lossless OpenAPI security shape: each entry
 	// is an alternative and the named schemes inside it are required together.
-	// Auth remains as the legacy, documentation-oriented summary.
 	SecurityRequirements []SecurityRequirementDoc `json:"security_requirements,omitempty"`
 	Servers              []ServerDoc              `json:"servers,omitempty"`
 	Parameters           []ParameterDoc           `json:"parameters,omitempty"`
@@ -24,15 +22,9 @@ type OperationDoc struct {
 }
 
 type BodyDoc struct {
-	Description      string        `json:"description,omitempty"`
-	Required         bool          `json:"required,omitempty"`
-	ContentType      string        `json:"content_type,omitempty"`
-	Schema           []SchemaField `json:"schema,omitempty"`
-	SchemaDefinition any           `json:"schema_definition,omitempty"`
-	ExampleJSON      string        `json:"example_json,omitempty"`
-	// MediaTypes preserves every request content entry. The fields above retain
-	// the first representation for existing docs consumers.
-	MediaTypes []MediaTypeDoc `json:"media_types,omitempty"`
+	Description string         `json:"description,omitempty"`
+	Required    bool           `json:"required,omitempty"`
+	MediaTypes  []MediaTypeDoc `json:"media_types"`
 }
 
 // MediaTypeDoc is the shared lossless representation of a request or response
@@ -42,16 +34,6 @@ type MediaTypeDoc struct {
 	Schema           []SchemaField `json:"schema,omitempty"`
 	SchemaDefinition any           `json:"schema_definition,omitempty"`
 	ExampleJSON      string        `json:"example_json,omitempty"`
-}
-
-type AuthDoc struct {
-	Required    bool   `json:"required"`
-	Scheme      string `json:"scheme,omitempty"`
-	Description string `json:"description,omitempty"`
-	Type        string `json:"type,omitempty"`
-	Name        string `json:"name,omitempty"`
-	In          string `json:"in,omitempty"`
-	HttpScheme  string `json:"http_scheme,omitempty"`
 }
 
 // SecurityRequirementDoc preserves the names and scopes from one OpenAPI

@@ -474,8 +474,6 @@ mod tests {
                 id: "getContact".into(),
                 method: HttpMethod::Get,
                 path: "/v1/contacts/{contact_id}".into(),
-                response_type: "Contact".into(),
-                request_type: None,
                 parameters: vec![],
                 request_body: None,
                 responses: vec![OperationResponse {
@@ -557,8 +555,6 @@ mod tests {
             id: "Create contact!".into(),
             method: HttpMethod::Post,
             path: "/contacts".into(),
-            response_type: "void".into(),
-            request_type: None,
             parameters: vec![],
             request_body: None,
             responses: vec![

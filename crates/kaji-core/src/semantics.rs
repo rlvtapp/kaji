@@ -307,7 +307,6 @@ mod tests {
                 schemes: BTreeMap::from([("apiKey".into(), vec![])]),
             }],
             annotations: BTreeMap::from([("x-kaji-pagination".into(), json!({}))]),
-            ..Operation::default()
         };
         let catalog = SecuritySchemeCatalog {
             schemes: vec![SecurityScheme {

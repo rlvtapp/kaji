@@ -184,7 +184,7 @@ func TestOperationDocsPreserveRequestAndResponseSchemaDefinitions(t *testing.T) 
 	if err != nil {
 		t.Fatalf("convert request body: %v", err)
 	}
-	if body == nil || body.SchemaDefinition == nil {
+	if body == nil || len(body.MediaTypes) == 0 || body.MediaTypes[0].SchemaDefinition == nil {
 		t.Fatalf("request schema definition missing: %#v", body)
 	}
 }
@@ -292,6 +292,22 @@ paths:
 	}
 	if document.RequestBody == nil || !document.RequestBody.Required || len(document.RequestBody.MediaTypes) != 2 {
 		t.Fatalf("request media types were not preserved: %#v", document.RequestBody)
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(documentBytes, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if _, present := payload["auth"]; present {
+		t.Fatal("operation must use security_requirements, not a first-scheme auth summary")
+	}
+	var bodyPayload map[string]json.RawMessage
+	if err := json.Unmarshal(payload["request_body"], &bodyPayload); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"content_type", "schema", "schema_definition", "example_json"} {
+		if _, present := bodyPayload[key]; present {
+			t.Fatalf("request representation %s must live only in media_types", key)
+		}
 	}
 	if len(document.Responses) != 3 || document.Responses[0].Code != "201" || document.Responses[1].ContentType != "application/xml" {
 		t.Fatalf("response status/media types were not preserved: %#v", document.Responses)

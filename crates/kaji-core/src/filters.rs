@@ -1,11 +1,12 @@
 //! Target-neutral operation selection.
 //!
-//! Kaji applies include/exclude rules before a plugin sees a node.  The Rust
-//! engine keeps that rule independent of a specific language backend so a
-//! TypeScript client and a Rust client cannot accidentally expose different
-//! operation sets for the same configuration.
+//! Plugins can apply these selectors explicitly before rendering. The typed
+//! engine does not implicitly filter operations or interpret override values;
+//! each plugin owns how its selected operations and options are consumed.
 
-use crate::{GeneratorConfig, HttpMethod, Operation, Schema};
+use std::collections::BTreeMap;
+
+use crate::{HttpMethod, Operation, Schema};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum OperationFilter {
@@ -97,7 +98,7 @@ impl OperationSelection {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OverrideRule {
     pub filter: OverrideFilter,
-    pub values: GeneratorConfig,
+    pub values: BTreeMap<String, String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -119,8 +120,8 @@ impl OverrideRules {
         &self,
         operation: &Operation,
         tags: &[String],
-        base: &GeneratorConfig,
-    ) -> GeneratorConfig {
+        base: &BTreeMap<String, String>,
+    ) -> BTreeMap<String, String> {
         self.resolve(base, |filter| match filter {
             OverrideFilter::OperationId(pattern) => wildcard_matches(pattern, &operation.id),
             OverrideFilter::Path(pattern) => wildcard_matches(pattern, &operation.path),
@@ -130,7 +131,11 @@ impl OverrideRules {
         })
     }
 
-    pub fn resolve_schema(&self, schema: &Schema, base: &GeneratorConfig) -> GeneratorConfig {
+    pub fn resolve_schema(
+        &self,
+        schema: &Schema,
+        base: &BTreeMap<String, String>,
+    ) -> BTreeMap<String, String> {
         self.resolve(base, |filter| match filter {
             OverrideFilter::SchemaName(pattern) => wildcard_matches(pattern, &schema.name),
             OverrideFilter::OperationId(_)
@@ -142,9 +147,9 @@ impl OverrideRules {
 
     fn resolve(
         &self,
-        base: &GeneratorConfig,
+        base: &BTreeMap<String, String>,
         matches: impl Fn(&OverrideFilter) -> bool,
-    ) -> GeneratorConfig {
+    ) -> BTreeMap<String, String> {
         let mut resolved = base.clone();
         for rule in &self.rules {
             if matches(&rule.filter) {
@@ -155,7 +160,7 @@ impl OverrideRules {
     }
 }
 
-/// A small, allocation-free glob matcher for config patterns. `*` matches any
+/// A small glob matcher for config patterns. `*` matches any
 /// sequence (including `/`) and `?` matches one Unicode scalar value.
 pub fn wildcard_matches(pattern: &str, value: &str) -> bool {
     let pattern: Vec<char> = pattern.chars().collect();

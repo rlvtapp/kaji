@@ -14,13 +14,12 @@ dependency-injection setup, or API wrapper convention and only wants Kaji to
 own the contract types and request serialization.
 
 ```rust
-use kaji::{ProfileSet, TypeScriptOptions, generate};
+use kaji::{prelude::*, ts, generate};
 
 let tree = generate(
     &api,
     ProfileSet::new("sdk")
-        .typescript_fetch()
-        .typescript_options(TypeScriptOptions::raw()),
+        .package(ts::package("typescript").with(ts::sdk().fetch().raw())),
 )?;
 ```
 
@@ -31,12 +30,13 @@ import { getContact, type Contact } from "@relevate/email-api";
 
 const contact: Contact = await getContact({
   client: myConfiguredClient,
-  contactId: "contact_123",
-});
+  path: { contactId: "contact_123" },
+}).unwrap();
 ```
 
 There is no generated `new RelevateEmail(...)` class in raw mode. You supply
-the configured transport client to each operation. The typed request and
+an optional configured transport client to each operation, or use the generated
+default transport and per-request options. The typed request and
 response definitions are still generated normally.
 
 **Full SDK output** adds the product-style instantiated client on top of the
@@ -44,16 +44,13 @@ same raw functions and types. It is the default for TypeScript and is the
 normal shape for native-language targets.
 
 ```rust
-use kaji::{ProfileSet, TypeScriptOptions, generate};
+use kaji::{prelude::*, ts, generate};
 
 let tree = generate(
     &api,
     ProfileSet::new("sdk")
-        .typescript_fetch()
-        .typescript_options(TypeScriptOptions {
-            client_name: Some("RelevateEmail".into()),
-            ..TypeScriptOptions::default()
-        }),
+        .package(ts::package("typescript")
+            .with(ts::sdk().fetch().client_name("RelevateEmail"))),
 )?;
 ```
 
@@ -65,26 +62,33 @@ const client = new RelevateEmail({
   apiKey: process.env.RELEVATE_API_KEY,
 });
 
-const contact = await client.contacts.get({ contactId: "contact_123" });
+const contact = await client.contacts.get({ path: { contactId: "contact_123" } }).unwrap();
 ```
 
 The full client owns its configured base URL, credentials, retries, hooks, and
 operation binding. It is the ergonomic choice for most SDK consumers.
+
+Path, query, header, and body values use the generated operation's grouped
+options rather than a completed URL. Ordinary TypeScript operations resolve to
+the decoded response body; `.unwrap()` returns the same underlying promise,
+not a separate result envelope. Streaming operations have a separate stream
+result surface.
+Names and exact request fields in these examples depend on your OpenAPI document.
 
 ### Full-client layouts
 
 The full client can be namespaced or flat:
 
 ```text
-namespaced (default)  client.contacts.get({ contactId })
-flat                  client.getContact({ contactId })
+namespaced (default)  client.contacts.get({ path: { contactId } })
+flat                  client.getContact({ path: { contactId } })
 ```
 
-For TypeScript select this with `TypeScriptOptions::flat_client()` or set
-`client_style: SdkClientStyle::Namespaced`. For Go, Python, PHP, Java, .NET,
-and Elixir choose `PackageOptions::flat()` or set `client_style` directly.
-Rust currently emits its maintained Reqwest client surface from its fixed
-profile; it does not expose this choice through `ProfileSet` yet.
+Select this with `language::sdk().flat()` or `.namespaced()` for every maintained
+SDK language, including Rust. Shared defaults can use
+`Common::default().client_style(SdkClientStyle::Flat)`.
+In the CLI, use `--client-style flat`; TypeScript raw output uses
+`--typescript-surface raw`.
 
 ## Public shapes
 
@@ -99,7 +103,7 @@ raw TS:     listContacts({ client, ... })
 
 Direct operation APIs remain available in TypeScript even when the class
 client is generated. Native targets retain their direct methods alongside
-namespaces so an SDK can migrate without a breaking rewrite.
+namespaces for callers who prefer direct operation access.
 
 ## Language packages
 

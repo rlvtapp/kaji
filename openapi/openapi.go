@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/cespare/xxhash/v2"
 	"github.com/pb33f/libopenapi"
@@ -89,7 +90,7 @@ func runWithHash(specPath, outDir string, prevHash *uint64) (uint64, bool, int, 
 	count := 0
 
 	if spec.Paths != nil && spec.Paths.PathItems != nil {
-		generated, err := collectPathItemOperations(spec.Paths.PathItems, defaultSecurity, spec.Components, spec.Servers, outDir, index, &order, false)
+		generated, err := collectPathItemOperations(spec.Paths.PathItems, defaultSecurity, spec.Servers, outDir, index, &order, false)
 		if err != nil {
 			return 0, false, 0, err
 		}
@@ -97,7 +98,7 @@ func runWithHash(specPath, outDir string, prevHash *uint64) (uint64, bool, int, 
 	}
 
 	if spec.Webhooks != nil {
-		generated, err := collectPathItemOperations(spec.Webhooks, defaultSecurity, spec.Components, spec.Servers, outDir, index, &order, true)
+		generated, err := collectPathItemOperations(spec.Webhooks, defaultSecurity, spec.Servers, outDir, index, &order, true)
 		if err != nil {
 			return 0, false, 0, err
 		}
@@ -211,7 +212,6 @@ func collectOAuthFlows(flows *v3.OAuthFlows) []OAuthFlowDoc {
 func collectPathItemOperations(
 	items *orderedmap.Map[string, *v3.PathItem],
 	defaultSecurity []*base.SecurityRequirement,
-	components *v3.Components,
 	specServers []*v3.Server,
 	outDir string,
 	index map[string]string,
@@ -219,6 +219,7 @@ func collectPathItemOperations(
 	isWebhook bool,
 ) (int, error) {
 	count := 0
+	usedSlugs := make(map[string]string)
 
 	for pair := items.First(); pair != nil; pair = pair.Next() {
 		path := pair.Key()
@@ -283,7 +284,6 @@ func collectPathItemOperations(
 
 			parameters := mergeParameters(pathParams, opParams)
 
-			auth := buildAuthDoc(op.Security, defaultSecurity, components)
 			securityRequirements := convertSecurityRequirements(op.Security, defaultSecurity)
 			servers := resolveServers(op.Servers, item.Servers, specServers)
 			serverDocs := convertServers(servers)
@@ -300,7 +300,6 @@ func collectPathItemOperations(
 				Description:          op.Description,
 				Deprecated:           deprecated,
 				Hidden:               extensionBool(op.Extensions, "x-hidden"),
-				Auth:                 auth,
 				SecurityRequirements: securityRequirements,
 				Servers:              serverDocs,
 				Parameters:           parameters,
@@ -322,6 +321,14 @@ func collectPathItemOperations(
 			if isWebhook {
 				slug = "webhook_" + slug
 			}
+			identity := method + " " + path
+			if previous, ok := usedSlugs[slug]; ok && previous != identity {
+				slug += fmt.Sprintf("_%016x", xxhash.Sum64String(identity))
+			}
+			if previous, ok := usedSlugs[slug]; ok && previous != identity {
+				return 0, fmt.Errorf("operation filename collision: %s and %s", previous, identity)
+			}
+			usedSlugs[slug] = identity
 			relFile := filepath.Join("operations", slug+".json")
 			absFile := filepath.Join(outDir, relFile)
 
@@ -346,8 +353,7 @@ func collectPathItemOperations(
 
 		if isWebhook && len(methods) == 1 {
 			sort.Strings(methods)
-			slug := "webhook_" + slugFor(path, methods[0])
-			index["WEBHOOK "+path] = slug + ".json"
+			index["WEBHOOK "+path] = index["WEBHOOK "+strings.ToUpper(methods[0])+" "+path]
 		}
 	}
 
@@ -564,7 +570,6 @@ func convertRequestBody(requestBody *v3.RequestBody) (*BodyDoc, error) {
 	}
 
 	var mediaTypes []MediaTypeDoc
-	var first *BodyDoc
 	for pair := requestBody.Content.First(); pair != nil; pair = pair.Next() {
 		contentType := pair.Key()
 		mediaType := pair.Value()
@@ -592,23 +597,15 @@ func convertRequestBody(requestBody *v3.RequestBody) (*BodyDoc, error) {
 		}
 		mediaTypes = append(mediaTypes, mediaTypeDoc)
 
-		if first == nil {
-			first = &BodyDoc{
-				Description:      requestBody.Description,
-				Required:         requestBody.Required != nil && *requestBody.Required,
-				ContentType:      mediaTypeDoc.ContentType,
-				Schema:           mediaTypeDoc.Schema,
-				SchemaDefinition: mediaTypeDoc.SchemaDefinition,
-				ExampleJSON:      mediaTypeDoc.ExampleJSON,
-			}
-		}
 	}
-
-	if first == nil {
+	if len(mediaTypes) == 0 {
 		return nil, nil
 	}
-	first.MediaTypes = mediaTypes
-	return first, nil
+	return &BodyDoc{
+		Description: requestBody.Description,
+		Required:    requestBody.Required != nil && *requestBody.Required,
+		MediaTypes:  mediaTypes,
+	}, nil
 }
 
 func convertResponse(code string, response *v3.Response) ([]ResponseDoc, error) {
@@ -826,39 +823,7 @@ func convertServerVariables(variables *orderedmap.Map[string, *v3.ServerVariable
 	return docs
 }
 
-func buildAuthDoc(opReqs, rootReqs []*base.SecurityRequirement, components *v3.Components) *AuthDoc {
-	reqs := opReqs
-	if len(reqs) == 0 {
-		reqs = rootReqs
-	}
-
-	if len(reqs) == 0 {
-		return nil
-	}
-
-	for _, req := range reqs {
-		if req == nil {
-			continue
-		}
-
-		if orderedmap.Len(req.Requirements) == 0 {
-			return &AuthDoc{Required: false}
-		}
-
-		for pair := req.Requirements.First(); pair != nil; pair = pair.Next() {
-			schemeName := pair.Key()
-			auth := lookupSecurityDoc(components, schemeName)
-			auth.Required = true
-			return &auth
-		}
-	}
-
-	return nil
-}
-
-// convertSecurityRequirements retains the complete OpenAPI security shape for
-// SDK generators. buildAuthDoc intentionally remains a compact, legacy docs
-// summary (it picks the first scheme), so it must not be used as this boundary.
+// convertSecurityRequirements retains the complete OpenAPI OR-of-AND security shape.
 func convertSecurityRequirements(opReqs, rootReqs []*base.SecurityRequirement) []SecurityRequirementDoc {
 	reqs := opReqs
 	if len(reqs) == 0 {
@@ -884,48 +849,6 @@ func convertSecurityRequirements(opReqs, rootReqs []*base.SecurityRequirement) [
 		return nil
 	}
 	return docs
-}
-
-func lookupSecurityDoc(components *v3.Components, name string) AuthDoc {
-	auth := AuthDoc{Scheme: name}
-	if components == nil || components.SecuritySchemes == nil {
-		auth.Description = fallbackSecurityDescription(auth.Type, auth.HttpScheme, name)
-		return auth
-	}
-
-	for pair := components.SecuritySchemes.First(); pair != nil; pair = pair.Next() {
-		if pair.Key() != name {
-			continue
-		}
-		scheme := pair.Value()
-		if scheme == nil {
-			auth.Description = fallbackSecurityDescription(auth.Type, auth.HttpScheme, name)
-			return auth
-		}
-
-		auth.Type = scheme.Type
-		auth.Name = scheme.Name
-		auth.In = scheme.In
-		auth.HttpScheme = scheme.Scheme
-		auth.Description = strings.TrimSpace(scheme.Description)
-		if auth.Description == "" {
-			auth.Description = fallbackSecurityDescription(scheme.Type, scheme.Scheme, name)
-		}
-		return auth
-	}
-
-	auth.Description = fallbackSecurityDescription(auth.Type, auth.HttpScheme, name)
-	return auth
-}
-
-func fallbackSecurityDescription(authType, httpScheme, name string) string {
-	if authType == "http" && strings.EqualFold(httpScheme, "bearer") {
-		return "Include an Authorization header with a Bearer token."
-	}
-	if authType == "apiKey" {
-		return "Provide an API key for authentication."
-	}
-	return "Security scheme " + name
 }
 
 func mergeParameters(pathParams, opParams []ParameterDoc) []ParameterDoc {
@@ -1053,16 +976,21 @@ func normalizeYAML(value any) any {
 }
 
 func schemaToFields(schema *base.Schema) []SchemaField {
-	if schema == nil {
+	return newSchemaWalk().fields(schema)
+}
+
+func (walk *schemaWalk) fields(schema *base.Schema) []SchemaField {
+	if !walk.enter(schema) {
 		return nil
 	}
+	defer walk.leave(schema)
 
 	if orderedmap.Len(schema.Properties) == 0 {
 		primary := firstNonNullType(schema.Type)
 		if primary == "array" && schema.Items != nil {
 			if schema.Items.IsA() && schema.Items.A != nil {
 				if child := schema.Items.A.Schema(); child != nil {
-					return schemaToFields(child)
+					return walk.fields(child)
 				}
 			}
 		}
@@ -1071,6 +999,10 @@ func schemaToFields(schema *base.Schema) []SchemaField {
 
 	var fields []SchemaField
 	for pair := schema.Properties.First(); pair != nil; pair = pair.Next() {
+		if walk.remaining <= 0 {
+			break
+		}
+		walk.remaining--
 		name := pair.Key()
 		proxy := pair.Value()
 
@@ -1088,12 +1020,12 @@ func schemaToFields(schema *base.Schema) []SchemaField {
 
 				primary := firstNonNullType(childSchema.Type)
 				if primary == "object" {
-					field.Children = schemaToFields(childSchema)
+					field.Children = walk.fields(childSchema)
 				} else if primary == "array" {
 					if childSchema.Items != nil && childSchema.Items.IsA() && childSchema.Items.A != nil {
 						subSchema := childSchema.Items.A.Schema()
 						if subSchema != nil {
-							field.Children = schemaToFields(subSchema)
+							field.Children = walk.fields(subSchema)
 						}
 					}
 				}
@@ -1107,6 +1039,14 @@ func schemaToFields(schema *base.Schema) []SchemaField {
 }
 
 func summarizeSchemaType(schema *base.Schema) string {
+	return newSchemaWalk().summary(schema)
+}
+
+func (walk *schemaWalk) summary(schema *base.Schema) string {
+	if !walk.enter(schema) {
+		return "any"
+	}
+	defer walk.leave(schema)
 	primary := firstNonNullType(schema.Type)
 	if primary == "" {
 		primary = "object"
@@ -1118,7 +1058,7 @@ func summarizeSchemaType(schema *base.Schema) string {
 		if schema.Items != nil {
 			if schema.Items.IsA() && schema.Items.A != nil {
 				if sub := schema.Items.A.Schema(); sub != nil {
-					itemType = summarizeSchemaType(sub)
+					itemType = walk.summary(sub)
 				}
 			}
 		}
@@ -1218,6 +1158,14 @@ func slugFor(path, method string) string {
 	slug = strings.Trim(slug, "_")
 	if slug == "" {
 		slug = method + "_root"
+	}
+	// Leave room for webhook/collision suffixes and .json on 255-byte filesystems.
+	if len(slug) > 180 {
+		end := 180
+		for !utf8.RuneStart(slug[end]) {
+			end--
+		}
+		slug = fmt.Sprintf("%s_%016x", slug[:end], xxhash.Sum64String(method+" "+path))
 	}
 
 	return slug

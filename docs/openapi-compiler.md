@@ -38,4 +38,25 @@ Kaji's Rust generators load these files into a target-neutral AST. That keeps
 OpenAPI complexity in one proven parser while every SDK generator remains pure
 Rust.
 
+The artifact directory is an internal, versioned-together compiler/generator
+boundary, not a stable interchange format. Regenerate it with this repository's
+compiler when updating Kaji. `schemas.json` and `security-schemes.json` are
+required even when their catalogs are empty. Operation `security_requirements` preserve the full
+declared alternatives; request bodies carry their representations under
+`media_types`, including media-specific schema and example data. Rust generators
+consume typed `request_body` and `responses`, rather than guessed type-name
+strings or a first-scheme authentication summary.
+
 The compiler test suite lives next to its source in `openapi/*_test.go`.
+
+## Large and recursive documents
+
+Schema example/field previews use path-local cycle detection, a maximum depth
+of 32, and a 256-node traversal budget. This limits only synthesized documentation
+previews: original schema definitions and references remain in the artifacts.
+Independent uses of the same schema are not mistaken for a cycle. Truncated
+examples use explicit placeholder text and are not validation fixtures.
+
+Long operation filenames are bounded and receive a deterministic hash suffix;
+paths that normalize to the same filename are disambiguated rather than
+overwriting another operation. See [large-spec verification](large-specs.md).

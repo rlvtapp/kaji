@@ -1,102 +1,131 @@
 # Kaji
 
-Kaji is a Rust SDK-generation toolkit for producing polished, idiomatic SDKs
-and contract mocks. It embeds its OpenAPI 3.0/3.1 compiler as Go source under
-`openapi/`, keeps generation independent of JavaScript, and lets one API
-contract produce packages for Rust, TypeScript, Go, Python, PHP, Java, .NET,
-and Elixir.
+A native command-line tool for generating typed SDKs from OpenAPI.
 
-> Kaji is pre-1.0. The public workspace is ready for collaboration; package
-> publication and the stable configuration format are intentionally still in
-> progress.
+One specification. Multiple languages. Ready-to-build packages.
 
-## What it does
-
-- Generates typed SDK packages with flat or resource-namespaced clients.
-- Supports Rust/Reqwest, TypeScript/Fetch, TypeScript/Axios, Go, Python, PHP,
-  Java, .NET, and Elixir targets.
-- Carries OpenAPI auth, declared errors, retries, pagination, streaming, file
-  media, and runtime hooks into supported SDKs.
-- Generates a language-neutral `httpmock` package from the same contract, so
-  every generated SDK can test against one local service.
-- Exposes a small Rust plugin API and a target-neutral AST for new generators.
-
-## Start here
-
-| Read | When you need it |
-| --- | --- |
-| [Getting started](docs/getting-started.md) | Compile an OpenAPI document and generate packages. |
-| [OpenAPI compiler](docs/openapi-compiler.md) | The embedded Go compiler, artifacts, and standalone command. |
-| [Configuration reference](docs/configuration.md) | Every target, package, TypeScript, and mock-server option. |
-| [Typed plugin packages (experimental)](docs/typed-plugins.md) | Language-scoped composition, shared defaults, contracts, and migration boundaries. |
-| [Generated SDKs](docs/generated-sdks.md) | Raw versus full SDK output, client shapes, and language requirements. |
-| [Contract mocking](docs/mocking.md) | Run the Docker mock and add `x-kaji-mock` / pagination behavior. |
-| [SDK verification](docs/verification.md) | Snapshot and live-contract CI coverage. |
-
-## Workspace
-
-| Path | Purpose |
-| --- | --- |
-| `openapi/` | Embedded Go OpenAPI compiler and its conformance tests |
-| `crates/kaji-core` | AST, artifact adapter, generation engine, SDK and mock primitives |
-| `crates/kaji` | First-party profile builder and standalone mock-server package |
-| `crates/plugins/*` | Native SDK package generators by language |
-| `docs/` | Architecture, contract-mocking, and SDK-verification notes |
+Generate **TypeScript, Rust, Go, Python, PHP, Java, .NET, and Elixir** SDKs
+from an OpenAPI 3.0/3.1 document. Choose Fetch or Axios for TypeScript, raw
+operation functions or a full client, and generate several languages in one run.
 
 ## Quick start
 
-First compile the source document into Kaji artifacts:
+Kaji is pre-1.0. The CLI and npm distribution are implemented in this repository,
+but npm packages have **not been published yet**. For now, follow the short
+[source-build instructions](docs/cli.md#local-source-build), then start a project:
 
 ```sh
-cd openapi
-go run . --out ../.kaji/openapi ../openapi.yaml
+npx @relevate/kaji init --input ./openapi.yaml --output ./generated --name "Email" --sdk-version 1.0.0
+# edit kaji.json, then:
+npx @relevate/kaji generate
 ```
 
-Then generate the requested packages from Rust:
+`npx @relevate/kaji init` creates a JSON recipe with its OpenAPI source, output root, SDK
+packages and plugins. Add as many independently configured packages as you
+need, then run `npx @relevate/kaji generate` again whenever the contract changes.
 
-```rust
-use anyhow::Result;
-use kaji::{ProfileSet, generate_openapi};
+The planned npm entry point is `@relevate/kaji`. It is a small Node launcher
+for bundled native executables; installed npm users will not need Rust or Go.
+The generator itself is Rust, with a bundled Go OpenAPI compiler.
 
-fn main() -> Result<()> {
-    let artifacts = generate_openapi(
-        std::path::Path::new(".kaji/openapi"),
-        "Example API",
-        "1.0.0",
-        ProfileSet::new("artifacts")
-            .rust()
-            .typescript_fetch()
-            .python()
-            .mock_server(),
-    )?;
-    artifacts.write_to("generated")?;
-    Ok(())
-}
-```
-
-The Rust call then writes isolated packages below `generated/artifacts`,
-including `generated/artifacts/mock-server`.
-
-## Development
+## Common commands
 
 ```sh
-cargo fmt --all --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-# Runs the generated Go/Python SDKs against a local contract mock.
-cargo test -p kaji --test sdk_to_mock_contract -- --ignored
+# See available SDK targets
+npx @relevate/kaji languages
+
+# Start or use an explicit JSON recipe
+npx @relevate/kaji init --input openapi.yaml
+npx @relevate/kaji generate --config ./kaji.json
+
+# Generate every SDK language (TypeScript uses Fetch by default)
+npx @relevate/kaji generate openapi.yaml --output ./generated --language all
+
+# Generate TypeScript operation functions without an SDK class
+npx @relevate/kaji generate openapi.yaml --output ./generated \
+  --language typescript --typescript-surface raw
+
+# Generate a flat client instead of resource namespaces
+npx @relevate/kaji generate openapi.yaml --output ./generated \
+  --language go --client-style flat
 ```
 
-Generated output is protected by an approved all-target snapshot, and the
-first live SDK contract suite exercises the generated Go and Python clients.
-See [docs/verification.md](docs/verification.md) for the coverage model.
+The JSON recipe is the recommended route. Direct command-line generation stays
+useful for one-off output and CI experiments. All options and every built-in
+config plugin are documented in the [CLI guide](docs/cli.md).
 
-## Inspiration
+Both modes accept a local OpenAPI file or an HTTPS URL. For example:
 
-Kaji's plugin-oriented workflow was initially inspired by Kubb. Kaji does not
-include Kubb configuration compatibility, source code, test corpus, or runtime
-dependencies.
+```sh
+npx @relevate/kaji generate https://aka.ms/graph/v1.0/openapi.yaml \
+  --output ./graph-sdk --language go --name "Microsoft Graph"
+```
 
-## License
+## What you get
 
-Kaji is licensed under the [MIT License](LICENSE).
+A generated TypeScript client can look like this:
+
+```ts
+const client = new Email({
+  baseUrl: "https://api.example.com",
+  apiKey,
+});
+
+const contact = await client.contacts.get({
+  path: { contactId: "contact_123" },
+}).unwrap();
+```
+
+Names and parameters come from your API. Each generated package includes
+its own usage guide and build metadata.
+
+## Choose what you ship
+
+- **Full SDKs:** configured clients, typed requests/responses, resource namespaces,
+  declared errors, and contract-driven runtime features.
+- **Direct operations:** select a flat client, or TypeScript raw functions with
+  `--typescript-surface raw`.
+- **Fetch or Axios:** separate TypeScript packages with the same source contract.
+- **Large Go APIs:** split model/operation files and bounded rendering workers.
+- **Validation and frontend helpers:** add Zod, TanStack React/Vue Query, SWR,
+  Faker, MSW, and Cypress beside a TypeScript package through `kaji.json`.
+- **Documentation artifacts:** add ReDoc or an MCP tool manifest through the
+  same recipe.
+- **Contract mocks:** add an optional `httpmock` Docker package usable by every
+  generated SDK.
+- **Custom generators:** language-scoped Rust plugins and typed dependencies,
+  without a JavaScript generation runtime.
+
+Supported auth, pagination, retries, streaming and file handling depend on the
+contract and target. Read the [generated SDK guide](docs/generated-sdks.md)
+before choosing a runtime integration; this is not a promise of identical
+features or API spelling in every language.
+
+## Rust interface
+
+For embedding Kaji or writing custom plugins, a typed Rust interface is also
+available. See the [Rust API guide](docs/getting-started.md) and
+[plugin authoring reference](docs/typed-plugins.md).
+
+## Documentation
+
+| Guide | What you will learn |
+| --- | --- |
+| [CLI](docs/cli.md) | Build/run the CLI, select languages, and use every command-line option. |
+| [`kaji.json`](docs/config-file.md) | Config-first versus direct generation, every JSON field, package, and plugin. |
+| [Rust interface](docs/getting-started.md) | Embed generation or configure packages programmatically. |
+| [Configuration](docs/configuration.md) | All public package, plugin, shared, and model options. |
+| [Generated SDKs](docs/generated-sdks.md) | Raw versus full clients, language requirements, and runtime behavior. |
+| [Auxiliary generators](docs/auxiliary-generators.md) | Zod, TanStack, SWR, fixtures, mocks, and documentation artifacts. |
+| [Contract mocking](docs/mocking.md) | Run local mocks and declare conditional responses. |
+| [Large specs](docs/large-specs.md) | Go file splitting, parallelism, and Microsoft Graph testing. |
+| [Plugin authoring](docs/typed-plugins.md) | Add a language or consume another plugin's typed output. |
+| [Contributing](docs/contributing.md) | Repository layout, development setup, and verification. |
+
+## Inspiration and license
+
+Kaji's plugin-oriented workflow was initially inspired by Kubb. Kaji has its
+own Rust API and implementation, without Kubb source, runtime dependencies,
+or configuration compatibility.
+
+Licensed under the [MIT License](LICENSE).

@@ -28,7 +28,6 @@ pub fn sdk_contract_api() -> Api {
             id: "getContact".into(),
             method: HttpMethod::Get,
             path: "/v1/contacts/current".into(),
-            response_type: "Contact".into(),
             responses: vec![OperationResponse {
                 status: "200".into(),
                 description: Some("The current contact".into()),

@@ -47,8 +47,15 @@ func extractExampleValue(example *base.Example) (any, error) {
 }
 
 func generateExampleFromSchemaProxy(proxy *base.SchemaProxy) (any, error) {
+	return newSchemaWalk().exampleProxy(proxy)
+}
+
+func (walk *schemaWalk) exampleProxy(proxy *base.SchemaProxy) (any, error) {
 	if proxy == nil {
 		return nil, nil
+	}
+	if walk.remaining <= 0 || walk.depth >= schemaPreviewDepth {
+		return "<truncated>", nil
 	}
 
 	schema := proxy.Schema()
@@ -62,13 +69,21 @@ func generateExampleFromSchemaProxy(proxy *base.SchemaProxy) (any, error) {
 		return nil, nil
 	}
 
-	return generateExampleFromSchema(schema)
+	return walk.example(schema)
 }
 
 func generateExampleFromSchema(schema *base.Schema) (any, error) {
+	return newSchemaWalk().example(schema)
+}
+
+func (walk *schemaWalk) example(schema *base.Schema) (any, error) {
 	if schema == nil {
 		return "<any>", nil
 	}
+	if !walk.enter(schema) {
+		return "<recursive or truncated>", nil
+	}
+	defer walk.leave(schema)
 
 	if example, ok, err := extractSchemaExample(schema); ok || err != nil {
 		return example, err
@@ -106,11 +121,11 @@ func generateExampleFromSchema(schema *base.Schema) (any, error) {
 	}
 
 	if len(schema.OneOf) > 0 {
-		return generateExampleFromSchemaProxy(schema.OneOf[0])
+		return walk.exampleProxy(schema.OneOf[0])
 	}
 
 	if len(schema.AnyOf) > 0 {
-		return generateExampleFromSchemaProxy(schema.AnyOf[0])
+		return walk.exampleProxy(schema.AnyOf[0])
 	}
 
 	primary := firstNonNullType(schema.Type)
@@ -127,7 +142,7 @@ func generateExampleFromSchema(schema *base.Schema) (any, error) {
 				if proxy == nil {
 					continue
 				}
-				value, err := generateExampleFromSchemaProxy(proxy)
+				value, err := walk.exampleProxy(proxy)
 				if err != nil {
 					return nil, err
 				}
@@ -141,11 +156,14 @@ func generateExampleFromSchema(schema *base.Schema) (any, error) {
 
 		if orderedmap.Len(schema.Properties) > 0 {
 			for pair := schema.Properties.First(); pair != nil; pair = pair.Next() {
+				if walk.remaining <= 0 {
+					break
+				}
 				key := pair.Key()
 				prop := pair.Value()
 				var placeholder any = "<any>"
 				if prop != nil {
-					value, err := generateExampleFromSchemaProxy(prop)
+					value, err := walk.exampleProxy(prop)
 					if err != nil {
 						return nil, err
 					}
@@ -165,7 +183,7 @@ func generateExampleFromSchema(schema *base.Schema) (any, error) {
 	case "array":
 		if schema.Items != nil {
 			if schema.Items.IsA() && schema.Items.A != nil {
-				value, err := generateExampleFromSchemaProxy(schema.Items.A)
+				value, err := walk.exampleProxy(schema.Items.A)
 				if err != nil {
 					return nil, err
 				}

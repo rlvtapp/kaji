@@ -9,3 +9,9 @@
 /openapi/.build/
 /openapi/.gocache/
 /openapi/.gomodcache/
+
+# Locally assembled native npm distribution packages.
+/packages/cli/npm/
+*.tgz
+node_modules/
+examples/microsoft-graph/generated/

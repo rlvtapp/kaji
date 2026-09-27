@@ -1,32 +1,29 @@
 # Kaji .NET plugin
 
-`kaji-plugin-dotnet` renders a native .NET 8 package from Kaji's neutral
-`kaji_core::Api` model. The original entry point keeps its compact,
-flat client surface:
+`kaji-plugin-dotnet` renders SDK packages from Kaji's neutral API model,
+using a .NET 8 HttpClient client. All generation runs in Rust.
 
 ```rust
-let tree = kaji_plugin_dotnet::generate_dotnet_sdk(
-    &api,
-    "sdks/dotnet",
-    Some("email-sdk"),
-)?;
+use kaji::{dotnet, prelude::*};
+
+let release = ProfileSet::new("sdk")
+    .package(dotnet::package("dotnet")
+        .name("email-sdk")
+        .with(dotnet::sdk()));
+let tree = kaji::generate(&api, release)?;
+tree.write_to("generated")?;
 ```
 
-Use `generate_dotnet_sdk_with_style` to select an exported resource façade:
+SDKs are namespaced by default. Choose `dotnet::sdk().flat()` or
+`.namespaced()` explicitly, or supply a shared `Common` default.
+Namespaced packages expose resources such as
+`client.Contacts.CreateContactAsync(...)`; flat packages keep methods directly
+on the client. Groups follow the first OpenAPI tag or a meaningful path resource.
 
-```rust
-use kaji_plugin_dotnet::generate_dotnet_sdk_with_style;
-use kaji_core::SdkClientStyle;
+When depending on this plugin without the `kaji` facade, import
+`kaji_plugin_dotnet::PackageExt` and compose its package through
+`kaji_core::engine::Packages`. Supply a security catalog when your API
+declares named security schemes.
 
-let tree = generate_dotnet_sdk_with_style(
-    &api,
-    "sdks/dotnet",
-    Some("email-sdk"),
-    SdkClientStyle::Namespaced,
-)?;
-```
-
-Flat packages use `client.CreateContactAsync(...)`. Namespaced packages add
-`client.Contacts.CreateContactAsync(...)`, grouping by the first OpenAPI tag
-or, when tags are absent, a stable path resource. The generated `README.md`
-and `STYLE_GUIDE.md` document both layouts.
+See [configuration](../../../docs/configuration.md) for every generation option
+and the generated package's README for exact operation signatures.

@@ -53,7 +53,7 @@ impl Plugin<DotNet> for Sdk {
         &self.meta
     }
     fn generate(&self, cx: &mut PluginContext<'_, DotNet>) -> Result<()> {
-        cx.files.append(crate::generate_dotnet_sdk_with_style(
+        cx.files.append(crate::render_sdk(
             cx.api,
             ".",
             cx.settings.package_name.as_deref(),

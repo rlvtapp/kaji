@@ -1,29 +1,32 @@
 # Kaji Python plugin
 
-`kaji-plugin-python` renders an installable, typed standard-library Python SDK
-from Kaji's neutral `kaji_core::Api` model.
+`kaji-plugin-python` renders SDK packages from Kaji's neutral API model,
+using a standard-library Python client. All generation runs in Rust.
 
 ```rust
-let tree = kaji_plugin_python::generate_python_sdk(&api, "sdks/python", Some("email-sdk"))?;
+use kaji::{python, prelude::*};
+
+let release = ProfileSet::new("sdk")
+    .package(python::package("python")
+        .name("email-sdk")
+        .with(python::sdk()));
+let tree = kaji::generate(&api, release)?;
 tree.write_to("generated")?;
 ```
 
-The default `SdkClientStyle::Flat` produces direct methods such as
-`client.get_contact(...)`. To emit the product-style resource facade, use:
+SDKs are namespaced by default. Choose `python::sdk().flat()` or
+`.namespaced()` explicitly, or supply a shared `Common` default.
+Namespaced clients expose methods such as `client.contacts.get(...)`;
+flat clients use `client.get_contact(...)`. Operation arguments and model names
+come from your API contract.
 
-```rust
-use kaji_core::SdkClientStyle;
+When depending on this plugin without the `kaji` facade, import
+`kaji_plugin_python::PackageExt` and compose its package through
+`kaji_core::engine::Packages`. Supply a security catalog when your API
+declares named security schemes.
 
-let tree = kaji_plugin_python::generate_python_sdk_with_style(
-    &api,
-    "sdks/python",
-    Some("email-sdk"),
-    SdkClientStyle::Namespaced,
-)?;
-```
-
-The namespaced client exposes typed operation groups such as
-`client.contacts.get(...)` while retaining the flat methods for migration.
+See [configuration](../../../docs/configuration.md) for every generation option
+and the generated package's README for exact operation signatures.
 
 Generated clients retry safe transient failures by default. `GET`, `PUT`,
 `PATCH`, and `DELETE` are retryable; `POST` requires a declared and supplied

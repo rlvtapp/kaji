@@ -1,205 +1,196 @@
 # Configuration reference
 
-`ProfileSet` is the first-party configuration API. It is a typed
-Rust builder: there is no JavaScript runtime, config discovery, or hidden
-plugin order. Calling a target method more than once is safe—it only emits one
-package for that target.
+## CLI JSON configuration
 
-## Complete profile example
+For normal CLI use, `kaji.json` is the source of truth. Create it with
+`npx @relevate/kaji init`, then run `npx @relevate/kaji generate`. The complete config format and the
+built-in SDK, TypeScript artifact, documentation, and mock plugin names are in
+the dedicated [`kaji.json` reference](config-file.md).
+
+The config is deliberately explicit: every package has a language, a directory,
+and a list of selected plugins. Kaji does not run Node/JavaScript plugin code
+from this file. A future external plugin mechanism can add new compiled plugin
+packages without changing the meaning of an existing recipe.
+
+The rest of this page is the equivalent typed Rust API for embedding Kaji,
+building custom plugins, or using options that are not yet represented in the
+CLI config.
+
+Options belong to the plugin that uses them. Package identity belongs to the
+language package. `Common` provides optional defaults across a release.
+
+Import `kaji::prelude::*` to bring the package extension traits into scope.
+
+## Complete release
 
 ```rust
-use kaji::{
-    MockServerOptions, PackageOptions, ProfileSet, SdkClientStyle,
-    SdkSurface, TypeScriptOptions,
-};
+use kaji::{dotnet, elixir, go, java, mock, php, prelude::*, python, rust, ts};
 
-let profiles = ProfileSet::new("sdk")
-    .rust()
-    .typescript_fetch()
-    .typescript_axios()
-    .go()
-    .python()
-    .php()
-    .java()
-    .dotnet()
-    .elixir()
-    .mock_server()
-    .typescript_options(TypeScriptOptions {
-        client_name: Some("RelevateEmail".into()),
-        client_style: SdkClientStyle::Namespaced,
-        surface: SdkSurface::Client,
-        group_by_tag: true,
-    })
-    .go_options(PackageOptions {
-        package_name: Some("relevateemail".into()),
-        client_style: SdkClientStyle::Namespaced,
-    })
-    .python_options(PackageOptions::flat())
-    .mock_server_options(MockServerOptions {
-        image: "httpmock/httpmock:0.8.0".into(),
-        port: 5000,
-    });
+let release = ProfileSet::new("sdk")
+    .common(Common::default()
+        .client_style(SdkClientStyle::Namespaced)
+        .package_version("1.0.0"))
+    .package(ts::package("typescript/fetch")
+        .name("@acme/sdk")
+        .with(ts::sdk().fetch().client_name("Acme")))
+    .package(ts::package("typescript/axios")
+        .name("@acme/sdk-axios")
+        .with(ts::sdk().axios().raw()))
+    .package(rust::package("rust").name("acme-sdk").with(rust::sdk()))
+    .package(go::package("go").name("acme").with(go::sdk().jobs(4)))
+    .package(python::package("python").with(python::sdk().flat()))
+    .package(php::package("php").with(php::sdk()))
+    .package(java::package("java").with(java::sdk()))
+    .package(dotnet::package("dotnet").with(dotnet::sdk()))
+    .package(elixir::package("elixir").with(elixir::sdk()))
+    .package(mock::package("mock-server")
+        .with(mock::server().image("httpmock/httpmock:0.8.0").port(4010)));
+
+let tree = kaji::generate(&api, release)?;
+tree.write_to("generated")?;
 ```
 
-An empty output root or a profile with no targets is rejected. `generate` is
-the operation that validates and renders the entire set.
+This writes below `generated/sdk`. Package directories are explicit: they do not
+have to match language names. Select Fetch and Axios in separate packages;
+one TypeScript SDK plugin uses one transport.
 
-### ProfileSet API map
+## Release, package, and output
 
-| Method | Use it for |
+| API | Meaning |
 | --- | --- |
-| `ProfileSet::new(root)` | Start a release under one output root. |
-| `.with(Target)` | Add any target dynamically; duplicates are ignored. |
-| `.rust()`, `.typescript_fetch()`, etc. | Add a named first-party target. |
-| `.typescript_options(...)` | Set options shared by both selected TypeScript targets. |
-| `.<language>_options(...)` | Set package identity and client style for one native target. |
-| `.mock_server_options(...)` | Set the generated mock image and port. |
-| `.build()` | Inspect the underlying `SdkProfile` values for the core Rust/TypeScript targets. It does not render packages and does not include external native plugin targets. |
+| `ProfileSet::new(root)` | Relative directory under the final output directory. |
+| `.common(Common)` | Release-wide optional defaults. |
+| `.package(Package<L>)` | Add an independently configured language package. |
+| `language::package(directory)` | Start a package with a safe relative directory. |
+| `.name(name)` | SDK package identity; normalized by the language. Requires its `PackageExt` trait, included in the prelude. |
+| `.common(Common)` on a package | Override release defaults for this package. |
+| `.with(plugin)` | Add a `Plugin<L>`; options are set on the plugin instance. |
+| `.settings(L::Settings)` / `.settings_mut()` | Language-owned configuration, useful for community integrations. |
+| `generate(&api, release)` | Render packages into a `GeneratedTree`. |
+| `generate_with_security_catalog(&api, release, Some(&catalog))` | Include named OpenAPI security definitions with an in-memory API. |
+| `generate_openapi(path, name, version, release)` | Read current compiler artifacts, including required schema and security catalogs, and generate. |
+| `tree.write_to(directory)` | Write generated files, preserving explicitly custom files. |
 
-For normal use, pass the builder directly to `generate` or `generate_openapi`.
-`build()` is primarily useful to an integration that is composing the
-lower-level core generator itself.
+A release must contain at least one package. Unsafe paths, overlapping file
+owners, and invalid plugin contracts fail generation. Adding a package or plugin
+twice is not a deduplication mechanism.
 
-## Targets
+Generated files are overwritten, not automatically pruned. Use a fresh output
+directory after removing or renaming operations, schemas, or packages. Writes
+are not transactional. TypeScript `custom/index.ts` is a create-once file.
 
-| Builder method | Output directory | Runtime/transport | Default client shape |
-| --- | --- | --- | --- |
-| `.rust()` | `rust` | Reqwest | namespaced |
-| `.typescript_fetch()` | `typescript-fetch` | Fetch | namespaced |
-| `.typescript_axios()` | `typescript-axios` | Axios | namespaced |
-| `.go()` | `go` | Go standard library | namespaced |
-| `.python()` | `python` | Python standard library | namespaced |
-| `.php()` | `php` | PSR-18 / PSR-7 | namespaced |
-| `.java()` | `java` | JDK `HttpClient` / Jackson | namespaced |
-| `.dotnet()` | `dotnet` | `HttpClient` / `System.Text.Json` | namespaced |
-| `.elixir()` | `elixir` | Finch / Jason | namespaced |
-| `.mock_server()` | `mock-server` | standalone `httpmock` Docker image | n/a |
+### Shared defaults
 
-The output root is the argument to `ProfileSet::new`. For example,
-`ProfileSet::new("artifacts")` writes the Go package to `artifacts/go`.
+`Common::default()` leaves each setting unset:
 
-You can also select a target dynamically with `.with(Target::Go)`. `Target`
-has one variant for every row above: `Rust`, `TypeScriptFetch`,
-`TypeScriptAxios`, `Go`, `Python`, `Php`, `Java`, `DotNet`, `Elixir`, and
-`MockServer`.
+| Builder / field | Effect |
+| --- | --- |
+| `.client_name(name)` / `client_name: Option<String>` | TypeScript SDK class name. Other first-party SDKs do not consume this value. |
+| `.client_style(style)` / `client_style: Option<SdkClientStyle>` | `Flat` or `Namespaced`. SDK plugins default to namespaced. |
+| `.package_version(version)` / `package_version: Option<String>` | Overrides the API version seen by this package's generators. |
 
-## TypeScript options
+Precedence is explicit plugin choice, then package defaults, then release
+defaults, then plugin defaults. Package version is resolved by the engine;
+client settings are consumed by each plugin.
 
-`TypeScriptOptions` applies to both selected TypeScript transports.
+## SDK plugin options
 
-| Field | Default | Meaning |
+Every SDK below supports `.flat()` and `.namespaced()`. The last explicit
+style selection wins. All default to namespaced.
+
+| Module | Transport/runtime | Additional SDK methods |
 | --- | --- | --- |
-| `client_name: Option<String>` | derived from API title | Exported SDK class name, e.g. `RelevateEmail`. |
-| `client_style: SdkClientStyle` | `Namespaced` | `client.contacts.list()` or `client.listContacts()`. |
-| `surface: SdkSurface` | `Client` | `Client` exports the configured class and raw operation functions; `Raw` exports only models and direct functions. |
-| `group_by_tag: bool` | `true` | Organizes operation and model files by the first OpenAPI tag. Untagged operations get a stable path-derived group. Set `false` for one flat directory. |
+| `ts` | Fetch (default) or Axios | See TypeScript reference below. |
+| `rust` | Reqwest | `.operation_prefix(string)` prefixes direct operation names and resource delegates. |
+| `go` | Standard-library HTTP | `.jobs(usize)`: 0 automatic (up to 8 workers), 1 serial, explicit values capped at 64. Files are always split. |
+| `python` | Standard library | None beyond client style. |
+| `php` | PSR-18 / PSR-7 | None beyond client style. |
+| `java` | JDK HttpClient / Jackson | None beyond client style. |
+| `dotnet` | HttpClient / System.Text.Json | None beyond client style. |
+| `elixir` | Finch / Jason | None beyond client style. |
 
-Convenience constructors:
+Package naming is configured on `language::package(...).name(...)`, not on
+the SDK plugin. Runtime credentials and retry knobs belong to the generated
+SDK consumer, not these generation builders.
+
+## TypeScript SDK
+
+| Method | Default | Effect |
+| --- | --- | --- |
+| `.fetch()` / `.axios()` | Fetch | Select exactly one transport. The last selection wins. |
+| `.client_name(name)` | Shared default or API-derived name | Exported class name. |
+| `.flat()` / `.namespaced()` | Namespaced | Full-client method grouping. |
+| `.raw()` | Full client | Omit the instantiated class; retain operation functions, models, and runtime. |
+| `.group_by_tag(bool)` | `true` | Group operation/client files; schema files remain individual models. |
+| `.model_options(ModelOptions)` | See below | Model syntax and enum formatting. |
+| `.throw_on_error(bool)` | `true` | Default direct-operation error behavior; consumers may override per request. |
+
+`raw()` controls the public surface, not the transport. A full client also
+exports direct operations. See [generated SDKs](generated-sdks.md).
+
+### ModelOptions
 
 ```rust
-// Direct models + operation functions only.
-let raw = TypeScriptOptions::raw();
-
-// A class client with `client.createContact(...)` methods.
-let flat = TypeScriptOptions::flat_client();
+let sdk = ts::sdk().model_options(ts::ModelOptions {
+    syntax: ts::Syntax::Interface,
+    enum_type: ts::EnumType::AsConst,
+    array_type: ts::ArrayType::Generic,
+    ..Default::default()
+});
 ```
 
-The generated package always keeps direct operation exports. `Raw` only
-removes the instantiated class wrapper; it does not remove typed models.
-
-## Native language package options
-
-`PackageOptions` is shared by Go, Python, PHP, Java, .NET, and Elixir.
-
-| Field | Default | Meaning |
+| Field | Default | Choices / effect |
 | --- | --- | --- |
-| `package_name: Option<String>` | derived from API title | Distribution/module/package identity. Each target normalizes it for its ecosystem. |
-| `client_style: SdkClientStyle` | `Namespaced` | Adds resource facades such as `client.contacts.list(...)`; `Flat` uses conventional direct methods. |
+| `array_type` | `ArrayType::Array` | `T[]`; `Generic` emits `Array<T>`. |
+| `optional_type` | `OptionalType::QuestionToken` | `name?: T`; `QuestionTokenAndUndefined`: `name?: T \| undefined`; `Undefined`: `name: T \| undefined`. |
+| `syntax` | `Syntax::Type` | Type aliases; `Interface` selects interfaces where appropriate. |
+| `enum_type` | `EnumType::Literal` | Literal union, `AsConst`, `Enum`, or `ConstEnum`. |
+| `enum_key_casing` | `EnumKeyCasing::None` | Also `CamelCase`, `PascalCase`, `SnakeCase`, `ScreamingSnakeCase`. |
+| `enum_const_casing` | `EnumConstCasing::CamelCase` | Also `PascalCase`. |
+| `enum_type_suffix` | `"Key"` | Suffix used for enum key types where emitted. |
+| `integer_as_string` | `false` | Render integer schema types as strings; does not convert HTTP data at runtime. |
+| `remove_optional_properties` | `false` | Omit optional properties from generated model shapes. |
 
-Use the matching builder to apply it: `.go_options(...)`,
-`.python_options(...)`, `.php_options(...)`, `.java_options(...)`,
-`.dotnet_options(...)`, or `.elixir_options(...)`.
+These options apply to `ts::sdk()`, not the standalone `ts::types()` renderer.
+
+### Types-only package
 
 ```rust
-let profiles = ProfileSet::new("sdk")
-    .go()
-    .go_options(PackageOptions::flat())
-    .python()
-    .python_options(PackageOptions {
-        package_name: Some("relevate-email".into()),
-        ..PackageOptions::default()
-    });
+let models = ts::types().output("generated/models");
+let models_handle = models.handle();
+let package = ts::package("types").name("@acme/types").with(models);
 ```
 
-Rust currently uses its fixed Reqwest package profile and does not take
-`PackageOptions` through `ProfileSet`.
+`output` is a module path without `.ts`; its default is `models`.
+The plugin publishes a `TsTypes` contract for community consumers. It generates
+types and package metadata, not an HTTP client. Do not combine it with
+`ts::sdk()` in one package: their files overlap. See
+[plugin authoring](typed-plugins.md) for handles and shared workspaces.
 
-## Mock-server options
+### Auxiliary renderers
 
-`MockServerOptions` controls the generated Docker package.
+Zod, TanStack React/Vue Query, SWR, Faker, MSW, Cypress, ReDoc, and MCP manifests
+can be selected by JSON config and also have an explicit `ArtifactOptions` Rust
+API. They currently return files directly rather than being first-party
+`.with(...)` package plugins. The complete [auxiliary generator
+reference](auxiliary-generators.md) covers every option and integration
+requirement.
 
-| Field | Default | Meaning |
+## Mock server
+
+`mock::package(directory).with(mock::server())` generates a language-neutral
+Docker package. It has no SDK package `.name()` setting.
+
+| Method | Default | Effect |
 | --- | --- | --- |
-| `image: String` | `httpmock/httpmock` | Docker base image. Pin a tag or digest for a reproducible release. |
-| `port: u16` | `5000` | Container and default published port. The generated `.env.example` exposes it as `KAJI_MOCK_PORT`. |
+| `.image(string)` | `httpmock/httpmock` | Docker base image; pin a tag or digest for reproducible releases. |
+| `.port(u16)` | `5000` | Container and default published port; choose a usable nonzero port. |
 
-```rust
-.mock_server_options(MockServerOptions {
-    image: "httpmock/httpmock:0.8.0".into(),
-    port: 4010,
-})
-```
+See [contract mocking](mocking.md) for fixture declarations and limitations.
 
-See [contract mocking](mocking.md) for route fixtures and scenarios.
+## CLI versus Rust configuration
 
-## Low-level Rust profiles
-
-`kaji_core::SdkProfile` is available for advanced Rust/TypeScript composition
-through `generate_sdks`. Prefer `ProfileSet` unless you specifically need to
-build the profile structs yourself.
-
-| Field | Rust constraint | TypeScript constraint |
-| --- | --- | --- |
-| `language` | `SdkLanguage::Rust` | `SdkLanguage::TypeScript` |
-| `output_dir` | required relative package directory | required relative package directory |
-| `package_name` | optional | optional |
-| `client_name` | optional | optional class name |
-| `client_style` | flat or namespaced | flat or namespaced |
-| `surface` | client | raw or client |
-| `transports` | exactly `[SdkTransport::Reqwest]` | exactly one: `[Fetch]` or `[Axios]` for structured output |
-| `style` | `SdkStyle::Native` | `SdkStyle::Structured` for the maintained layout |
-| `group_by_tag` | `false` | defaults to `true` |
-
-`SdkProfile::rust("sdk/rust")` and `SdkProfile::typescript("sdk/ts")` start
-from the supported defaults. Mixing Fetch and Axios in one structured package
-is rejected; select both first-party TypeScript targets instead when you need
-both packages.
-
-The corresponding core functions are:
-
-```rust
-use kaji_core::{Api, SdkProfile, generate_sdks};
-
-let tree = generate_sdks(
-    &api,
-    &[
-        SdkProfile::rust("sdk/rust"),
-        SdkProfile::typescript("sdk/typescript-fetch"),
-    ],
-)?;
-```
-
-`kaji::custom(profile)` is a small identity helper for passing an advanced
-`SdkProfile` through code that otherwise works with first-party profiles. It
-does not register a new `ProfileSet` target by itself.
-
-The first-party `kaji` crate offers `generate_openapi` for all maintained
-language targets. Give it the artifact directory emitted by the embedded Go
-compiler; it should be preferred for multi-language releases.
-
-## What Kaji does not configure yet
-
-Kaji does not yet ship a stable config-file format, a CLI, a Node compatibility
-layer, or a generator-time arbitrary custom HTTP transport injection. Those
-are deliberately not implied by these builders. Consumers can still use the
-native transport injection/hooks that each generated SDK exposes.
+The JSON CLI selects all current built-in SDK packages, auxiliary artifacts,
+and the mock package. Model options, custom plugins, and typed inter-plugin
+contracts remain Rust API work for now. See the [CLI reference](cli.md) for
+the supported JSON fields and direct-mode flags.

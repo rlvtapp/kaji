@@ -1,6 +1,6 @@
-# Typed plugin packages (experimental)
+# Typed plugin packages
 
-This branch introduces language-scoped packages and a generic plugin engine.
+Kaji uses language-scoped packages and a generic plugin engine.
 Core owns no Rust or TypeScript renderers. All eight maintained languages live
 under `crates/plugins/`; community languages need no change to a central enum.
 
@@ -9,10 +9,10 @@ use kaji::{prelude::*, rust, ts};
 
 let release = ProfileSet::new("sdk")
     .common(Common::default().client_style(SdkClientStyle::Namespaced))
-    .package(ts::package("typescript-fetch")
+    .package(ts::package("typescript/fetch")
         .name("@acme/sdk")
         .with(ts::sdk().fetch().client_name("Acme")))
-    .package(ts::package("typescript-axios")
+    .package(ts::package("typescript/axios")
         .with(ts::sdk().axios().raw()))
     .package(rust::package("rust").with(rust::sdk()));
 // kaji::generate(&api, release)?.write_to(output_directory)?;
@@ -58,21 +58,24 @@ The engine tests in `crates/kaji-core/tests/typed_packages.rs` cover provider
 resolution, explicit handles, optional requirements, cycles, shared workspace
 state, option inheritance, file ownership, and custom-file preservation.
 
-## Migration boundaries
+## Current composition boundaries
 
-The maintained `sdk()` plugins currently wrap complete existing SDK generators
-to preserve output. Fetch and Axios are options on that wrapper, not independent
+The maintained `sdk()` plugins currently render complete SDK packages.
+Fetch and Axios are options on the TypeScript SDK plugin, not independent
 transport providers yet. Use separate packages for the two variants. Do not
 combine `ts::types()` with `ts::sdk()` in the same package: both currently own
 model and package files.
 
-Separating models, operation clients, and transport contracts (then consumers
-such as TanStack) is a follow-up. No placeholder operation contracts are exposed.
-Only TypeScript currently has a symbol/dependency workspace; other language
-wrappers retain their existing rendering and use unit workspaces for now.
+Only the types-only renderer currently publishes the `TsTypes` contract.
+Complete SDKs do not publish operation or transport contracts. The
+[TanStack and other auxiliary renderers](auxiliary-generators.md) return files
+directly; their import paths and dependencies must be configured explicitly.
+Only TypeScript currently has a symbol/dependency workspace; other languages
+use unit workspaces for now.
 
-The old `ProfileSet` shortcuts remain as compatibility adapters into the new
-engine. Legacy low-level SDK profiles moved from `kaji_core` to
-`kaji::legacy_sdk`; TypeScript options now live in its plugin crate and are
-re-exported by the facade. This is a branch experiment, not a stable plugin ABI
-or a Node compatibility layer.
+Plugins are native Rust implementations linked into your generator application.
+There is no dynamic binary plugin loader or Node plugin runtime. A community
+crate can implement `Language` for an entirely new language, or `Plugin<L>` for
+an existing language, without modifying a central core enum. The CLI includes
+only its bundled target list; publishing a Rust plugin does not automatically
+make it a CLI target. The public Rust API is pre-1.0, not a stable binary ABI.

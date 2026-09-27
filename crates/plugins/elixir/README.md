@@ -1,32 +1,30 @@
 # Kaji Elixir plugin
 
-`kaji-plugin-elixir` renders a native Elixir/Mix package from Kaji's neutral
-`kaji_core::Api` model. It emits component structs, a Finch-based
-transport, typed operation functions, and explicit `{:ok, value}` / `{:error,
-reason}` responses without using a JavaScript generator runtime.
+`kaji-plugin-elixir` renders SDK packages from Kaji's neutral API model,
+using a Finch/Jason client. All generation runs in Rust.
 
 ```rust
-let tree = kaji_plugin_elixir::generate_elixir_sdk(&api, "sdks/elixir", Some("email-sdk"))?;
+use kaji::{elixir, prelude::*};
+
+let release = ProfileSet::new("sdk")
+    .package(elixir::package("elixir")
+        .name("email-sdk")
+        .with(elixir::sdk()));
+let tree = kaji::generate(&api, release)?;
 tree.write_to("generated")?;
 ```
 
-That compatibility entry point keeps the flat `<Sdk>.API.operation/2` layout.
-Select the exported resource façade when desired:
-
-```rust
-use kaji_plugin_elixir::generate_elixir_sdk_with_style;
-use kaji_core::SdkClientStyle;
-
-let tree = generate_elixir_sdk_with_style(
-    &api,
-    "sdks/elixir",
-    Some("email-sdk"),
-    SdkClientStyle::Namespaced,
-)?;
-```
-
+SDKs are namespaced by default. Choose `elixir::sdk().flat()` or
+`.namespaced()` explicitly, or supply a shared `Common` default.
 Namespaced packages add modules such as
-`<Sdk>.Resources.Contacts.create_contact(client, body: contact)`. They group by
-the first OpenAPI tag or, without tags, a stable path resource. The generated
-`README.md` and `STYLE_GUIDE.md` document both layouts. The package depends on
-Finch and Jason and uses a normal configured `<Sdk>.Client` in either style.
+`<Sdk>.Resources.Contacts.create_contact(client, body: contact)`; flat packages
+keep `<Sdk>.API` operations. Both use a configured `<Sdk>.Client` and explicit
+`{:ok, value}` / `{:error, reason}` results.
+
+When depending on this plugin without the `kaji` facade, import
+`kaji_plugin_elixir::PackageExt` and compose its package through
+`kaji_core::engine::Packages`. Supply a security catalog when your API
+declares named security schemes.
+
+See [configuration](../../../docs/configuration.md) for every generation option
+and the generated package's README for exact operation signatures.

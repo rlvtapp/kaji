@@ -1,120 +1,124 @@
-# Getting started
+# Getting started with the Rust API
 
-Kaji has two local pieces: the embedded Go OpenAPI compiler in `openapi/`, and
-the Rust SDK generator crates. Compile an OpenAPI 3.0/3.1 JSON or YAML document
-into Kaji artifacts, select packages, then materialize the generated files.
+For a command-line workflow without writing Rust configuration, use the
+[CLI guide](cli.md). This guide covers native package composition.
 
-Until the crates are published, use path dependencies that point at a Kaji
-clone:
+Kaji has a bundled Go OpenAPI compiler and Rust SDK generators. Compile a local
+OpenAPI 3.0/3.1 JSON or YAML document once, then generate as many packages as
+needed from its artifacts.
+
+## Add dependencies
+
+Until the crates are published, use paths to a Kaji clone:
 
 ```toml
 [dependencies]
 anyhow = "1"
-kaji = { path = "../Kaji/crates/kaji" }
-kaji-core = { path = "../Kaji/crates/kaji-core" }
+kaji = { path = "../kaji/crates/kaji" }
+kaji-core = { path = "../kaji/crates/kaji-core" }
 ```
 
-Kaji requires Rust 1.85 or newer. The generated SDKs have their own native
-toolchain requirements; see [generated SDKs](generated-sdks.md).
+Use the Rust version declared by the workspace (currently Rust 1.85 or newer).
+Go is required to build/run the source compiler, not to use a generated SDK.
 
-## Compile an OpenAPI document
+## Compile the document
 
-The checked-in Go module is Kaji's OpenAPI compiler. Run it from the repository
-root; it accepts JSON or YAML and writes a deterministic artifact directory.
+From the Kaji repository:
 
 ```sh
 cd openapi
 go run . --out ../.kaji/openapi ../openapi.yaml
 ```
 
-The output contains normalized operation documents, component schemas, and
-security scheme metadata. It is an internal Kaji boundary, not a dependency on
-Relevate Docs or another repository.
+The output includes normalized operations, schemas, and `security-schemes.json`.
+Keep this artifact directory together; the Rust adapter requires the current
+compiler format. It has no dependency on another repository or running service.
 
-## Generate SDK packages
+## Generate packages
+
+In your Rust application, use an artifact path relative to its working directory:
 
 ```rust
 use std::path::Path;
-
 use anyhow::Result;
-use kaji::{ProfileSet, generate_openapi};
+use kaji::{go, mock, prelude::*, python, rust, ts};
 
 fn main() -> Result<()> {
-    let artifacts = generate_openapi(
-        Path::new(".kaji/openapi"),
-        "Relevate Email",
-        "2026.9.25",
-        ProfileSet::new("sdk")
-            .rust()
-            .typescript_fetch()
-            .typescript_axios()
-            .go()
-            .python()
-            .php()
-            .java()
-            .dotnet()
-            .elixir()
-            .mock_server(),
-    )?;
+    let release = ProfileSet::new("sdk")
+        .package(ts::package("typescript/fetch")
+            .name("@acme/email").with(ts::sdk().fetch().client_name("Email")))
+        .package(ts::package("typescript/axios").with(ts::sdk().axios()))
+        .package(rust::package("rust").with(rust::sdk()))
+        .package(go::package("go").with(go::sdk()))
+        .package(python::package("python").with(python::sdk()))
+        .package(mock::package("mock-server").with(mock::server()));
 
-    artifacts.write_to("generated")?;
+    let tree = kaji::generate_openapi(
+        Path::new("../kaji/.kaji/openapi"),
+        "Email",
+        "1.0.0",
+        release,
+    )?;
+    tree.write_to("generated")?;
     Ok(())
 }
 ```
 
-That produces one independently usable package per selected target:
+This produces isolated packages below `generated/sdk`:
 
 ```text
-generated/
-  sdk/
-    rust/
-    typescript-fetch/
-    typescript-axios/
-    go/
-    python/
-    php/
-    java/
-    dotnet/
-    elixir/
-    mock-server/
+sdk/
+  typescript/
+    fetch/
+    axios/
+  rust/
+  go/
+  python/
+  mock-server/
 ```
 
-`generate_openapi` reads the local compiler artifacts. It preserves component
-schemas, request/response media, security schemes, examples, extensions, and
-operation metadata in Kaji's Rust AST without requiring a Go service at runtime.
+Add `php::package(...).with(php::sdk())`, `java`, `dotnet`, or `elixir` in the
+same way. Directory names and package names are separate choices.
 
-## Generate from an existing Rust adapter
+Each SDK has its own README, manifest, and generated client. Install its
+dependencies and build it using the target ecosystem's tooling. Generation
+does not install those dependencies or publish anything.
 
-If an integration already has a `kaji_core::Api`, pass it directly:
+## Generate from a Rust API model
+
+If an integration already has a `kaji_core::Api`:
 
 ```rust
 use anyhow::Result;
-use kaji::{ProfileSet, generate};
-use kaji_core::Api;
+use kaji::{prelude::*, ts};
+use kaji_core::{Api, SecuritySchemeCatalog};
 
-fn generate_packages(api: &Api) -> Result<()> {
-    let artifacts = generate(
-        api,
-        ProfileSet::new("sdk")
-            .typescript_fetch()
-            .python()
-            .mock_server(),
-    )?;
-    artifacts.write_to("generated")?;
+fn generate_packages(api: &Api, catalog: &SecuritySchemeCatalog) -> Result<()> {
+    let release = ProfileSet::new("sdk")
+        .package(ts::package("typescript").with(ts::sdk()));
+    let tree = kaji::generate_with_security_catalog(api, release, Some(catalog))?;
+    tree.write_to("generated")?;
     Ok(())
 }
 ```
 
-`GeneratedTree::write_to` only accepts safe relative generated paths and
-refuses symlink escapes. It overwrites generated files on a later run. The one
-exception is TypeScript's `custom/index.ts`: Kaji creates it once and leaves
-subsequent user edits untouched.
+For APIs without named security requirements, `kaji::generate(api, release)`
+is sufficient. Do not infer credential behavior from a security scheme's name;
+pass its catalog or load compiler artifacts.
 
-## The three things to decide
+The API model uses typed `request_body`, `responses`, and schemas. For example,
+`OperationRequestBody::json(schema, true)` constructs a required JSON body;
+`OperationResponse::json("200", schema)` constructs a JSON response.
 
-1. Choose target packages with `ProfileSet`.
-2. Choose the public SDK shape: namespaced by default, flat where preferred.
-3. Optionally generate the language-neutral mock package alongside the SDKs.
+## Regeneration
 
-The [configuration reference](configuration.md) lists every available option.
-The [generated SDK guide](generated-sdks.md) explains what consumers receive.
+Generated files are replaced. Explicit custom starter files, including
+TypeScript `custom/index.ts`, are created only if absent. Unrelated and obsolete
+files are not deleted. Use a new output directory when removing/renaming
+operations or changing output paths, then review the result before replacing a
+published package. The writer checks relative paths and refuses symlink escapes;
+a filesystem failure can still leave a partially written result.
+
+Next: [all configuration options](configuration.md),
+[raw versus full SDKs](generated-sdks.md), or
+[Zod and frontend artifacts](auxiliary-generators.md).

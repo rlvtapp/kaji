@@ -85,7 +85,7 @@ func TestBuildExampleForMediaTypeNil(t *testing.T) {
 	}
 }
 
-func TestLookupSecurityDescriptionDefaultsBearer(t *testing.T) {
+func TestSecurityCatalogPreservesBearerMetadata(t *testing.T) {
 	doc, err := libopenapi.NewDocument([]byte(bearerSpec))
 	if err != nil {
 		t.Fatalf("new doc: %v", err)
@@ -96,12 +96,12 @@ func TestLookupSecurityDescriptionDefaultsBearer(t *testing.T) {
 	}
 	components := model.Model.Components
 
-	auth := lookupSecurityDoc(components, "BearerAuth")
-	if auth.Description != "Include an Authorization header with a Bearer token." {
-		t.Fatalf("unexpected message: %s", auth.Description)
+	schemes := collectSecuritySchemes(components)
+	if len(schemes) != 1 || schemes[0].Type != "http" || schemes[0].HTTPScheme != "bearer" {
+		t.Fatalf("unexpected security metadata: %#v", schemes)
 	}
-	if auth.Type != "http" || auth.HttpScheme != "bearer" {
-		t.Fatalf("unexpected auth metadata: %#v", auth)
+	if schemes[0].Description != "" {
+		t.Fatalf("description must not be synthesized: %#v", schemes[0])
 	}
 }
 

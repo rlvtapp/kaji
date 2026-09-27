@@ -87,7 +87,7 @@ impl Workspace {
     }
 
     /// Conservatively requires identical dependency declarations. Semver range
-    /// intersection is deliberately not guessed during this migration.
+    /// intersection is deliberately not guessed.
     pub fn dependency(&mut self, name: impl Into<String>, range: impl Into<String>) -> Result<()> {
         let name = name.into();
         let range = range.into();

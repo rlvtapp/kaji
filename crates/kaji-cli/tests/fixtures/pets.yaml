@@ -1,0 +1,29 @@
+openapi: 3.0.3
+info:
+  title: CLI Pets
+  version: 1.0.0
+paths:
+  /pets/{id}:
+    get:
+      operationId: getPet
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Pet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pet'
+components:
+  schemas:
+    Pet:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string

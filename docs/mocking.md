@@ -1,6 +1,6 @@
 # Contract mocking
 
-`ProfileSet::mock_server()` writes a standalone `httpmock` Docker package next
+`mock::package("mock-server").with(mock::server())` writes an `httpmock` Docker package next
 to SDK outputs. Its happy-path fixtures are derived from declared OpenAPI
 responses and schema examples. This is one service every generated SDK can
 use: set its normal base URL to `http://localhost:5000` during a test.
@@ -8,18 +8,15 @@ use: set its normal base URL to `http://localhost:5000` during a test.
 ## Generate and run
 
 ```rust
-use kaji::{MockServerOptions, ProfileSet, generate};
+use kaji::{mock, prelude::*, python, ts, generate};
 
 let artifacts = generate(
     &api,
     ProfileSet::new("sdk")
-        .typescript_fetch()
-        .python()
-        .mock_server()
-        .mock_server_options(MockServerOptions {
-            image: "httpmock/httpmock:0.8.0".into(),
-            port: 5000,
-        }),
+        .package(ts::package("typescript").with(ts::sdk().fetch()))
+        .package(python::package("python").with(python::sdk()))
+        .package(mock::package("mock-server")
+            .with(mock::server().image("httpmock/httpmock:0.8.0").port(5000))),
 )?;
 artifacts.write_to("generated")?;
 ```

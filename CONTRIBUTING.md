@@ -3,6 +3,9 @@
 Thanks for contributing. Kaji values small, reviewable changes with clear
 behavioural tests.
 
+Start with the [contributor guide](docs/contributing.md) for workspace structure,
+toolchains, checks, plugin boundaries, and release preparation.
+
 1. Open an issue before a broad API or generator-design change.
 2. Keep generated output deterministic and add a focused regression test for
    every observable change.

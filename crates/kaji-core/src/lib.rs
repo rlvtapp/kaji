@@ -2,14 +2,12 @@
 
 pub mod adapter;
 pub mod ast;
-pub mod conformance;
 pub mod engine;
 pub mod files;
 pub mod filters;
 pub mod httpmock;
 pub mod manifest;
 pub mod mocking;
-pub mod plugin;
 pub mod semantics;
 pub mod style;
 
@@ -18,10 +16,6 @@ pub use ast::{
     OperationMediaType, OperationParameter, OperationRequestBody, OperationResponse, Schema,
     SchemaKind, SchemaValue, SecurityRequirement, SecurityScheme, SecuritySchemeCatalog,
     SecuritySchemeKind,
-};
-pub use conformance::{
-    GenerationLifecycle, GenerationResult, PluginInvocation, generate_with_plan,
-    generate_with_plan_and_lifecycle, ordered_plugins,
 };
 pub use files::{GeneratedFile, GeneratedTree};
 pub use filters::{
@@ -34,7 +28,6 @@ pub use mocking::{
     MockRequestMatch, MockResponse, MockScenario, extract_mock_scenarios,
     extract_operation_mock_scenarios,
 };
-pub use plugin::{CodegenPlugin, GeneratorConfig, generate};
 pub use semantics::{
     AuthAlternative, AuthScheme, DeclaredError, OperationSemantics, PaginationHint,
     PaginationSource, RequestBodyKind, RetryClass, SdkSemantics, StreamingKind, analyze_operation,

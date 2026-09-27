@@ -1,0 +1,30 @@
+{
+  "openapi": {
+    "input": "https://aka.ms/graph/v1.0/openapi.yaml",
+    "name": "Microsoft Graph",
+    "version": "1.0.0"
+  },
+  "output": { "path": "sdk-config" },
+  "defaults": { "client_style": "namespaced" },
+  "packages": [
+    {
+      "language": "go",
+      "path": "go",
+      "name": "graph",
+      "plugins": [{ "name": "sdk", "jobs": 4 }]
+    },
+    {
+      "language": "typescript",
+      "path": "typescript",
+      "name": "@kaji/microsoft-graph",
+      "plugins": [
+        {
+          "name": "sdk",
+          "transport": "fetch",
+          "client_name": "MicrosoftGraph",
+          "group_by_tag": true
+        }
+      ]
+    }
+  ]
+}

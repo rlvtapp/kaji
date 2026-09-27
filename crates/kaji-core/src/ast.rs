@@ -226,13 +226,6 @@ pub struct Operation {
     pub id: String,
     pub method: HttpMethod,
     pub path: String,
-    /// Kept for the first-generation renderers. New generators should consume
-    /// [`Operation::responses`] so they can select by status code and media
-    /// type instead of relying on this lossy convenience value.
-    pub response_type: String,
-    /// Kept for the first-generation renderers. New generators should consume
-    /// [`Operation::request_body`] for the complete media-type set.
-    pub request_type: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub parameters: Vec<OperationParameter>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -254,8 +247,6 @@ impl Default for Operation {
             id: String::new(),
             method: HttpMethod::Get,
             path: String::new(),
-            response_type: "void".into(),
-            request_type: None,
             parameters: Vec::new(),
             request_body: None,
             responses: Vec::new(),
@@ -283,9 +274,37 @@ pub struct OperationParameter {
     pub annotations: BTreeMap<String, Value>,
 }
 
-/// An operation request body. Its media types are deliberately independent of
-/// the legacy `request_type`, since a single request can have JSON, XML, or
-/// form encodings with different schemas.
+impl Operation {
+    /// The preferred request schema, favoring JSON when multiple media types exist.
+    pub fn request_schema(&self) -> Option<&SchemaValue> {
+        preferred_schema(&self.request_body.as_ref()?.media_types)
+    }
+
+    /// The first declared successful response's schema, favoring JSON media.
+    /// Error and default responses are not treated as successful responses.
+    pub fn success_schema(&self) -> Option<&SchemaValue> {
+        preferred_schema(
+            &self
+                .responses
+                .iter()
+                .find(|response| response.status.starts_with('2'))?
+                .media_types,
+        )
+    }
+}
+
+fn preferred_schema(media_types: &[OperationMediaType]) -> Option<&SchemaValue> {
+    media_types
+        .iter()
+        .find(|media| {
+            media.content_type == "application/json" || media.content_type.ends_with("+json")
+        })
+        .or_else(|| media_types.first())?
+        .schema
+        .as_ref()
+}
+
+/// An operation request body, retaining the schemas for each media type.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OperationRequestBody {
     #[serde(default)]
@@ -304,6 +323,32 @@ pub struct OperationResponse {
     pub description: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub media_types: Vec<OperationMediaType>,
+}
+
+impl OperationRequestBody {
+    pub fn json(schema: SchemaValue, required: bool) -> Self {
+        Self {
+            required,
+            description: None,
+            media_types: vec![OperationMediaType {
+                content_type: "application/json".into(),
+                schema: Some(schema),
+            }],
+        }
+    }
+}
+
+impl OperationResponse {
+    pub fn json(status: impl Into<String>, schema: SchemaValue) -> Self {
+        Self {
+            status: status.into(),
+            description: None,
+            media_types: vec![OperationMediaType {
+                content_type: "application/json".into(),
+                schema: Some(schema),
+            }],
+        }
+    }
 }
 
 /// A named representation carried by a request or response.
@@ -385,6 +430,65 @@ pub struct OAuthFlow {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn operation_schema_selection_uses_declared_json_media() {
+        let mut operation = Operation {
+            request_body: Some(OperationRequestBody::json(
+                SchemaValue::reference("Input"),
+                true,
+            )),
+            responses: vec![OperationResponse::json(
+                "200",
+                SchemaValue::reference("Output"),
+            )],
+            ..Operation::default()
+        };
+        operation.request_body.as_mut().unwrap().media_types.insert(
+            0,
+            OperationMediaType {
+                content_type: "text/plain".into(),
+                schema: Some(SchemaValue::new(SchemaKind::String)),
+            },
+        );
+        operation.responses[0].media_types.insert(
+            0,
+            OperationMediaType {
+                content_type: "text/plain".into(),
+                schema: Some(SchemaValue::new(SchemaKind::String)),
+            },
+        );
+        assert_eq!(
+            operation.request_schema().unwrap().kind.reference_name(),
+            Some("Input")
+        );
+        assert_eq!(
+            operation.success_schema().unwrap().kind.reference_name(),
+            Some("Output")
+        );
+    }
+
+    #[test]
+    fn missing_or_empty_success_never_uses_an_error_schema() {
+        let mut operation = Operation {
+            responses: vec![OperationResponse::json(
+                "default",
+                SchemaValue::reference("Error"),
+            )],
+            ..Operation::default()
+        };
+        assert!(operation.success_schema().is_none());
+        operation.responses.insert(
+            0,
+            OperationResponse {
+                status: "204".into(),
+                description: None,
+                media_types: vec![],
+            },
+        );
+        assert!(operation.success_schema().is_none());
+        assert!(operation.request_schema().is_none());
+    }
 
     #[test]
     fn preserves_a_recursive_discriminated_union() {

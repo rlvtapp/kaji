@@ -53,7 +53,7 @@ impl Plugin<Php> for Sdk {
         &self.meta
     }
     fn generate(&self, cx: &mut PluginContext<'_, Php>) -> Result<()> {
-        cx.files.append(crate::generate_php_sdk_with_style(
+        cx.files.append(crate::render_sdk(
             cx.api,
             ".",
             cx.settings.package_name.as_deref(),

@@ -14,7 +14,7 @@ use std::{
     thread,
 };
 
-use kaji::{PackageOptions, ProfileSet, generate};
+use kaji::{generate, go, mock, prelude::*, python};
 
 struct MockServer {
     base_url: String,
@@ -74,17 +74,13 @@ fn generated_contract_tree() -> kaji_core::GeneratedTree {
     generate(
         &support::sdk_contract_api(),
         ProfileSet::new("sdk")
-            .go()
-            .go_options(PackageOptions {
-                package_name: Some("contractsdk".into()),
-                ..PackageOptions::default()
-            })
-            .python()
-            .python_options(PackageOptions {
-                package_name: Some("contract-sdk".into()),
-                ..PackageOptions::default()
-            })
-            .mock_server(),
+            .package(go::package("go").name("contractsdk").with(go::sdk()))
+            .package(
+                python::package("python")
+                    .name("contract-sdk")
+                    .with(python::sdk()),
+            )
+            .package(mock::package("mock-server").with(mock::server())),
     )
     .expect("the contract targets should generate")
 }

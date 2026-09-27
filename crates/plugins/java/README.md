@@ -1,11 +1,29 @@
 # Kaji Java plugin
 
-Generates a Java 17+ SDK from Kaji's neutral `Api` model. Generated packages
-use `java.net.http.HttpClient` and Jackson, and include both Gradle and Maven
-build descriptors so a consumer can choose either build tool.
+`kaji-plugin-java` renders SDK packages from Kaji's neutral API model,
+using a Java 17+ HttpClient/Jackson client. All generation runs in Rust.
 
-`generate_java_sdk` preserves the direct-operation client API. Select
-`generate_java_sdk_with_style(..., SdkClientStyle::Namespaced)` to additionally
-export resource accessors such as `client.contacts().get(input)`.
+```rust
+use kaji::{java, prelude::*};
 
-See [STYLE_GUIDE.md](STYLE_GUIDE.md) for both generated client shapes.
+let release = ProfileSet::new("sdk")
+    .package(java::package("java")
+        .name("email-sdk")
+        .with(java::sdk()));
+let tree = kaji::generate(&api, release)?;
+tree.write_to("generated")?;
+```
+
+SDKs are namespaced by default. Choose `java::sdk().flat()` or
+`.namespaced()` explicitly, or supply a shared `Common` default.
+Namespaced clients expose resources such as `client.contacts().get(input)`;
+flat clients use `client.getContact(input)`. Generated packages include Maven
+and Gradle metadata. See [STYLE_GUIDE.md](STYLE_GUIDE.md).
+
+When depending on this plugin without the `kaji` facade, import
+`kaji_plugin_java::PackageExt` and compose its package through
+`kaji_core::engine::Packages`. Supply a security catalog when your API
+declares named security schemes.
+
+See [configuration](../../../docs/configuration.md) for every generation option
+and the generated package's README for exact operation signatures.

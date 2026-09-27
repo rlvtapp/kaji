@@ -24,16 +24,16 @@ fn snapshot() -> String {
     let tree = generate(
         &support::sdk_contract_api(),
         ProfileSet::new("sdk")
-            .rust()
-            .typescript_fetch()
-            .typescript_axios()
-            .go()
-            .python()
-            .php()
-            .java()
-            .dotnet()
-            .elixir()
-            .mock_server(),
+            .package(kaji::rust::package("rust").with(kaji::rust::sdk()))
+            .package(kaji::ts::package("typescript-fetch").with(kaji::ts::sdk().fetch()))
+            .package(kaji::ts::package("typescript-axios").with(kaji::ts::sdk().axios()))
+            .package(kaji::go::package("go").with(kaji::go::sdk()))
+            .package(kaji::python::package("python").with(kaji::python::sdk()))
+            .package(kaji::php::package("php").with(kaji::php::sdk()))
+            .package(kaji::java::package("java").with(kaji::java::sdk()))
+            .package(kaji::dotnet::package("dotnet").with(kaji::dotnet::sdk()))
+            .package(kaji::elixir::package("elixir").with(kaji::elixir::sdk()))
+            .package(kaji::mock::package("mock-server").with(kaji::mock::server())),
     )
     .expect("the maintained target set must generate");
 

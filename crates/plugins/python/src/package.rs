@@ -53,7 +53,7 @@ impl Plugin<Python> for Sdk {
         &self.meta
     }
     fn generate(&self, cx: &mut PluginContext<'_, Python>) -> Result<()> {
-        cx.files.append(crate::generate_python_sdk_with_style(
+        cx.files.append(crate::render_sdk(
             cx.api,
             ".",
             cx.settings.package_name.as_deref(),

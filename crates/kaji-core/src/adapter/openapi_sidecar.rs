@@ -51,14 +51,7 @@ struct SidecarBody {
     required: bool,
     #[serde(default)]
     description: Option<String>,
-    #[serde(default)]
     media_types: Vec<SidecarMediaType>,
-    // The fields below make this reader compatible with sidecar output from
-    // before `media_types` existed.
-    #[serde(default)]
-    content_type: Option<String>,
-    #[serde(default)]
-    schema_definition: Option<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -184,7 +177,6 @@ pub fn load_operations(output_dir: &Path, name: String, version: String) -> Resu
             .get(&key)
             .with_context(|| format!("sidecar operation index is missing {key:?}"))?;
         let document: SidecarOperation = read_json(&output_dir.join("operations").join(file))?;
-        let response_schema = preferred_response_schema(&document.responses);
         let mut annotations = document.extensions;
         add_optional_annotation(&mut annotations, "summary", document.summary);
         add_optional_annotation(&mut annotations, "description", document.description);
@@ -192,11 +184,7 @@ pub fn load_operations(output_dir: &Path, name: String, version: String) -> Resu
             annotations.insert("deprecated".into(), Value::Bool(true));
         }
         if !document.request_examples.is_empty() {
-            // Preserve the exact sidecar/Docs payload under a stable
-            // adapter-owned annotation. This keeps the neutral AST backwards
-            // compatible for third-party Rust plugins while giving any Kaji
-            // profile access to the per-operation examples without reparsing
-            // Go-sidecar files.
+            // Preserve per-operation examples for documentation generators.
             annotations.insert(
                 "kaji.docs.request_examples".into(),
                 serde_json::to_value(&document.request_examples)
@@ -211,18 +199,6 @@ pub fn load_operations(output_dir: &Path, name: String, version: String) -> Resu
             },
             method: parse_method(&document.method)?,
             path: document.path,
-            response_type: response_schema.map(type_name).unwrap_or_else(|| {
-                if document.responses.is_empty() {
-                    "void".into()
-                } else {
-                    "unknown".into()
-                }
-            }),
-            request_type: document
-                .request_body
-                .as_ref()
-                .and_then(|body| body.schema_definition.as_ref())
-                .map(type_name),
             parameters: document
                 .parameters
                 .into_iter()
@@ -259,17 +235,12 @@ pub fn load_operations(output_dir: &Path, name: String, version: String) -> Resu
         });
     }
 
-    let schemas_path = output_dir.join("schemas.json");
-    let schemas = if schemas_path.exists() {
-        let document: SidecarSchemas = read_json(&schemas_path)?;
-        document
-            .schemas
-            .iter()
-            .map(|schema| Schema::new(schema.name.clone(), convert_value(&schema.schema)))
-            .collect()
-    } else {
-        Vec::new()
-    };
+    let document: SidecarSchemas = read_json(&output_dir.join("schemas.json"))?;
+    let schemas = document
+        .schemas
+        .iter()
+        .map(|schema| Schema::new(schema.name.clone(), convert_value(&schema.schema)))
+        .collect();
 
     Ok(Api {
         name,
@@ -281,10 +252,8 @@ pub fn load_operations(output_dir: &Path, name: String, version: String) -> Resu
 }
 
 /// Loads reusable OpenAPI component security schemes from the Go-sidecar
-/// `security-schemes.json` artifact. This deliberately remains independent of
-/// [`load_operations`]: callers can adopt typed auth metadata without changing
-/// existing operation-only generation paths or requiring older artifacts to
-/// contain this newly-added file.
+/// `security-schemes.json` artifact. Operation requirements refer to these
+/// definitions by name; the artifact is required even when the catalog is empty.
 pub fn load_security_schemes(output_dir: &Path) -> Result<SecuritySchemeCatalog> {
     let document: SidecarSecuritySchemes = read_json(&output_dir.join("security-schemes.json"))?;
     Ok(SecuritySchemeCatalog {
@@ -335,21 +304,11 @@ fn convert_security_scheme(scheme: SidecarSecurityScheme) -> SecurityScheme {
 }
 
 fn convert_request_body(body: &SidecarBody) -> OperationRequestBody {
-    let mut media_types = body
+    let media_types = body
         .media_types
         .iter()
         .map(convert_media_type)
         .collect::<Vec<_>>();
-
-    // Read historical one-media-type sidecar output as a single media type.
-    if media_types.is_empty() {
-        if let Some(content_type) = &body.content_type {
-            media_types.push(OperationMediaType {
-                content_type: content_type.clone(),
-                schema: body.schema_definition.as_ref().map(convert_value),
-            });
-        }
-    }
 
     OperationRequestBody {
         required: body.required,
@@ -400,14 +359,6 @@ fn convert_responses(responses: &[SidecarResponse]) -> Vec<OperationResponse> {
         });
     }
     converted
-}
-
-fn preferred_response_schema(responses: &[SidecarResponse]) -> Option<&Value> {
-    responses
-        .iter()
-        .find(|response| response.code.starts_with('2'))
-        .or_else(|| responses.first())
-        .and_then(|response| response.schema_definition.as_ref())
 }
 
 fn add_optional_annotation(
@@ -637,40 +588,6 @@ fn is_constraint_key(key: &str) -> bool {
     )
 }
 
-fn type_name(schema: &Value) -> String {
-    type_name_from_value(&convert_value(schema))
-}
-
-fn type_name_from_value(value: &SchemaValue) -> String {
-    let name = match &value.kind {
-        SchemaKind::Reference { reference } => {
-            reference.rsplit('/').next().unwrap_or("unknown").to_owned()
-        }
-        SchemaKind::Null => "null".into(),
-        SchemaKind::Boolean => "boolean".into(),
-        SchemaKind::Integer | SchemaKind::Number => "number".into(),
-        SchemaKind::String => "string".into(),
-        SchemaKind::Array { items } => format!("{}[]", type_name_from_value(items)),
-        SchemaKind::Object { .. } => "Record<string, unknown>".into(),
-        SchemaKind::OneOf { variants } | SchemaKind::AnyOf { variants } => variants
-            .iter()
-            .map(type_name_from_value)
-            .collect::<Vec<_>>()
-            .join(" | "),
-        SchemaKind::AllOf { variants } => variants
-            .iter()
-            .map(type_name_from_value)
-            .collect::<Vec<_>>()
-            .join(" & "),
-        SchemaKind::Any | SchemaKind::Not { .. } => "unknown".into(),
-    };
-    if value.nullable {
-        format!("{name} | null")
-    } else {
-        name
-    }
-}
-
 fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T> {
     let content = fs::read_to_string(path)
         .with_context(|| format!("read Go OpenAPI sidecar output {}", path.display()))?;
@@ -718,10 +635,57 @@ mod tests {
     use std::fs;
 
     #[test]
+    fn request_body_requires_the_current_media_type_shape() {
+        assert!(
+            serde_json::from_value::<SidecarBody>(serde_json::json!({
+                "content_type": "application/json", "schema_definition": {"type": "string"}
+            }))
+            .is_err()
+        );
+        let body: SidecarBody = serde_json::from_value(serde_json::json!({
+            "media_types": [{"content_type": "application/json", "schema_definition": {"type": "string"}}]
+        })).unwrap();
+        assert_eq!(convert_request_body(&body).media_types.len(), 1);
+    }
+
+    #[test]
+    fn security_catalog_artifact_is_required() {
+        let temp = tempfile::tempdir().unwrap();
+        assert!(load_security_schemes(temp.path()).is_err());
+        fs::write(
+            temp.path().join("security-schemes.json"),
+            r#"{"schemes":[]}"#,
+        )
+        .unwrap();
+        assert!(
+            load_security_schemes(temp.path())
+                .unwrap()
+                .schemes
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn schema_catalog_artifact_is_required() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("operations.json"), "{}").unwrap();
+        fs::write(temp.path().join("operations-order.json"), "[]").unwrap();
+        assert!(load_operations(temp.path(), "Empty".into(), "1".into()).is_err());
+        fs::write(temp.path().join("schemas.json"), r#"{"schemas":[]}"#).unwrap();
+        assert!(
+            load_operations(temp.path(), "Empty".into(), "1".into())
+                .unwrap()
+                .schemas
+                .is_empty()
+        );
+    }
+
+    #[test]
     fn preserves_composed_components_and_operation_schemas() {
         let temp = tempfile::tempdir().unwrap();
         let operations = temp.path().join("operations");
         fs::create_dir_all(&operations).unwrap();
+        fs::write(temp.path().join("schemas.json"), r#"{"schemas":[]}"#).unwrap();
         fs::write(
             temp.path().join("operations.json"),
             r#"{"GET /pets/{petId}":"get.json"}"#,
@@ -732,11 +696,21 @@ mod tests {
             r#"["GET /pets/{petId}"]"#,
         )
         .unwrap();
-        fs::write(operations.join("get.json"), r##"{"path":"/pets/{petId}","method":"GET","request_body":{"schema_definition":{"$ref":"#/components/schemas/Pet"}},"responses":[{"code":"200","schema_definition":{"type":"array","items":{"$ref":"#/components/schemas/Pet"}}}]}"##).unwrap();
+        fs::write(operations.join("get.json"), r##"{"path":"/pets/{petId}","method":"GET","request_body":{"media_types":[{"content_type":"application/json","schema_definition":{"$ref":"#/components/schemas/Pet"}}]},"responses":[{"code":"200","content_type":"application/json","schema_definition":{"type":"array","items":{"$ref":"#/components/schemas/Pet"}}}]}"##).unwrap();
         fs::write(temp.path().join("schemas.json"), r##"{"schemas":[{"name":"Pet","schema":{"type":"object","required":["name"],"additionalProperties":{"type":"string"},"properties":{"name":{"type":"string","format":"uuid"},"kind":{"type":["string","null"],"enum":["cat","dog"]}},"x-target-name":"animal"}},{"name":"Animal","schema":{"oneOf":[{"$ref":"#/components/schemas/Pet"},{"type":"integer"}],"nullable":true,"discriminator":{"propertyName":"kind","mapping":{"cat":"#/components/schemas/Pet"}}}}]}"##).unwrap();
         let api = load_operations(temp.path(), "Pets".into(), "1.0.0".into()).unwrap();
-        assert_eq!(api.operations[0].request_type.as_deref(), Some("Pet"));
-        assert_eq!(api.operations[0].response_type, "Pet[]");
+        assert_eq!(
+            api.operations[0]
+                .request_schema()
+                .unwrap()
+                .kind
+                .reference_name(),
+            Some("Pet")
+        );
+        assert!(matches!(
+            api.operations[0].success_schema().unwrap().kind,
+            SchemaKind::Array { .. }
+        ));
         let SchemaKind::Object {
             fields,
             additional_properties,
@@ -787,6 +761,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let operations = temp.path().join("operations");
         fs::create_dir_all(&operations).unwrap();
+        fs::write(temp.path().join("schemas.json"), r#"{"schemas":[]}"#).unwrap();
         fs::write(
             temp.path().join("operations.json"),
             r#"{"POST /pets/{petId}":"post.json"}"#,
@@ -805,7 +780,7 @@ mod tests {
                 {"name":"petId","in":"path","required":true,"style":"matrix","explode":true,"schema":{"type":"string"}},
                 {"name":"include","in":"query","style":"pipeDelimited","explode":false,"schema":{"type":"array","items":{"type":"string"}}}
               ],
-              "request_body":{"required":true,"description":"New pet","content_type":"application/json","schema_definition":{"$ref":"#/components/schemas/PetInput"},"media_types":[
+              "request_body":{"required":true,"description":"New pet","media_types":[
                 {"content_type":"application/json","schema_definition":{"$ref":"#/components/schemas/PetInput"}},
                 {"content_type":"application/xml","schema_definition":{"type":"string"}}
               ]},
@@ -856,6 +831,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let operations = temp.path().join("operations");
         fs::create_dir_all(&operations).unwrap();
+        fs::write(temp.path().join("schemas.json"), r#"{"schemas":[]}"#).unwrap();
         fs::write(
             temp.path().join("operations.json"),
             r#"{"POST /widgets":"post.json"}"#,
@@ -899,6 +875,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let operations = temp.path().join("operations");
         fs::create_dir_all(&operations).unwrap();
+        fs::write(temp.path().join("schemas.json"), r#"{"schemas":[]}"#).unwrap();
         fs::write(
             temp.path().join("operations.json"),
             r#"{"GET /widgets":"get.json"}"#,

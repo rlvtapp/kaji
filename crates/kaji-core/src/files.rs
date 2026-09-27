@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GeneratedFile {
@@ -62,6 +62,22 @@ impl GeneratedTree {
         Ok(())
     }
 
+    /// Replaces the contents of a file already owned by this generated tree.
+    ///
+    /// Composition layers can use this for a deliberate finalization pass,
+    /// such as extending a generated package manifest. It never creates a new
+    /// file, so accidental ownership conflicts remain visible through `insert`.
+    pub fn replace(&mut self, file: GeneratedFile) -> Result<()> {
+        if !self.files.contains_key(&file.path) {
+            bail!(
+                "cannot replace missing generated file {}",
+                file.path.display()
+            );
+        }
+        self.files.insert(file.path, file.contents);
+        Ok(())
+    }
+
     pub fn get(&self, path: impl AsRef<Path>) -> Option<&str> {
         self.files.get(path.as_ref()).map(String::as_str)
     }
@@ -74,6 +90,19 @@ impl GeneratedTree {
         self.files
             .iter()
             .map(|(path, contents)| (path.as_path(), contents.as_str()))
+    }
+
+    /// Moves file contents and create-once metadata without copying the entire
+    /// generated SDK between composition layers.
+    pub fn into_files(self) -> impl Iterator<Item = (GeneratedFile, bool)> {
+        let Self {
+            files,
+            preserve_existing,
+        } = self;
+        files.into_iter().map(move |(path, contents)| {
+            let custom = preserve_existing.contains(&path);
+            (GeneratedFile { path, contents }, custom)
+        })
     }
 
     /// Merges a separately generated package tree, retaining the same
@@ -101,16 +130,28 @@ impl GeneratedTree {
     pub fn write_to(&self, root: impl AsRef<Path>) -> Result<()> {
         fs::create_dir_all(root.as_ref())?;
         let root = fs::canonicalize(root.as_ref())?;
-        for (relative, contents) in &self.files {
-            let destination = root.join(relative);
-            let parent = destination
-                .parent()
-                .ok_or_else(|| anyhow::anyhow!("generated path has no parent"))?;
-            fs::create_dir_all(parent)?;
-            let canonical_parent = fs::canonicalize(parent)?;
+
+        // Validate each containing directory once before materializing files.
+        // Large OpenAPI documents commonly produce tens of thousands of files;
+        // canonicalizing the same directory for every file made that safe path
+        // check dominate generation time. `GeneratedFile` has already rejected
+        // absolute and parent-directory paths, and checking every unique parent
+        // still prevents a generated path from traversing a pre-existing link.
+        let parents = self
+            .files
+            .keys()
+            .map(|relative| relative.parent().map(Path::to_path_buf).unwrap_or_default())
+            .collect::<BTreeSet<_>>();
+        for relative_parent in parents {
+            let parent = root.join(relative_parent);
+            fs::create_dir_all(&parent)?;
+            let canonical_parent = fs::canonicalize(&parent)?;
             if !canonical_parent.starts_with(&root) {
                 bail!("generated path escapes its output directory");
             }
+        }
+        for (relative, contents) in &self.files {
+            let destination = root.join(relative);
             if fs::symlink_metadata(&destination)
                 .map(|metadata| metadata.file_type().is_symlink())
                 .unwrap_or(false)
@@ -120,7 +161,9 @@ impl GeneratedTree {
             if self.preserve_existing.contains(relative) && destination.exists() {
                 continue;
             }
-            fs::write(destination, contents)?;
+            fs::write(&destination, contents).with_context(|| {
+                format!("cannot write generated file {}", destination.display())
+            })?;
         }
         Ok(())
     }
@@ -171,6 +214,25 @@ mod tests {
         assert_eq!(
             fs::read_to_string(output.path().join(path)).unwrap(),
             "export const userOwned = true\n"
+        );
+    }
+
+    #[test]
+    fn replace_updates_an_owned_file_without_creating_new_ownership() {
+        let mut tree = GeneratedTree::default();
+        tree.insert(GeneratedFile::new("typescript/package.json", "{}\n").unwrap())
+            .unwrap();
+        tree.replace(
+            GeneratedFile::new("typescript/package.json", "{\"name\":\"sdk\"}\n").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            tree.get("typescript/package.json"),
+            Some("{\"name\":\"sdk\"}\n")
+        );
+        assert!(
+            tree.replace(GeneratedFile::new("typescript/missing.json", "{}\n").unwrap())
+                .is_err()
         );
     }
 }

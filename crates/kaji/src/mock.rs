@@ -6,14 +6,59 @@
 //! backends can remain target-neutral while Kaji owns the supported UX.
 
 use anyhow::Result;
+use kaji_core::engine::{Language, Meta, Package, Plugin, PluginContext};
 use kaji_core::{Api, GeneratedFile, GeneratedTree};
+
+pub struct HttpMock;
+impl Language for HttpMock {
+    const NAME: &'static str = "httpmock";
+    type Settings = ();
+    type Workspace = ();
+}
+pub fn package(directory: impl Into<String>) -> Package<HttpMock> {
+    Package::new(directory)
+}
+pub struct Server {
+    meta: Meta,
+    options: MockServerOptions,
+}
+pub fn server() -> Server {
+    Server {
+        meta: Meta::new(),
+        options: MockServerOptions::default(),
+    }
+}
+impl Server {
+    pub fn image(mut self, image: impl Into<String>) -> Self {
+        self.options.image = image.into();
+        self
+    }
+    pub fn port(mut self, port: u16) -> Self {
+        self.options.port = port;
+        self
+    }
+}
+impl Plugin<HttpMock> for Server {
+    fn kind(&self) -> &'static str {
+        "httpmock-server"
+    }
+    fn meta(&self) -> &Meta {
+        &self.meta
+    }
+    fn generate(&self, cx: &mut PluginContext<'_, HttpMock>) -> Result<()> {
+        cx.files.append_from(
+            generate(cx.api, "__mock", &self.options)?,
+            std::path::Path::new("__mock"),
+        )
+    }
+}
 
 /// Configuration for Kaji's standalone mock-server target.
 ///
 /// `image` defaults to the official httpmock standalone image. Pin the image
 /// in a release profile when a build must be fully reproducible.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct MockServerOptions {
+struct MockServerOptions {
     pub image: String,
     pub port: u16,
 }
@@ -27,11 +72,7 @@ impl Default for MockServerOptions {
     }
 }
 
-pub(super) fn generate(
-    api: &Api,
-    output_dir: &str,
-    options: &MockServerOptions,
-) -> Result<GeneratedTree> {
+fn generate(api: &Api, output_dir: &str, options: &MockServerOptions) -> Result<GeneratedTree> {
     let mut tree = GeneratedTree::default();
     let root = output_dir.trim_matches('/');
 
@@ -108,7 +149,6 @@ mod tests {
                 id: "listPets".into(),
                 method: HttpMethod::Get,
                 path: "/pets".into(),
-                response_type: "PetList".into(),
                 ..Operation::default()
             }],
             ..Api::default()
@@ -141,7 +181,6 @@ mod tests {
                 id: "listContacts".into(),
                 method: HttpMethod::Get,
                 path: "/contacts".into(),
-                response_type: "ContactList".into(),
                 annotations: std::collections::BTreeMap::from([(
                     "x-kaji-mock".into(),
                     json!({

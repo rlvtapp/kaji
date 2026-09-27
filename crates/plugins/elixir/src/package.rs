@@ -53,7 +53,7 @@ impl Plugin<Elixir> for Sdk {
         &self.meta
     }
     fn generate(&self, cx: &mut PluginContext<'_, Elixir>) -> Result<()> {
-        cx.files.append(crate::generate_elixir_sdk_with_style(
+        cx.files.append(crate::render_sdk(
             cx.api,
             ".",
             cx.settings.package_name.as_deref(),

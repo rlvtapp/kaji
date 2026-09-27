@@ -1,38 +1,24 @@
 //! TypeScript SDK layout, runtime, facade and typed renderer options.
-use crate::clients::{StructuredTypeScriptAxios, StructuredTypeScriptFetch};
-use crate::models::StructuredTypeScriptModels;
-use crate::render::{TypeScriptAxios, TypeScriptFetch, TypeScriptModels, TypeScriptPackage};
+use crate::clients::{ClientRenderOptions, generate_operations, operation_file_identifier};
+use crate::models::{
+    ModelOptions, ModelRenderOptions, ModelRenderer, operation_model_file_identifier,
+};
 use anyhow::{Result, bail};
 use kaji_core::{
-    Api, CodegenPlugin, GeneratedFile, GeneratedTree, GeneratorConfig, Operation, SdkClientStyle,
-    SecuritySchemeCatalog, generate,
+    Api, GeneratedFile, GeneratedTree, Operation, SdkClientStyle, SecuritySchemeCatalog,
 };
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
 /// A transport implementation selected within one language profile.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SdkTransport {
     Fetch,
     Axios,
 }
 
-/// Output layout for a language profile. Structured is TypeScript-only and is
-/// the default there because it preserves separate models, clients, and
-/// runtime files without changing other language targets.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SdkStyle {
-    Native,
-    #[default]
-    Structured,
-}
-
 /// Whether a TypeScript SDK exposes only generated exports or also an
 /// instantiated product-client facade.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SdkSurface {
     /// Models and direct operation functions only.
     Raw,
@@ -41,100 +27,49 @@ pub enum SdkSurface {
     Client,
 }
 
-/// One independently generated SDK package.
-///
-/// `output_dir` is mandatory so multiple language targets can be generated
-/// together without colliding. Configuration intentionally stays typed here;
-/// config-file adapters can deserialize into this shape without adding a JS
-/// runtime to generation.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SdkProfile {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct SdkConfig {
     pub output_dir: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub package_name: Option<String>,
-    /// Public client class name for class-oriented SDK targets. When omitted,
-    /// it is derived from the OpenAPI title (for example `KajiEmail`).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client_name: Option<String>,
-    #[serde(default)]
     pub client_style: SdkClientStyle,
-    #[serde(default)]
     pub surface: SdkSurface,
-    #[serde(default)]
-    pub transports: Vec<SdkTransport>,
-    #[serde(default)]
-    pub style: SdkStyle,
-    /// Split structured output by the first OpenAPI tag. This prevents operation/schema name
-    /// collisions without forcing one giant file. Set this to `false` for a
-    /// flat package layout.
-    #[serde(default = "default_group_by_tag")]
+    pub transport: SdkTransport,
     pub group_by_tag: bool,
+    pub model_options: ModelOptions,
+    pub throw_on_error: bool,
 }
 
-fn default_group_by_tag() -> bool {
-    true
-}
-
-impl SdkProfile {
-    pub fn typescript(output_dir: impl Into<String>) -> Self {
+impl SdkConfig {
+    pub(crate) fn new(output_dir: impl Into<String>) -> Self {
         Self {
             output_dir: output_dir.into(),
             package_name: None,
             client_name: None,
             client_style: SdkClientStyle::Namespaced,
-            transports: vec![SdkTransport::Fetch],
-            style: SdkStyle::Structured,
             surface: SdkSurface::Client,
+            transport: SdkTransport::Fetch,
             group_by_tag: true,
+            model_options: ModelOptions::default(),
+            throw_on_error: true,
         }
     }
 }
 
-/// Generates a TypeScript package using the maintained renderer family.
-pub fn generate_sdk(
+pub(crate) fn generate_sdk(
     api: &Api,
-    profile: &SdkProfile,
+    profile: &SdkConfig,
     security_schemes: Option<&SecuritySchemeCatalog>,
 ) -> Result<GeneratedTree> {
-    let config = profile_config(profile)?;
-    if profile.transports.is_empty() {
-        bail!("TypeScript SDK profiles need at least one transport");
+    if profile.output_dir.is_empty() {
+        bail!("SDK output directory cannot be empty")
     }
-    if profile.style == SdkStyle::Structured {
-        require_one_typescript_transport(profile)?;
-        generate_structured_typescript_sdk(api, profile, config, security_schemes)
-    } else {
-        let models = TypeScriptModels;
-        let package = TypeScriptPackage;
-        let fetch = TypeScriptFetch;
-        let axios = TypeScriptAxios;
-        let mut plugins: Vec<(&dyn CodegenPlugin, GeneratorConfig)> =
-            vec![(&models, config.clone()), (&package, config.clone())];
-        if profile.transports.contains(&SdkTransport::Fetch) {
-            plugins.push((&fetch, config.clone()));
-        }
-        if profile.transports.contains(&SdkTransport::Axios) {
-            plugins.push((&axios, config));
-        }
-        generate(api, &plugins)
-    }
-}
-fn require_one_typescript_transport(profile: &SdkProfile) -> Result<()> {
-    if profile.transports.len() != 1
-        || !matches!(
-            profile.transports[0],
-            SdkTransport::Fetch | SdkTransport::Axios
-        )
-    {
-        bail!("structured TypeScript profiles need exactly one of fetch or axios")
-    }
-    Ok(())
+    generate_typescript_sdk(api, profile, security_schemes)
 }
 
-fn generate_structured_typescript_sdk(
+fn generate_typescript_sdk(
     api: &Api,
-    profile: &SdkProfile,
-    mut config: GeneratorConfig,
+    profile: &SdkConfig,
     security_schemes: Option<&SecuritySchemeCatalog>,
 ) -> Result<GeneratedTree> {
     // Kaji's tag-directory layout otherwise puts every untagged operation in
@@ -154,38 +89,40 @@ fn generate_structured_typescript_sdk(
     let root = profile.output_dir.trim_matches('/');
     let models_dir = format!("{root}/models");
     let clients_dir = format!("{root}/clients");
-    let mut type_config = config.clone();
-    type_config.insert("output_dir".into(), models_dir);
-    config.insert("output_dir".into(), clients_dir);
-    config.insert("runtime_dir".into(), ".kaji".into());
-    if profile.group_by_tag {
-        type_config.insert("group_type".into(), "tag".into());
-        config.insert("group_type".into(), "tag".into());
-        config.insert("group_default_directory".into(), "true".into());
-        config.insert("type_import_prefix".into(), "../../models".into());
-    } else {
-        config.insert("type_import_prefix".into(), "../models".into());
+    let type_options = ModelRenderOptions {
+        output_dir: models_dir,
+        schema_output_dir: None,
+        operation_output_dir: None,
+        group_by_tag: profile.group_by_tag,
+        model: profile.model_options.clone(),
+    };
+    let client_options = ClientRenderOptions {
+        output_dir: clients_dir,
+        runtime_dir: ".kaji".into(),
+        throw_on_error: profile.throw_on_error,
+        group_by_tag: profile.group_by_tag,
+        group_default_directory: profile.group_by_tag,
+        type_import_prefix: Some(
+            if profile.group_by_tag {
+                "../../models"
+            } else {
+                "../models"
+            }
+            .into(),
+        ),
+        runtime_import_prefix: Some("..".into()),
+    };
+    let mut tree = GeneratedTree::default();
+    for file in ModelRenderer.generate(&sdk_api, &type_options)? {
+        tree.insert(file)?;
     }
-    let types = StructuredTypeScriptModels;
-    let fetch = StructuredTypeScriptFetch;
-    let axios = StructuredTypeScriptAxios;
-    let mut tree = generate(&sdk_api, &[(&types, type_config)])?;
-    let client_files = match profile.transports[0] {
-        SdkTransport::Fetch => security_schemes.map_or_else(
-            || fetch.generate(&sdk_api, &config),
-            |catalog| fetch.generate_with_named_security_catalog(&sdk_api, &config, catalog),
-        ),
-        SdkTransport::Axios => security_schemes.map_or_else(
-            || axios.generate(&sdk_api, &config),
-            |catalog| axios.generate_with_named_security_catalog(&sdk_api, &config, catalog),
-        ),
-    }?;
+    let client_files = generate_operations(&sdk_api, &client_options, security_schemes)?;
     for file in client_files {
         tree.insert(file)?;
     }
     tree.insert(GeneratedFile::new(
         format!("{root}/.kaji/client.ts"),
-        kaji_runtime(profile.transports[0], security_schemes),
+        kaji_runtime(profile.transport, security_schemes),
     )?)?;
     let client_name = (profile.surface == SdkSurface::Client).then(|| {
         profile
@@ -194,32 +131,32 @@ fn generate_structured_typescript_sdk(
             .unwrap_or_else(|| sdk_client_name(&sdk_api.name))
     });
     if let Some(client_name) = &client_name {
-        tree.insert(GeneratedFile::new(
-            format!("{root}/client.ts"),
-            kaji_sdk_client(
-                &sdk_api,
-                client_name,
-                profile.group_by_tag,
-                profile.client_style,
-                ".kaji",
-            ),
-        )?)?;
+        for file in kaji_sdk_client(
+            &sdk_api,
+            client_name,
+            profile.group_by_tag,
+            profile.client_style,
+            root,
+            ".kaji",
+        )? {
+            tree.insert(file)?;
+        }
     }
     tree.insert_custom(GeneratedFile::new(
         format!("{root}/custom/index.ts"),
         "// This module is created once and never overwritten by Kaji.\n// Add stable helpers, exports, or product-specific wrappers here.\nexport {}\n",
     )?)?;
-    tree.insert(GeneratedFile::new(
-        format!("{root}/index.ts"),
-        kaji_barrel(&sdk_api, profile.group_by_tag, client_name.as_deref()),
-    )?)?;
+    for file in kaji_barrels(
+        &sdk_api,
+        profile.group_by_tag,
+        client_name.as_deref(),
+        !matches!(profile.model_options.enum_type, crate::EnumType::Literal),
+    )? {
+        tree.insert(GeneratedFile::new(format!("{root}/{}", file.0), file.1)?)?;
+    }
     tree.insert(GeneratedFile::new(
         format!("{root}/package.json"),
-        kaji_package(
-            &sdk_api,
-            profile.transports[0],
-            profile.package_name.as_deref(),
-        )?,
+        kaji_package(&sdk_api, profile.transport, profile.package_name.as_deref())?,
     )?)?;
     tree.insert(GeneratedFile::new(
         format!("{root}/README.md"),
@@ -232,40 +169,168 @@ fn generate_structured_typescript_sdk(
     Ok(tree)
 }
 
-fn kaji_barrel(api: &Api, group_by_tag: bool, client_name: Option<&str>) -> String {
+const BARREL_EXPORTS_PER_FILE: usize = 100;
+
+/// Builds a shallow, stable public export topology. A large API no longer
+/// writes every symbol into `index.ts`: consumers retain normal root imports
+/// while TypeScript only has to parse small barrel modules at each level.
+fn kaji_barrels(
+    api: &Api,
+    group_by_tag: bool,
+    client_name: Option<&str>,
+    export_runtime_types: bool,
+) -> Result<Vec<(String, String)>> {
+    let type_export = if export_runtime_types {
+        "export * from"
+    } else {
+        "export type * from"
+    };
+    let mut files = Vec::new();
     let mut output = String::new();
     output.push_str("export * from './custom'\n");
     if let Some(client_name) = client_name {
         output.push_str(&format!("export {{ {client_name} }} from './client'\n"));
     }
+    output.push_str("export * from './models'\nexport * from './clients'\n");
+    files.push(("index.ts".into(), output));
+
+    let schema_paths = api
+        .schemas
+        .iter()
+        .map(|schema| format!("./{}", pascal_identifier(&schema.name)))
+        .collect::<Vec<_>>();
+    let schema_chunks = render_barrel_chunks(
+        &mut files,
+        "models",
+        "schemas",
+        &schema_paths,
+        type_export,
+        None,
+    )?;
+
+    let mut operation_groups = BTreeMap::<String, Vec<&Operation>>::new();
     for operation in &api.operations {
-        let name = pascal_identifier(&operation.id);
-        let function = lower_camel_identifier(&operation.id);
         let group = if group_by_tag {
             operation_tag_directory(operation)
         } else {
             String::new()
         };
-        let operation_path = if group.is_empty() {
-            format!("./models/{name}")
-        } else {
-            format!("./models/{group}/{name}")
-        };
-        let client_path = if group.is_empty() {
-            format!("./clients/{function}")
-        } else {
-            format!("./clients/{group}/{function}")
-        };
-        output.push_str(&format!("export type * from '{operation_path}'\n"));
-        output.push_str(&format!("export {{ {function} }} from '{client_path}'\n"));
+        operation_groups.entry(group).or_default().push(operation);
     }
-    for schema in &api.schemas {
-        output.push_str(&format!(
-            "export type * from './models/{}'\n",
-            pascal_identifier(&schema.name)
-        ));
+
+    let mut model_index = String::new();
+    for chunk in &schema_chunks {
+        let _ = std::fmt::Write::write_fmt(
+            &mut model_index,
+            format_args!("export * from './{chunk}'\n"),
+        );
     }
-    output
+    let mut client_index = String::new();
+    for (group, operations) in &operation_groups {
+        let (model_dir, client_dir) = if group.is_empty() {
+            ("models".to_owned(), "clients".to_owned())
+        } else {
+            (format!("models/{group}"), format!("clients/{group}"))
+        };
+        let model_exports = operations
+            .iter()
+            .map(|operation| format!("./{}", operation_model_file_identifier(&operation.id)))
+            .collect::<Vec<_>>();
+        let model_chunks = render_barrel_chunks(
+            &mut files,
+            &model_dir,
+            "operation_types",
+            &model_exports,
+            type_export,
+            None,
+        )?;
+        let client_exports = operations
+            .iter()
+            .map(|operation| {
+                (
+                    format!("./{}", operation_file_identifier(&operation.id)),
+                    lower_camel_identifier(&operation.id),
+                )
+            })
+            .collect::<Vec<_>>();
+        let client_chunks = render_client_barrel_chunks(&mut files, &client_dir, &client_exports)?;
+
+        let mut model_group_index = String::new();
+        for chunk in model_chunks {
+            let _ = std::fmt::Write::write_fmt(
+                &mut model_group_index,
+                format_args!("export * from './{chunk}'\n"),
+            );
+        }
+        if group.is_empty() {
+            model_index.push_str(&model_group_index);
+        } else {
+            files.push((format!("{model_dir}/index.ts"), model_group_index));
+            let _ = std::fmt::Write::write_fmt(
+                &mut model_index,
+                format_args!("export * from './{group}'\n"),
+            );
+        }
+
+        let mut client_group_index = String::new();
+        for chunk in client_chunks {
+            let _ = std::fmt::Write::write_fmt(
+                &mut client_group_index,
+                format_args!("export * from './{chunk}'\n"),
+            );
+        }
+        if group.is_empty() {
+            client_index.push_str(&client_group_index);
+        } else {
+            files.push((format!("{client_dir}/index.ts"), client_group_index));
+            let _ = std::fmt::Write::write_fmt(
+                &mut client_index,
+                format_args!("export * from './{group}'\n"),
+            );
+        }
+    }
+    files.push(("models/index.ts".into(), model_index));
+    files.push(("clients/index.ts".into(), client_index));
+    Ok(files)
+}
+
+fn render_barrel_chunks(
+    files: &mut Vec<(String, String)>,
+    directory: &str,
+    prefix: &str,
+    exports: &[String],
+    export_kind: &str,
+    _reserved: Option<()>,
+) -> Result<Vec<String>> {
+    let mut names = Vec::new();
+    for (index, chunk) in exports.chunks(BARREL_EXPORTS_PER_FILE).enumerate() {
+        let name = format!("{prefix}_{:04}", index + 1);
+        let contents = chunk
+            .iter()
+            .map(|path| format!("{export_kind} '{path}'\n"))
+            .collect();
+        files.push((format!("{directory}/{name}.ts"), contents));
+        names.push(name);
+    }
+    Ok(names)
+}
+
+fn render_client_barrel_chunks(
+    files: &mut Vec<(String, String)>,
+    directory: &str,
+    exports: &[(String, String)],
+) -> Result<Vec<String>> {
+    let mut names = Vec::new();
+    for (index, chunk) in exports.chunks(BARREL_EXPORTS_PER_FILE).enumerate() {
+        let name = format!("operations_{:04}", index + 1);
+        let contents = chunk
+            .iter()
+            .map(|(path, function)| format!("export {{ {function} }} from '{path}'\n"))
+            .collect();
+        files.push((format!("{directory}/{name}.ts"), contents));
+        names.push(name);
+    }
+    Ok(names)
 }
 
 fn kaji_sdk_client(
@@ -273,12 +338,16 @@ fn kaji_sdk_client(
     class_name: &str,
     group_by_tag: bool,
     style: SdkClientStyle,
+    root: &str,
     runtime_dir: &str,
-) -> String {
+) -> Result<Vec<GeneratedFile>> {
     match style {
-        SdkClientStyle::Flat => kaji_flat_sdk_client(api, class_name, group_by_tag, runtime_dir),
+        SdkClientStyle::Flat => Ok(vec![GeneratedFile::new(
+            format!("{root}/client.ts"),
+            kaji_flat_sdk_client(api, class_name, group_by_tag, runtime_dir),
+        )?]),
         SdkClientStyle::Namespaced => {
-            kaji_namespaced_sdk_client(api, class_name, group_by_tag, runtime_dir)
+            kaji_namespaced_sdk_client(api, class_name, group_by_tag, root, runtime_dir)
         }
     }
 }
@@ -294,15 +363,16 @@ fn kaji_flat_sdk_client(
     ));
     for operation in &api.operations {
         let function = lower_camel_identifier(&operation.id);
+        let module = operation_file_identifier(&operation.id);
         let group = if group_by_tag {
             operation_tag_directory(operation)
         } else {
             String::new()
         };
         let path = if group.is_empty() {
-            format!("./clients/{function}")
+            format!("./clients/{module}")
         } else {
-            format!("./clients/{group}/{function}")
+            format!("./clients/{group}/{module}")
         };
         output.push_str(&format!("import {{ {function} }} from '{path}'\n"));
     }
@@ -345,8 +415,9 @@ fn kaji_namespaced_sdk_client(
     api: &Api,
     class_name: &str,
     group_by_tag: bool,
+    root: &str,
     runtime_dir: &str,
-) -> String {
+) -> Result<Vec<GeneratedFile>> {
     let mut groups: BTreeMap<String, Vec<(&Operation, String)>> = BTreeMap::new();
     for operation in &api.operations {
         let namespace = sdk_namespace(operation);
@@ -357,66 +428,63 @@ fn kaji_namespaced_sdk_client(
             .push((operation, method));
     }
 
-    let mut output = String::from(&format!(
-        "import type {{ ClientConfig, ClientInstance }} from './{runtime_dir}/client'\nimport {{ createClient }} from './{runtime_dir}/client'\n"
-    ));
-    for operation in &api.operations {
-        let function = lower_camel_identifier(&operation.id);
-        let group = if group_by_tag {
-            operation_tag_directory(operation)
-        } else {
-            String::new()
-        };
-        let path = if group.is_empty() {
-            format!("./clients/{function}")
-        } else {
-            format!("./clients/{group}/{function}")
-        };
-        output.push_str(&format!("import {{ {function} }} from '{path}'\n"));
-    }
-    if has_pagination(api) {
-        output.push_str(pagination_helpers());
-    }
-
     let mut client_types = Vec::new();
+    let mut files = Vec::new();
     for (namespace, operations) in &groups {
         let namespace_type = format!("{}Client", pascal_identifier(namespace));
         client_types.push((namespace.clone(), namespace_type.clone()));
-        output.push_str(&format!("\nclass {namespace_type} {{\n"));
-        let mut names = std::collections::BTreeSet::new();
-        for (operation, proposed_name) in operations {
-            let function = lower_camel_identifier(&operation.id);
-            let name = if names.insert(proposed_name.clone()) {
-                proposed_name.clone()
-            } else {
-                function.clone()
-            };
-            output.push_str(&format!("  readonly {name}: typeof {function}\n"));
-            if pagination(operation).is_some() {
-                output.push_str(&format!(
-                    "  readonly {name}Pages: (options: Parameters<typeof {function}>[0]) => AsyncIterable<Awaited<ReturnType<typeof {function}>>>\n"
-                ));
-            }
+        let resolved_methods = resolved_resource_methods(operations);
+        let mut chunk_types = Vec::new();
+        for (index, chunk) in resolved_methods.chunks(BARREL_EXPORTS_PER_FILE).enumerate() {
+            let chunk_type = format!("{namespace_type}Operations{:04}", index + 1);
+            let chunk_file = format!("operations_{:04}", index + 1);
+            chunk_types.push((chunk_type.clone(), chunk_file.clone()));
+            files.push(GeneratedFile::new(
+                format!("{root}/resources/{namespace}/{chunk_file}.ts"),
+                render_namespaced_resource_chunk(chunk, &chunk_type, group_by_tag, runtime_dir),
+            )?);
         }
-        output.push_str("\n  constructor(private readonly client: ClientInstance) {\n");
-        let mut names = std::collections::BTreeSet::new();
-        for (operation, proposed_name) in operations {
-            let function = lower_camel_identifier(&operation.id);
-            let name = if names.insert(proposed_name.clone()) {
-                proposed_name.clone()
-            } else {
-                function.clone()
-            };
+        let mut output = String::from(&format!(
+            "import type {{ ClientInstance }} from '../{runtime_dir}/client'\n"
+        ));
+        for (chunk_type, chunk_file) in &chunk_types {
             output.push_str(&format!(
-                "    this.{name} = ((options: Parameters<typeof {function}>[0]) => {function}({{ ...options, client: this.client }})) as typeof {function}\n"
+                "import {{ {chunk_type} }} from './{namespace}/{chunk_file}'\n"
             ));
-            if let Some(pagination) = pagination(operation) {
-                output.push_str(&render_pagination_iterator(&name, &function, &pagination));
-            }
         }
-        output.push_str("  }\n}\n");
+        output.push_str(&format!("\nexport interface {namespace_type} extends "));
+        output.push_str(
+            &chunk_types
+                .iter()
+                .map(|(chunk_type, _)| chunk_type.as_str())
+                .collect::<Vec<_>>()
+                .join(", "),
+        );
+        output.push_str(" {}\n\n");
+        output.push_str(&format!("export class {namespace_type} {{\n"));
+        output.push_str("  constructor(client: ClientInstance) {\n    Object.assign(this, ");
+        output.push_str(
+            &chunk_types
+                .iter()
+                .map(|(chunk_type, _)| format!("new {chunk_type}(client)"))
+                .collect::<Vec<_>>()
+                .join(", "),
+        );
+        output.push_str(")\n  }\n}\n");
+        files.push(GeneratedFile::new(
+            format!("{root}/resources/{namespace}.ts"),
+            output,
+        )?);
     }
 
+    let mut output = String::from(&format!(
+        "import type {{ ClientConfig }} from './{runtime_dir}/client'\nimport {{ createClient }} from './{runtime_dir}/client'\n"
+    ));
+    for (namespace, namespace_type) in &client_types {
+        output.push_str(&format!(
+            "import {{ {namespace_type} }} from './resources/{namespace}'\n"
+        ));
+    }
     output.push_str(&format!("\nexport class {class_name} {{\n"));
     for (namespace, namespace_type) in &client_types {
         output.push_str(&format!("  readonly {namespace}: {namespace_type}\n"));
@@ -428,6 +496,84 @@ fn kaji_namespaced_sdk_client(
         output.push_str(&format!(
             "    this.{namespace} = new {namespace_type}(client)\n"
         ));
+    }
+    output.push_str("  }\n}\n");
+    files.push(GeneratedFile::new(format!("{root}/client.ts"), output)?);
+    Ok(files)
+}
+
+fn resolved_resource_methods<'a>(
+    operations: &'a [(&'a Operation, String)],
+) -> Vec<(&'a Operation, String)> {
+    let mut names = std::collections::BTreeSet::new();
+    operations
+        .iter()
+        .map(|(operation, proposed_name)| {
+            let function = lower_camel_identifier(&operation.id);
+            let name = if names.insert(proposed_name.clone()) {
+                proposed_name.clone()
+            } else {
+                function
+            };
+            (*operation, name)
+        })
+        .collect()
+}
+
+fn render_namespaced_resource_chunk(
+    operations: &[(&Operation, String)],
+    class_name: &str,
+    group_by_tag: bool,
+    runtime_dir: &str,
+) -> String {
+    let mut output = String::from(&format!(
+        "import type {{ ClientInstance }} from '../../{runtime_dir}/client'\n"
+    ));
+    for (operation, _) in operations {
+        let function = lower_camel_identifier(&operation.id);
+        let module = operation_file_identifier(&operation.id);
+        let group = if group_by_tag {
+            operation_tag_directory(operation)
+        } else {
+            String::new()
+        };
+        let path = if group.is_empty() {
+            format!("../../clients/{module}")
+        } else {
+            format!("../../clients/{group}/{module}")
+        };
+        output.push_str(&format!("import {{ {function} }} from '{path}'\n"));
+    }
+    if operations
+        .iter()
+        .any(|(operation, _)| pagination(operation).is_some())
+    {
+        output.push_str(pagination_helpers());
+    }
+    output.push_str(&format!("\nexport class {class_name} {{\n"));
+    for (operation, name) in operations {
+        let function = lower_camel_identifier(&operation.id);
+        output.push_str(&format!("  readonly {name}: typeof {function}\n"));
+        if pagination(operation).is_some() {
+            output.push_str(&format!(
+                "  readonly {name}Pages: (options: Parameters<typeof {function}>[0]) => AsyncIterable<Awaited<ReturnType<typeof {function}>>>\n"
+            ));
+        }
+    }
+    output.push_str("\n  constructor(client: ClientInstance) {\n");
+    for (operation, name) in operations {
+        let function = lower_camel_identifier(&operation.id);
+        output.push_str(&format!(
+            "    this.{name} = ((options: Parameters<typeof {function}>[0]) => {function}({{ ...options, client: this.client }})) as typeof {function}\n"
+        ));
+        if let Some(pagination) = pagination(operation) {
+            output.push_str(&render_pagination_iterator_with_client(
+                name,
+                &function,
+                &pagination,
+                "client",
+            ));
+        }
     }
     output.push_str("  }\n}\n");
     output
@@ -658,11 +804,25 @@ fn render_pagination_iterator(
     function: &str,
     pagination: &Pagination,
 ) -> String {
+    render_pagination_iterator_with_client(public_name, function, pagination, "this.client")
+}
+
+fn render_pagination_iterator_with_client(
+    public_name: &str,
+    function: &str,
+    pagination: &Pagination,
+    client_expression: &str,
+) -> String {
     if let Pagination::Url(pagination) = pagination {
-        return render_url_pagination_iterator(public_name, function, pagination);
+        return render_url_pagination_iterator(
+            public_name,
+            function,
+            pagination,
+            client_expression,
+        );
     }
     let header = format!(
-        "    {{\n      const paginationClient = this.client\n      this.{public_name}Pages = async function* (options: Parameters<typeof {function}>[0]) {{\n        let current: unknown = options\n        while (true) {{\n          const response = await {function}({{ ...(current as Record<string, unknown>), client: paginationClient }} as Parameters<typeof {function}>[0])\n          yield response\n"
+        "    {{\n      const paginationClient = {client_expression}\n      this.{public_name}Pages = async function* (options: Parameters<typeof {function}>[0]) {{\n        let current: unknown = options\n        while (true) {{\n          const response = await {function}({{ ...(current as Record<string, unknown>), client: paginationClient }} as Parameters<typeof {function}>[0])\n          yield response\n"
     );
     let footer = "        }\n      }\n    }\n";
     let body = match pagination {
@@ -702,9 +862,10 @@ fn render_url_pagination_iterator(
     public_name: &str,
     function: &str,
     pagination: &UrlPagination,
+    client_expression: &str,
 ) -> String {
     format!(
-        "    {{\n      const paginationClient = this.client\n      this.{public_name}Pages = async function* (options: Parameters<typeof {function}>[0]) {{\n        let current: unknown = options\n        let nextUrl: string | undefined\n        while (true) {{\n          const request: ClientInstance = nextUrl === undefined\n            ? paginationClient\n            : (operation) => paginationClient({{ ...operation, paginationUrl: nextUrl }})\n          const requestOptions = nextUrl === undefined\n            ? (current as Record<string, unknown>)\n            : {{ ...(current as Record<string, unknown>), query: undefined }}\n          const response = await {function}({{ ...requestOptions, client: request }} as Parameters<typeof {function}>[0])\n          yield response\n          nextUrl = kajiPaginationUrl(response, {:?})\n          if (nextUrl === undefined) return\n        }}\n      }}\n    }}\n",
+        "    {{\n      const paginationClient = {client_expression}\n      this.{public_name}Pages = async function* (options: Parameters<typeof {function}>[0]) {{\n        let current: unknown = options\n        let nextUrl: string | undefined\n        while (true) {{\n          const request: ClientInstance = nextUrl === undefined\n            ? paginationClient\n            : (operation) => paginationClient({{ ...operation, paginationUrl: nextUrl }})\n          const requestOptions = nextUrl === undefined\n            ? (current as Record<string, unknown>)\n            : {{ ...(current as Record<string, unknown>), query: undefined }}\n          const response = await {function}({{ ...requestOptions, client: request }} as Parameters<typeof {function}>[0])\n          yield response\n          nextUrl = kajiPaginationUrl(response, {:?})\n          if (nextUrl === undefined) return\n        }}\n      }}\n    }}\n",
         pagination.next_url_path,
     )
 }
@@ -795,6 +956,10 @@ fn sdk_client_name(api_name: &str) -> String {
     }
 }
 
+pub(crate) fn operation_group(operation: &Operation) -> String {
+    operation_tag_directory_if_present(operation).unwrap_or_else(|| sdk_namespace(operation))
+}
+
 fn operation_tag_directory(operation: &Operation) -> String {
     sdk_namespace(operation)
 }
@@ -822,7 +987,7 @@ fn kaji_package(api: &Api, transport: SdkTransport, name: Option<&str>) -> Resul
         "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
         "files": ["dist"],
         "scripts": { "build": "tsc -p tsconfig.json" },
-        "devDependencies": { "typescript": "^5.0.0" }
+        "devDependencies": { "typescript": "^7.0.0" }
     });
     if transport == SdkTransport::Axios {
         package["peerDependencies"] = serde_json::json!({ "axios": "^1.0.0" });
@@ -841,11 +1006,11 @@ fn kaji_package_name(api: &Api, transport: SdkTransport) -> String {
     )
 }
 
-fn kaji_readme(api: &Api, profile: &SdkProfile) -> String {
+fn kaji_readme(api: &Api, profile: &SdkConfig) -> String {
     let package_name = profile
         .package_name
         .clone()
-        .unwrap_or_else(|| kaji_package_name(api, profile.transports[0]));
+        .unwrap_or_else(|| kaji_package_name(api, profile.transport));
     let client_name = profile
         .client_name
         .clone()
@@ -944,12 +1109,12 @@ export interface RequestHookContext { method: string; url: string; body?: unknow
 export interface ResponseHookContext { request: RequestHookContext; status: number; response: Response }
 export interface ClientHooks { beforeRequest?: (request: RequestHookContext) => void | Promise<void>; afterResponse?: (response: ResponseHookContext) => void | Promise<void>; onError?: (error: unknown, request: RequestHookContext) => void | Promise<void> }
 export interface ClientConfig { baseUrl?: string; apiKey?: string; apiKeyHeader?: string; apiKeyPrefix?: string; auth?: SecurityCredentials; headers?: HeadersInit; fetch?: typeof globalThis.fetch; retry?: RetryConfig | false; hooks?: ClientHooks }
-export type RequestConfig = { method: string; url: string; body?: unknown; path?: Record<string, unknown>; query?: Record<string, unknown>; headers?: HeadersInit; throwOnError?: boolean; security?: unknown; contentType?: { request?: string }; responseType?: 'stream'; styles?: unknown; paginationUrl?: string }
+export type RequestConfig = { method: string; url: string; body?: unknown; path?: Record<string, unknown>; query?: Record<string, unknown>; headers?: HeadersInit; throwOnError?: boolean; security?: SecurityDescriptor[][]; contentType?: { request?: string }; responseType?: 'stream'; styles?: unknown; paginationUrl?: string }
 export type ClientInstance = (request: RequestConfig) => Promise<unknown>
 export type Options<T, ThrowOnError extends boolean> = T & { client?: ClientInstance; throwOnError?: ThrowOnError }
-export type RequestResult<T, _ThrowOnError extends boolean> = T
+export type SuccessOf<T> = T[Extract<keyof T, `2${string}`>]
+export type RequestResult<T, ThrowOnError extends boolean> = ThrowOnError extends true ? SuccessOf<T> : T[keyof T]
 export type Unwrappable<T> = Promise<T> & { unwrap(): Promise<T> }
-export type SuccessOf<T> = T
 export type EventStreamResult<T> = AsyncIterable<T>
 const resolveUrl = (template: string, path?: Record<string, unknown>, query?: Record<string, unknown>) => {
   const url = template.replace(/\{([^}]+)\}/g, (_match, key) => encodeURIComponent(String(path?.[key] ?? `{${key}}`)))
@@ -979,18 +1144,19 @@ const requestBody = (body: unknown, headers: Headers) => {
   if (!headers.has('content-type')) headers.set('content-type', 'application/json')
   return JSON.stringify(body)
 }
-const applySecurity = (headers: Headers, query: Record<string, unknown>, security: unknown, credentials?: SecurityCredentials) => {
-  if (!Array.isArray(security)) return
-  const alternatives = (Array.isArray(security[0]) ? security : [security]) as Array<Array<SecurityDescriptor>>
-  const values = credentials ?? {}
-  const selected = alternatives.find((alternative) => alternative.every((scheme) => !scheme.id || values[scheme.id]))
+const applySecurity = (headers: Headers, query: Record<string, unknown>, security: SecurityDescriptor[][] | undefined, credentials?: SecurityCredentials) => {
+  if (!security) return
+  const values: Record<string, string | undefined> = { ...credentials }
+  const selected = security.find((alternative) => alternative.every((scheme) => values[scheme.id]))
   if (!selected) return
   for (const scheme of selected) {
-    const value = scheme.id ? values[scheme.id] : undefined
+    const value = values[scheme.id]
     if (!value) continue
     if (scheme.type === 'apiKey') {
-      if (scheme.in === 'query') query[scheme.name ?? scheme.id] = value
-      else headers.set(scheme.name ?? scheme.id, value)
+      const name = scheme.name
+      if (!name) continue
+      if (scheme.in === 'query') query[name] = value
+      else headers.set(name, value)
     } else headers.set('authorization', `${scheme.scheme === 'basic' ? 'Basic' : 'Bearer'} ${value}`)
   }
 }
@@ -1079,12 +1245,12 @@ export interface RequestHookContext { method: string; url: string; body?: unknow
 export interface ResponseHookContext { request: RequestHookContext; status: number; headers: Record<string, unknown>; data: unknown }
 export interface ClientHooks { beforeRequest?: (request: RequestHookContext) => void | Promise<void>; afterResponse?: (response: ResponseHookContext) => void | Promise<void>; onError?: (error: unknown, request: RequestHookContext) => void | Promise<void> }
 export interface ClientConfig { baseUrl?: string; apiKey?: string; apiKeyHeader?: string; apiKeyPrefix?: string; auth?: SecurityCredentials; headers?: Record<string, string>; client?: AxiosInstance; retry?: RetryConfig | false; hooks?: ClientHooks }
-export type RequestConfig = { method: string; url: string; body?: unknown; path?: Record<string, unknown>; query?: Record<string, unknown>; headers?: Record<string, string>; throwOnError?: boolean; security?: unknown; contentType?: { request?: string }; responseType?: 'stream'; styles?: unknown; paginationUrl?: string }
+export type RequestConfig = { method: string; url: string; body?: unknown; path?: Record<string, unknown>; query?: Record<string, unknown>; headers?: Record<string, string>; throwOnError?: boolean; security?: SecurityDescriptor[][]; contentType?: { request?: string }; responseType?: 'stream'; styles?: unknown; paginationUrl?: string }
 export type ClientInstance = (request: RequestConfig) => Promise<unknown>
 export type Options<T, ThrowOnError extends boolean> = T & { client?: ClientInstance; throwOnError?: ThrowOnError }
-export type RequestResult<T, _ThrowOnError extends boolean> = T
+export type SuccessOf<T> = T[Extract<keyof T, `2${string}`>]
+export type RequestResult<T, ThrowOnError extends boolean> = ThrowOnError extends true ? SuccessOf<T> : T[keyof T]
 export type Unwrappable<T> = Promise<T> & { unwrap(): Promise<T> }
-export type SuccessOf<T> = T
 export type EventStreamResult<T> = AsyncIterable<T>
 const resolvePath = (template: string, path?: Record<string, unknown>) => template.replace(/\{([^}]+)\}/g, (_match, key) => encodeURIComponent(String(path?.[key] ?? `{${key}}`)))
 const resolvePaginationUrl = (nextUrl: string, baseUrl?: string): string => {
@@ -1099,18 +1265,19 @@ const resolvePaginationUrl = (nextUrl: string, baseUrl?: string): string => {
   if (target.origin !== base.origin) throw new TypeError('Pagination URL must use the configured API origin')
   return target.toString()
 }
-const applySecurity = (headers: Record<string, string>, query: Record<string, unknown>, security: unknown, credentials?: SecurityCredentials) => {
-  if (!Array.isArray(security)) return
-  const alternatives = (Array.isArray(security[0]) ? security : [security]) as Array<Array<SecurityDescriptor>>
-  const values = credentials ?? {}
-  const selected = alternatives.find((alternative) => alternative.every((scheme) => !scheme.id || values[scheme.id]))
+const applySecurity = (headers: Record<string, string>, query: Record<string, unknown>, security: SecurityDescriptor[][] | undefined, credentials?: SecurityCredentials) => {
+  if (!security) return
+  const values: Record<string, string | undefined> = { ...credentials }
+  const selected = security.find((alternative) => alternative.every((scheme) => values[scheme.id]))
   if (!selected) return
   for (const scheme of selected) {
-    const value = scheme.id ? values[scheme.id] : undefined
+    const value = values[scheme.id]
     if (!value) continue
     if (scheme.type === 'apiKey') {
-      if (scheme.in === 'query') query[scheme.name ?? scheme.id] = value
-      else headers[scheme.name ?? scheme.id] = value
+      const name = scheme.name
+      if (!name) continue
+      if (scheme.in === 'query') query[name] = value
+      else headers[name] = value
     } else headers.authorization = `${scheme.scheme === 'basic' ? 'Basic' : 'Bearer'} ${value}`
   }
 }
@@ -1204,7 +1371,7 @@ fn render_security_types(security_schemes: Option<&SecuritySchemeCatalog>) -> St
         .filter(|fields| !fields.is_empty())
         .unwrap_or_else(|| "  [name: string]: string | undefined".into());
     format!(
-        "export interface SecurityCredentials {{\n{fields}\n}}\nexport type SecurityDescriptor = {{ id?: string; type: 'apiKey' | 'http' | 'oauth2'; name?: string; in?: 'header' | 'query' | 'cookie'; scheme?: string; scopes?: string[] }}\nexport class ApiError extends Error {{\n  constructor(public readonly status: number, public readonly body: unknown) {{ super(`Request failed: ${{status}}`) }}\n}}"
+        "export interface SecurityCredentials {{\n{fields}\n}}\nexport type SecurityDescriptor = {{ id: string; type: 'apiKey' | 'http' | 'oauth2'; name?: string; in?: 'header' | 'query' | 'cookie'; scheme?: string; scopes?: string[] }}\nexport class ApiError extends Error {{\n  constructor(public readonly status: number, public readonly body: unknown) {{ super(`Request failed: ${{status}}`) }}\n}}"
     )
 }
 
@@ -1230,7 +1397,7 @@ fn pascal_identifier(value: &str) -> String {
     }
 }
 
-fn lower_camel_identifier(value: &str) -> String {
+pub(crate) fn lower_camel_identifier(value: &str) -> String {
     let pascal = pascal_identifier(value);
     let mut characters = pascal.chars();
     match characters.next() {
@@ -1257,46 +1424,6 @@ fn package_slug(value: &str) -> String {
     }
 }
 
-fn profile_config(profile: &SdkProfile) -> Result<GeneratorConfig> {
-    let output_dir = profile.output_dir.trim_matches('/');
-    if output_dir.is_empty() || output_dir == "." {
-        bail!("SDK profiles need a non-empty output_dir")
-    }
-    let mut config = GeneratorConfig::from([("output_dir".into(), output_dir.into())]);
-    config.insert(
-        "sdk_surface".into(),
-        match profile.surface {
-            SdkSurface::Raw => "raw",
-            SdkSurface::Client => "client",
-        }
-        .into(),
-    );
-    config.insert(
-        "client_style".into(),
-        match profile.client_style {
-            SdkClientStyle::Flat => "flat",
-            SdkClientStyle::Namespaced => "namespaced",
-        }
-        .into(),
-    );
-    if let Some(package_name) = &profile.package_name {
-        config.insert("package_name".into(), package_name.clone());
-        config.insert("crate_name".into(), package_name.clone());
-    }
-    let clients = profile
-        .transports
-        .iter()
-        .map(|transport| match transport {
-            SdkTransport::Fetch => "fetch",
-            SdkTransport::Axios => "axios",
-        })
-        .collect::<Vec<_>>();
-    if !clients.is_empty() {
-        config.insert("clients".into(), clients.join(","));
-    }
-    Ok(config)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1313,7 +1440,16 @@ mod tests {
                 id: "listMessages".into(),
                 method: HttpMethod::Get,
                 path: "/messages".into(),
-                response_type: "MessageList".into(),
+                responses: vec![kaji_core::OperationResponse {
+                    status: "200".into(),
+                    description: None,
+                    media_types: vec![kaji_core::OperationMediaType {
+                        content_type: "application/json".into(),
+                        schema: Some(kaji_core::SchemaValue::reference(
+                            "#/components/schemas/MessageList",
+                        )),
+                    }],
+                }],
                 security: vec![SecurityRequirement {
                     schemes: [("kajiApiKey".into(), Vec::new())].into_iter().collect(),
                 }],
@@ -1332,12 +1468,7 @@ mod tests {
             }],
         };
 
-        let tree = generate_sdk(
-            &api,
-            &SdkProfile::typescript("sdk/typescript"),
-            Some(&catalog),
-        )
-        .unwrap();
+        let tree = generate_sdk(&api, &SdkConfig::new("sdk/typescript"), Some(&catalog)).unwrap();
         let runtime = tree.get("sdk/typescript/.kaji/client.ts").unwrap();
         let operation = tree
             .get("sdk/typescript/clients/messages/listMessages.ts")

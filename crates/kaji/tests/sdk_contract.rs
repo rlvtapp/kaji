@@ -6,15 +6,27 @@
 
 use std::collections::BTreeMap;
 
-use kaji::{ProfileSet, generate};
+use kaji::{ProfileSet, generate_with_security_catalog};
 use kaji_core::{
     Api, Field, HttpMethod, Operation, OperationMediaType, OperationParameter,
     OperationRequestBody, OperationResponse, Schema, SchemaKind, SchemaValue, SecurityRequirement,
+    SecurityScheme, SecuritySchemeCatalog, SecuritySchemeKind,
 };
 use serde_json::json;
 
 fn reference(name: &str) -> SchemaValue {
     SchemaValue::reference(format!("#/components/schemas/{name}"))
+}
+
+/// A release contract is about the public behaviour emitted by a target, not
+/// about which internal source file happens to own an operation. Large SDKs
+/// deliberately split those internals into bounded files.
+fn generated_source_under(tree: &kaji_core::GeneratedTree, root: &str) -> String {
+    tree.iter()
+        .filter(|(path, _)| path.starts_with(root))
+        .map(|(_, source)| source)
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn contract_api() -> Api {
@@ -63,8 +75,6 @@ fn contract_api() -> Api {
                 id: "listContacts".into(),
                 method: HttpMethod::Get,
                 path: "/v1/contacts".into(),
-                response_type: "Contact[]".into(),
-                request_type: None,
                 parameters: vec![OperationParameter {
                     name: "cursor".into(),
                     location: "query".into(),
@@ -98,8 +108,6 @@ fn contract_api() -> Api {
                 id: "createContact".into(),
                 method: HttpMethod::Post,
                 path: "/v1/contacts".into(),
-                response_type: "Contact".into(),
-                request_type: Some("Contact".into()),
                 parameters: vec![OperationParameter {
                     name: "Idempotency-Key".into(),
                     location: "header".into(),
@@ -128,8 +136,6 @@ fn contract_api() -> Api {
                 id: "streamEvents".into(),
                 method: HttpMethod::Get,
                 path: "/v1/events".into(),
-                response_type: "string".into(),
-                request_type: None,
                 parameters: Vec::new(),
                 request_body: None,
                 responses: vec![OperationResponse {
@@ -147,8 +153,6 @@ fn contract_api() -> Api {
                 id: "downloadExport".into(),
                 method: HttpMethod::Get,
                 path: "/v1/exports/{id}".into(),
-                response_type: "binary".into(),
-                request_type: None,
                 parameters: vec![OperationParameter {
                     name: "id".into(),
                     location: "path".into(),
@@ -176,22 +180,33 @@ fn contract_api() -> Api {
 
 #[test]
 fn all_first_party_packages_preserve_the_public_sdk_contract() {
-    let tree = generate(
+    let catalog = SecuritySchemeCatalog {
+        schemes: vec![SecurityScheme {
+            name: "Bearer".into(),
+            description: None,
+            kind: SecuritySchemeKind::Http {
+                scheme: Some("bearer".into()),
+                bearer_format: None,
+            },
+        }],
+    };
+    let tree = generate_with_security_catalog(
         &contract_api(),
         ProfileSet::new("sdks")
-            .rust()
-            .typescript_fetch()
-            .typescript_axios()
-            .go()
-            .python()
-            .php()
-            .java()
-            .dotnet()
-            .elixir(),
+            .package(kaji::rust::package("rust").with(kaji::rust::sdk()))
+            .package(kaji::ts::package("typescript-fetch").with(kaji::ts::sdk().fetch()))
+            .package(kaji::ts::package("typescript-axios").with(kaji::ts::sdk().axios()))
+            .package(kaji::go::package("go").with(kaji::go::sdk()))
+            .package(kaji::python::package("python").with(kaji::python::sdk()))
+            .package(kaji::php::package("php").with(kaji::php::sdk()))
+            .package(kaji::java::package("java").with(kaji::java::sdk()))
+            .package(kaji::dotnet::package("dotnet").with(kaji::dotnet::sdk()))
+            .package(kaji::elixir::package("elixir").with(kaji::elixir::sdk())),
+        Some(&catalog),
     )
     .unwrap();
 
-    let rust = tree.get("sdks/rust/src/client.rs").unwrap();
+    let rust = generated_source_under(&tree, "sdks/rust/src");
     assert!(rust.contains("pub struct ApiResponse"));
     assert!(rust.contains("ListContactsError"));
     assert!(rust.contains("with_bearer_token"));
@@ -201,7 +216,7 @@ fn all_first_party_packages_preserve_the_public_sdk_contract() {
     assert!(rust.contains("futures_util::stream::try_unfold"));
 
     for transport in ["typescript-fetch", "typescript-axios"] {
-        let client = tree.get(format!("sdks/{transport}/client.ts")).unwrap();
+        let client = generated_source_under(&tree, &format!("sdks/{transport}"));
         let barrel = tree.get(format!("sdks/{transport}/index.ts")).unwrap();
         let custom = tree
             .get(format!("sdks/{transport}/custom/index.ts"))
@@ -227,9 +242,7 @@ fn all_first_party_packages_preserve_the_public_sdk_contract() {
         assert!(runtime.contains("onError"));
     }
 
-    let python = tree
-        .get("sdks/python/src/kaji_email_sdk/client.py")
-        .unwrap();
+    let python = generated_source_under(&tree, "sdks/python/src/kaji_email_sdk");
     assert!(python.contains("class ListContactsStatus429Error(ApiError):"));
     assert!(python.contains("def stream_events"));
     assert!(python.contains("def download_export"));

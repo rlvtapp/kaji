@@ -279,22 +279,19 @@ func TestComputeSpecHashChanges(t *testing.T) {
 	}
 }
 
-func TestBuildAuthDocUsesSchemeDescription(t *testing.T) {
+func TestSecurityCatalogPreservesSchemeDescription(t *testing.T) {
 	spec := loadSampleSpec(t, securitySpec)
 	_, op := getOperation(t, spec, "get")
-
-	auth := buildAuthDoc(op.Security, spec.Security, spec.Components)
-	if auth == nil {
-		t.Fatalf("expected auth doc")
+	requirements := convertSecurityRequirements(op.Security, spec.Security)
+	if len(requirements) != 1 {
+		t.Fatalf("expected one security requirement: %#v", requirements)
 	}
-	if !auth.Required {
-		t.Fatalf("expected auth required")
+	if _, ok := requirements[0].Schemes["BearerAuth"]; !ok {
+		t.Fatalf("missing bearer requirement: %#v", requirements)
 	}
-	if auth.Scheme != "BearerAuth" {
-		t.Fatalf("unexpected scheme: %s", auth.Scheme)
-	}
-	if auth.Description != "Use a bearer token" {
-		t.Fatalf("unexpected description: %s", auth.Description)
+	schemes := collectSecuritySchemes(spec.Components)
+	if len(schemes) != 1 || schemes[0].Name != "BearerAuth" || schemes[0].Description != "Use a bearer token" {
+		t.Fatalf("unexpected security catalog: %#v", schemes)
 	}
 }
 
