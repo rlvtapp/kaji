@@ -255,6 +255,10 @@ fn init_writes_a_json_recipe_without_overwriting_existing_work() {
     assert!(first.status.success());
     let document: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
+    assert_eq!(
+        document["$schema"],
+        "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/kaji.schema.json"
+    );
     assert_eq!(document["openapi"]["input"], "contract/openapi.json");
     assert_eq!(document["packages"][0]["plugins"][1]["name"], "zod");
     assert_eq!(
@@ -268,4 +272,16 @@ fn init_writes_a_json_recipe_without_overwriting_existing_work() {
         .unwrap();
     assert_eq!(second.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&second.stderr).contains("refusing to overwrite"));
+}
+
+#[test]
+fn published_config_schema_is_valid_json_schema_document() {
+    let schema: serde_json::Value =
+        serde_json::from_str(include_str!("../../../schemas/kaji.schema.json")).unwrap();
+    assert_eq!(
+        schema["$schema"],
+        "https://json-schema.org/draft/2020-12/schema"
+    );
+    assert!(schema["properties"]["packages"].is_object());
+    assert!(schema["$defs"]["plugin"].is_object());
 }

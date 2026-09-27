@@ -4,6 +4,19 @@
 the OpenAPI input, output root, SDK packages, client choices, helper artifacts,
 and mock/documentation output in source control.
 
+## Editor autocomplete
+
+Kaji's [JSON Schema](https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/kaji.schema.json)
+gives VS Code, JetBrains IDEs, and other JSON Schema-aware editors completion,
+descriptions, enum choices, and inline validation. `kaji init` adds it for you.
+For an existing file, add this as the first property:
+
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/kaji.schema.json"
+}
+```
+
 Run `npx @relevate/kaji init` to create a safe starter file, then run `npx @relevate/kaji generate`. Kaji
 never overwrites an existing config file. Use `npx @relevate/kaji generate --config path.json`
 when the recipe is not named `kaji.json` or is not in the current directory.

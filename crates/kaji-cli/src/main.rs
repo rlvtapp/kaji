@@ -337,6 +337,8 @@ struct Init {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ProjectConfig {
+    #[serde(rename = "$schema")]
+    _schema: Option<String>,
     openapi: OpenApiConfig,
     output: OutputConfig,
     #[serde(default)]
@@ -1052,6 +1054,7 @@ fn init_config(init: Init) -> Result<()> {
         );
     }
     let document = serde_json::json!({
+        "$schema": "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/kaji.schema.json",
         "openapi": {
             "input": init.input,
             "name": init.name,
