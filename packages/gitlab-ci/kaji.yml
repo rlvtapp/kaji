@@ -1,0 +1,16 @@
+# Include this template from a pinned Kaji release in .gitlab-ci.yml.
+# Override KAJI_CONFIG, KAJI_VERSION, or KAJI_WORKING_DIRECTORY per project.
+
+.kaji:generate:
+  # The published Linux launcher targets glibc; Alpine's musl image is unsupported.
+  image: node:22-bookworm-slim
+  variables:
+    KAJI_CONFIG: kaji.json
+    KAJI_VERSION: latest
+    KAJI_WORKING_DIRECTORY: .
+  script:
+    - cd "$KAJI_WORKING_DIRECTORY"
+    - npx --yes "@relevate/kaji@$KAJI_VERSION" generate --config "$KAJI_CONFIG"
+
+kaji:generate:
+  extends: .kaji:generate

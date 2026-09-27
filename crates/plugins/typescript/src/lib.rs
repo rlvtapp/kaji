@@ -370,6 +370,8 @@ mod tests {
             resource_operations
                 .contains("import { listContacts } from '../../clients/contacts/listContacts'")
         );
+        assert!(resource_operations.contains(", client }"));
+        assert!(!resource_operations.contains("this.client"));
     }
 
     #[test]
@@ -463,7 +465,9 @@ mod tests {
             assert!(models.contains("import type { Contact } from '../Contact'"));
             let runtime = tree.get(format!("{package}/.kaji/client.ts")).unwrap();
             assert!(runtime.contains("SuccessOf<T> = T[Extract<keyof T, `2${string}`>]"));
-            assert!(runtime.contains("ThrowOnError extends true ? SuccessOf<T> : T[keyof T]"));
+            assert!(
+                runtime.contains("ThrowOnError extends true ? SuccessResult<T> : StatusResult<T>")
+            );
             assert!(runtime.contains("security?: SecurityDescriptor[][]"));
             assert!(!runtime.contains("Array.isArray(security[0])"));
             assert!(!runtime.contains("scheme.name ?? scheme.id"));
@@ -490,13 +494,20 @@ mod tests {
                 r#"
 import { listContacts, type Contact } from './raw/index';
 import { Contacts } from './full/index';
-const raw: Contact = await listContacts({}).unwrap();
-const direct: Contact = await listContacts({});
-const full: Contact = await new Contacts().contacts.list({}).unwrap();
-const errorOrSuccess: Contact | string = await listContacts({ throwOnError: false });
-// @ts-expect-error: declared error bodies must not be typed as success-only.
+const raw = await listContacts({}).unwrap();
+const rawData: Contact = raw.data;
+const direct = await listContacts({});
+const directData: Contact = direct.data;
+const full = await new Contacts().contacts.list({}).unwrap();
+const fullData: Contact = full.data;
+const errorOrSuccess = await listContacts({ throwOnError: false });
+if (errorOrSuccess.status === 200) {
+  const success: Contact = errorOrSuccess.data;
+  console.log(success, errorOrSuccess.contentType);
+}
+// @ts-expect-error: status-discriminated results are not bare response bodies.
 const incorrect: Contact = await listContacts({ throwOnError: false });
-console.log(raw, direct, full, errorOrSuccess, incorrect);
+console.log(rawData, directData, fullData, errorOrSuccess, incorrect);
 "#,
             )
             .unwrap(),
