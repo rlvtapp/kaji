@@ -6,14 +6,14 @@ and mock/documentation output in source control.
 
 ## Editor autocomplete
 
-Kaji's [JSON Schema](https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/kaji.schema.json)
+Kaji's [JSON Schema](https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/v1/kaji.schema.json)
 gives VS Code, JetBrains IDEs, and other JSON Schema-aware editors completion,
 descriptions, enum choices, and inline validation. `kaji init` adds it for you.
 For an existing file, add this as the first property:
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/kaji.schema.json"
+  "$schema": "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/v1/kaji.schema.json"
 }
 ```
 

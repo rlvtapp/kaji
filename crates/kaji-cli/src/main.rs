@@ -1054,7 +1054,7 @@ fn init_config(init: Init) -> Result<()> {
         );
     }
     let document = serde_json::json!({
-        "$schema": "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/kaji.schema.json",
+        "$schema": "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/v1/kaji.schema.json",
         "openapi": {
             "input": init.input,
             "name": init.name,
