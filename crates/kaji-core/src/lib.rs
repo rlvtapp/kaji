@@ -11,7 +11,6 @@ pub mod mocking;
 pub mod semantics;
 pub mod style;
 
-pub use adapter::{AdaptedApi, Adapter};
 pub use ast::{
     AdditionalProperties, Api, Discriminator, Field, HttpMethod, OAuthFlow, Operation,
     OperationMediaType, OperationParameter, OperationRequestBody, OperationResponse, Schema,

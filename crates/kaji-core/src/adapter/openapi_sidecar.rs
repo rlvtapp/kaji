@@ -6,60 +6,18 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
-use crate::adapter::{AdaptedApi, Adapter};
 use crate::ast::{
     AdditionalProperties, Discriminator, OAuthFlow, OperationMediaType, OperationParameter,
     OperationRequestBody, OperationResponse, SchemaKind, SchemaValue, SecurityRequirement,
     SecurityScheme, SecuritySchemeCatalog, SecuritySchemeKind,
 };
 use crate::{Api, Field, HttpMethod, Operation, Schema};
-
-/// An [`Adapter`] over the artifact directory emitted by Kaji's bundled Go
-/// OpenAPI compiler.
-///
-/// The free `load_operations` and `load_security_schemes` functions remain
-/// available for callers migrating from earlier Kaji releases. New code can
-/// use this type anywhere an input [`Adapter`] is accepted.
-#[derive(Clone, Debug)]
-pub struct OpenApiSidecar {
-    output_dir: PathBuf,
-    name: String,
-    version: String,
-}
-
-impl OpenApiSidecar {
-    pub fn new(
-        output_dir: impl Into<PathBuf>,
-        name: impl Into<String>,
-        version: impl Into<String>,
-    ) -> Self {
-        Self {
-            output_dir: output_dir.into(),
-            name: name.into(),
-            version: version.into(),
-        }
-    }
-
-    /// Reads the current sidecar artifacts into a normalized API contract.
-    pub fn load(&self) -> Result<AdaptedApi> {
-        Ok(AdaptedApi::new(
-            load_operations(&self.output_dir, self.name.clone(), self.version.clone())?,
-            load_security_schemes(&self.output_dir)?,
-        ))
-    }
-}
-
-impl Adapter for OpenApiSidecar {
-    fn adapt(&self) -> Result<AdaptedApi> {
-        self.load()
-    }
-}
 
 #[derive(Debug, Deserialize)]
 struct SidecarOperation {
@@ -129,44 +87,6 @@ struct SidecarMediaType {
     content_type: String,
     #[serde(default)]
     schema_definition: Option<Value>,
-    #[serde(default)]
-    encoding: BTreeMap<String, SidecarFormEncoding>,
-}
-
-/// Transport hints from an OpenAPI Encoding Object. They stay as operation
-/// annotations until a target runtime consumes them; the core AST remains
-/// independent of a particular form-data implementation.
-#[derive(Debug, Deserialize, serde::Serialize)]
-struct SidecarFormEncoding {
-    #[serde(default, rename = "contentType")]
-    content_type: Option<String>,
-    #[serde(default)]
-    headers: BTreeMap<String, SidecarFormHeader>,
-    #[serde(default)]
-    style: Option<String>,
-    #[serde(default)]
-    explode: Option<bool>,
-    #[serde(default, rename = "allowReserved")]
-    allow_reserved: bool,
-}
-
-/// The Header Objects associated with one multipart part. These remain MIME
-/// part headers in the annotation; they must not be confused with HTTP
-/// request headers.
-#[derive(Debug, Deserialize, serde::Serialize)]
-struct SidecarFormHeader {
-    #[serde(default)]
-    required: bool,
-    #[serde(default)]
-    style: Option<String>,
-    #[serde(default)]
-    explode: Option<bool>,
-    #[serde(default, rename = "allowReserved")]
-    allow_reserved: bool,
-    #[serde(default)]
-    schema_definition: Option<Value>,
-    #[serde(default)]
-    example_json: Option<String>,
 }
 
 /// Kept source-compatible with `openapi.ExampleDoc`, which is also the shape
@@ -270,21 +190,6 @@ pub fn load_operations(output_dir: &Path, name: String, version: String) -> Resu
                 serde_json::to_value(&document.request_examples)
                     .expect("sidecar request examples are JSON-compatible"),
             );
-        }
-        if let Some(body) = &document.request_body {
-            let encodings = body
-                .media_types
-                .iter()
-                .filter(|media| !media.encoding.is_empty())
-                .map(|media| (media.content_type.clone(), &media.encoding))
-                .collect::<BTreeMap<_, _>>();
-            if !encodings.is_empty() {
-                annotations.insert(
-                    "kaji.request_body_encodings".into(),
-                    serde_json::to_value(encodings)
-                        .expect("sidecar form encodings are JSON-compatible"),
-                );
-            }
         }
         operations.push(Operation {
             id: if document.operation_id.is_empty() {
@@ -877,8 +782,7 @@ mod tests {
               ],
               "request_body":{"required":true,"description":"New pet","media_types":[
                 {"content_type":"application/json","schema_definition":{"$ref":"#/components/schemas/PetInput"}},
-                {"content_type":"application/xml","schema_definition":{"type":"string"}},
-                {"content_type":"multipart/form-data","schema_definition":{"type":"object"},"encoding":{"metadata":{"contentType":"application/json","style":"form","explode":false,"allowReserved":true,"headers":{"X-Part-Id":{"required":true,"style":"simple","explode":false,"schema_definition":{"type":"string"},"example_json":"\"metadata-1\""}}}}}
+                {"content_type":"application/xml","schema_definition":{"type":"string"}}
               ]},
               "responses":[
                 {"code":"201","description":"Created","content_type":"application/json","schema_definition":{"$ref":"#/components/schemas/Pet"}},
@@ -911,23 +815,8 @@ mod tests {
         ));
         let request = operation.request_body.as_ref().unwrap();
         assert!(request.required);
-        assert_eq!(request.media_types.len(), 3);
+        assert_eq!(request.media_types.len(), 2);
         assert_eq!(request.media_types[1].content_type, "application/xml");
-        let encodings = operation
-            .annotations
-            .get("kaji.request_body_encodings")
-            .and_then(Value::as_object)
-            .unwrap();
-        let metadata = &encodings["multipart/form-data"]["metadata"];
-        assert_eq!(metadata["contentType"], "application/json");
-        assert_eq!(metadata["style"], "form");
-        assert_eq!(metadata["explode"], false);
-        assert_eq!(metadata["allowReserved"], true);
-        assert_eq!(metadata["headers"]["X-Part-Id"]["required"], true);
-        assert_eq!(
-            metadata["headers"]["X-Part-Id"]["schema_definition"]["type"],
-            "string"
-        );
         assert_eq!(operation.responses.len(), 2);
         assert_eq!(operation.responses[0].status, "201");
         assert_eq!(operation.responses[0].media_types.len(), 2);

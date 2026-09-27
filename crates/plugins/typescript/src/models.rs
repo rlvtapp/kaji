@@ -514,28 +514,23 @@ fn render_operation(operation: &Operation, options: &ModelOptions, notice: &str)
             }
         }
     }
-    let parameter_groups = [
-        ("path", "Path"),
-        ("query", "Query"),
-        ("header", "Headers"),
-        ("cookie", "Cookies"),
-    ]
-    .into_iter()
-    .filter_map(|(location, suffix)| {
-        // Kaji keeps the first occurrence of an exactly duplicated
-        // `(in, name)` parameter, while distinct casing variants remain
-        // separate OpenAPI properties.
-        let mut names = BTreeSet::new();
-        let parameters = operation
-            .parameters
-            .iter()
-            .filter(|parameter| {
-                parameter.location == location && names.insert(parameter.name.as_str())
-            })
-            .collect::<Vec<_>>();
-        (!parameters.is_empty()).then_some((suffix, parameters))
-    })
-    .collect::<Vec<_>>();
+    let parameter_groups = [("path", "Path"), ("query", "Query"), ("header", "Headers")]
+        .into_iter()
+        .filter_map(|(location, suffix)| {
+            // Kaji keeps the first occurrence of an exactly duplicated
+            // `(in, name)` parameter, while distinct casing variants remain
+            // separate OpenAPI properties.
+            let mut names = BTreeSet::new();
+            let parameters = operation
+                .parameters
+                .iter()
+                .filter(|parameter| {
+                    parameter.location == location && names.insert(parameter.name.as_str())
+                })
+                .collect::<Vec<_>>();
+            (!parameters.is_empty()).then_some((suffix, parameters))
+        })
+        .collect::<Vec<_>>();
     let response_types = operation
         .responses
         .iter()
@@ -673,7 +668,6 @@ fn render_operation(operation: &Operation, options: &ModelOptions, notice: &str)
         ("path", "Path", "path"),
         ("query", "Query", "query"),
         ("header", "Headers", "headers"),
-        ("cookie", "Cookies", "cookies"),
     ] {
         if parameter_groups
             .iter()

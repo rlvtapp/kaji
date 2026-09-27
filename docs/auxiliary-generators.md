@@ -56,23 +56,19 @@ All names below are exported from `kaji::ts::artifacts`.
 
 | Renderer | Default output | Purpose / required consumer dependency |
 | --- | --- | --- |
-| `TypeScriptZod` | `typescript/zod.ts` | Zod 4 component, request-body, and response validation schemas; `zod`. |
+| `TypeScriptZod` | `typescript/zod.ts` | Component validation schemas and inferred types; `zod`. |
 | `TypeScriptReactQuery` | `typescript/react-query.ts` | GET query keys/hooks and non-GET mutation hooks; `@tanstack/react-query` and its framework peers. |
 | `TypeScriptVueQuery` | `typescript/vue-query.ts` | GET queries and non-GET mutations; `@tanstack/vue-query` and its peers. |
 | `TypeScriptSwr` | `typescript/swr.ts` | GET hooks only; `swr` and its peers. |
 | `TypeScriptFaker` | `typescript/faker.ts` | Component factories; `@faker-js/faker` plus generated model exports. |
 | `TypeScriptMsw` | `typescript/msw.ts` | MSW v2 route-handler scaffolding; `msw`. |
-| `TypeScriptCypress` | `cypress/e2e/api.cy.ts` | Routing smoke-test scaffolding; a configured Cypress project. Config mode adds Cypress as a development dependency when Kaji owns the package manifest. |
+| `TypeScriptCypress` | `cypress/e2e/api.cy.ts` | Routing smoke-test scaffolding; a configured Cypress project. |
 | `ReDoc` | `redoc/redoc.html`, `redoc/redocly.yaml` | Documentation entry point loading ReDoc from its CDN. |
 | `McpToolManifest` | `mcp/tools.json` | Tool metadata for your own MCP integration, not an executable server. |
 
 These helpers have narrower scope than full framework-specific generator
 products. They do not expose every TanStack/Zod/MSW feature or every upstream
 generator option.
-
-For a complete, runnable config that places these helpers beside a Fetch SDK,
-keeps an Axios SDK separate, and includes the shared Docker mock, see the
-[complete TypeScript example](../examples/typescript-stack/README.md).
 
 ## ArtifactOptions reference
 
@@ -139,7 +135,7 @@ impl Plugin<ts::TypeScript> for Zod {
     fn meta(&self) -> &Meta { &self.meta }
 
     fn generate(&self, cx: &mut PluginContext<'_, ts::TypeScript>) -> Result<()> {
-        cx.workspace.dependency("zod", "^4.0.0")?;
+        cx.workspace.dependency("zod", "^3.0.0")?;
         let options = ArtifactOptions {
             output_dir: Some(".".into()),
             ..Default::default()
@@ -164,18 +160,9 @@ typed requirements instead; see [plugin authoring](typed-plugins.md).
 
 ## Important boundaries
 
-- **Zod:** Kaji targets Zod 4. The module exports one `<Name>Schema` per
-  component plus a stable `kajiSchemas` registry and `getKajiSchema(name)`.
-  It also exports `<Operation>RequestBodySchemas` and
-  `<Operation>ResponseSchemas`, indexed by declared media type and response
-  status, with the combined `kajiOperationSchemas` registry keyed by operation
-  id. Zod 4 schemas implement Standard Schema V1, so the registries can be
-  consumed by either Zod or Standard Schema-aware validation wrappers.
-  Request-body and response entries are emitted only when the source declares
-  a schema; Kaji does not guess a media type or synthesize validators for
-  undeclared parameter bundles. This is not a complete JSON Schema validator;
-  unsupported constraints may be approximated. Compile and test the generated
-  validation module for your schema shapes.
+- **Zod:** schemas are generated from component definitions. This is not a
+  complete JSON Schema validator; unsupported constraints may be approximated.
+  Compile and test the generated validation module for your schema shapes.
 - **Faker:** factories are randomized unless you seed Faker yourself. The module
   imports `./models`: pair it with `ts::types()` at its default location or
   supply a matching model barrel. The split SDK does not automatically create

@@ -115,7 +115,6 @@ available. See the [Rust API guide](docs/getting-started.md) and
 | [Rust interface](docs/getting-started.md) | Embed generation or configure packages programmatically. |
 | [Configuration](docs/configuration.md) | All public package, plugin, shared, and model options. |
 | [Generated SDKs](docs/generated-sdks.md) | Raw versus full clients, language requirements, and runtime behavior. |
-| [CI integration](docs/ci-integration.md) | GitHub Actions and GitLab CI templates for generation. |
 | [Auxiliary generators](docs/auxiliary-generators.md) | Zod, TanStack, SWR, fixtures, mocks, and documentation artifacts. |
 | [Contract mocking](docs/mocking.md) | Run local mocks and declare conditional responses. |
 | [Large specs](docs/large-specs.md) | Go file splitting, parallelism, and Microsoft Graph testing. |

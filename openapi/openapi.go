@@ -48,20 +48,9 @@ func runWithHash(specPath, outDir string, prevHash *uint64) (uint64, bool, int, 
 		return 0, false, 0, fmt.Errorf("parse spec: %w", err)
 	}
 
-	model, v3Err := doc.BuildV3Model()
-	if v3Err != nil {
-		// libopenapi intentionally exposes separate models for Swagger 2 and
-		// OpenAPI 3: their object shapes differ materially. Keep the existing
-		// v3 compiler path intact and normalize the legacy v2 model below.
-		v2Model, v2Err := doc.BuildV2Model()
-		if v2Err != nil {
-			return 0, false, 0, fmt.Errorf("build OpenAPI model (v3: %v; v2: %w)", v3Err, v2Err)
-		}
-		count, err := compileSwaggerV2(&v2Model.Model, outDir)
-		if err != nil {
-			return 0, false, 0, err
-		}
-		return newHash, true, count, nil
+	model, err := doc.BuildV3Model()
+	if err != nil {
+		return 0, false, 0, fmt.Errorf("build v3 model: %w", err)
 	}
 
 	spec := model.Model
@@ -600,16 +589,11 @@ func convertRequestBody(requestBody *v3.RequestBody) (*BodyDoc, error) {
 		if err != nil {
 			return nil, err
 		}
-		encodings, err := convertFormEncodings(mediaType)
-		if err != nil {
-			return nil, err
-		}
 		mediaTypeDoc := MediaTypeDoc{
 			ContentType:      contentType,
 			Schema:           schema,
 			SchemaDefinition: schemaDefinition,
 			ExampleJSON:      formatExampleJSON(exampleValue),
-			Encoding:         encodings,
 		}
 		mediaTypes = append(mediaTypes, mediaTypeDoc)
 
@@ -622,65 +606,6 @@ func convertRequestBody(requestBody *v3.RequestBody) (*BodyDoc, error) {
 		Required:    requestBody.Required != nil && *requestBody.Required,
 		MediaTypes:  mediaTypes,
 	}, nil
-}
-
-func convertFormEncodings(mediaType *v3.MediaType) (map[string]FormEncodingDoc, error) {
-	if mediaType == nil || mediaType.Encoding == nil || orderedmap.Len(mediaType.Encoding) == 0 {
-		return nil, nil
-	}
-	encodings := make(map[string]FormEncodingDoc, orderedmap.Len(mediaType.Encoding))
-	for pair := mediaType.Encoding.First(); pair != nil; pair = pair.Next() {
-		encoding := pair.Value()
-		if encoding == nil {
-			continue
-		}
-		headers, err := convertFormEncodingHeaders(encoding)
-		if err != nil {
-			return nil, err
-		}
-		encodings[pair.Key()] = FormEncodingDoc{
-			ContentType:   encoding.ContentType,
-			Headers:       headers,
-			Style:         encoding.Style,
-			Explode:       encoding.Explode,
-			AllowReserved: encoding.AllowReserved,
-		}
-	}
-	return encodings, nil
-}
-
-func convertFormEncodingHeaders(encoding *v3.Encoding) (map[string]FormHeaderDoc, error) {
-	if encoding.Headers == nil || orderedmap.Len(encoding.Headers) == 0 {
-		return nil, nil
-	}
-	headers := make(map[string]FormHeaderDoc, orderedmap.Len(encoding.Headers))
-	for pair := encoding.Headers.First(); pair != nil; pair = pair.Next() {
-		header := pair.Value()
-		if header == nil {
-			continue
-		}
-		var schema any
-		if header.Schema != nil {
-			var err error
-			schema, err = schemaProxyToInterface(header.Schema)
-			if err != nil {
-				return nil, err
-			}
-		}
-		example, err := yamlNodeToInterface(header.Example)
-		if err != nil {
-			return nil, err
-		}
-		headers[pair.Key()] = FormHeaderDoc{
-			Required:         header.Required,
-			Style:            header.Style,
-			Explode:          header.Explode,
-			AllowReserved:    header.AllowReserved,
-			SchemaDefinition: schema,
-			ExampleJSON:      formatExampleJSON(example),
-		}
-	}
-	return headers, nil
 }
 
 func convertResponse(code string, response *v3.Response) ([]ResponseDoc, error) {
