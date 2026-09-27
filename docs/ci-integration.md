@@ -44,3 +44,19 @@ create a small dedicated public repository (for example `rlvtapp/kaji-action`)
 whose root contains this action, release it under a stable tag, and publish that
 release from GitHub. Do not add a root action metadata file to this monorepo
 solely for Marketplace discovery.
+
+## Publishing Kaji's npm packages
+
+`.github/workflows/npm-publish.yml` is the release workflow. Pushing a version
+tag such as `v0.1.0` builds each native package on its target platform, then
+publishes the four native packages before `@relevate/kaji` and the optional
+unscoped `kaji` facade.
+
+The workflow uses npm trusted publishing via GitHub Actions OIDC. Configure the
+same `npm-publish.yml` workflow name as a trusted publisher for every npm
+package it publishes. It needs no `NPM_TOKEN`; only its final publish job has
+`id-token: write`. Keep that permission out of normal CI and build jobs.
+
+The tag version must exactly match the versions in `packages/cli/package.json`
+and `packages/npm/package.json`. Publish a release only after the tag is
+protected and the trusted-publisher relationship has been configured in npm.

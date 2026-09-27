@@ -1,0 +1,121 @@
+name: Publish npm packages
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    name: Build ${{ matrix.platform }} package
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            platform: darwin-arm64
+            target: aarch64-apple-darwin
+          - runner: macos-15-intel
+            platform: darwin-x64
+            target: x86_64-apple-darwin
+          - runner: ubuntu-22.04
+            platform: linux-x64-gnu
+            target: x86_64-unknown-linux-gnu
+          - runner: windows-latest
+            platform: win32-x64-msvc
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: openapi/go.mod
+          cache-dependency-path: openapi/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: cargo test -p kaji-cli --locked
+      - run: node --test packages/cli/test/launcher.test.cjs
+      - run: node packages/cli/scripts/build-platform.mjs ${{ matrix.platform }}
+      - run: node packages/cli/scripts/smoke-native.mjs ${{ matrix.platform }}
+      - name: Pack native package
+        working-directory: packages/cli/npm/${{ matrix.platform }}
+        run: npm pack --ignore-scripts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.platform }}
+          path: packages/cli/npm/${{ matrix.platform }}/*.tgz
+          if-no-files-found: error
+
+  launchers:
+    name: Pack Node launchers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node --test packages/cli/test/launcher.test.cjs
+      - name: Pack scoped launcher
+        working-directory: packages/cli
+        run: npm pack --ignore-scripts
+      - name: Pack optional facade
+        working-directory: packages/npm
+        run: npm pack --ignore-scripts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scoped-launcher
+          path: packages/cli/*.tgz
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unscoped-facade
+          path: packages/npm/*.tgz
+          if-no-files-found: error
+
+  publish:
+    name: Publish to npm
+    needs: [native, launchers]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          path: release-artifacts/native
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: scoped-launcher
+          path: release-artifacts/scoped-launcher
+      - uses: actions/download-artifact@v4
+        with:
+          name: unscoped-facade
+          path: release-artifacts/unscoped-facade
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Verify release version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          test "$tag" = "$(node -p "require('./packages/cli/package.json').version")"
+          test "$tag" = "$(node -p "require('./packages/npm/package.json').version")"
+      - name: Publish native packages
+        run: |
+          for package in release-artifacts/native/*.tgz; do
+            npm publish "$package" --access public
+          done
+      - name: Publish scoped launcher
+        run: npm publish release-artifacts/scoped-launcher/*.tgz --access public
+      - name: Publish optional facade
+        run: npm publish release-artifacts/unscoped-facade/*.tgz --access public
