@@ -5,14 +5,13 @@ A native command-line tool for generating typed SDKs from OpenAPI.
 One specification. Multiple languages. Ready-to-build packages.
 
 Generate **TypeScript, Rust, Go, Python, PHP, Java, .NET, and Elixir** SDKs
-from an OpenAPI 3.0/3.1 document. Choose Fetch or Axios for TypeScript, raw
+from a Swagger 2.0 or OpenAPI 3.0/3.1 document. Choose Fetch or Axios for TypeScript, raw
 operation functions or a full client, and generate several languages in one run.
 
 ## Quick start
 
-Kaji is pre-1.0. The CLI and npm distribution are implemented in this repository,
-but npm packages have **not been published yet**. For now, follow the short
-[source-build instructions](docs/cli.md#local-source-build), then start a project:
+Kaji is pre-1.0. Install or run it through the published npm facade; it downloads
+the platform-native generator and bundled OpenAPI compiler automatically:
 
 ```sh
 npx @relevate/kaji init --input ./openapi.yaml --output ./generated --name "Email" --sdk-version 1.0.0
@@ -24,8 +23,8 @@ npx @relevate/kaji generate
 packages and plugins. Add as many independently configured packages as you
 need, then run `npx @relevate/kaji generate` again whenever the contract changes.
 
-The planned npm entry point is `@relevate/kaji`. It is a small Node launcher
-for bundled native executables; installed npm users will not need Rust or Go.
+`@relevate/kaji` is a small Node launcher for bundled native executables;
+installed npm users do not need Rust or Go.
 The generator itself is Rust, with a bundled Go OpenAPI compiler.
 
 ## Common commands
@@ -121,6 +120,14 @@ available. See the [Rust API guide](docs/getting-started.md) and
 | [Large specs](docs/large-specs.md) | Go file splitting, parallelism, and Microsoft Graph testing. |
 | [Plugin authoring](docs/typed-plugins.md) | Add a language or consume another plugin's typed output. |
 | [Contributing](docs/contributing.md) | Repository layout, development setup, and verification. |
+
+## Runnable examples
+
+- [Complete TypeScript stack](examples/typescript-stack/README.md): Fetch and
+  Axios SDKs, plus Zod, TanStack React/Vue Query, SWR, Faker, MSW, Cypress, and
+  the shared HTTP mock server from one small OpenAPI contract.
+- [Microsoft Graph](examples/microsoft-graph/README.md): a URL-backed,
+  large-contract Fetch and Go generation demo.
 
 ## Inspiration and license
 
