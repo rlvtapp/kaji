@@ -15,3 +15,10 @@
 *.tgz
 node_modules/
 examples/microsoft-graph/generated/
+examples/cli-basic/generated/
+examples/cli-multi-package/generated/
+examples/rust-embedded/.kaji/
+examples/rust-embedded/generated/
+examples/rust-embedded/Cargo.lock
+examples/mock-scenarios/generated/
+examples/react-query-consumer/generated/

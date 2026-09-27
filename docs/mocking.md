@@ -1,5 +1,8 @@
 # Contract mocking
 
+> Need help choosing between Faker, MSW, Cypress, and the Docker mock? Start
+> with [testing generated SDKs](guides/testing.md).
+
 `mock::package("mock-server").with(mock::server())` writes an `httpmock` Docker package next
 to SDK outputs. Its happy-path fixtures are derived from declared OpenAPI
 responses and schema examples. This is one service every generated SDK can

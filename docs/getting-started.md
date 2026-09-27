@@ -1,5 +1,9 @@
 # Getting started with the Rust API
 
+> Prefer the structured [Rust library documentation](library/README.md) for an
+> onboarding path and [the embedded example](../examples/rust-embedded/README.md)
+> for a runnable application. This page remains the detailed API reference.
+
 For a command-line workflow without writing Rust configuration, use the
 [CLI guide](cli.md). This guide covers native package composition.
 

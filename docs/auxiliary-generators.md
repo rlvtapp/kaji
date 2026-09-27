@@ -1,5 +1,10 @@
 # Auxiliary generators: validation, hooks, fixtures, and docs
 
+> Start with [TypeScript helpers](guides/typescript-helpers.md),
+> [testing generated SDKs](guides/testing.md), and
+> [generated artifacts](guides/artifacts.md). This page is the detailed
+> renderer and Rust API reference.
+
 Kaji has Rust renderers for Zod, TanStack React/Vue Query, SWR, Faker, MSW,
 Cypress, ReDoc, and MCP tool manifests.
 

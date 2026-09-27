@@ -1,0 +1,8 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/v1/kaji.schema.json",
+  "openapi": { "input": "./openapi.yaml", "name": "Notes", "version": "1.0.0" },
+  "output": { "path": "./generated" },
+  "packages": [
+    { "language": "mock", "path": "mock-server", "plugins": [{ "name": "server", "port": 4010 }] }
+  ]
+}

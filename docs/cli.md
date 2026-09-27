@@ -1,5 +1,10 @@
 # Command-line SDK generation
 
+> Prefer the task-focused [CLI documentation](cli/README.md) for a first
+> project: [quickstart](cli/quickstart.md), [`kaji.json` recipes](cli/config.md),
+> [commands](cli/commands.md), and [common recipes](cli/recipes.md). This page
+> remains the exhaustive reference and source-build guide.
+
 Kaji's CLI uses the same Rust plugins as the library. Its npm entry point is a
 small Node launcher, not a JavaScript implementation of the generator. Platform
 packages contain two executables: `kaji` (Rust) and `kaji-openapi` (the embedded Go

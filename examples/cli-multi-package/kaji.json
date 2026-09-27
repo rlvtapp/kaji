@@ -1,0 +1,23 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/v1/kaji.schema.json",
+  "openapi": { "input": "./openapi.yaml", "name": "Notes", "version": "1.0.0" },
+  "output": { "path": "./generated" },
+  "packages": [
+    {
+      "language": "typescript", "path": "typescript", "name": "@example/notes",
+      "plugins": [
+        { "name": "sdk", "transport": "fetch", "client_name": "Notes" },
+        { "name": "zod", "output": "validation" }
+      ]
+    },
+    { "language": "go", "path": "go", "name": "notes", "plugins": [{ "name": "sdk", "jobs": 2 }] },
+    {
+      "language": "artifacts", "path": "docs",
+      "plugins": [
+        { "name": "redoc", "openapi_spec": "../openapi.yaml", "title": "Notes API" },
+        { "name": "mcp" }
+      ]
+    },
+    { "language": "mock", "path": "mock-server", "plugins": [{ "name": "server", "port": 4010 }] }
+  ]
+}

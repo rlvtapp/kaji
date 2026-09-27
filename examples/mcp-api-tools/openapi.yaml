@@ -1,0 +1,25 @@
+openapi: 3.1.0
+info:
+  title: Notes API
+  version: 1.0.0
+paths:
+  /notes/{noteId}:
+    get:
+      operationId: getNote
+      summary: Get one note
+      parameters:
+        - name: noteId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: A note
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, body]
+                properties:
+                  id: { type: string }
+                  body: { type: string }

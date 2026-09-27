@@ -108,22 +108,42 @@ available. See the [Rust API guide](docs/getting-started.md) and
 
 ## Documentation
 
-| Guide | What you will learn |
-| --- | --- |
-| [CLI](docs/cli.md) | Build/run the CLI, select languages, and use every command-line option. |
-| [`kaji.json`](docs/config-file.md) | Config-first versus direct generation, every JSON field, package, and plugin. |
-| [Rust interface](docs/getting-started.md) | Embed generation or configure packages programmatically. |
-| [Configuration](docs/configuration.md) | All public package, plugin, shared, and model options. |
-| [Generated SDKs](docs/generated-sdks.md) | Raw versus full clients, language requirements, and runtime behavior. |
-| [CI integration](docs/ci-integration.md) | GitHub Actions and GitLab CI templates for generation. |
-| [Auxiliary generators](docs/auxiliary-generators.md) | Zod, TanStack, SWR, fixtures, mocks, and documentation artifacts. |
-| [Contract mocking](docs/mocking.md) | Run local mocks and declare conditional responses. |
-| [Large specs](docs/large-specs.md) | Go file splitting, parallelism, and Microsoft Graph testing. |
-| [Plugin authoring](docs/typed-plugins.md) | Add a language or consume another plugin's typed output. |
-| [Contributing](docs/contributing.md) | Repository layout, development setup, and verification. |
+Start with the [documentation home](docs/README.md), then choose a workflow:
+
+- **[CLI workflow](docs/cli/README.md):** quickstart, recipes, command reference,
+  and reproducible `kaji.json` configuration.
+- **[Rust library workflow](docs/library/README.md):** embedded generation,
+  package composition, and native plugin development.
+- **[Generated SDK guide](docs/generated-sdks.md):** runtime behavior and target
+  requirements.
+- **[TypeScript helpers](docs/guides/typescript-helpers.md),
+  [testing](docs/guides/testing.md), and [generated artifacts](docs/guides/artifacts.md):**
+  validation, hooks, fixtures, mocks, API docs, and MCP output.
+- **[CI integration](docs/ci-integration.md), [mocking](docs/mocking.md), and
+  [large-spec guidance](docs/large-specs.md):** adopt generation safely in a
+  production repository.
+
+Existing detailed references remain available: [complete CLI reference](docs/cli.md),
+[`kaji.json` schema reference](docs/config-file.md), [configuration](docs/configuration.md),
+[auxiliary generators](docs/auxiliary-generators.md), and
+[plugin authoring](docs/typed-plugins.md).
 
 ## Runnable examples
 
+- [Examples index](examples/README.md): choose a minimal CLI recipe, a
+  multi-package build, or an embedded Rust application.
+- [CLI basic](examples/cli-basic/README.md): a small contract and one
+  reproducible TypeScript SDK recipe.
+- [CLI multi-package](examples/cli-multi-package/README.md): TypeScript, Go,
+  documentation, and a mock service from one contract.
+- [Mock scenarios](examples/mock-scenarios/README.md): generate a Docker mock
+  with contract-owned conditional responses.
+- [React Query consumer](examples/react-query-consumer/README.md): wire a
+  generated SDK and TanStack hooks into an application.
+- [MCP API tools](examples/mcp-api-tools/README.md): expose a contract through
+  a local stdio MCP server.
+- [Rust embedded](examples/rust-embedded/README.md): call Kaji from an
+  application instead of a shell command.
 - [Complete TypeScript stack](examples/typescript-stack/README.md): Fetch and
   Axios SDKs, plus Zod, TanStack React/Vue Query, SWR, Faker, MSW, Cypress, and
   the shared HTTP mock server from one small OpenAPI contract.

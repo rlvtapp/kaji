@@ -1,0 +1,11 @@
+{
+  "name": "kaji-react-query-consumer-example",
+  "private": true,
+  "scripts": { "typecheck": "tsc --noEmit" },
+  "dependencies": {
+    "@example/notes": "file:./generated/sdk",
+    "@tanstack/react-query": "^5.0.0",
+    "react": "^18.0.0"
+  },
+  "devDependencies": { "@types/react": "^18.0.0", "typescript": "^5.0.0" }
+}

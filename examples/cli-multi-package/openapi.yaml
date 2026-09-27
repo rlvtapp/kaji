@@ -1,0 +1,25 @@
+openapi: 3.1.0
+info:
+  title: Notes API
+  version: 1.0.0
+paths:
+  /notes:
+    get:
+      operationId: listNotes
+      tags: [notes]
+      responses:
+        '200':
+          description: Notes
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Note' }
+components:
+  schemas:
+    Note:
+      type: object
+      required: [id, body]
+      properties:
+        id: { type: string }
+        body: { type: string }

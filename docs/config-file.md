@@ -1,5 +1,9 @@
 # `kaji.json` reference
 
+> New to configuration? Start with the shorter [`kaji.json` recipe guide](cli/config.md)
+> and [copyable CLI recipes](cli/recipes.md). This page is the complete field
+> reference.
+
 `kaji.json` is Kaji's recommended, reproducible generation recipe. It records
 the OpenAPI input, output root, SDK packages, client choices, helper artifacts,
 and mock/documentation output in source control.

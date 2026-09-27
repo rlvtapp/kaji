@@ -1,5 +1,8 @@
 # Typed plugin packages
 
+> Start with [native plugin composition](library/plugins.md) for the concise
+> mental model. This page is the detailed authoring and API reference.
+
 Kaji uses language-scoped packages and a generic plugin engine.
 Core owns no Rust or TypeScript renderers. All eight maintained languages live
 under `crates/plugins/`; community languages need no change to a central enum.
