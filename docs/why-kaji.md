@@ -1,15 +1,17 @@
 # Why Relevate built Kaji
 
-At Relevate, we needed our OpenAPI contracts to power more than a client SDK.
-We needed the same API definition to drive client interfaces, frontend hooks,
-validation schemas, mocks, documentation, and tools used by AI agents—without
-maintaining each one as a separate, hand-written integration.
+At Relevate, we made Kaji to generate the Relevate Email SDKs. We needed the
+Relevate Email OpenAPI contract to drive more than a client library: client
+interfaces, frontend hooks, validation schemas, mocks, documentation, and tools
+used by AI agents—without maintaining each one as a separate, hand-written
+integration.
 
 Kaji exists to make that possible: one OpenAPI contract, multiple outputs.
 
-It is built first for Relevate's own products and workflows. An API change should
-have one explicit, reviewable path to every developer-facing artifact it affects,
-rather than becoming a string of manual updates that drift apart over time.
+It is built first for Relevate Email's own SDK and integration workflow. An API
+change should have one explicit, reviewable path to every developer-facing
+artifact it affects, rather than becoming a string of manual updates that drift
+apart over time.
 
 ```text
 OpenAPI
@@ -28,8 +30,8 @@ Kaji
 ## Built for our own use, released for yours
 
 Kaji is not a generic product idea looking for an enterprise tier. We maintain
-it because Relevate uses it. Publishing it as open source means other teams can
-use it too, inspect how it works, and help make it better.
+it because Relevate Email uses it. Publishing it as open source means other teams
+can use it too, inspect how it works, and help make it better.
 
 ## What Kaji is not
 
@@ -52,8 +54,8 @@ runtime or workflow:
 - Use the native CLI in a repository or CI job, or embed the Rust library and
   compose typed plugins when generation belongs inside an application.
 
-The point is boring reliability: at Relevate, a contract change should have one
-obvious, repeatable path to every artifact it affects.
+The point is boring reliability: a Relevate Email contract change should have
+one obvious, repeatable path to every artifact it affects.
 
 ## Our commitment
 
