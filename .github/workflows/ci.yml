@@ -20,11 +20,16 @@ jobs:
         with:
           go-version-file: openapi/go.mod
           cache-dependency-path: openapi/go.sum
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
       - name: Test CI integration templates
         run: node --test packages/github-action/test/*.test.cjs packages/gitlab-ci/test/*.test.cjs
+      - name: Test Python CLI launcher
+        run: PYTHONPATH=packages/python/src python -m unittest discover -s packages/python/tests -v
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace

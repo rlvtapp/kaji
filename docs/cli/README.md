@@ -9,6 +9,17 @@ npx @relevate/kaji init --input ./openapi.yaml --output ./generated
 npx @relevate/kaji generate
 ```
 
+If Python is your project runtime, install the same CLI from PyPI instead:
+
+```sh
+python -m pip install kaji-cli
+kaji init --input ./openapi.yaml --output ./generated
+kaji generate
+```
+
+The pip package includes the platform-native generator and its bundled OpenAPI
+compiler. It does not need Node.js, Rust, Go, or a binary download at runtime.
+
 `init` makes a reviewable `kaji.json`; `generate` repeats it exactly. Use that
 config-first route for projects you expect to regenerate. Direct flags remain
 useful for one-off experiments.

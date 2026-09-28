@@ -20,6 +20,9 @@ const [target, goos, goarch] = platforms[key];
 const output = path.join(packageRoot, 'npm', key);
 const exe = goos === 'windows' ? '.exe' : '';
 const cargoDirectory = path.join(root, 'target');
+const platformEnvironment = goos === 'darwin'
+  ? { MACOSX_DEPLOYMENT_TARGET: key === 'darwin-arm64' ? '11.0' : '10.13' }
+  : {};
 
 function run(command, args, cwd, extraEnv = {}) {
   const result = spawnSync(command, args, { cwd, stdio: 'inherit', env: { ...process.env, ...extraEnv } });
@@ -27,9 +30,9 @@ function run(command, args, cwd, extraEnv = {}) {
   if (result.status !== 0) throw new Error(`${command} failed (${result.status ?? result.signal})`);
 }
 
-run('cargo', ['build', '--locked', '--release', '-p', 'kaji-cli', '--target', target, '--target-dir', cargoDirectory], root);
+run('cargo', ['build', '--locked', '--release', '-p', 'kaji-cli', '--target', target, '--target-dir', cargoDirectory], root, platformEnvironment);
 fs.mkdirSync(output, { recursive: true });
-run('go', ['build', '-trimpath', '-ldflags=-s -w', '-o', path.join(output, `kaji-openapi${exe}`), '.'], path.join(root, 'openapi'), { GOOS: goos, GOARCH: goarch, CGO_ENABLED: '0' });
+run('go', ['build', '-trimpath', '-ldflags=-s -w', '-o', path.join(output, `kaji-openapi${exe}`), '.'], path.join(root, 'openapi'), { ...platformEnvironment, GOOS: goos, GOARCH: goarch, CGO_ENABLED: '0' });
 fs.copyFileSync(path.join(cargoDirectory, target, 'release', `kaji${exe}`), path.join(output, `kaji${exe}`));
 for (const binary of [`kaji${exe}`, `kaji-openapi${exe}`]) if (!exe) fs.chmodSync(path.join(output, binary), 0o755);
 fs.copyFileSync(path.join(root, 'LICENSE'), path.join(output, 'LICENSE'));

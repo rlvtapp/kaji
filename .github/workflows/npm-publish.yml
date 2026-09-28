@@ -1,4 +1,4 @@
-name: Publish npm packages
+name: Publish release packages
 
 on:
   push:
@@ -40,10 +40,14 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
       - run: cargo test -p kaji-cli --locked
       - run: node --test packages/cli/test/launcher.test.cjs
       - run: node packages/cli/scripts/build-platform.mjs ${{ matrix.platform }}
       - run: node packages/cli/scripts/smoke-native.mjs ${{ matrix.platform }}
+      - run: node packages/python/scripts/build-wheel.mjs ${{ matrix.platform }}
       - name: Pack native package
         working-directory: packages/cli/npm/${{ matrix.platform }}
         run: npm pack --ignore-scripts
@@ -51,6 +55,11 @@ jobs:
         with:
           name: native-${{ matrix.platform }}
           path: packages/cli/npm/${{ matrix.platform }}/*.tgz
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          name: python-${{ matrix.platform }}
+          path: packages/python/dist/*.whl
           if-no-files-found: error
 
   launchers:
@@ -61,7 +70,11 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
       - run: node --test packages/cli/test/launcher.test.cjs
+      - run: PYTHONPATH=packages/python/src python -m unittest discover -s packages/python/tests -v
       - name: Pack scoped launcher
         working-directory: packages/cli
         run: npm pack --ignore-scripts
@@ -104,3 +117,29 @@ jobs:
           done
       - name: Publish scoped launcher
         run: npm publish release-artifacts/scoped-launcher/*.tgz --access public
+
+  publish-python:
+    name: Publish to PyPI
+    needs: [native, launchers]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: python-*
+          path: release-artifacts/python
+          merge-multiple: true
+      - name: Verify release version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(python -c 'from pathlib import Path; import re; source = Path("packages/python/setup.py").read_text(); print(re.search(r"version=\"([^\"]+)\"", source).group(1))')"
+          test "$tag" = "$version"
+      - name: Publish platform-native wheels
+        uses: pypa/gh-action-pypi-publish@v1.14.2
+        with:
+          packages-dir: release-artifacts/python

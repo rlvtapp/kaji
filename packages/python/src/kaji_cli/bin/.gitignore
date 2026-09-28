@@ -1,0 +1,3 @@
+# Native executables are staged by scripts/build-wheel.mjs before wheel creation.
+*
+!.gitignore

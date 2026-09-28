@@ -34,33 +34,45 @@ jobs:
         with:
           go-version-file: openapi/go.mod
           cache-dependency-path: openapi/go.sum
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
       - run: cargo test -p kaji-cli --locked
       - run: node --test packages/cli/test/launcher.test.cjs
       - run: node packages/cli/scripts/build-platform.mjs ${{ matrix.platform }}
       - run: node packages/cli/scripts/smoke-native.mjs ${{ matrix.platform }}
+      - run: node packages/python/scripts/build-wheel.mjs ${{ matrix.platform }}
       - name: Pack native artifacts (does not publish)
         working-directory: packages/cli/npm/${{ matrix.platform }}
         run: npm pack --ignore-scripts
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: kaji-${{ matrix.platform }}
           path: packages/cli/npm/${{ matrix.platform }}/*.tgz
+      - uses: actions/upload-artifact@v7
+        with:
+          name: kaji-python-${{ matrix.platform }}
+          path: packages/python/dist/*.whl
   launcher:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
       - run: node --test packages/cli/test/launcher.test.cjs
+      - run: PYTHONPATH=packages/python/src python -m unittest discover -s packages/python/tests -v
       - run: npm pack --ignore-scripts
         working-directory: packages/cli
       - run: npm pack --ignore-scripts
         working-directory: packages/npm
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: kaji-node-launchers
           path: |

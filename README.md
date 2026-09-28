@@ -27,6 +27,18 @@ need, then run `npx @relevate/kaji generate` again whenever the contract changes
 installed npm users do not need Rust or Go.
 The generator itself is Rust, with a bundled Go OpenAPI compiler.
 
+Python users can install the same native CLI through pip:
+
+```sh
+python -m pip install kaji-cli
+kaji init --input ./openapi.yaml --output ./generated
+kaji generate
+```
+
+`kaji-cli` includes the executable for its platform; Python is only the console
+entry point. Wheels currently support macOS ARM64/x64, Linux x64 with glibc 2.35+
+and Windows x64.
+
 ## Common commands
 
 ```sh
