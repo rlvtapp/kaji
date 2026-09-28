@@ -1,32 +1,44 @@
-# Why Kaji
+# Why Relevate built Kaji
 
-An OpenAPI contract should be the source of truth for more than an SDK.
+At Relevate, we needed our OpenAPI contracts to power more than a client SDK.
+We needed the same API definition to drive client interfaces, frontend hooks,
+validation schemas, mocks, documentation, and tools used by AI agents—without
+maintaining each one as a separate, hand-written integration.
 
-In a typical API, the client library, frontend hooks, validation schemas, mocks,
-documentation, and AI tooling are built separately. They drift separately too:
-an endpoint changes, the SDK gets updated, but the mock still accepts the old
-shape, the docs are stale, and every consumer has a slightly different idea of
-what the API does.
+Kaji exists to make that possible: one OpenAPI contract, multiple outputs.
 
-Kaji exists to make the contract the common input for that whole ecosystem.
-One explicit, reviewable recipe can generate the artifacts that API consumers
-actually need:
+It is built first for Relevate's own products and workflows. An API change should
+have one explicit, reviewable path to every developer-facing artifact it affects,
+rather than becoming a string of manual updates that drift apart over time.
 
 ```text
 OpenAPI
   │
   ▼
 Kaji
-  ├── typed SDKs        TypeScript · Rust · Go · Python · PHP · Java · .NET · Elixir
-  ├── client surfaces   Fetch · Axios · direct operations
-  ├── frontend helpers  TanStack React Query · Vue Query · SWR
-  ├── schema helpers    Zod · Faker
-  ├── testing           MSW · Cypress · HTTP mocks
-  ├── documentation     ReDoc
-  └── AI tooling        MCP
+  ├── SDKs      TypeScript · Go · Python · Rust · Java · .NET · PHP · Elixir
+  ├── Clients   Fetch · Axios
+  ├── Frontend  TanStack React Query · Vue Query · SWR
+  ├── Schema    Zod · Faker
+  ├── Testing   MSW · Cypress · HTTP mocks
+  ├── Docs      ReDoc
+  └── AI        MCP
 ```
 
-## Why not just an SDK generator?
+## Built for our own use, released for yours
+
+Kaji is not a generic product idea looking for an enterprise tier. We maintain
+it because Relevate uses it. Publishing it as open source means other teams can
+use it too, inspect how it works, and help make it better.
+
+## What Kaji is not
+
+- not a hosted code-generation platform
+- not a paid SDK generator with a free teaser tier
+- not a commercial-license funnel
+- not an enterprise-only product with the useful features held back
+
+## More than an SDK generator
 
 An SDK generator solves only one of the contract's downstream problems. Kaji
 keeps the generated pieces together without forcing every consumer into the same
@@ -40,8 +52,8 @@ runtime or workflow:
 - Use the native CLI in a repository or CI job, or embed the Rust library and
   compose typed plugins when generation belongs inside an application.
 
-The point is boring reliability: a contract change should have one obvious,
-repeatable path to every artifact it affects.
+The point is boring reliability: at Relevate, a contract change should have one
+obvious, repeatable path to every artifact it affects.
 
 ## Our commitment
 

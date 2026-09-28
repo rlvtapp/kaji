@@ -21,8 +21,9 @@ Kaji
 ```
 
 The goal is not just to produce an SDK. It is to keep every developer-facing
-surface of an API aligned with the contract that defines it. Read [why Kaji](docs/why-kaji.md)
-for the problem it solves and what we are committing to keep free.
+surface of an API aligned with the contract that defines it. Read [why Relevate
+built Kaji](docs/why-kaji.md) for the problem that made us build it and what we
+are committing to keep free.
 
 ## Quick start
 
