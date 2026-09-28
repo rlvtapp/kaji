@@ -1,9 +1,9 @@
 {
   "name": "kaji",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Command-line facade for @relevate/kaji.",
   "bin": { "kaji": "bin/kaji.cjs" },
-  "dependencies": { "@relevate/kaji": "0.2.0" },
+  "dependencies": { "@relevate/kaji": "0.2.1" },
   "license": "MIT",
   "repository": {
     "type": "git",

@@ -473,7 +473,7 @@ dependencies = [
 
 [[package]]
 name = "kaji"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "kaji-core",
@@ -492,7 +492,7 @@ dependencies = [
 
 [[package]]
 name = "kaji-cli"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "kaji",
@@ -505,7 +505,7 @@ dependencies = [
 
 [[package]]
 name = "kaji-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "serde",
@@ -516,7 +516,7 @@ dependencies = [
 
 [[package]]
 name = "kaji-plugin-dotnet"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "kaji-core",
@@ -526,7 +526,7 @@ dependencies = [
 
 [[package]]
 name = "kaji-plugin-elixir"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "kaji-core",
@@ -535,7 +535,7 @@ dependencies = [
 
 [[package]]
 name = "kaji-plugin-go"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "kaji-core",
@@ -545,7 +545,7 @@ dependencies = [
 
 [[package]]
 name = "kaji-plugin-java"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "kaji-core",
@@ -554,7 +554,7 @@ dependencies = [
 
 [[package]]
 name = "kaji-plugin-php"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "kaji-core",
@@ -563,7 +563,7 @@ dependencies = [
 
 [[package]]
 name = "kaji-plugin-python"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "kaji-core",
@@ -573,7 +573,7 @@ dependencies = [
 
 [[package]]
 name = "kaji-plugin-rust"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "kaji-core",
@@ -583,7 +583,7 @@ dependencies = [
 
 [[package]]
 name = "kaji-plugin-typescript"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "kaji-core",
