@@ -29,7 +29,7 @@ jobs:
             target: x86_64-pc-windows-msvc
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -37,7 +37,7 @@ jobs:
         with:
           go-version-file: openapi/go.mod
           cache-dependency-path: openapi/go.sum
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
       - run: cargo test -p kaji-cli --locked
@@ -47,7 +47,7 @@ jobs:
       - name: Pack native package
         working-directory: packages/cli/npm/${{ matrix.platform }}
         run: npm pack --ignore-scripts
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: native-${{ matrix.platform }}
           path: packages/cli/npm/${{ matrix.platform }}/*.tgz
@@ -57,15 +57,15 @@ jobs:
     name: Pack Node launchers
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
       - run: node --test packages/cli/test/launcher.test.cjs
       - name: Pack scoped launcher
         working-directory: packages/cli
         run: npm pack --ignore-scripts
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: scoped-launcher
           path: packages/cli/*.tgz
@@ -79,20 +79,20 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           pattern: native-*
           path: release-artifacts/native
           merge-multiple: true
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: scoped-launcher
           path: release-artifacts/scoped-launcher
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-          package-manager-cache: false
       - name: Verify release version
         run: |
           tag="${GITHUB_REF_NAME#v}"
