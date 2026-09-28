@@ -3,7 +3,7 @@
 At Relevate, we made Kaji to generate the Relevate Email SDKs. We needed the
 Relevate Email OpenAPI contract to drive more than a client library: client
 interfaces, frontend hooks, validation schemas, mocks, documentation, and tools
-used by AI agents—without maintaining each one as a separate, hand-written
+used by AI agents, without maintaining each one as a separate, hand-written
 integration.
 
 Kaji exists to make that possible: one OpenAPI contract, multiple outputs.
@@ -66,7 +66,7 @@ generated output should remain useful without asking anyone to buy permission.
 
 If you need Kaji to do something it does not yet do, open an issue, propose a
 design, or contribute a plugin. The project should improve because its users
-need better software—not because a feature can be put behind a sales call.
+need better software, not because a feature can be put behind a sales call.
 
 ## Start here
 
