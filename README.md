@@ -187,10 +187,10 @@ Existing detailed references remain available: [complete CLI reference](docs/cli
 Licensed under the [MIT License](LICENSE).
 
 <details>
-<summary>Commercial license</summary>
+<summary><strong>Commercial license</strong></summary>
 
 Need a commercial license for Kaji? We've got you covered.
 
-[Get a commercial license →](https://www.youtube.com/watch?v=dQw4w9WgXcQ)
+**[Get a commercial license →](https://www.youtube.com/watch?v=dQw4w9WgXcQ)**
 
 </details>
