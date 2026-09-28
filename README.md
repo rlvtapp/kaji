@@ -189,7 +189,7 @@ Licensed under the [MIT License](LICENSE).
 <details>
 <summary>Commercial license</summary>
 
-You already have commercial-use rights under MIT.
+Need a commercial license for Kaji? We've got you covered.
 
 [Get a commercial license →](https://www.youtube.com/watch?v=dQw4w9WgXcQ)
 
