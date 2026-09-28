@@ -5,6 +5,7 @@ renderers; choose the one that fits where generation belongs.
 
 | If you want to… | Start here |
 | --- | --- |
+| Understand why Kaji generates more than SDKs | [Why Kaji](why-kaji.md) |
 | Generate from a repository, script, or CI job | [CLI workflow](cli/README.md) |
 | Embed generation in a Rust application | [Rust library workflow](library/README.md) |
 | Understand generated code | [Generated SDK guide](generated-sdks.md) |

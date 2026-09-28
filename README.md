@@ -1,12 +1,28 @@
 # Kaji
 
-A native command-line tool for generating typed SDKs from OpenAPI.
+## Generate your API's entire developer ecosystem from one contract.
 
-One specification. Multiple languages. Ready-to-build packages.
+Kaji turns a Swagger 2.0 or OpenAPI 3.0/3.1 document into production-ready SDKs,
+mocks, validation, framework integrations, documentation, and MCP tools. Generate
+for TypeScript, Rust, Go, Python, PHP, Java, .NET, and Elixir from the same contract.
 
-Generate **TypeScript, Rust, Go, Python, PHP, Java, .NET, and Elixir** SDKs
-from a Swagger 2.0 or OpenAPI 3.0/3.1 document. Choose Fetch or Axios for TypeScript, raw
-operation functions or a full client, and generate several languages in one run.
+```text
+OpenAPI
+  │
+  ▼
+Kaji
+  ├── SDKs      TypeScript · Go · Python · Rust · Java · .NET · PHP · Elixir
+  ├── Clients   Fetch · Axios
+  ├── Frontend  TanStack React Query · Vue Query · SWR
+  ├── Schema    Zod · Faker
+  ├── Testing   MSW · Cypress · HTTP mocks
+  ├── Docs      ReDoc
+  └── AI        MCP
+```
+
+The goal is not just to produce an SDK. It is to keep every developer-facing
+surface of an API aligned with the contract that defines it. Read [why Kaji](docs/why-kaji.md)
+for the problem it solves and what we are committing to keep free.
 
 ## Quick start
 
@@ -122,6 +138,9 @@ available. See the [Rust API guide](docs/getting-started.md) and
 
 Start with the [documentation home](docs/README.md), then choose a workflow:
 
+- **[Why Kaji](docs/why-kaji.md):** the problem Kaji solves, its scope, and its
+  no-monetization commitment.
+
 - **[CLI workflow](docs/cli/README.md):** quickstart, recipes, command reference,
   and reproducible `kaji.json` configuration.
 - **[Rust library workflow](docs/library/README.md):** embedded generation,
@@ -165,3 +184,12 @@ Existing detailed references remain available: [complete CLI reference](docs/cli
 ## License
 
 Licensed under the [MIT License](LICENSE).
+
+<details>
+<summary>Commercial license</summary>
+
+You already have commercial-use rights under MIT.
+
+[Get a commercial license →](https://www.youtube.com/watch?v=dQw4w9WgXcQ)
+
+</details>
