@@ -1,8 +1,8 @@
 sdk/dotnet/ApiException.cs	487	986dad8a9e037919
-sdk/dotnet/KajiClient.cs	13553	8aea67e24802aad2
+sdk/dotnet/KajiClient.cs	13609	212d09e71f7c750a
 sdk/dotnet/KajiContractApiSdk.csproj	454	05f103a9c11ac4c0
 sdk/dotnet/Models/Contact_00000_87bae2710b2492c3.cs	368	c08c041b70bad996
-sdk/dotnet/Operations/KajiClientOperations000.cs	699	6f3c1dccf9edad09
+sdk/dotnet/Operations/KajiClientOperations000.cs	689	40eea8fe99322898
 sdk/dotnet/README.md	735	e51f93f6f8950cff
 sdk/dotnet/Resources/ContactsResource000.cs	600	b7bf1fe9d1997f23
 sdk/dotnet/STYLE_GUIDE.md	1215	8596de2994cbeefa

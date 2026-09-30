@@ -67,13 +67,13 @@ jobs:
   verify-swift:
     name: Compile generated Swift SDK
     runs-on: macos-14
-    env:
-      CLANG_MODULE_CACHE_PATH: ${{ runner.temp }}/kaji-swift-cache/clang
-      SWIFTPM_MODULECACHE_OVERRIDE: ${{ runner.temp }}/kaji-swift-cache/swiftpm
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test -p kaji-plugin-swift generated_package_builds_with_swiftpm -- --ignored
+      - run: >-
+          CLANG_MODULE_CACHE_PATH="$RUNNER_TEMP/kaji-swift-cache/clang"
+          SWIFTPM_MODULECACHE_OVERRIDE="$RUNNER_TEMP/kaji-swift-cache/swiftpm"
+          cargo test -p kaji-plugin-swift generated_package_builds_with_swiftpm -- --ignored
 
   native:
     name: Build ${{ matrix.platform }} package

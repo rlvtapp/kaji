@@ -307,6 +307,13 @@ fn render_client(api: &Api, namespace: &str, client_style: SdkClientStyle) -> St
         "\n    /// <summary>Downloads a non-JSON representation without attempting JSON deserialization.</summary>\n    private async Task<byte[]> SendBytesAsync(HttpRequestMessage request, CancellationToken cancellationToken)\n    {\n        using (request)\n        using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);\n        var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);\n        if (!response.IsSuccessStatusCode)\n        {\n            var error = new ApiException((int)response.StatusCode, Encoding.UTF8.GetString(bytes));\n            _hooks?.OnError(error);\n            throw error;\n        }\n        _hooks?.AfterResponse(response);\n        return bytes;\n    }\n\n    /// <summary>Yields payloads from an OpenAPI text/event-stream response. The underlying response is disposed when enumeration ends.</summary>\n    private async IAsyncEnumerable<string> StreamSseAsync(HttpRequestMessage request, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)\n    {\n        using (request)\n        using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);\n        if (!response.IsSuccessStatusCode)\n        {\n            var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);\n            var error = new ApiException((int)response.StatusCode, body);\n            _hooks?.OnError(error);\n            throw error;\n        }\n        _hooks?.AfterResponse(response);\n        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);\n        using var reader = new StreamReader(stream);\n        while (!reader.EndOfStream)\n        {\n            var line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);\n            if (string.IsNullOrEmpty(line) || line.StartsWith(\":\", StringComparison.Ordinal)) continue;\n            yield return line.StartsWith(\"data:\", StringComparison.Ordinal) ? line[5..].TrimStart() : line;\n        }\n    }\n"
     );
     render_error_deserialization_helper(&mut output);
+    // A using declaration cannot be the body of a `using (request)` statement.
+    // Keep the request lifetime scoped to each method with a second declaration
+    // instead; this is valid C# and disposes both request and response.
+    output = output.replace(
+        "        using (request)\n        using var response",
+        "        using var _request = request;\n        using var response",
+    );
     output.push_str("\n    // Limited JSONPath evaluator for declared cursor output paths. It accepts only $.field.nestedField; unsupported expressions stop the pager rather than guessing.\n    private static string? KajiJsonPath(JsonElement value, string path)\n    {\n        if (!path.StartsWith('$')) return null;\n        var current = value;\n        foreach (var segment in path[1..].Split('.', StringSplitOptions.RemoveEmptyEntries))\n        {\n            if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(segment, out current)) return null;\n        }\n        return current.ValueKind == JsonValueKind.String ? current.GetString() : null;\n    }\n");
     output.push_str("}\n");
     output
@@ -1310,6 +1317,8 @@ mod tests {
         assert!(runtime.contains("SendWithRetryAsync"));
         assert!(runtime.contains("Idempotency-Key"));
         assert!(runtime.contains("IKajiClientHooks"));
+        assert!(runtime.contains("using var _request = request;"));
+        assert!(!runtime.contains("using (request)\n        using var response"));
     }
 
     #[test]
