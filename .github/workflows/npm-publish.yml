@@ -30,6 +30,14 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '8.0.x'
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
       - name: Verify Rust workspace
         run: |
           cargo fmt --all --check
@@ -44,6 +52,10 @@ jobs:
         run: cargo test -p kaji-plugin-rust generated_retry_runtime_compiles_warning_free -- --ignored
       - name: Compile generated C# SDK
         run: cargo test -p kaji-plugin-csharp generated_csharp_project_builds_with_dotnet -- --ignored
+      - name: Compile generated Java SDK
+        run: cargo test -p kaji-plugin-java generated_package_compiles_with_maven -- --ignored
+      - name: Lint generated PHP SDK
+        run: cargo test -p kaji-plugin-php generated_package_passes_php_syntax_checks -- --ignored
       - name: Install TypeScript compiler
         run: npm install --prefix "$RUNNER_TEMP/kaji-typescript" --no-save typescript
       - name: Compile generated TypeScript SDK
@@ -51,6 +63,17 @@ jobs:
           KAJI_TSC_JS="$RUNNER_TEMP/kaji-typescript/node_modules/typescript/lib/tsc.js"
           cargo test -p kaji-plugin-typescript
           generated_fetch_consumer_compiles_with_strict_typescript -- --ignored
+
+  verify-swift:
+    name: Compile generated Swift SDK
+    runs-on: macos-14
+    env:
+      CLANG_MODULE_CACHE_PATH: ${{ runner.temp }}/kaji-swift-cache/clang
+      SWIFTPM_MODULECACHE_OVERRIDE: ${{ runner.temp }}/kaji-swift-cache/swiftpm
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test -p kaji-plugin-swift generated_package_builds_with_swiftpm -- --ignored
 
   native:
     name: Build ${{ matrix.platform }} package
@@ -129,7 +152,7 @@ jobs:
 
   publish:
     name: Publish to npm
-    needs: [verify, native, launchers]
+    needs: [verify, verify-swift, native, launchers]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -163,7 +186,7 @@ jobs:
 
   publish-python:
     name: Publish to PyPI
-    needs: [verify, native, launchers]
+    needs: [verify, verify-swift, native, launchers]
     runs-on: ubuntu-latest
     permissions:
       id-token: write

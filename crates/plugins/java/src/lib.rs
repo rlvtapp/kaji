@@ -1752,6 +1752,40 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires Maven and a JDK 17 toolchain"]
+    fn generated_package_compiles_with_maven() {
+        use std::process::Command;
+
+        let root = tempfile::tempdir().unwrap();
+        render_sdk(
+            &contact_api(),
+            "sdk",
+            Some("com.kaji.email"),
+            SdkClientStyle::Namespaced,
+        )
+        .unwrap()
+        .write_to(root.path())
+        .unwrap();
+        let output = Command::new("mvn")
+            .args([
+                "--batch-mode",
+                "--no-transfer-progress",
+                "-q",
+                "-DskipTests",
+                "compile",
+            ])
+            .current_dir(root.path().join("sdk"))
+            .output()
+            .expect("Maven must be available when this test is selected");
+        assert!(
+            output.status.success(),
+            "generated Java package failed to compile:\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+    }
+
+    #[test]
     fn uses_safe_output_paths_and_deterministic_defaults() {
         assert!(render_test_sdk(&contact_api(), "../escape", None).is_err());
         let tree = render_test_sdk(&contact_api(), "java", None).unwrap();

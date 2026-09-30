@@ -1630,6 +1630,38 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires PHP 8.2 or newer"]
+    fn generated_package_passes_php_syntax_checks() {
+        use std::process::Command;
+
+        let root = tempfile::tempdir().unwrap();
+        let tree = render_sdk(
+            &api(),
+            "sdk",
+            Some("acme/pet-sdk"),
+            SdkClientStyle::Namespaced,
+        )
+        .unwrap();
+        tree.write_to(root.path()).unwrap();
+        for (path, _) in tree
+            .iter()
+            .filter(|(path, _)| path.extension().is_some_and(|extension| extension == "php"))
+        {
+            let output = Command::new("php")
+                .args(["-l"])
+                .arg(root.path().join(path))
+                .output()
+                .expect("PHP must be available when this test is selected");
+            assert!(
+                output.status.success(),
+                "generated PHP file {} failed syntax validation:\n{}",
+                path.display(),
+                String::from_utf8_lossy(&output.stderr),
+            );
+        }
+    }
+
+    #[test]
     fn output_is_deterministic_and_uses_a_safe_default_composer_name() {
         let first = render_test_sdk(&api(), "php", None).unwrap();
         let second = render_test_sdk(&api(), "php", None).unwrap();

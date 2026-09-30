@@ -564,6 +564,7 @@ dependencies = [
  "anyhow",
  "kaji-core",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -573,6 +574,7 @@ dependencies = [
  "anyhow",
  "kaji-core",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]
