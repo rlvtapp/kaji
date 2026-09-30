@@ -42,7 +42,9 @@ jobs:
       - name: Run generated SDK contract suite
         run: cargo test -p kaji --test sdk_to_mock_contract -- --ignored
       - name: Build Kaji once
-        run: cargo build -p kaji-cli --locked
+        run: |
+          cargo build -p kaji-cli --locked
+          (cd openapi && go build -o ../target/debug/kaji-openapi .)
       - name: Generate cross-language SDK fixture once
         run: >-
           target/debug/kaji generate crates/kaji-cli/tests/fixtures/pets.yaml
