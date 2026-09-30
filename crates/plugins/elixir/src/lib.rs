@@ -491,7 +491,7 @@ fn render_client(module: &str) -> String {
   defp credential(prefix, key), do: prefix <> " " <> key
   defp encode_body(nil, _), do: nil
   defp encode_body(body, :binary) when is_binary(body), do: body
-  defp encode_body(_body, :binary), do: raise ArgumentError, "binary request bodies must be binaries"
+  defp encode_body(_body, :binary), do: raise(ArgumentError, "binary request bodies must be binaries")
   defp encode_body(body, :form), do: body |> JSON.to_wire() |> URI.encode_query()
   defp encode_body(body, _), do: Jason.encode!(JSON.to_wire(body))
 end
@@ -571,7 +571,7 @@ fn render_model(module: &str, schema: &Schema) -> String {
 
 fn render_api_facade(module: &str, api: &Api) -> String {
     let mut output = format!(
-        "{NOTICE}\ndefmodule {module}.API do\n  @moduledoc \"Typed API operations for {}.\"\n\n  alias {module}.Client\n\n",
+        "{NOTICE}\ndefmodule {module}.API do\n  @moduledoc \"Typed API operations for {}.\"\n\n",
         escape_elixir_string(&api.name)
     );
     for (index, operations) in api.operations.chunks(OPERATIONS_PER_FILE).enumerate() {
@@ -612,7 +612,7 @@ fn render_operation_chunk(
 
 fn render_resource_facade(module: &str, resource: &str, operations: &[&Operation]) -> String {
     let mut output = format!(
-        "{NOTICE}\ndefmodule {module}.Resources.{resource} do\n  @moduledoc \"Resource-namespaced operations for {resource}.\"\n\n  alias {module}.{{API, Client}}\n"
+        "{NOTICE}\ndefmodule {module}.Resources.{resource} do\n  @moduledoc \"Resource-namespaced operations for {resource}.\"\n\n"
     );
     for (index, chunk) in operations.chunks(RESOURCE_METHODS_PER_FILE).enumerate() {
         let _ = writeln!(
