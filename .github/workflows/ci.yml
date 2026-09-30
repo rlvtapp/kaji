@@ -9,7 +9,8 @@ permissions:
   contents: read
 
 jobs:
-  rust:
+  workspace:
+    name: Workspace checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -26,9 +27,6 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: '8.0.x'
       - name: Test CI integration templates
         run: node --test packages/github-action/test/*.test.cjs packages/gitlab-ci/test/*.test.cjs
       - name: Test Python CLI launcher
@@ -39,9 +37,51 @@ jobs:
       - name: Test embedded OpenAPI compiler
         working-directory: openapi
         run: go test ./...
-      - name: Run generated SDK contract suite
-        run: cargo test -p kaji --test sdk_to_mock_contract -- --ignored
-      - name: Compile generated Rust SDK warning-free
-        run: cargo test -p kaji-plugin-rust generated_retry_runtime_compiles_warning_free -- --ignored
-      - name: Compile generated C# SDK
-        run: cargo test -p kaji-plugin-csharp generated_csharp_project_builds_with_dotnet -- --ignored
+
+  generated-contract:
+    name: Generated SDK contract suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: openapi/go.mod
+          cache-dependency-path: openapi/go.sum
+      - run: cargo test -p kaji --test sdk_to_mock_contract -- --ignored
+
+  generated-rust:
+    name: Compile generated Rust SDK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test -p kaji-plugin-rust generated_retry_runtime_compiles_warning_free -- --ignored
+
+  generated-csharp:
+    name: Compile generated C# SDK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
+      - run: cargo test -p kaji-plugin-csharp generated_csharp_project_builds_with_dotnet -- --ignored
+
+  generated-typescript:
+    name: Compile generated TypeScript SDK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Install TypeScript compiler
+        run: npm install --prefix "$RUNNER_TEMP/kaji-typescript" --no-save typescript
+      - name: Compile strict generated consumer
+        run: >-
+          KAJI_TSC_JS="$RUNNER_TEMP/kaji-typescript/node_modules/typescript/lib/tsc.js"
+          cargo test -p kaji-plugin-typescript
+          generated_fetch_consumer_compiles_with_strict_typescript -- --ignored
