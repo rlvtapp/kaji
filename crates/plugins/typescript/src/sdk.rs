@@ -1293,12 +1293,12 @@ export const createClient = (config: ClientConfig = {}): ClientInstance => async
       await retryDelay(attempt, retry ?? {})
     }
   }
+  await config.hooks?.afterResponse?.({ request, status: response.status, response: response.clone() })
   if (!response.ok && _throwOnError !== false) {
     const error = new ApiError(response.status, await responseBody(response.clone(), config.codecs))
     await config.hooks?.onError?.(error, request)
     throw error
   }
-  await config.hooks?.afterResponse?.({ request, status: response.status, response: response.clone() })
   if (responseType === 'stream') return response
   const data = response.status === 204 ? undefined : await responseBody(response.clone(), config.codecs)
   await validate(validation?.response ?? config.validation?.response, data)
@@ -1479,24 +1479,34 @@ export const createClient = (config: ClientConfig = {}): ClientInstance => {
     const retry = config.retry === false ? undefined : config.retry ?? {}
     const maxAttempts = retry && retryAllowed(method, resolvedHeaders) ? Math.max(1, retry.maxAttempts ?? 3) : 1
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      let response
       try {
-        const response = await instance.request({ method, url: requestUrl, data: encodeBody(body, resolvedHeaders, contentType?.request, config.codecs, formEncodings, formHeaders, config.multipartEncoder), params: serializeQuery(resolvedQuery, styles), headers: resolvedHeaders, responseType: responseType === 'stream' ? 'stream' : undefined, validateStatus: () => true })
-        if (attempt + 1 < maxAttempts && retryableStatus(response.status)) {
-          await retryDelay(attempt, retry ?? {}, response.headers['retry-after'])
-          continue
-        }
-        if (response.status >= 400 && _throwOnError !== false) throw new ApiError(response.status, response.data)
-        const mediaType = String(response.headers['content-type'] ?? '')
-        const data = await codecFor(config.codecs, mediaType)?.decode?.(response.data, mediaType) ?? response.data
-        await validate(validation?.response ?? config.validation?.response, data)
-        await config.hooks?.afterResponse?.({ request, status: response.status, headers: response.headers as Record<string, unknown>, data })
-        return { status: response.status, contentType: mediaType.split(';')[0].trim(), data, headers: response.headers as Record<string, unknown> }
+        response = await instance.request({ method, url: requestUrl, data: encodeBody(body, resolvedHeaders, contentType?.request, config.codecs, formEncodings, formHeaders, config.multipartEncoder), params: serializeQuery(resolvedQuery, styles), headers: resolvedHeaders, responseType: responseType === 'stream' ? 'stream' : undefined, validateStatus: () => true })
       } catch (error) {
-        if (error instanceof ApiError || attempt + 1 >= maxAttempts) {
+        // validateStatus above keeps HTTP responses out of this branch. Only
+        // adapter/network failures retry; a hook, codec, or validator failure
+        // must remain a single terminal outcome.
+        if (!axios.isAxiosError(error) || attempt + 1 >= maxAttempts) {
           await config.hooks?.onError?.(error, request)
           throw error
         }
         await retryDelay(attempt, retry ?? {})
+        continue
+      }
+      if (attempt + 1 < maxAttempts && retryableStatus(response.status)) {
+        await retryDelay(attempt, retry ?? {}, response.headers['retry-after'])
+        continue
+      }
+      const mediaType = String(response.headers['content-type'] ?? '')
+      const data = await codecFor(config.codecs, mediaType)?.decode?.(response.data, mediaType) ?? response.data
+      try {
+        await config.hooks?.afterResponse?.({ request, status: response.status, headers: response.headers as Record<string, unknown>, data })
+        if (response.status >= 400 && _throwOnError !== false) throw new ApiError(response.status, data)
+        await validate(validation?.response ?? config.validation?.response, data)
+        return { status: response.status, contentType: mediaType.split(';')[0].trim(), data, headers: response.headers as Record<string, unknown> }
+      } catch (error) {
+        await config.hooks?.onError?.(error, request)
+        throw error
       }
     }
     throw new Error('Kaji retry loop completed without a response')
@@ -1844,6 +1854,7 @@ mod tests {
         assert!(runtime.contains("contentType: response.headers.get('content-type')"));
         assert!(runtime.contains("scheme.in === 'cookie'"));
         assert!(runtime.contains("export interface StandardSchema"));
+        assert!(runtime.contains("await config.hooks?.afterResponse?.({ request, status: response.status, response: response.clone() })\n  if (!response.ok"));
         assert!(
             runtime.contains("validate(validation?.response ?? config.validation?.response, data)")
         );
@@ -1867,6 +1878,8 @@ mod tests {
         assert!(runtime.contains("multipart/form-data"));
         assert!(runtime.contains("config.codecs"));
         assert!(runtime.contains("export interface StandardSchema"));
+        assert!(runtime.contains("await config.hooks?.afterResponse?.({ request, status: response.status, headers: response.headers as Record<string, unknown>, data })\n        if (response.status >= 400"));
+        assert!(runtime.contains("if (!axios.isAxiosError(error) || attempt + 1 >= maxAttempts)"));
         assert!(
             runtime.contains("validate(validation?.request ?? config.validation?.request, body)")
         );

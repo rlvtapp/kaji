@@ -3,6 +3,22 @@ info:
   title: Notes API
   version: 1.0.0
 paths:
+  /notes/random:
+    get:
+      operationId: getRandomNote
+      summary: Return a schema-shaped note with fresh fallback values
+      responses:
+        '200':
+          description: A generated note
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, authorEmail, priority]
+                properties:
+                  id: { type: string }
+                  authorEmail: { type: string, format: email }
+                  priority: { type: integer, minimum: 1, maximum: 5 }
   /notes/{noteId}:
     get:
       operationId: getNote

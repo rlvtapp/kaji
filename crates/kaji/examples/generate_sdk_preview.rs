@@ -40,7 +40,7 @@ fn main() -> Result<()> {
             .package(kaji::python::package("python").with(kaji::python::sdk()))
             .package(kaji::php::package("php").with(kaji::php::sdk()))
             .package(kaji::java::package("java").with(kaji::java::sdk()))
-            .package(kaji::dotnet::package("dotnet").with(kaji::dotnet::sdk()))
+            .package(kaji::csharp::package("csharp").with(kaji::csharp::sdk()))
             .package(kaji::elixir::package("elixir").with(kaji::elixir::sdk())),
     )?;
     let count = tree.iter().count();

@@ -45,3 +45,7 @@ kaji mcp generator
 
 Keep this server scoped to a trusted workspace: `kaji_generate` writes SDK
 output, just like running `kaji generate` directly.
+
+The [agentic generation example](../examples/agentic-generation/README.md)
+includes a copyable MCP command fragment, a minimal contract, representative
+tool input, and the recommended workspace boundary.

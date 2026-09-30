@@ -1,0 +1,4 @@
+{
+  "command": "npx",
+  "args": ["@relevate/kaji", "mcp", "generator"]
+}

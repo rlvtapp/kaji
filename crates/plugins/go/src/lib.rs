@@ -227,15 +227,15 @@ fn add_retry_runtime(mut output: String) -> String {
     );
     output = output.replace(
         "\tHTTPClient   *http.Client\n}",
-        "\tHTTPClient   *http.Client\n\t// Retry configures safe automatic retries. Nil uses Kaji defaults; set\n\t// MaxAttempts to 1 to disable retries.\n\tRetry        *RetryConfig\n}",
+        "\tHTTPClient   *http.Client\n\t// Retry configures safe automatic retries. Nil uses Kaji defaults; set\n\t// MaxAttempts to 1 to disable retries.\n\tRetry        *RetryConfig\n\t// Hooks observes the final lifecycle of a logical request. It receives no\n\t// request headers or bodies, so credentials stay private by default.\n\tHooks        KajiClientHooks\n}",
     );
     output = output.replace(
         "\thttpClient   *http.Client\n",
-        "\thttpClient   *http.Client\n\tretry        retryConfig\n",
+        "\thttpClient   *http.Client\n\tretry        retryConfig\n\thooks        KajiClientHooks\n",
     );
     output = output.replace(
         "client := &Client{baseURL: baseURL, apiKey: config.APIKey, apiKeyHeader: header, apiKeyPrefix: config.APIKeyPrefix, httpClient: httpClient}",
-        "client := &Client{baseURL: baseURL, apiKey: config.APIKey, apiKeyHeader: header, apiKeyPrefix: config.APIKeyPrefix, httpClient: httpClient, retry: normalizeRetry(config.Retry)}",
+        "client := &Client{baseURL: baseURL, apiKey: config.APIKey, apiKeyHeader: header, apiKeyPrefix: config.APIKeyPrefix, httpClient: httpClient, retry: normalizeRetry(config.Retry), hooks: config.Hooks}",
     );
     output = output.replace("client.do(request,", "client.doWithRetry(request,");
     output.push_str(include_str!("go_retry_runtime.txt"));
@@ -1565,6 +1565,11 @@ mod tests {
         let client = all_source(&tree);
         assert!(client.contains("Retry        *RetryConfig"));
         assert!(client.contains("retry: normalizeRetry(config.Retry)"));
+        assert!(client.contains("Hooks        KajiClientHooks"));
+        assert!(client.contains("type KajiClientHooks interface"));
+        assert!(client.contains("client.beforeRequest(requestInfo)"));
+        assert!(client.contains("client.afterResponse(requestInfo, response)"));
+        assert!(client.contains("client.onError(requestInfo, result)"));
         assert!(client.contains("client.doWithRetry(request, &response)"));
         assert!(client.contains("func canRetry(request *http.Request) bool"));
         assert!(
@@ -1617,6 +1622,11 @@ import (
 
 type retryTransport struct { attempts int }
 
+type lifecycleHooks struct { before, after, errors int }
+func (hooks *lifecycleHooks) BeforeRequest(KajiRequestInfo) { hooks.before++ }
+func (hooks *lifecycleHooks) AfterResponse(KajiResponseInfo) { hooks.after++ }
+func (hooks *lifecycleHooks) OnError(KajiRequestInfo, error) { hooks.errors++ }
+
 func (transport *retryTransport) RoundTrip(request *http.Request) (*http.Response, error) {
     transport.attempts++
     status := http.StatusTooManyRequests
@@ -1631,15 +1641,19 @@ func (transport *retryTransport) RoundTrip(request *http.Request) (*http.Respons
 
 func TestKajiRetriesSafeRequest(t *testing.T) {
     transport := &retryTransport{}
+
+    hooks := &lifecycleHooks{}
     client, err := NewClient(ClientConfig{
         BaseURL: "https://example.test",
         HTTPClient: &http.Client{Transport: transport},
         Retry: &RetryConfig{MaxAttempts: 2, InitialDelay: time.Nanosecond},
+        Hooks: hooks,
     })
     if err != nil { t.Fatal(err) }
     _, err = client.GetContact(context.Background(), &GetContactRequest{ContactID: "contact_123"})
     if err != nil { t.Fatal(err) }
     if transport.attempts != 2 { t.Fatalf("attempts = %d, want 2", transport.attempts) }
+    if hooks.before != 1 || hooks.after != 1 || hooks.errors != 0 { t.Fatalf("hooks = before %d after %d errors %d", hooks.before, hooks.after, hooks.errors) }
 }
 
 func TestKajiDoesNotRetryPostWithoutIdempotencyKey(t *testing.T) {

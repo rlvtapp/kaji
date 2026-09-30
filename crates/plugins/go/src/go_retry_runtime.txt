@@ -8,6 +8,49 @@ type RetryConfig struct {
 	MaxDelay     time.Duration
 }
 
+// KajiRequestInfo is safe request metadata for lifecycle hooks. Request
+// headers and bodies are deliberately omitted so observability integrations do
+// not accidentally receive credentials or customer data.
+type KajiRequestInfo struct {
+	Method string
+	URL    string
+}
+
+// KajiResponseInfo describes the final HTTP response observed by a request.
+// Intermediate retry responses are intentionally not reported.
+type KajiResponseInfo struct {
+	Request    KajiRequestInfo
+	StatusCode int
+	Headers    http.Header
+}
+
+// KajiClientHooks receives lifecycle events for one logical generated SDK
+// request. BeforeRequest, AfterResponse, and OnError run at most once each;
+// retries remain an implementation detail of the transport.
+type KajiClientHooks interface {
+	BeforeRequest(KajiRequestInfo)
+	AfterResponse(KajiResponseInfo)
+	OnError(KajiRequestInfo, error)
+}
+
+func (client *Client) beforeRequest(request KajiRequestInfo) {
+	if client.hooks != nil {
+		client.hooks.BeforeRequest(request)
+	}
+}
+
+func (client *Client) afterResponse(request KajiRequestInfo, response *http.Response) {
+	if client.hooks != nil {
+		client.hooks.AfterResponse(KajiResponseInfo{Request: request, StatusCode: response.StatusCode, Headers: response.Header.Clone()})
+	}
+}
+
+func (client *Client) onError(request KajiRequestInfo, err error) {
+	if client.hooks != nil {
+		client.hooks.OnError(request, err)
+	}
+}
+
 type retryConfig struct {
 	maxAttempts  int
 	initialDelay time.Duration
@@ -112,17 +155,24 @@ func replayRequest(request *http.Request) (*http.Request, error) {
 
 func (client *Client) doWithRetry(request *http.Request, destination any) error {
 	retryAllowed := canRetry(request)
+	requestInfo := KajiRequestInfo{Method: request.Method, URL: request.URL.String()}
+	client.beforeRequest(requestInfo)
 	for attempt := 1; ; attempt++ {
 		response, err := client.httpClient.Do(request)
 		if err != nil {
 			if !retryAllowed || attempt >= client.retry.maxAttempts || request.Context().Err() != nil {
-				return fmt.Errorf("kaji: execute request: %w", err)
+				result := fmt.Errorf("kaji: execute request: %w", err)
+				client.onError(requestInfo, result)
+				return result
 			}
 			if err := waitForRetry(request.Context(), client.retry.delay(nil, attempt)); err != nil {
-				return fmt.Errorf("kaji: execute request: %w", err)
+				result := fmt.Errorf("kaji: execute request: %w", err)
+				client.onError(requestInfo, result)
+				return result
 			}
 			request, err = replayRequest(request)
 			if err != nil {
+				client.onError(requestInfo, err)
 				return err
 			}
 			continue
@@ -130,23 +180,26 @@ func (client *Client) doWithRetry(request *http.Request, destination any) error 
 
 		if response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {
 			defer response.Body.Close()
+			client.afterResponse(requestInfo, response)
 			if destination == nil || response.StatusCode == http.StatusNoContent {
 				return nil
 			}
 			if bytesDestination, ok := destination.(*[]byte); ok {
 				body, err := io.ReadAll(response.Body)
-				if err != nil { return fmt.Errorf("kaji: read binary response: %w", err) }
+				if err != nil { result := fmt.Errorf("kaji: read binary response: %w", err); client.onError(requestInfo, result); return result }
 				*bytesDestination = body
 				return nil
 			}
 			if textDestination, ok := destination.(*string); ok {
 				body, err := io.ReadAll(response.Body)
-				if err != nil { return fmt.Errorf("kaji: read text response: %w", err) }
+				if err != nil { result := fmt.Errorf("kaji: read text response: %w", err); client.onError(requestInfo, result); return result }
 				*textDestination = string(body)
 				return nil
 			}
 			if err := json.NewDecoder(response.Body).Decode(destination); err != nil && err != io.EOF {
-				return fmt.Errorf("kaji: decode response: %w", err)
+				result := fmt.Errorf("kaji: decode response: %w", err)
+				client.onError(requestInfo, result)
+				return result
 			}
 			return nil
 		}
@@ -165,8 +218,11 @@ func (client *Client) doWithRetry(request *http.Request, destination any) error 
 		}
 
 		body, _ := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+		client.afterResponse(requestInfo, response)
 		response.Body.Close()
-		return &kajiAPIError{StatusCode: response.StatusCode, Body: body, ContentType: response.Header.Get("Content-Type")}
+		result := &kajiAPIError{StatusCode: response.StatusCode, Body: body, ContentType: response.Header.Get("Content-Type")}
+		client.onError(requestInfo, result)
+		return result
 	}
 }
 
@@ -175,34 +231,46 @@ func (client *Client) doWithRetry(request *http.Request, destination any) error 
 // flowing, reconnect policy belongs to the consuming application.
 func (client *Client) stream(request *http.Request) (io.ReadCloser, error) {
 	retryAllowed := canRetry(request)
+	requestInfo := KajiRequestInfo{Method: request.Method, URL: request.URL.String()}
+	client.beforeRequest(requestInfo)
 	for attempt := 1; ; attempt++ {
 		response, err := client.httpClient.Do(request)
 		if err != nil {
 			if !retryAllowed || attempt >= client.retry.maxAttempts || request.Context().Err() != nil {
-				return nil, fmt.Errorf("kaji: execute request: %w", err)
+				result := fmt.Errorf("kaji: execute request: %w", err)
+				client.onError(requestInfo, result)
+				return nil, result
 			}
 			if err := waitForRetry(request.Context(), client.retry.delay(nil, attempt)); err != nil {
-				return nil, fmt.Errorf("kaji: execute request: %w", err)
+				result := fmt.Errorf("kaji: execute request: %w", err)
+				client.onError(requestInfo, result)
+				return nil, result
 			}
 			request, err = replayRequest(request)
-			if err != nil { return nil, err }
+			if err != nil { client.onError(requestInfo, err); return nil, err }
 			continue
 		}
 		if response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {
+			client.afterResponse(requestInfo, response)
 			return response.Body, nil
 		}
 		if retryAllowed && isRetryableStatus(response.StatusCode) && attempt < client.retry.maxAttempts {
 			delay := client.retry.delay(response, attempt)
 			response.Body.Close()
 			if err := waitForRetry(request.Context(), delay); err != nil {
-				return nil, fmt.Errorf("kaji: execute request: %w", err)
+				result := fmt.Errorf("kaji: execute request: %w", err)
+				client.onError(requestInfo, result)
+				return nil, result
 			}
 			request, err = replayRequest(request)
-			if err != nil { return nil, err }
+			if err != nil { client.onError(requestInfo, err); return nil, err }
 			continue
 		}
 		body, _ := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+		client.afterResponse(requestInfo, response)
 		response.Body.Close()
-		return nil, &kajiAPIError{StatusCode: response.StatusCode, Body: body, ContentType: response.Header.Get("Content-Type")}
+		result := &kajiAPIError{StatusCode: response.StatusCode, Body: body, ContentType: response.Header.Get("Content-Type")}
+		client.onError(requestInfo, result)
+		return nil, result
 	}
 }

@@ -91,6 +91,10 @@ the native server and fixture generator put scenarios ahead of the default
 route, so the fallback cannot swallow them. The native server compares headers
 case-insensitively and decodes query/path values before comparison.
 
+For a runnable contract with dynamic fallback responses, a conditional error,
+and request-log inspection, use the
+[mock scenarios example](../examples/mock-scenarios/README.md).
+
 ## Full `x-kaji-mock` reference
 
 ```yaml

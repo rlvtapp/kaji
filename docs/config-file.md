@@ -131,6 +131,34 @@ Set exactly one source field:
 | `name` | No | API display name; defaults to `API`. |
 | `version` | No | Generated package version; defaults to `0.1.0`. |
 | `compiler` | No | Local path to a replacement `kaji-openapi` executable. Only applies with `input`. |
+| `paths.include` | No | OpenAPI path glob patterns to include. Empty includes every path. `*` crosses `/`; includes are ORed. |
+| `paths.exclude` | No | OpenAPI path glob patterns to omit after inclusion. Exclusions always win. |
+
+Path selectors apply once to the normalized contract, before every SDK, API
+CLI, mock, and helper artifact is rendered. Each pattern must begin with `/`.
+Kaji stops when they would produce zero operations—this catches a renamed
+endpoint or a typo before it becomes an empty release.
+
+```json
+{
+  "openapi": {
+    "input": "./openapi.yaml",
+    "paths": { "include": ["/messages*"], "exclude": ["/messages/internal*"] }
+  }
+}
+```
+
+## Generation metadata and review
+
+Every generation writes `.kaji/generation.lock.json` below the output root.
+Commit it alongside generated code. It has no credentials: it records Kaji's
+version, source locator, hashes of the input/config/compiler artifacts, the
+path selection, target package labels, and selected operation inventory.
+
+That makes a generated change explainable in review and makes CI drift checks
+reproducible. It is generated metadata, not a hand-edited configuration file:
+run `kaji generate` to refresh it. A remote input's URL is recorded, but its
+authorization headers/tokens are never written to the lock.
 
 ### Remote URL object, headers, and authentication
 
@@ -191,7 +219,7 @@ Every package contains:
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `language` | Yes | One of `typescript`, `typescript-cli`, `rust`, `rust-cli`, `go`, `python`, `php`, `java`, `dotnet`, `elixir`, `mock`, or `artifacts`. |
+| `language` | Yes | One of `typescript`, `typescript-cli`, `rust`, `rust-cli`, `go`, `python`, `php`, `java`, `csharp`, `elixir`, `mock`, or `artifacts`. `dotnet` remains a legacy alias for `csharp`. |
 | `path` | Yes | Package directory below `output.path`. |
 | `name` | No | Ecosystem package identity for SDK languages. |
 | `client_style` | No | Package-level `namespaced` or `flat` override. |
@@ -199,7 +227,7 @@ Every package contains:
 
 ### SDK languages
 
-`rust`, `go`, `python`, `php`, `java`, `dotnet`, and `elixir` require exactly
+`rust`, `go`, `python`, `php`, `java`, `csharp`, and `elixir` require exactly
 one `{ "name": "sdk" }` plugin. Go accepts `jobs`, a bounded generation worker
 count. The other current SDK plugins have no package-specific JSON options
 beyond package name and client style.

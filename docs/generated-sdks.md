@@ -170,7 +170,55 @@ namespaces for callers who prefer direct operation access.
 Install and compile the generated package with its own ecosystem tooling. Kaji
 does not silently fetch third-party dependencies during generation.
 
-## Common runtime behavior
+## Common runtime contract
+
+Kaji uses native APIs in every language. The retry policy below is shared by
+the maintained SDK targets; the lifecycle ordering is the stable contract for
+the TypeScript, Rust, and Go runtimes. Other targets expose their native hook
+surfaces and are documented by the generated package while they converge on
+this contract. This is the behavior to rely on when writing a wrapper, an
+observability adapter, or a cross-language integration.
+
+### Credentials and request lifecycle
+
+The generated client first resolves its configured base URL, caller headers,
+and OpenAPI security requirements. It then serializes the request and invokes
+the transport. Static credentials are configured at client construction; use a
+custom transport or the target's lifecycle hook when credentials need dynamic
+refreshing or signing.
+
+For the TypeScript, Rust, and Go hook APIs, the events have these meanings:
+
+- `beforeRequest` / `before_request` runs once for a logical operation, after
+  Kaji has assembled the request and before its first transport attempt.
+- `afterResponse` / `after_response` runs once for the final HTTP response,
+  including a final non-2xx response. Retryable intermediate responses are not
+  reported.
+- `onError` / `on_error` runs once when the final outcome is a transport,
+  decoding, validation, or HTTP error. A final non-2xx response therefore
+  invokes both `afterResponse` and `onError`.
+
+Hook payloads are target-native. Treat them as observability and policy
+boundaries: avoid logging headers or bodies unless your application has made a
+deliberate redaction decision. Hooks must not assume they receive one event per
+retry attempt.
+
+### Retries, cancellation, and streams
+
+All maintained SDKs default to three **total** attempts, with a 250 ms initial
+delay, exponential backoff, and an 8 second cap. Set `maxAttempts` (or the
+target-native equivalent) to `1` to disable retries. Kaji retries only `GET`,
+`PUT`, `PATCH`, and `DELETE`, plus `POST` carrying an `Idempotency-Key` header.
+It retries transport failures and HTTP `408`, `429`, `500`, `502`, `503`, and
+`504`. A valid `Retry-After` value takes precedence, subject to the same cap.
+
+In targets that expose caller cancellation/deadlines, cancellation stops
+retrying. Event streams use this retry policy only while establishing the
+initial connection; reconnecting after events have started is application
+policy, because Kaji will not invent a resume token or `Last-Event-ID`
+behavior.
+
+### Supported runtime features
 
 Where declared by the OpenAPI contract and supported by the target, Kaji
 generates:

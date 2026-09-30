@@ -1,5 +1,5 @@
 mod support;
-use kaji::{prelude::*, ts};
+use kaji::{csharp, prelude::*, ts};
 
 struct CommunityConsumer {
     meta: Meta,
@@ -134,5 +134,25 @@ fn shared_package_and_local_settings_resolve_per_instance() {
         tree.get("sdk/c/STYLE_GUIDE.md")
             .unwrap()
             .contains("namespaced instantiated client")
+    );
+}
+
+#[test]
+fn csharp_is_a_first_class_alias_for_the_dotnet_sdk_generator() {
+    let tree = kaji::generate(
+        &support::sdk_contract_api(),
+        ProfileSet::new("sdk").package(
+            csharp::package("csharp")
+                .name("acme-email")
+                .with(csharp::sdk().namespaced()),
+        ),
+    )
+    .unwrap();
+
+    assert!(tree.get("sdk/csharp/AcmeEmail.csproj").is_some());
+    assert!(
+        tree.get("sdk/csharp/KajiClient.cs")
+            .unwrap()
+            .contains("HttpClient")
     );
 }

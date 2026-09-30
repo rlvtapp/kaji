@@ -71,11 +71,27 @@ fn generates_all_languages_from_artifacts_and_preserves_custom_files() {
         "python",
         "php",
         "java",
-        "dotnet",
+        "csharp",
         "elixir",
     ] {
         assert!(output.join(target).is_dir(), "missing {target}");
     }
+    let lock: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(output.join(".kaji/generation.lock.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(lock["version"], 1);
+    assert_eq!(lock["generator"]["name"], "kaji");
+    assert_eq!(lock["input"]["kind"], "artifacts");
+    assert_eq!(
+        lock["api"]["operations"],
+        serde_json::json!(["GET /contacts"])
+    );
+    assert!(
+        lock["input"]["artifacts_sha256"]
+            .as_str()
+            .is_some_and(|hash| hash.len() == 64)
+    );
     let stderr = String::from_utf8_lossy(&result.stderr);
     assert!(stderr.contains("Generation completed"));
     assert!(stderr.contains("Files"));
@@ -175,7 +191,12 @@ fn json_config_generates_sdks_and_all_selected_artifacts() {
     fs::write(
         &config,
         r#"{
-  "openapi": { "artifacts": "artifacts", "name": "Contacts", "version": "1.2.3" },
+  "openapi": {
+    "artifacts": "artifacts",
+    "name": "Contacts",
+    "version": "1.2.3",
+    "paths": { "include": ["/contacts*"] }
+  },
   "output": { "path": "generated" },
   "packages": [
     {
@@ -194,6 +215,7 @@ fn json_config_generates_sdks_and_all_selected_artifacts() {
       ]
     },
     { "language": "go", "path": "go", "plugins": [{ "name": "sdk", "jobs": 2 }] },
+    { "language": "csharp", "path": "csharp", "name": "acme-contacts", "plugins": [{ "name": "sdk" }] },
     {
       "language": "artifacts",
       "path": "docs",
@@ -228,6 +250,7 @@ fn json_config_generates_sdks_and_all_selected_artifacts() {
         "web/msw.ts",
         "web/api.cy.ts",
         "go/go.mod",
+        "csharp/AcmeContacts.csproj",
         "docs/redoc.html",
         "docs/redocly.yaml",
         "docs/tools.json",
@@ -241,6 +264,12 @@ fn json_config_generates_sdks_and_all_selected_artifacts() {
     assert_eq!(manifest["dependencies"]["@tanstack/react-query"], "^5.0.0");
     assert_eq!(manifest["dependencies"]["msw"], "^2.0.0");
     assert_eq!(manifest["devDependencies"]["cypress"], "^15.0.0");
+    let lock: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(output.join(".kaji/generation.lock.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(lock["paths"]["include"], serde_json::json!(["/contacts*"]));
+    assert!(lock["input"]["config_sha256"].is_string());
 }
 
 #[test]

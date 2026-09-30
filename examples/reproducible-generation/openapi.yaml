@@ -1,0 +1,49 @@
+openapi: 3.1.0
+info:
+  title: Mail API
+  version: 1.0.0
+paths:
+  /messages:
+    get:
+      operationId: listMessages
+      tags: [messages]
+      responses:
+        '200':
+          description: Messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Message' }
+  /admin/audit:
+    get:
+      operationId: listAuditEvents
+      tags: [admin]
+      responses:
+        '200':
+          description: Audit events
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: string }
+  /health:
+    get:
+      operationId: getHealth
+      responses:
+        '200':
+          description: Health status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+components:
+  schemas:
+    Message:
+      type: object
+      required: [id, subject]
+      properties:
+        id: { type: string }
+        subject: { type: string }

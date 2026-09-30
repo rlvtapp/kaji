@@ -14,6 +14,7 @@ renderers; choose the one that fits where generation belongs.
 ## Common journeys
 
 - **First SDK:** [CLI quickstart](cli/quickstart.md).
+- **Find a public contract:** [OpenAPI discovery and download](discovery.md).
 - **Committed recipe:** [`kaji.json` guide](cli/config.md).
 - **Several packages from one contract:** [CLI recipes](cli/recipes.md).
 - **Zod, TanStack, SWR, Faker, MSW, and Cypress:** [TypeScript helpers](guides/typescript-helpers.md).

@@ -99,7 +99,7 @@ impl GeneratorServer {
                         "properties": {
                             "source": { "type": "string", "description": "Local OpenAPI 2.0/3.x file" },
                             "output": { "type": "string", "description": "Generated SDK output directory" },
-                            "languages": { "type": "array", "items": { "type": "string", "enum": ["rust", "typescript", "go", "python", "php", "java", "dotnet", "elixir"] }, "minItems": 1 },
+                            "languages": { "type": "array", "items": { "type": "string", "enum": ["rust", "typescript", "go", "python", "php", "java", "csharp", "dotnet", "elixir"] }, "minItems": 1 },
                             "name": { "type": "string" },
                             "sdkVersion": { "type": "string" },
                             "clientStyle": { "type": "string", "enum": ["namespaced", "flat"] },
@@ -129,7 +129,7 @@ impl GeneratorServer {
             .context("tools/call requires params.name")?;
         match name {
             "kaji_languages" => Ok(json!({
-                "content": [{ "type": "text", "text": "rust, typescript, go, python, php, java, dotnet, elixir" }],
+                "content": [{ "type": "text", "text": "rust, typescript, go, python, php, java, csharp, dotnet (legacy alias), elixir" }],
             })),
             "kaji_generate" => {
                 self.generate(params.get("arguments").cloned().unwrap_or(Value::Null))
@@ -165,6 +165,7 @@ impl GeneratorServer {
             "python",
             "php",
             "java",
+            "csharp",
             "dotnet",
             "elixir",
         ];
@@ -980,6 +981,12 @@ mod tests {
         assert_eq!(
             tools[1]["inputSchema"]["required"],
             json!(["source", "output", "languages"])
+        );
+        assert!(
+            tools[1]["inputSchema"]["properties"]["languages"]["items"]["enum"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("csharp"))
         );
     }
 }

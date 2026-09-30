@@ -246,7 +246,7 @@ fn render_client(api: &Api, namespace: &str, client_style: SdkClientStyle) -> St
     );
     output = output.replacen(
         "using System.Net.Http.Json;",
-        "using System.Net.Http.Headers;\nusing System.Net.Http.Json;",
+        "using System.Net;\nusing System.Net.Http.Headers;\nusing System.Net.Http.Json;",
         1,
     );
     output = output.replacen(
@@ -1409,6 +1409,34 @@ mod tests {
         assert!(errors.contains("Contact? Body"));
         assert!(client.contains("throw MapGetContactError(error)"));
         assert!(client.contains("TryDeserializeError<Contact>(error.ResponseBody)"));
+    }
+
+    #[test]
+    #[ignore = "requires the .NET 8 SDK; CI runs this generated-package smoke test"]
+    fn generated_csharp_project_builds_with_dotnet() {
+        use std::process::Command;
+
+        let output = tempfile::tempdir().unwrap();
+        let tree = render_sdk(
+            &api(),
+            "csharp",
+            Some("example-api-sdk"),
+            SdkClientStyle::Namespaced,
+        )
+        .unwrap();
+        tree.write_to(output.path()).unwrap();
+        let project = output.path().join("csharp/ExampleApiSdk.csproj");
+        let result = Command::new("dotnet")
+            .args(["build", "--nologo", "--verbosity", "minimal"])
+            .arg(&project)
+            .output()
+            .expect("the .NET SDK must be available when this test is selected");
+        assert!(
+            result.status.success(),
+            "generated C# project failed to build:\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&result.stdout),
+            String::from_utf8_lossy(&result.stderr),
+        );
     }
 }
 

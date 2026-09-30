@@ -1,5 +1,5 @@
 sdk/dotnet/ApiException.cs	487	986dad8a9e037919
-sdk/dotnet/KajiClient.cs	13535	bbd4c736abdc682d
+sdk/dotnet/KajiClient.cs	13553	8aea67e24802aad2
 sdk/dotnet/KajiContractApiSdk.csproj	454	05f103a9c11ac4c0
 sdk/dotnet/Models/Contact_00000_87bae2710b2492c3.cs	368	c08c041b70bad996
 sdk/dotnet/Operations/KajiClientOperations000.cs	699	6f3c1dccf9edad09
@@ -22,7 +22,7 @@ sdk/elixir/lib/kaji_contract_api_sdk.ex	402	925b22f23dced582
 sdk/elixir/mix.exs	513	83c654e71c044df4
 sdk/go/README.md	482	9be60e25ab8dbf91
 sdk/go/STYLE_GUIDE.md	550	bb495e13888fdccf
-sdk/go/client.go	12275	4292a93af8e79e04
+sdk/go/client.go	15006	1f12a733de71751a
 sdk/go/go.mod	34	da84606bdc0ddaff
 sdk/go/model_contact_87bae2710b2492c3.go	113	f005197486c63775
 sdk/go/operation_get_contact_a450554c884b5371.go	575	d0e941ccc86f2aee
@@ -87,7 +87,7 @@ sdk/rust/src/lib.rs	115	031116454d22926d
 sdk/rust/src/models/chunk_0001/contact_1.rs	221	96529b29cba5332b
 sdk/rust/src/models/chunk_0001/mod.rs	81	dca6320e284e6921
 sdk/rust/src/models/mod.rs	83	478fe55ab7530f57
-sdk/typescript-axios/.kaji/client.ts	19996	d9d914b16b3cf192
+sdk/typescript-axios/.kaji/client.ts	20331	dbcd3e9eecfe4ebe
 sdk/typescript-axios/README.md	432	999bd2bcdf73dbaf
 sdk/typescript-axios/STYLE_GUIDE.md	528	005a5f7f1c32fe10
 sdk/typescript-axios/client.ts	507	0d4162a3114c53d0
@@ -107,7 +107,7 @@ sdk/typescript-axios/package.json	492	9f03d89ba4a44366
 sdk/typescript-axios/resources/contacts/operations_0001.ts	366	7a34a630322dca55
 sdk/typescript-axios/resources/contacts.ts	344	42f72b65376fdb88
 sdk/typescript-axios/tsconfig.json	202	7960835b62c4965e
-sdk/typescript-fetch/.kaji/client.ts	20668	55642dcaff588fb1
+sdk/typescript-fetch/.kaji/client.ts	20668	88e9cb04022b8d5d
 sdk/typescript-fetch/README.md	432	80e5d9abd0e0620f
 sdk/typescript-fetch/STYLE_GUIDE.md	528	005a5f7f1c32fe10
 sdk/typescript-fetch/client.ts	507	0d4162a3114c53d0

@@ -14,13 +14,15 @@ use kaji::ts::artifacts::{
     TypeScriptReactQuery, TypeScriptSwr, TypeScriptVueQuery, TypeScriptZod,
 };
 use kaji::{
-    SdkClientStyle, dotnet, elixir, go, java, mock, php, prelude::*, python, rust, rust_cli, ts,
-    ts_cli,
+    SdkClientStyle, csharp, dotnet, elixir, go, java, mock, php, prelude::*, python, rust,
+    rust_cli, ts, ts_cli,
 };
 use kaji_core::{Api, GeneratedFile, GeneratedTree};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 mod mcp;
+mod registry;
 
 const HELP: &str = "Kaji — native multi-language OpenAPI SDK generator
 
@@ -34,6 +36,8 @@ Usage:
   kaji mcp generator
   kaji mock serve <openapi-file> [--port <port>]
   kaji check <openapi-file> [--format human|json]
+  kaji discover <query> [--limit <count>] [--format human|json]
+  kaji download <api-id> --output <openapi-file> [--version <version>]
   kaji languages
   kaji --version
 
@@ -55,9 +59,11 @@ Generate options (direct mode):
       --jobs <count>                  Go emission workers (default: bounded auto)
       --artifacts <directory>         Reuse compiled OpenAPI JSON artifacts
       --openapi-compiler <file>       Override bundled kaji-openapi executable
+      --include-path <pattern>        Generate only matching OpenAPI paths; repeatable
+      --exclude-path <pattern>        Omit matching OpenAPI paths; repeatable
   -h, --help                          Show help
 
-Targets: rust, rust-cli, typescript, typescript-cli, go, python, php, java, dotnet, elixir
+Targets: rust, rust-cli, typescript, typescript-cli, go, python, php, java, csharp, dotnet (legacy alias), elixir
 
 MCP commands:
   mcp                                   Serve an OpenAPI document as MCP tools over stdio
@@ -80,8 +86,17 @@ Contract commands:
       --write-baseline <file>            Record current diagnostics as a baseline
       --ignore <rule>                    Suppress a rule entirely; repeatable
 
+Registry commands:
+  discover <query>                       Search the public OpenAPI directory
+      --limit <count>                    Results to return (default: 20)
+      --format <format>                  human (default) or json for automation
+  download <api-id>                      Download its preferred OpenAPI version
+      --version <version>                Select a directory version explicitly
+      --output <openapi-file>            Destination; must not already exist
+
 Each target is written to its own subdirectory. Generated files are overwritten;
-custom starter files and unrelated files are preserved. Input must be a local file.
+custom starter files and unrelated files are preserved. Generation accepts local files,
+HTTPS URLs, or a remote input object in config. The registry commands use APIs.guru.
 The npm distribution bundles both native executables; Rust and Go are not required.
 ";
 
@@ -94,6 +109,7 @@ const LANGUAGES: &[&str] = &[
     "python",
     "php",
     "java",
+    "csharp",
     "dotnet",
     "elixir",
 ];
@@ -108,7 +124,7 @@ const SDK_LANGUAGES: &[&str] = &[
     "python",
     "php",
     "java",
-    "dotnet",
+    "csharp",
     "elixir",
 ];
 
@@ -127,6 +143,9 @@ struct Generate {
     typescript_transport: Option<TypeScriptTransport>,
     client_name: Option<String>,
     compiler: Option<PathBuf>,
+    path_selection: PathSelection,
+    config_sha256: Option<String>,
+    source_sha256: Option<String>,
     jobs: usize,
     color: ColorChoice,
 }
@@ -318,6 +337,90 @@ fn configured_plugin_count(options: &Generate) -> usize {
 }
 
 const MAX_OPENAPI_DOWNLOAD_BYTES: u64 = 128 * 1024 * 1024;
+const MAX_API_DIRECTORY_BYTES: u64 = 16 * 1024 * 1024;
+
+fn load_api_directory() -> Result<registry::Directory> {
+    let client = reqwest::blocking::Client::builder()
+        .user_agent(concat!("kaji/", env!("CARGO_PKG_VERSION")))
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .context("configure API directory client")?;
+    let response = client
+        .get(registry::DIRECTORY_URL)
+        .send()
+        .context("download API directory")?
+        .error_for_status()
+        .context("download API directory")?;
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_API_DIRECTORY_BYTES)
+    {
+        bail!(
+            "API directory is larger than the {} MiB download limit",
+            MAX_API_DIRECTORY_BYTES / 1024 / 1024
+        )
+    }
+    let mut document = Vec::new();
+    response
+        .take(MAX_API_DIRECTORY_BYTES + 1)
+        .read_to_end(&mut document)
+        .context("read API directory")?;
+    if document.len() as u64 > MAX_API_DIRECTORY_BYTES {
+        bail!(
+            "API directory is larger than the {} MiB download limit",
+            MAX_API_DIRECTORY_BYTES / 1024 / 1024
+        )
+    }
+    let document = std::str::from_utf8(&document).context("API directory is not UTF-8")?;
+    registry::Directory::parse(document)
+}
+
+fn discover(options: Discover) -> Result<()> {
+    let directory = load_api_directory()?;
+    let apis = directory.search(&options.query, options.limit);
+    match options.format {
+        DiscoverFormat::Json => println!("{}", serde_json::to_string_pretty(&apis)?),
+        DiscoverFormat::Human => {
+            if apis.is_empty() {
+                println!("No OpenAPI directory entries matched {:?}.", options.query);
+                return Ok(());
+            }
+            for api in apis {
+                println!("{}  {}  {}", api.id, api.version, api.title);
+                if let Some(description) = api.description {
+                    println!("  {description}");
+                }
+                println!("  {}", api.openapi_url);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn download(options: Download) -> Result<()> {
+    if options.output.exists() {
+        bail!(
+            "refusing to overwrite existing file {}; choose a new --output path",
+            options.output.display()
+        )
+    }
+    let directory = load_api_directory()?;
+    let api = directory.resolve(&options.id, options.version.as_deref())?;
+    registry::validate_download(&api)?;
+    let source = RemoteInput {
+        url: api.openapi_url.clone(),
+        headers: BTreeMap::new(),
+        auth: None,
+    };
+    download_openapi(&source, &options.output)?;
+    println!(
+        "Downloaded {} version {} to {}",
+        api.id,
+        api.version,
+        options.output.display()
+    );
+    Ok(())
+}
 
 fn remote_spec_url(source: &Path) -> Option<&str> {
     let source = source.to_str()?;
@@ -487,6 +590,20 @@ struct OpenApiConfig {
     #[serde(default = "default_sdk_version")]
     version: String,
     compiler: Option<PathBuf>,
+    #[serde(default)]
+    paths: PathSelection,
+}
+
+/// Path filters intentionally use the same small glob language as Kaji's
+/// operation filters: `*` matches any sequence (including `/`) and `?` one
+/// Unicode scalar. Includes form an OR-set; an exclusion always wins.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct PathSelection {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    include: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    exclude: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -603,12 +720,34 @@ enum Action {
     Help,
     Version,
     Languages,
+    Discover(Discover),
+    Download(Download),
     Init(Init),
     Mcp(Mcp),
     McpGenerator,
     MockServe(MockServe),
     Check(Check),
     Generate(Box<Generate>),
+}
+
+#[derive(Debug)]
+struct Discover {
+    query: String,
+    limit: usize,
+    format: DiscoverFormat,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DiscoverFormat {
+    Human,
+    Json,
+}
+
+#[derive(Debug)]
+struct Download {
+    id: String,
+    version: Option<String>,
+    output: PathBuf,
 }
 
 fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Action> {
@@ -634,6 +773,12 @@ fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Action> {
     if command == "check" {
         return parse_check(args);
     }
+    if command == "discover" {
+        return parse_discover(args);
+    }
+    if command == "download" {
+        return parse_download(args);
+    }
     if command == "languages" {
         if args.next().is_some() {
             bail!("languages does not accept arguments")
@@ -657,6 +802,9 @@ fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Action> {
         typescript_transport: None,
         client_name: None,
         compiler: None,
+        path_selection: PathSelection::default(),
+        config_sha256: None,
+        source_sha256: None,
         jobs: 0,
         color: ColorChoice::Auto,
     };
@@ -691,6 +839,8 @@ fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Action> {
                 | "--jobs"
                 | "--artifacts"
                 | "--openapi-compiler"
+                | "--include-path"
+                | "--exclude-path"
                 | "--config"
                 | "--color"
         ) {
@@ -735,6 +885,8 @@ fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Action> {
                         options.typescript_transport = Some(TypeScriptTransport::parse(&value)?);
                     }
                     "--typescript-client-name" => options.client_name = Some(value),
+                    "--include-path" => options.path_selection.include.push(value),
+                    "--exclude-path" => options.path_selection.exclude.push(value),
                     "--color" => options.color = ColorChoice::parse(&value)?,
                     "--jobs" => {
                         options.jobs =
@@ -770,6 +922,8 @@ fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Action> {
         || options.typescript_transport.is_some()
         || options.client_name.is_some()
         || options.compiler.is_some()
+        || !options.path_selection.include.is_empty()
+        || !options.path_selection.exclude.is_empty()
         || options.jobs != 0;
     if options.config.is_some() || !direct_mode {
         if direct_mode {
@@ -792,6 +946,7 @@ fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Action> {
     if options.artifacts.is_some() && options.compiler.is_some() {
         bail!("--openapi-compiler cannot be used with --artifacts")
     }
+    validate_path_selection(&options.path_selection)?;
     if (options.raw || options.typescript_transport.is_some() || options.client_name.is_some())
         && !options
             .languages
@@ -801,6 +956,110 @@ fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Action> {
         bail!("TypeScript options require a TypeScript target")
     }
     Ok(Action::Generate(Box::new(options)))
+}
+
+fn parse_discover(args: impl IntoIterator<Item = OsString>) -> Result<Action> {
+    let mut query = None;
+    let mut limit = 20;
+    let mut format = DiscoverFormat::Human;
+    let mut args = args.into_iter();
+    while let Some(argument) = args.next() {
+        let flag = argument.to_string_lossy();
+        match flag.as_ref() {
+            "--help" | "-h" => return Ok(Action::Help),
+            "--limit" => {
+                let value = args.next().context("--limit requires a positive integer")?;
+                limit = value
+                    .to_string_lossy()
+                    .parse()
+                    .context("--limit requires a positive integer")?;
+                if limit == 0 {
+                    bail!("--limit requires a positive integer")
+                }
+            }
+            "--format" => {
+                format = match args
+                    .next()
+                    .context("--format requires human or json")?
+                    .to_string_lossy()
+                    .as_ref()
+                {
+                    "human" => DiscoverFormat::Human,
+                    "json" => DiscoverFormat::Json,
+                    value => bail!("--format must be human or json, got {value:?}"),
+                }
+            }
+            value if value.starts_with('-') => bail!("unknown option {value}; run kaji --help"),
+            _ => {
+                if query
+                    .replace(
+                        argument
+                            .into_string()
+                            .map_err(|_| anyhow::anyhow!("discover query must be UTF-8 text"))?,
+                    )
+                    .is_some()
+                {
+                    bail!("discover accepts exactly one query")
+                }
+            }
+        }
+    }
+    let query = query.context("discover requires a query")?;
+    if query.trim().is_empty() {
+        bail!("discover query cannot be empty")
+    }
+    Ok(Action::Discover(Discover {
+        query,
+        limit,
+        format,
+    }))
+}
+
+fn parse_download(args: impl IntoIterator<Item = OsString>) -> Result<Action> {
+    let mut id = None;
+    let mut version = None;
+    let mut output = None;
+    let mut args = args.into_iter();
+    while let Some(argument) = args.next() {
+        let flag = argument.to_string_lossy();
+        match flag.as_ref() {
+            "--help" | "-h" => return Ok(Action::Help),
+            "--version" => {
+                version = Some(
+                    args.next()
+                        .context("--version requires a value")?
+                        .into_string()
+                        .map_err(|_| anyhow::anyhow!("--version requires UTF-8 text"))?,
+                );
+            }
+            "--output" | "-o" => {
+                output = Some(args.next().context("--output requires a file path")?.into());
+            }
+            value if value.starts_with('-') => bail!("unknown option {value}; run kaji --help"),
+            _ => {
+                if id
+                    .replace(
+                        argument
+                            .into_string()
+                            .map_err(|_| anyhow::anyhow!("API id must be UTF-8 text"))?,
+                    )
+                    .is_some()
+                {
+                    bail!("download accepts exactly one API id")
+                }
+            }
+        }
+    }
+    let id = id.context("download requires an API id")?;
+    if id.trim().is_empty() {
+        bail!("API id cannot be empty")
+    }
+    let output = output.context("download requires --output <openapi-file>")?;
+    Ok(Action::Download(Download {
+        id,
+        version,
+        output,
+    }))
 }
 
 fn parse_check(args: impl IntoIterator<Item = OsString>) -> Result<Action> {
@@ -1088,6 +1347,9 @@ fn profiles(options: &Generate) -> Result<ProfileSet> {
             "python" => profiles.package(python::package("python").with(python::sdk())),
             "php" => profiles.package(php::package("php").with(php::sdk())),
             "java" => profiles.package(java::package("java").with(java::sdk())),
+            "csharp" => profiles.package(csharp::package("csharp").with(csharp::sdk())),
+            // Keep the established selector for existing scripts. New
+            // configuration and direct commands should use `csharp`.
             "dotnet" => profiles.package(dotnet::package("dotnet").with(dotnet::sdk())),
             "elixir" => profiles.package(elixir::package("elixir").with(elixir::sdk())),
             "typescript" => {
@@ -1370,15 +1632,15 @@ fn config_profiles(
                 };
                 profiles.package(package_builder.with(java::sdk()))
             }
-            "dotnet" => {
+            "csharp" | "dotnet" => {
                 has_only_known_plugins(package, &["sdk"])?;
-                let package_builder = dotnet::package(&package.path).common(package_common(style));
+                let package_builder = csharp::package(&package.path).common(package_common(style));
                 let package_builder = if let Some(name) = &package.name {
                     package_builder.name(name)
                 } else {
                     package_builder
                 };
-                profiles.package(package_builder.with(dotnet::sdk()))
+                profiles.package(package_builder.with(csharp::sdk()))
             }
             "elixir" => {
                 has_only_known_plugins(package, &["sdk"])?;
@@ -1425,7 +1687,7 @@ fn config_profiles(
                 profiles.package(ts::package(&package.path).common(package_common(style)))
             }
             other => bail!(
-                "unknown config language {other:?}; use typescript, typescript-cli, rust, rust-cli, go, python, php, java, dotnet, elixir, mock, or artifacts"
+                "unknown config language {other:?}; use typescript, typescript-cli, rust, rust-cli, go, python, php, java, csharp, dotnet (legacy alias), elixir, mock, or artifacts"
             ),
         };
     }
@@ -1464,6 +1726,7 @@ fn generate_from_config(path: &Path, color: ColorChoice) -> Result<()> {
     if has_input == has_artifacts {
         bail!("openapi must set exactly one of input or artifacts");
     }
+    validate_path_selection(&config.openapi.paths)?;
     let style = parse_style(config.defaults.client_style.as_deref())?;
     let options = Generate {
         source: config
@@ -1488,6 +1751,9 @@ fn generate_from_config(path: &Path, color: ColorChoice) -> Result<()> {
             .openapi
             .compiler
             .map(|compiler| config_path(base, compiler)),
+        path_selection: config.openapi.paths,
+        config_sha256: Some(sha256(source.as_bytes())),
+        source_sha256: None,
         jobs: 0,
         color,
     };
@@ -1705,7 +1971,7 @@ fn add_typescript_artifact_dependencies(
     Ok(())
 }
 
-fn generate(options: Generate) -> Result<()> {
+fn generate(mut options: Generate) -> Result<()> {
     if let Some(config) = &options.config {
         return generate_from_config(config, options.color);
     }
@@ -1731,6 +1997,7 @@ fn generate(options: Generate) -> Result<()> {
             let started = Instant::now();
             download_openapi(&remote, &downloaded)?;
             reporter.phase("Download", started.elapsed());
+            options.source_sha256 = Some(sha256_file(&downloaded)?);
             downloaded
         } else {
             let OpenApiInput::Path(source) = source else {
@@ -1741,6 +2008,7 @@ fn generate(options: Generate) -> Result<()> {
             if !source.is_file() {
                 bail!("OpenAPI source must be a file")
             }
+            options.source_sha256 = Some(sha256_file(&source)?);
             source
         };
         let helper = compiler_path(options.compiler.clone())?;
@@ -1768,6 +2036,7 @@ fn write_sdk(artifacts: &Path, options: &Generate, reporter: &Reporter) -> Resul
         options.name.clone(),
         options.version.clone(),
     )?;
+    let api = slice_api_paths(api, &options.path_selection)?;
     let security_schemes = kaji_core::adapter::openapi_sidecar::load_security_schemes(artifacts)?;
     let mut tree =
         kaji::generate_with_security_catalog(&api, profiles(options)?, Some(&security_schemes))?;
@@ -1778,13 +2047,232 @@ fn write_sdk(artifacts: &Path, options: &Generate, reporter: &Reporter) -> Resul
     reporter.generated(options, started.elapsed());
     let started = Instant::now();
     tree.write_to(&options.output)?;
+    write_generation_lock(&options.output, artifacts, options, &api)?;
     reporter.phase("Writing files", started.elapsed());
     reporter.completed(
         configured_plugin_count(options),
-        tree.iter().count(),
+        tree.iter().count() + 1,
         &options.output,
     );
     Ok(())
+}
+
+const GENERATION_LOCK_VERSION: u8 = 1;
+const GENERATION_LOCK_PATH: &str = ".kaji/generation.lock.json";
+
+/// A deliberately small, secret-free account of exactly what Kaji rendered.
+/// It is an output artifact rather than an input lock: regenerate it whenever
+/// the contract or selected generator settings change, then review it in the
+/// same change as generated code.
+#[derive(Debug, Serialize)]
+struct GenerationLock {
+    version: u8,
+    generator: GeneratorLock,
+    input: GenerationInputLock,
+    api: GeneratedApiLock,
+    paths: PathSelection,
+    targets: Vec<String>,
+    settings: GenerationSettingsLock,
+}
+
+#[derive(Debug, Serialize)]
+struct GeneratorLock {
+    name: &'static str,
+    version: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+struct GenerationInputLock {
+    kind: &'static str,
+    locator: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source_sha256: Option<String>,
+    artifacts_sha256: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    config_sha256: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct GeneratedApiLock {
+    name: String,
+    version: String,
+    operations: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct GenerationSettingsLock {
+    client_style: &'static str,
+    typescript_transport: Option<&'static str>,
+    typescript_surface: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    typescript_client_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    go_jobs: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    compiler: Option<String>,
+}
+
+fn write_generation_lock(
+    output: &Path,
+    artifacts: &Path,
+    options: &Generate,
+    api: &Api,
+) -> Result<()> {
+    let (kind, locator, source_sha256) = match (&options.artifacts, &options.source) {
+        (Some(path), _) => ("artifacts", path.to_string_lossy().into_owned(), None),
+        (None, Some(OpenApiInput::Path(path))) if remote_spec_url(path).is_none() => (
+            "openapi",
+            path.to_string_lossy().into_owned(),
+            options.source_sha256.clone().or(Some(sha256_file(path)?)),
+        ),
+        (None, Some(OpenApiInput::Path(path))) => (
+            "openapi",
+            path.to_string_lossy().into_owned(),
+            options.source_sha256.clone(),
+        ),
+        (None, Some(OpenApiInput::Remote(remote))) => {
+            ("openapi", remote.url.clone(), options.source_sha256.clone())
+        }
+        (None, None) => bail!("generation input is missing"),
+    };
+    let lock = GenerationLock {
+        version: GENERATION_LOCK_VERSION,
+        generator: GeneratorLock {
+            name: "kaji",
+            version: env!("CARGO_PKG_VERSION"),
+        },
+        input: GenerationInputLock {
+            kind,
+            locator,
+            source_sha256,
+            artifacts_sha256: sha256_directory(artifacts)?,
+            config_sha256: options.config_sha256.clone(),
+        },
+        api: GeneratedApiLock {
+            name: api.name.clone(),
+            version: api.version.clone(),
+            operations: api
+                .operations
+                .iter()
+                .map(|operation| format!("{} {}", operation.method.as_str(), operation.path))
+                .collect(),
+        },
+        paths: options.path_selection.clone(),
+        targets: configured_labels(options),
+        settings: GenerationSettingsLock {
+            client_style: match options.style {
+                SdkClientStyle::Namespaced => "namespaced",
+                SdkClientStyle::Flat => "flat",
+            },
+            typescript_transport: options
+                .typescript_transport
+                .map(|transport| match transport {
+                    TypeScriptTransport::Fetch => "fetch",
+                    TypeScriptTransport::Axios => "axios",
+                }),
+            typescript_surface: if options.raw { "raw" } else { "client" },
+            typescript_client_name: options.client_name.clone(),
+            go_jobs: (options.jobs != 0).then_some(options.jobs),
+            compiler: options
+                .compiler
+                .as_ref()
+                .map(|compiler| compiler.to_string_lossy().into_owned()),
+        },
+    };
+    let destination = output.join(GENERATION_LOCK_PATH);
+    if let Some(parent) = destination.parent() {
+        std::fs::create_dir_all(parent).with_context(|| {
+            format!("create generation metadata directory {}", parent.display())
+        })?;
+    }
+    std::fs::write(
+        &destination,
+        format!("{}\n", serde_json::to_string_pretty(&lock)?),
+    )
+    .with_context(|| format!("write generation metadata {}", destination.display()))
+}
+
+fn sha256_file(path: &Path) -> Result<String> {
+    let bytes = std::fs::read(path).with_context(|| format!("read {}", path.display()))?;
+    Ok(sha256(&bytes))
+}
+
+fn sha256_directory(path: &Path) -> Result<String> {
+    fn visit(root: &Path, directory: &Path, hasher: &mut Sha256) -> Result<()> {
+        let mut entries = std::fs::read_dir(directory)
+            .with_context(|| format!("read compiler artifacts {}", directory.display()))?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .with_context(|| format!("read compiler artifacts {}", directory.display()))?;
+        entries.sort_by_key(|entry| entry.file_name());
+        for entry in entries {
+            let path = entry.path();
+            let file_type = entry
+                .file_type()
+                .with_context(|| format!("inspect compiler artifact {}", path.display()))?;
+            if file_type.is_dir() {
+                visit(root, &path, hasher)?;
+            } else if file_type.is_file() {
+                let relative = path
+                    .strip_prefix(root)
+                    .expect("artifact child remains below artifact root");
+                hasher.update(relative.to_string_lossy().as_bytes());
+                hasher.update([0]);
+                hasher.update(
+                    std::fs::read(&path)
+                        .with_context(|| format!("read compiler artifact {}", path.display()))?,
+                );
+                hasher.update([0]);
+            }
+        }
+        Ok(())
+    }
+
+    let mut hasher = Sha256::new();
+    visit(path, path, &mut hasher)?;
+    Ok(hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect())
+}
+
+fn sha256(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn validate_path_selection(selection: &PathSelection) -> Result<()> {
+    for (kind, patterns) in [
+        ("include path", &selection.include),
+        ("exclude path", &selection.exclude),
+    ] {
+        for pattern in patterns {
+            if pattern.trim().is_empty() || !pattern.starts_with('/') {
+                bail!("{kind} pattern must start with '/' and cannot be empty, got {pattern:?}");
+            }
+        }
+    }
+    Ok(())
+}
+
+fn slice_api_paths(mut api: Api, selection: &PathSelection) -> Result<Api> {
+    validate_path_selection(selection)?;
+    api.operations.retain(|operation| {
+        let included = selection.include.is_empty()
+            || selection
+                .include
+                .iter()
+                .any(|pattern| kaji_core::wildcard_matches(pattern, &operation.path));
+        included
+            && !selection
+                .exclude
+                .iter()
+                .any(|pattern| kaji_core::wildcard_matches(pattern, &operation.path))
+    });
+    if api.operations.is_empty() {
+        bail!("path selection matched no OpenAPI operations; adjust paths.include or paths.exclude")
+    }
+    Ok(api)
 }
 
 #[derive(Debug, Deserialize)]
@@ -2613,6 +3101,8 @@ fn main() -> ExitCode {
             println!("{}", LANGUAGES.join("\n"));
             Ok(())
         }
+        Action::Discover(options) => discover(options),
+        Action::Download(options) => download(options),
         Action::Init(init) => init_config(init),
         Action::Mcp(options) => serve_mcp(options),
         Action::McpGenerator => mcp::serve_generator(),
@@ -2649,6 +3139,28 @@ mod tests {
     }
 
     #[test]
+    fn accepts_csharp_and_the_legacy_dotnet_selector() {
+        let Action::Generate(options) =
+            parse(arguments("generate api.yaml -o sdk -l csharp,dotnet")).unwrap()
+        else {
+            panic!()
+        };
+        assert_eq!(options.languages, ["csharp", "dotnet"]);
+    }
+
+    #[test]
+    fn parses_repeatable_direct_path_selectors() {
+        let Action::Generate(options) = parse(arguments(
+            "generate --artifacts cache -o sdk -l go --include-path /messages* --include-path /admin* --exclude-path /admin/audit*",
+        ))
+        .unwrap() else {
+            panic!()
+        };
+        assert_eq!(options.path_selection.include, ["/messages*", "/admin*"]);
+        assert_eq!(options.path_selection.exclude, ["/admin/audit*"]);
+    }
+
+    #[test]
     fn validates_flags_sources_and_language_specific_options() {
         for invalid in [
             "generate api.yaml -o sdk",
@@ -2679,6 +3191,69 @@ mod tests {
         };
         assert_eq!(options.languages.len(), SDK_LANGUAGES.len());
         assert_eq!(options.artifacts, Some(PathBuf::from("cache")));
+    }
+
+    #[test]
+    fn path_selectors_are_validated_and_exclusions_win() {
+        let selection = PathSelection {
+            include: vec!["/messages*".into(), "/admin/users*".into()],
+            exclude: vec!["/admin/users/audit*".into()],
+        };
+        let api = Api {
+            name: "Example".into(),
+            version: "1".into(),
+            operations: vec![
+                Operation {
+                    path: "/messages/send".into(),
+                    ..Default::default()
+                },
+                Operation {
+                    path: "/admin/users".into(),
+                    ..Default::default()
+                },
+                Operation {
+                    path: "/admin/users/audit-log".into(),
+                    ..Default::default()
+                },
+                Operation {
+                    path: "/health".into(),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        let sliced = slice_api_paths(api, &selection).unwrap();
+        assert_eq!(
+            sliced
+                .operations
+                .iter()
+                .map(|operation| operation.path.as_str())
+                .collect::<Vec<_>>(),
+            ["/messages/send", "/admin/users"]
+        );
+        assert!(
+            validate_path_selection(&PathSelection {
+                include: vec!["messages".into()],
+                ..Default::default()
+            })
+            .is_err()
+        );
+        assert!(
+            slice_api_paths(
+                Api {
+                    operations: vec![Operation {
+                        path: "/health".into(),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                },
+                &PathSelection {
+                    include: vec!["/messages*".into()],
+                    ..Default::default()
+                }
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -2726,6 +3301,30 @@ mod tests {
         assert_eq!(options.compiler, Some(PathBuf::from("compiler")));
         assert!(parse(arguments("check one.yaml two.yaml")).is_err());
         assert!(parse(arguments("check openapi.yaml --wat")).is_err());
+    }
+
+    #[test]
+    fn parses_openapi_directory_commands() {
+        let Action::Discover(options) =
+            parse(arguments("discover github --limit 5 --format json")).unwrap()
+        else {
+            panic!()
+        };
+        assert_eq!(options.query, "github");
+        assert_eq!(options.limit, 5);
+        assert_eq!(options.format, DiscoverFormat::Json);
+        assert!(parse(arguments("discover --limit 0 github")).is_err());
+
+        let Action::Download(options) = parse(arguments(
+            "download github.com --version 1.1.4 --output contract.yaml",
+        ))
+        .unwrap() else {
+            panic!()
+        };
+        assert_eq!(options.id, "github.com");
+        assert_eq!(options.version.as_deref(), Some("1.1.4"));
+        assert_eq!(options.output, PathBuf::from("contract.yaml"));
+        assert!(parse(arguments("download github.com")).is_err());
     }
 
     #[test]

@@ -60,12 +60,28 @@ npx @relevate/kaji --help
 | `--jobs` | Positive Go emission worker count; currently affects Go only | Bounded automatic selection |
 | `--artifacts` | Already compiled Kaji OpenAPI artifact directory, instead of source | Unset |
 | `--openapi-compiler` | Explicit Go compiler executable for source input | Bundled sibling executable |
+| `--include-path` | Repeatable OpenAPI path glob to include | Every path |
+| `--exclude-path` | Repeatable OpenAPI path glob to omit after inclusion | None |
 
 Targets: `rust`, `rust-cli`, `typescript`, `typescript-cli`, `go`, `python`, `php`,
-`java`, `dotnet`, `elixir`. Each becomes a matching subdirectory, including when
+`java`, `csharp`, `elixir`. Each becomes a matching subdirectory, including when
 only one target is selected. Advanced/custom plugin composition remains available
 through the [Rust API](typed-plugins.md). The CLI does not load JavaScript
 plugins; JSON names only select plugins built into the installed Kaji binary.
+
+`csharp` emits a .NET 8 C# SDK. `dotnet` is a backwards-compatible selector
+for existing commands and recipes.
+
+Path globs must start with `/`; `*` matches any sequence (including `/`) and
+`?` one character. Includes are ORed and excludes take precedence. The same
+selection is available as `openapi.paths.include` / `openapi.paths.exclude` in
+`kaji.json`. A selection with no remaining operations fails before output is
+written.
+
+Every successful generation emits `.kaji/generation.lock.json` below the
+output root. Commit it with generated files: it records Kaji's version,
+secret-free input/config/artifact hashes, selected paths, targets, and
+operations so a regeneration is reviewable and repeatable.
 
 ### JSON recipes and built-in plugins
 
@@ -107,7 +123,7 @@ TypeScript multi-client examples are in the [`kaji.json` reference](config-file.
 | Package `language` | Built-in plugin names | Relevant plugin options |
 | --- | --- | --- |
 | `typescript` | `sdk`, `zod`, `tanstack-react-query`, `tanstack-vue-query`, `swr`, `faker`, `msw`, `cypress` | SDK: `transport` (`fetch`/`axios`), `surface` (`client`/`raw`), `client_name`, `group_by_tag`, `throw_on_error`. Artifacts: `output`, `clients_import`, `group_by_tag`. |
-| `rust`, `go`, `python`, `php`, `java`, `dotnet`, `elixir` | `sdk` | Go SDK: `jobs`. |
+| `rust`, `go`, `python`, `php`, `java`, `csharp`, `elixir` | `sdk` | Go SDK: `jobs`. |
 | `mock` | `server` | `image`, `port`. |
 | `artifacts` | `redoc`, `mcp` | `output`; ReDoc also accepts `openapi_spec`, `title`. |
 

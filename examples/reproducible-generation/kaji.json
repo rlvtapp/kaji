@@ -1,0 +1,17 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/v1/kaji.schema.json",
+  "openapi": {
+    "input": "./openapi.yaml",
+    "name": "Mail",
+    "version": "1.0.0",
+    "paths": {
+      "include": ["/messages*", "/admin*"],
+      "exclude": ["/admin/audit*"]
+    }
+  },
+  "output": { "path": "./generated" },
+  "packages": [
+    { "language": "typescript", "path": "typescript", "plugins": [{ "name": "sdk", "transport": "fetch" }] },
+    { "language": "csharp", "path": "csharp", "plugins": [{ "name": "sdk" }] }
+  ]
+}

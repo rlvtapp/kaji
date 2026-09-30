@@ -9,6 +9,11 @@ pub mod mock;
 pub use kaji_core::SdkClientStyle;
 pub use kaji_core::engine::{Common, Enforce, Package, PluginPhase};
 pub use kaji_plugin_dotnet as dotnet;
+/// First-party C# SDK generator.
+///
+/// This is the preferred name for the .NET/C# target. [`dotnet`] remains an
+/// alias so existing embedded generation profiles continue to compile.
+pub use kaji_plugin_dotnet as csharp;
 pub use kaji_plugin_elixir as elixir;
 pub use kaji_plugin_go as go;
 pub use kaji_plugin_java as java;

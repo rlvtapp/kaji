@@ -24,7 +24,7 @@ Import `kaji::prelude::*` to bring the package extension traits into scope.
 ## Complete release
 
 ```rust
-use kaji::{dotnet, elixir, go, java, mock, php, prelude::*, python, rust, ts};
+use kaji::{csharp, elixir, go, java, mock, php, prelude::*, python, rust, ts};
 
 let release = ProfileSet::new("sdk")
     .common(Common::default()
@@ -41,7 +41,7 @@ let release = ProfileSet::new("sdk")
     .package(python::package("python").with(python::sdk().flat()))
     .package(php::package("php").with(php::sdk()))
     .package(java::package("java").with(java::sdk()))
-    .package(dotnet::package("dotnet").with(dotnet::sdk()))
+    .package(csharp::package("csharp").with(csharp::sdk()))
     .package(elixir::package("elixir").with(elixir::sdk()))
     .package(mock::package("mock-server")
         .with(mock::server().image("httpmock/httpmock:0.8.0").port(4010)));
@@ -106,7 +106,7 @@ style selection wins. All default to namespaced.
 | `python` | Standard library | None beyond client style. |
 | `php` | PSR-18 / PSR-7 | None beyond client style. |
 | `java` | JDK HttpClient / Jackson | None beyond client style. |
-| `dotnet` | HttpClient / System.Text.Json | None beyond client style. |
+| `csharp` | .NET 8 `HttpClient` / `System.Text.Json` | None beyond client style. `dotnet` remains a compatibility alias. |
 | `elixir` | Finch / Jason | None beyond client style. |
 
 Package naming is configured on `language::package(...).name(...)`, not on

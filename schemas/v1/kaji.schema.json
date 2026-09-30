@@ -102,12 +102,30 @@
         "artifacts": { "type": "string", "minLength": 1, "description": "Existing Kaji compiler artifact directory." },
         "name": { "type": "string", "default": "API" },
         "version": { "type": "string", "default": "0.1.0" },
-        "compiler": { "type": "string", "description": "Optional replacement kaji-openapi executable." }
+        "compiler": { "type": "string", "description": "Optional replacement kaji-openapi executable." },
+        "paths": { "$ref": "#/$defs/pathSelection" }
       },
       "oneOf": [
         { "required": ["input"], "not": { "required": ["artifacts"] } },
         { "required": ["artifacts"], "not": { "required": ["input"] } }
       ]
+    },
+    "pathSelection": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Select a focused API surface before every package is generated. Include patterns are ORed; excludes always win. Patterns use * for any sequence, including /, and ? for one character.",
+      "properties": {
+        "include": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^/" },
+          "description": "Only generate operations whose OpenAPI path matches one of these patterns. Empty means every path."
+        },
+        "exclude": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^/" },
+          "description": "Never generate operations whose OpenAPI path matches one of these patterns."
+        }
+      }
     },
     "package": {
       "type": "object",
@@ -116,7 +134,7 @@
       "properties": {
         "language": {
           "type": "string",
-          "enum": ["typescript", "typescript-cli", "rust", "rust-cli", "go", "python", "php", "java", "dotnet", "elixir", "mock", "artifacts"]
+          "enum": ["typescript", "typescript-cli", "rust", "rust-cli", "go", "python", "php", "java", "csharp", "dotnet", "elixir", "mock", "artifacts"]
         },
         "path": { "type": "string", "minLength": 1, "description": "Safe path below output.path." },
         "name": { "type": "string", "minLength": 1, "description": "Generated package identity." },

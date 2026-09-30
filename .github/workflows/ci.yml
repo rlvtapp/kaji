@@ -26,6 +26,9 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '8.0.x'
       - name: Test CI integration templates
         run: node --test packages/github-action/test/*.test.cjs packages/gitlab-ci/test/*.test.cjs
       - name: Test Python CLI launcher
@@ -40,3 +43,5 @@ jobs:
         run: cargo test -p kaji --test sdk_to_mock_contract -- --ignored
       - name: Compile generated Rust SDK warning-free
         run: cargo test -p kaji-plugin-rust generated_retry_runtime_compiles_warning_free -- --ignored
+      - name: Compile generated C# SDK
+        run: cargo test -p kaji-plugin-dotnet generated_csharp_project_builds_with_dotnet -- --ignored
