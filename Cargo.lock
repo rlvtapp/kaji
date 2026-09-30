@@ -484,7 +484,9 @@ dependencies = [
  "kaji-plugin-php",
  "kaji-plugin-python",
  "kaji-plugin-rust",
+ "kaji-plugin-rust-cli",
  "kaji-plugin-typescript",
+ "kaji-plugin-typescript-cli",
  "serde",
  "serde_json",
  "tempfile",
@@ -582,7 +584,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "kaji-plugin-rust-cli"
+version = "0.2.1"
+dependencies = [
+ "anyhow",
+ "kaji-core",
+ "serde_json",
+]
+
+[[package]]
 name = "kaji-plugin-typescript"
+version = "0.2.1"
+dependencies = [
+ "anyhow",
+ "kaji-core",
+ "serde_json",
+]
+
+[[package]]
+name = "kaji-plugin-typescript-cli"
 version = "0.2.1"
 dependencies = [
  "anyhow",

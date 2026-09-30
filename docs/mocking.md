@@ -8,6 +8,31 @@ to SDK outputs. Its happy-path fixtures are derived from declared OpenAPI
 responses and schema examples. This is one service every generated SDK can
 use: set its normal base URL to `http://localhost:5000` during a test.
 
+## Native mock inspector (no Docker)
+
+For local development, Kaji can run the contract directly:
+
+```sh
+kaji mock serve openapi.yaml --port 4010
+```
+
+The mock API is available at `http://127.0.0.1:4010`. Its machine-readable
+request log is available at `http://127.0.0.1:4010/_kaji/requests`, with the
+matched operation ID, status code, and request body for each call. This keeps
+diagnosis useful for people and agents without shipping a separate dashboard.
+
+Unless an `x-kaji-mock` scenario matches, unconstrained schema fields vary for
+every request: strings, IDs, emails, numbers, dates, arrays, and objects are
+generated from the response schema. Explicit examples, defaults, constants,
+and enum values remain stable. This gives local apps realistic changing data
+while retaining contract-owned values where the API specifies them.
+
+The native server also evaluates declared `x-kaji-mock` scenarios. The first
+matching scenario in OpenAPI order wins and returns its exact status, headers,
+body, and optional delay; its name is recorded in `/_kaji/requests`. This gives
+local development and Docker fixtures the same conditional contract cases,
+while only the native server generates a fresh fallback body.
+
 ## Generate and run
 
 ```rust
@@ -60,9 +85,10 @@ x-kaji-mock:
 ```
 
 Scenarios validate request headers, query values, path parameters, or an exact
-JSON body. Responses can set a status, headers, body, and bounded delay. The
-fixture generator places specific scenarios before the default route, so the
-fallback cannot swallow them.
+JSON body. Responses can set a status, headers, body, and bounded delay. Both
+the native server and fixture generator put scenarios ahead of the default
+route, so the fallback cannot swallow them. The native server compares headers
+case-insensitively and decodes query/path values before comparison.
 
 ## Full `x-kaji-mock` reference
 
@@ -134,8 +160,8 @@ Kaji also accepts `x-speakeasy-pagination` for existing specifications. Use
 
 ## Scope
 
-This is a static HTTP contract mock: request method/path plus explicit
-scenarios in, deterministic response out. It is not a stateful database,
-authentication emulator, or arbitrary code runtime. Keep durable HTTP
-contract cases in the OpenAPI document; use a dedicated test service for
-stateful product behavior.
+This is an HTTP contract mock: request method/path plus explicit scenarios in,
+then either a deterministic scenario response or a schema-shaped dynamic
+fallback. It is not a stateful database, authentication emulator, or arbitrary
+code runtime. Keep durable HTTP contract cases in the OpenAPI document; use a
+dedicated test service for stateful product behavior.

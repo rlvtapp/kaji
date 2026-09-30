@@ -27,7 +27,7 @@ pub use httpmock::{HttpmockFixtureConfig, generate_httpmock_fixtures};
 pub use manifest::{GeneratedManifest, MANIFEST_VERSION, ManifestEntry};
 pub use mocking::{
     MockRequestMatch, MockResponse, MockScenario, extract_mock_scenarios,
-    extract_operation_mock_scenarios,
+    extract_operation_mock_scenarios, mock_scenario_matches,
 };
 pub use semantics::{
     AuthAlternative, AuthScheme, DeclaredError, OperationSemantics, PaginationHint,

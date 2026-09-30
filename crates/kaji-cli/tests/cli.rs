@@ -286,3 +286,17 @@ fn published_config_schema_is_valid_json_schema_document() {
     assert!(schema["properties"]["packages"].is_object());
     assert!(schema["$defs"]["plugin"].is_object());
 }
+
+#[test]
+fn published_check_baseline_schema_is_valid_json_schema_document() {
+    let schema: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../schemas/v1/check-baseline.schema.json"
+    ))
+    .unwrap();
+    assert_eq!(
+        schema["$schema"],
+        "https://json-schema.org/draft/2020-12/schema"
+    );
+    assert_eq!(schema["properties"]["version"]["const"], 1);
+    assert!(schema["properties"]["diagnostics"].is_object());
+}

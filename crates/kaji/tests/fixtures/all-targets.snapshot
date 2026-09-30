@@ -77,7 +77,7 @@ sdk/python/src/kaji_contract_api_sdk/runtime.py	14862	99575f3f8b6bca5c
 sdk/rust/Cargo.toml	315	12e12eaaf0d1492a
 sdk/rust/README.md	398	aefb52824b8c8ea1
 sdk/rust/STYLE_GUIDE.md	417	8cf61ef02d3bf18c
-sdk/rust/src/client/mod.rs	4771	0dc28db3cf5e0cf5
+sdk/rust/src/client/mod.rs	4849	b6b17b010a68e435
 sdk/rust/src/client/operations/chunk_0001.rs	3225	0b208e97232ef9b5
 sdk/rust/src/client/operations/mod.rs	83	478fe55ab7530f57
 sdk/rust/src/client/resources/contacts_1/chunk_0001.rs	589	e9204dc049887f54
@@ -87,11 +87,11 @@ sdk/rust/src/lib.rs	115	031116454d22926d
 sdk/rust/src/models/chunk_0001/contact_1.rs	221	96529b29cba5332b
 sdk/rust/src/models/chunk_0001/mod.rs	81	dca6320e284e6921
 sdk/rust/src/models/mod.rs	83	478fe55ab7530f57
-sdk/typescript-axios/.kaji/client.ts	19727	0a19df1dea17d002
+sdk/typescript-axios/.kaji/client.ts	19996	d9d914b16b3cf192
 sdk/typescript-axios/README.md	432	999bd2bcdf73dbaf
 sdk/typescript-axios/STYLE_GUIDE.md	528	005a5f7f1c32fe10
 sdk/typescript-axios/client.ts	507	0d4162a3114c53d0
-sdk/typescript-axios/clients/contacts/getContact.ts	789	257b63d1bc46a90c
+sdk/typescript-axios/clients/contacts/getContact.ts	886	d535b5dfcb19b3c2
 sdk/typescript-axios/clients/contacts/index.ts	34	e0d9cd0da85b63f2
 sdk/typescript-axios/clients/contacts/operations_0001.ts	42	51306724acd024ac
 sdk/typescript-axios/clients/index.ts	27	a3f8c25c970af72d
@@ -107,11 +107,11 @@ sdk/typescript-axios/package.json	492	9f03d89ba4a44366
 sdk/typescript-axios/resources/contacts/operations_0001.ts	366	7a34a630322dca55
 sdk/typescript-axios/resources/contacts.ts	344	42f72b65376fdb88
 sdk/typescript-axios/tsconfig.json	202	7960835b62c4965e
-sdk/typescript-fetch/.kaji/client.ts	20399	0d29d97e1cf89dff
+sdk/typescript-fetch/.kaji/client.ts	20668	55642dcaff588fb1
 sdk/typescript-fetch/README.md	432	80e5d9abd0e0620f
 sdk/typescript-fetch/STYLE_GUIDE.md	528	005a5f7f1c32fe10
 sdk/typescript-fetch/client.ts	507	0d4162a3114c53d0
-sdk/typescript-fetch/clients/contacts/getContact.ts	789	257b63d1bc46a90c
+sdk/typescript-fetch/clients/contacts/getContact.ts	886	d535b5dfcb19b3c2
 sdk/typescript-fetch/clients/contacts/index.ts	34	e0d9cd0da85b63f2
 sdk/typescript-fetch/clients/contacts/operations_0001.ts	42	51306724acd024ac
 sdk/typescript-fetch/clients/index.ts	27	a3f8c25c970af72d

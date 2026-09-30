@@ -6,6 +6,8 @@ members = [
     "crates/kaji-cli",
     "crates/plugins/rust",
     "crates/plugins/typescript",
+    "crates/plugins/typescript-cli",
+    "crates/plugins/rust-cli",
     "crates/plugins/go",
     "crates/plugins/python",
     "crates/plugins/php",

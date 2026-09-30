@@ -36,6 +36,8 @@ package a separate safe relative `path`; `name` is its ecosystem identity.
 | Package language | Plugins |
 | --- | --- |
 | `typescript` | `sdk`, `zod`, TanStack, SWR, Faker, MSW, Cypress |
+| `typescript-cli` | `cli` |
+| `rust-cli` | `cli` |
 | `rust`, `go`, `python`, `php`, `java`, `dotnet`, `elixir` | `sdk` |
 | `mock` | `server` |
 | `artifacts` | `redoc`, `mcp` |

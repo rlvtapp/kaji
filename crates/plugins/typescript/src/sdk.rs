@@ -1135,7 +1135,7 @@ type MediaResult<S, T> = T extends { contentType: infer ContentType extends stri
 export type StatusResult<T> = { [S in keyof T]: MediaResult<S, T[S]> }[keyof T]
 export type SuccessResult<T> = { [S in Extract<keyof T, `2${string}`>]: MediaResult<S, T[S]> }[Extract<keyof T, `2${string}`>]
 export type RequestResult<T, ThrowOnError extends boolean> = ThrowOnError extends true ? SuccessResult<T> : StatusResult<T>
-export type Unwrappable<T> = Promise<T> & { unwrap(): Promise<T> }
+export type ResponseResult<T extends { status: number; data: unknown }, ThrowOnError extends boolean> = ThrowOnError extends true ? T['data'] : T
 export type EventStreamResult<T> = AsyncIterable<T>
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 const styleFor = (styles: ParameterStyles | undefined, location: keyof ParameterStyles, name: string): Required<ParameterStyle> => {
@@ -1326,7 +1326,7 @@ export const toEventStream = async <T>(response: Promise<unknown>): Promise<Even
   })()
 }
 export const client = createClient()
-export const withUnwrap = <T>(promise: Promise<T>): Unwrappable<T> => Object.assign(promise, { unwrap: () => promise })
+export const resolveResponse = <T extends { status: number; data: unknown }, ThrowOnError extends boolean>(promise: Promise<T>, throwOnError: ThrowOnError): Promise<ResponseResult<T, ThrowOnError>> => (throwOnError ? promise.then((result) => result.data) : promise) as Promise<ResponseResult<T, ThrowOnError>>
 "#
             )
         }
@@ -1361,7 +1361,7 @@ type MediaResult<S, T> = T extends { contentType: infer ContentType extends stri
 export type StatusResult<T> = { [S in keyof T]: MediaResult<S, T[S]> }[keyof T]
 export type SuccessResult<T> = { [S in Extract<keyof T, `2${string}`>]: MediaResult<S, T[S]> }[Extract<keyof T, `2${string}`>]
 export type RequestResult<T, ThrowOnError extends boolean> = ThrowOnError extends true ? SuccessResult<T> : StatusResult<T>
-export type Unwrappable<T> = Promise<T> & { unwrap(): Promise<T> }
+export type ResponseResult<T extends { status: number; data: unknown }, ThrowOnError extends boolean> = ThrowOnError extends true ? T['data'] : T
 export type EventStreamResult<T> = AsyncIterable<T>
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 const styleFor = (styles: ParameterStyles | undefined, location: keyof ParameterStyles, name: string): Required<ParameterStyle> => {
@@ -1525,7 +1525,7 @@ export const toEventStream = async <T>(response: Promise<unknown>): Promise<Even
   })()
 }
 export const client = createClient()
-export const withUnwrap = <T>(promise: Promise<T>): Unwrappable<T> => Object.assign(promise, { unwrap: () => promise })
+export const resolveResponse = <T extends { status: number; data: unknown }, ThrowOnError extends boolean>(promise: Promise<T>, throwOnError: ThrowOnError): Promise<ResponseResult<T, ThrowOnError>> => (throwOnError ? promise.then((result) => result.data) : promise) as Promise<ResponseResult<T, ThrowOnError>>
 "#
             )
         }
@@ -1829,6 +1829,9 @@ mod tests {
         let runtime = kaji_runtime(SdkTransport::Fetch, None);
         assert!(runtime.contains("export interface Codec"));
         assert!(runtime.contains("export type StatusResult<T>"));
+        assert!(runtime.contains("export type ResponseResult<T"));
+        assert!(runtime.contains("export const resolveResponse"));
+        assert!(!runtime.contains("withUnwrap"));
         assert!(runtime.contains("serializePath"));
         assert!(runtime.contains("deepObject"));
         assert!(runtime.contains("multipart/form-data"));
@@ -1856,6 +1859,9 @@ mod tests {
         assert!(runtime.contains("contentType: mediaType.split(';')[0].trim()"));
         assert!(runtime.contains("export interface Codec"));
         assert!(runtime.contains("export type StatusResult<T>"));
+        assert!(runtime.contains("export type ResponseResult<T"));
+        assert!(runtime.contains("export const resolveResponse"));
+        assert!(!runtime.contains("withUnwrap"));
         assert!(runtime.contains("serializeQuery"));
         assert!(runtime.contains("encodeBody"));
         assert!(runtime.contains("multipart/form-data"));

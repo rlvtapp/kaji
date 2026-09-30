@@ -58,6 +58,41 @@ pub struct MockResponse {
     pub delay_ms: Option<u64>,
 }
 
+/// Returns whether a scenario applies to one incoming HTTP request.
+///
+/// Header names are case-insensitive as required by HTTP. Query and path
+/// values are compared after the transport has decoded them, while a body
+/// predicate is an exact JSON value comparison. Keeping this decision next to
+/// the typed scenario contract lets native and generated mock transports use
+/// the same matching rules.
+pub fn mock_scenario_matches(
+    scenario: &MockScenario,
+    headers: &BTreeMap<String, String>,
+    query: &BTreeMap<String, String>,
+    path: &BTreeMap<String, String>,
+    body: Option<&Value>,
+) -> bool {
+    scenario.when.headers.iter().all(|(name, expected)| {
+        headers
+            .iter()
+            .any(|(actual, value)| actual.eq_ignore_ascii_case(name) && value == expected)
+    }) && scenario
+        .when
+        .query
+        .iter()
+        .all(|(name, expected)| query.get(name) == Some(expected))
+        && scenario
+            .when
+            .path
+            .iter()
+            .all(|(name, expected)| path.get(name) == Some(expected))
+        && scenario
+            .when
+            .body
+            .as_ref()
+            .is_none_or(|expected| body == Some(expected))
+}
+
 const EXTENSION: &str = "x-kaji-mock";
 const MAX_DELAY_MS: u64 = 600_000;
 
@@ -311,5 +346,40 @@ mod tests {
             ..Api::default()
         };
         assert!(extract_mock_scenarios(&api).unwrap().is_empty());
+    }
+
+    #[test]
+    fn matches_all_scenario_predicates_with_case_insensitive_headers() {
+        let scenario = extract_operation_mock_scenarios(&operation(json!({
+            "scenarios": [{
+                "name": "all-predicates",
+                "when": {
+                    "headers": {"x-test-scenario": "selected"},
+                    "query": {"expand": "stats"},
+                    "path": {"contact_id": "contact_123"},
+                    "body": {"enabled": true}
+                },
+                "response": {"status": 200}
+            }]
+        })))
+        .unwrap()
+        .remove(0);
+        let headers = BTreeMap::from([("X-Test-Scenario".into(), "selected".into())]);
+        let query = BTreeMap::from([("expand".into(), "stats".into())]);
+        let path = BTreeMap::from([("contact_id".into(), "contact_123".into())]);
+        assert!(mock_scenario_matches(
+            &scenario,
+            &headers,
+            &query,
+            &path,
+            Some(&json!({"enabled": true})),
+        ));
+        assert!(!mock_scenario_matches(
+            &scenario,
+            &headers,
+            &query,
+            &path,
+            Some(&json!({"enabled": false})),
+        ));
     }
 }

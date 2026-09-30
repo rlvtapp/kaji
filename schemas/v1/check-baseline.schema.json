@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/v1/check-baseline.schema.json",
+  "title": "Kaji contract-check baseline",
+  "description": "Known Kaji check diagnostics to suppress while a contract is gradually brought into compliance.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "diagnostics"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "format": "uri",
+      "description": "Optional schema association written by Kaji."
+    },
+    "version": {
+      "const": 1,
+      "description": "Baseline format version."
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["fingerprint"],
+        "properties": {
+          "fingerprint": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*:[A-Z]+:.*$",
+            "description": "Stable check identity: rule:HTTP-method:path."
+          }
+        }
+      }
+    }
+  }
+}

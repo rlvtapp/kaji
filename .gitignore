@@ -16,6 +16,7 @@
 node_modules/
 examples/microsoft-graph/generated/
 examples/cli-basic/generated/
+examples/typescript-cli/generated/
 examples/cli-multi-package/generated/
 examples/rust-embedded/.kaji/
 examples/rust-embedded/generated/

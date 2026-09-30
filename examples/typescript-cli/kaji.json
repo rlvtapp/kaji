@@ -1,0 +1,39 @@
+{
+  "$schema": "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/v1/kaji.schema.json",
+  "openapi": { "input": "./openapi.yaml", "name": "Notes", "version": "1.0.0" },
+  "output": { "path": "./generated" },
+  "packages": [
+    {
+      "language": "typescript-cli",
+      "path": "notes",
+      "name": "@example/notes-cli",
+      "plugins": [
+        {
+          "name": "cli",
+          "command_name": "notes",
+          "base_url": "https://api.example.test/v1",
+          "oauth": {
+            "security_scheme": "OAuth",
+            "client_id": "notes-cli-development",
+            "preferred_flow": "device",
+            "device_authorization_url": "https://auth.example.test/oauth/device/code",
+            "scopes": ["notes:read", "notes:write"],
+            "redirect_uri": "http://127.0.0.1:8765/callback"
+          }
+        }
+      ]
+    },
+    {
+      "language": "rust-cli",
+      "path": "notes-rust",
+      "name": "notes-rust-cli",
+      "plugins": [
+        {
+          "name": "cli",
+          "command_name": "notes",
+          "base_url": "https://api.example.test/v1"
+        }
+      ]
+    }
+  ]
+}

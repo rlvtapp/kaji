@@ -17,6 +17,8 @@ renderers; choose the one that fits where generation belongs.
 - **Committed recipe:** [`kaji.json` guide](cli/config.md).
 - **Several packages from one contract:** [CLI recipes](cli/recipes.md).
 - **Zod, TanStack, SWR, Faker, MSW, and Cypress:** [TypeScript helpers](guides/typescript-helpers.md).
+- **A Node.js API command-line client:** [TypeScript API CLI](typescript-cli.md).
+- **A distributable native API CLI:** [Rust API CLI](rust-cli.md).
 - **Mock server and test layers:** [testing generated SDKs](guides/testing.md).
 - **ReDoc and MCP output:** [generated artifacts](guides/artifacts.md).
 - **Automation:** [CI integration](ci-integration.md).

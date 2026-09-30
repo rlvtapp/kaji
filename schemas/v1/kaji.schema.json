@@ -116,7 +116,7 @@
       "properties": {
         "language": {
           "type": "string",
-          "enum": ["typescript", "rust", "go", "python", "php", "java", "dotnet", "elixir", "mock", "artifacts"]
+          "enum": ["typescript", "typescript-cli", "rust", "rust-cli", "go", "python", "php", "java", "dotnet", "elixir", "mock", "artifacts"]
         },
         "path": { "type": "string", "minLength": 1, "description": "Safe path below output.path." },
         "name": { "type": "string", "minLength": 1, "description": "Generated package identity." },
@@ -125,8 +125,10 @@
       }
     },
     "plugin": {
-      "oneOf": [
+      "anyOf": [
         { "$ref": "#/$defs/sdkPlugin" },
+        { "$ref": "#/$defs/typescriptCliPlugin" },
+        { "$ref": "#/$defs/rustCliPlugin" },
         { "$ref": "#/$defs/typescriptArtifactPlugin" },
         { "$ref": "#/$defs/redocPlugin" },
         { "$ref": "#/$defs/mcpPlugin" },
@@ -156,6 +158,42 @@
         "output": { "type": "string", "minLength": 1 },
         "clients_import": { "type": "string", "minLength": 1 },
         "group_by_tag": { "type": "boolean", "default": true }
+      }
+    },
+    "typescriptCliPlugin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": { "const": "cli" },
+        "command_name": { "type": "string", "minLength": 1, "description": "Executable command name. Defaults to the API name." },
+        "base_url": { "type": "string", "format": "uri", "description": "Default API origin. Users can override it with --base-url or the generated environment variable." },
+        "oauth": { "$ref": "#/$defs/cliOAuth" }
+      }
+    },
+    "rustCliPlugin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": { "const": "cli" },
+        "command_name": { "type": "string", "minLength": 1, "description": "Executable command name. Defaults to the API name." },
+        "base_url": { "type": "string", "format": "uri", "description": "Default API origin. Users can override it with --base-url or the generated environment variable." }
+      }
+    },
+    "cliOAuth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["client_id"],
+      "properties": {
+        "client_id": { "type": "string", "minLength": 1, "description": "Public OAuth client identifier registered for this CLI." },
+        "security_scheme": { "type": "string", "minLength": 1, "description": "OpenAPI OAuth security scheme used by access tokens." },
+        "scopes": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "preferred_flow": { "type": "string", "enum": ["device", "browser"], "default": "device" },
+        "authorization_url": { "type": "string", "format": "uri", "description": "Overrides the OpenAPI authorizationCode flow URL." },
+        "device_authorization_url": { "type": "string", "format": "uri", "description": "RFC 8628 device authorization endpoint." },
+        "token_url": { "type": "string", "format": "uri", "description": "Overrides the OpenAPI OAuth token URL." },
+        "redirect_uri": { "type": "string", "format": "uri", "description": "Registered loopback callback for PKCE browser login." }
       }
     },
     "redocPlugin": {

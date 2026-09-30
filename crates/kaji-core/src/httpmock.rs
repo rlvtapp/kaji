@@ -218,6 +218,48 @@ fn preferred_response(operation: &Operation) -> Option<&OperationResponse> {
         .or_else(|| operation.responses.first())
 }
 
+/// Returns the deterministic happy-path response used by Kaji's fixture and
+/// native mock servers. This keeps Docker-based fixtures and `kaji mock serve`
+/// contract-compatible without requiring an external runtime.
+pub fn mock_happy_response(api: &Api, operation: &Operation) -> (u16, Option<String>, Value) {
+    let Some(response) = preferred_response(operation) else {
+        return (200, Some("application/json".into()), Value::Null);
+    };
+    let status = status_code(&response.status);
+    let Some(media_type) = response.media_types.first() else {
+        return (status, None, Value::Null);
+    };
+    let body = media_type
+        .schema
+        .as_ref()
+        .map(|schema| sample_schema(api, schema, &mut BTreeSet::new()))
+        .unwrap_or(Value::Null);
+    (status, Some(media_type.content_type.clone()), body)
+}
+
+/// Returns a happy-path response with a fresh, schema-shaped fallback value.
+/// Explicit OpenAPI examples, defaults, constants, and enum values remain
+/// authoritative; only unconstrained fields vary with `seed`.
+pub fn mock_dynamic_response(
+    api: &Api,
+    operation: &Operation,
+    seed: u64,
+) -> (u16, Option<String>, Value) {
+    let Some(response) = preferred_response(operation) else {
+        return (200, Some("application/json".into()), Value::Null);
+    };
+    let status = status_code(&response.status);
+    let Some(media_type) = response.media_types.first() else {
+        return (status, None, Value::Null);
+    };
+    let body = media_type
+        .schema
+        .as_ref()
+        .map(|schema| dynamic_schema(api, schema, seed, &mut BTreeSet::new()))
+        .unwrap_or(Value::Null);
+    (status, Some(media_type.content_type.clone()), body)
+}
+
 fn status_code(status: &str) -> u16 {
     status
         .parse()
@@ -380,6 +422,102 @@ fn sample_schema(api: &Api, schema: &SchemaValue, visiting: &mut BTreeSet<String
             Value::Object(result)
         }
         SchemaKind::Not { .. } => Value::Null,
+    }
+}
+
+fn dynamic_schema(
+    api: &Api,
+    schema: &SchemaValue,
+    seed: u64,
+    visiting: &mut BTreeSet<String>,
+) -> Value {
+    if let Some(value) = schema
+        .const_value
+        .clone()
+        .or_else(|| schema.default.clone())
+    {
+        return value;
+    }
+    if let Some(value) = schema.enum_values.first() {
+        return value.clone();
+    }
+    if let Some(example) = schema.constraints.get("example") {
+        return example.clone();
+    }
+    if let Some(Value::Array(examples)) = schema.constraints.get("examples") {
+        if let Some(example) = examples.first() {
+            return example.clone();
+        }
+    }
+    match &schema.kind {
+        SchemaKind::Any | SchemaKind::Null | SchemaKind::Not { .. } => Value::Null,
+        SchemaKind::Boolean => Value::Bool(seed % 2 == 0),
+        SchemaKind::Integer => Value::Number(Number::from(seed)),
+        SchemaKind::Number => {
+            Number::from_f64(seed as f64 + 0.5).map_or(Value::Null, Value::Number)
+        }
+        SchemaKind::String => Value::String(dynamic_string(schema.format.as_deref(), seed)),
+        SchemaKind::Array { items } => Value::Array(vec![dynamic_schema(
+            api,
+            items,
+            seed.saturating_add(1),
+            visiting,
+        )]),
+        SchemaKind::Object { fields, .. } => Value::Object(
+            fields
+                .iter()
+                .enumerate()
+                .map(|(index, field)| {
+                    (
+                        field.name.clone(),
+                        dynamic_schema(
+                            api,
+                            &field.value,
+                            seed.saturating_add(index as u64),
+                            visiting,
+                        ),
+                    )
+                })
+                .collect::<Map<_, _>>(),
+        ),
+        SchemaKind::Reference { reference } => {
+            let name = reference.rsplit('/').next().unwrap_or(reference);
+            if !visiting.insert(name.into()) {
+                return Value::Null;
+            }
+            let sampled = api
+                .schemas
+                .iter()
+                .find(|schema| schema.name == name)
+                .map(|schema| dynamic_schema(api, &schema.value, seed, visiting))
+                .unwrap_or(Value::Null);
+            visiting.remove(name);
+            sampled
+        }
+        SchemaKind::OneOf { variants } | SchemaKind::AnyOf { variants } => variants
+            .first()
+            .map(|variant| dynamic_schema(api, variant, seed, visiting))
+            .unwrap_or(Value::Null),
+        SchemaKind::AllOf { variants } => {
+            let mut result = Map::new();
+            for variant in variants {
+                if let Value::Object(object) = dynamic_schema(api, variant, seed, visiting) {
+                    result.extend(object);
+                }
+            }
+            Value::Object(result)
+        }
+    }
+}
+
+fn dynamic_string(format: Option<&str>, seed: u64) -> String {
+    match format.unwrap_or_default() {
+        "email" => format!("mock-{seed}@example.test"),
+        "uuid" => format!("00000000-0000-4000-8000-{seed:012x}"),
+        "date" => format!("2026-01-{:02}", seed % 28 + 1),
+        "date-time" | "datetime" => format!("2026-01-{:02}T12:00:00Z", seed % 28 + 1),
+        "uri" | "url" => format!("https://mock.example.test/resources/{seed}"),
+        _ => format!("mock-{seed}"),
     }
 }
 
@@ -593,5 +731,48 @@ mod tests {
         .unwrap();
         assert_eq!(files[0].path, std::path::Path::new("create-contact.yaml"));
         assert!(files[0].contents.contains("status: 200"));
+    }
+
+    #[test]
+    fn dynamic_responses_vary_unconstrained_schema_values() {
+        let api = Api {
+            name: "Test".into(),
+            version: "1".into(),
+            schemas: vec![],
+            operations: vec![],
+            annotations: BTreeMap::new(),
+        };
+        let operation = Operation {
+            id: "getWidget".into(),
+            method: HttpMethod::Get,
+            path: "/widgets/{id}".into(),
+            parameters: vec![],
+            request_body: None,
+            responses: vec![OperationResponse {
+                status: "200".into(),
+                description: None,
+                media_types: vec![OperationMediaType {
+                    content_type: "application/json".into(),
+                    schema: Some(SchemaValue::new(SchemaKind::Object {
+                        fields: vec![Field {
+                            name: "email".into(),
+                            value: SchemaValue {
+                                format: Some("email".into()),
+                                ..SchemaValue::new(SchemaKind::String)
+                            },
+                            required: true,
+                            annotations: BTreeMap::new(),
+                        }],
+                        additional_properties: Default::default(),
+                    })),
+                }],
+            }],
+            security: vec![],
+            annotations: BTreeMap::new(),
+        };
+        let (_, _, first) = mock_dynamic_response(&api, &operation, 1);
+        let (_, _, second) = mock_dynamic_response(&api, &operation, 2);
+        assert_eq!(first["email"], "mock-1@example.test");
+        assert_eq!(second["email"], "mock-2@example.test");
     }
 }

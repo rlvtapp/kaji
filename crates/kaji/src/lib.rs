@@ -15,7 +15,9 @@ pub use kaji_plugin_java as java;
 pub use kaji_plugin_php as php;
 pub use kaji_plugin_python as python;
 pub use kaji_plugin_rust as rust;
+pub use kaji_plugin_rust_cli as rust_cli;
 pub use kaji_plugin_typescript as ts;
+pub use kaji_plugin_typescript_cli as ts_cli;
 
 pub mod prelude {
     pub use crate::{Common, Package, ProfileSet};
@@ -31,7 +33,9 @@ pub mod prelude {
     pub use kaji_plugin_php::PackageExt as _;
     pub use kaji_plugin_python::PackageExt as _;
     pub use kaji_plugin_rust::PackageExt as _;
+    pub use kaji_plugin_rust_cli::PackageExt as _;
     pub use kaji_plugin_typescript::PackageExt as _;
+    pub use kaji_plugin_typescript_cli::PackageExt as _;
 }
 
 /// One release containing independently configured, typed packages.

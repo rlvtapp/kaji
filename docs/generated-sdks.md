@@ -31,7 +31,7 @@ import { getContact, type Contact } from "@relevate/email-api";
 const contact: Contact = await getContact({
   client: myConfiguredClient,
   path: { contactId: "contact_123" },
-}).unwrap();
+});
 ```
 
 There is no generated `new RelevateEmail(...)` class in raw mode. You supply
@@ -62,7 +62,7 @@ const client = new RelevateEmail({
   apiKey: process.env.RELEVATE_API_KEY,
 });
 
-const contact = await client.contacts.get({ path: { contactId: "contact_123" } }).unwrap();
+const contact = await client.contacts.get({ path: { contactId: "contact_123" } });
 ```
 
 The full client owns its configured base URL, credentials, retries, hooks, and
@@ -79,9 +79,9 @@ const query = useGetContact({ client: sdk.transport, path: { contactId: "contact
 
 Path, query, header, and body values use the generated operation's grouped
 options rather than a completed URL. Ordinary TypeScript operations resolve to
-the decoded response body; `.unwrap()` returns the same underlying promise,
-not a separate result envelope. Streaming operations have a separate stream
-result surface.
+the decoded success body. Pass `throwOnError: false` when the caller needs the
+typed status/result envelope for declared success and error responses. Streaming
+operations have a separate stream result surface.
 
 ### TypeScript transport and validation controls
 

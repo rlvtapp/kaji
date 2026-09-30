@@ -3,8 +3,9 @@
 ## Generate your API's entire developer ecosystem from one contract.
 
 Kaji turns a Swagger 2.0 or OpenAPI 3.0/3.1 document into production-ready SDKs,
-mocks, validation, framework integrations, documentation, and MCP tools. Generate
-for TypeScript, Rust, Go, Python, PHP, Java, .NET, and Elixir from the same contract.
+API CLIs, mocks, validation, framework integrations, documentation, and MCP
+tools. Generate for TypeScript, Rust, Go, Python, PHP, Java, .NET, and Elixir
+from the same contract.
 
 ```text
 OpenAPI
@@ -12,6 +13,7 @@ OpenAPI
   ▼
 Kaji
   ├── SDKs      TypeScript · Go · Python · Rust · Java · .NET · PHP · Elixir
+  ├── API CLIs  TypeScript (Node.js) · Rust (native)
   ├── Clients   Fetch · Axios
   ├── Frontend  TanStack React Query · Vue Query · SWR
   ├── Schema    Zod · Faker
@@ -101,11 +103,24 @@ const client = new Email({
 
 const contact = await client.contacts.get({
   path: { contactId: "contact_123" },
-}).unwrap();
+});
 ```
 
 Names and parameters come from your API. Each generated package includes
-its own usage guide and build metadata.
+its own usage guide and build metadata. TypeScript operations resolve to the
+decoded success body by default.
+
+A generated CLI follows the same contract, but turns operations into commands:
+
+```sh
+email messages send --from hello@example.com --to customer@example.com \
+  --subject "Welcome"
+email admin users list
+```
+
+Its `auth` group supports OAuth login, OpenAPI API keys, named credential
+profiles, and environment variables for CI. See the [TypeScript API CLI](docs/typescript-cli.md)
+and [Rust API CLI](docs/rust-cli.md) guides.
 
 ## Choose what you ship
 
@@ -113,6 +128,8 @@ its own usage guide and build metadata.
   declared errors, and contract-driven runtime features.
 - **Direct operations:** select a flat client, or TypeScript raw functions with
   `--typescript-surface raw`.
+- **API CLIs:** generate a publishable Node.js or native Rust executable from
+  the same paths, parameters, request bodies, and security requirements.
 - **Fetch or Axios:** separate TypeScript packages with the same source contract.
 - **Large Go APIs:** split model/operation files and bounded rendering workers.
 - **Validation and frontend helpers:** add Zod, TanStack React/Vue Query, SWR,
@@ -148,6 +165,8 @@ Start with the [documentation home](docs/README.md), then choose a workflow:
   package composition, and native plugin development.
 - **[Generated SDK guide](docs/generated-sdks.md):** runtime behavior and target
   requirements.
+- **[TypeScript API CLI](docs/typescript-cli.md) and [Rust API CLI](docs/rust-cli.md):**
+  distributable API commands, OAuth, API keys, profiles, and extensions.
 - **[TypeScript helpers](docs/guides/typescript-helpers.md),
   [testing](docs/guides/testing.md), and [generated artifacts](docs/guides/artifacts.md):**
   validation, hooks, fixtures, mocks, API docs, and MCP output.
@@ -168,6 +187,8 @@ Existing detailed references remain available: [complete CLI reference](docs/cli
   reproducible TypeScript SDK recipe.
 - [CLI multi-package](examples/cli-multi-package/README.md): TypeScript, Go,
   documentation, and a mock service from one contract.
+- [API CLI](examples/typescript-cli/README.md): TypeScript and Rust command-line
+  clients with OAuth, profiles, and nested commands.
 - [Mock scenarios](examples/mock-scenarios/README.md): generate a Docker mock
   with contract-owned conditional responses.
 - [React Query consumer](examples/react-query-consumer/README.md): wire a

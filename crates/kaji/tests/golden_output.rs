@@ -1,4 +1,5 @@
 //! Approved generated-output fingerprints for every maintained Kaji target.
+//! TypeScript SDK operations resolve directly to their successful response body.
 //!
 //! The checked-in fixture protects the actual emitted files, rather than only
 //! the generator API.  Update it intentionally after reviewing a generation

@@ -6,6 +6,7 @@ together. Start small, then move to the complete stacks.
 | Example | Shows | Best for |
 | --- | --- | --- |
 | [CLI basic](cli-basic/README.md) | One config-first TypeScript SDK | First generation |
+| [TypeScript API CLI](typescript-cli/README.md) | Node.js API CLI, OAuth device flow, and PKCE | Command-line API tools |
 | [CLI multi-package](cli-multi-package/README.md) | TypeScript, Go, docs, and a mock from one contract | Team and CI setup |
 | [Mock scenarios](mock-scenarios/README.md) | Docker HTTP mock plus conditional contract responses | SDK integration tests |
 | [React Query consumer](react-query-consumer/README.md) | Generated Fetch SDK and TanStack React Query hooks | Frontend integration |

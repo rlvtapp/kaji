@@ -38,6 +38,7 @@ npx @relevate/kaji generate                         # reads ./kaji.json
 npx @relevate/kaji generate --config <file>
 npx @relevate/kaji generate <openapi-file> --output <directory> --language <target>...
 npx @relevate/kaji generate --artifacts <directory> --output <directory> --language <target>...
+npx @relevate/kaji check <openapi-file> [--format human|json]
 npx @relevate/kaji languages
 npx @relevate/kaji --version
 npx @relevate/kaji --help
@@ -59,7 +60,7 @@ npx @relevate/kaji --help
 | `--artifacts` | Already compiled Kaji OpenAPI artifact directory, instead of source | Unset |
 | `--openapi-compiler` | Explicit Go compiler executable for source input | Bundled sibling executable |
 
-Targets: `rust`, `typescript`, `go`, `python`, `php`,
+Targets: `rust`, `rust-cli`, `typescript`, `typescript-cli`, `go`, `python`, `php`,
 `java`, `dotnet`, `elixir`. Each becomes a matching subdirectory, including when
 only one target is selected. Advanced/custom plugin composition remains available
 through the [Rust API](typed-plugins.md). The CLI does not load JavaScript
@@ -144,6 +145,43 @@ Go worker counts are capped at 64; automatic selection uses at most 8 workers.
 Argument errors exit with code 2; compiler/generator/write errors exit with code 1.
 Compiler failure does not write SDK output. Writes are not transactional if a
 filesystem error occurs during materialization.
+
+### Contract checks
+
+Run `kaji check openapi.yaml` before generation to catch contract details that
+would make generated SDK and CLI surfaces unstable or ambiguous. It compiles the
+same OpenAPI input used by generation and reports actionable errors for missing
+or duplicate operation IDs, IDs that collide after code-style normalization,
+missing 2xx responses, ambiguous path segments, and invalid path parameters.
+Use `--openapi-compiler <file>` when source builds need an explicit compiler.
+A passing check exits successfully; reported issues exit non-zero so it can run
+in CI. Human output is the default. Use `--format json` (or `--json`) when a
+CI system or agent needs a stable machine-readable report containing rule,
+severity, request location, hint, and diagnostic fingerprint.
+
+Checks default to `error` severity and fail on errors, preserving the strict
+behavior of `kaji check`. Teams can adopt rules gradually without hiding new
+problems:
+
+```sh
+# Treat one noisy rule as advisory while the contract is being cleaned up.
+kaji check openapi.yaml --severity missing-operation-id=warning --fail-on error
+
+# Capture today's known findings once, then fail only on new findings.
+kaji check openapi.yaml --write-baseline .kaji/check-baseline.json --fail-on none
+kaji check openapi.yaml --baseline .kaji/check-baseline.json
+
+# Suppress a rule explicitly for a short-lived migration.
+kaji check openapi.yaml --ignore missing-operation-id
+```
+
+`--baseline` matches the stable `code:METHOD:path` fingerprint, so a rule at a
+new endpoint still appears. `--write-baseline` writes a compact JSON file that
+can be committed; its format is described by
+[`check-baseline.schema.json`](../schemas/v1/check-baseline.schema.json).
+`--fail-on warning` treats both warnings and errors as failures, while
+`--fail-on none` only reports them. `--ignore` suppresses an entire rule and is
+best reserved for temporary exceptions.
 
 Generated files are overwritten. Custom starter files and unrelated files are
 retained; stale generated files are not automatically deleted. Use a fresh output

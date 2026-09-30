@@ -191,7 +191,7 @@ Every package contains:
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `language` | Yes | One of `typescript`, `rust`, `go`, `python`, `php`, `java`, `dotnet`, `elixir`, `mock`, or `artifacts`. |
+| `language` | Yes | One of `typescript`, `typescript-cli`, `rust`, `rust-cli`, `go`, `python`, `php`, `java`, `dotnet`, `elixir`, `mock`, or `artifacts`. |
 | `path` | Yes | Package directory below `output.path`. |
 | `name` | No | Ecosystem package identity for SDK languages. |
 | `client_style` | No | Package-level `namespaced` or `flat` override. |

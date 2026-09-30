@@ -13,6 +13,8 @@ anyhow = "1.0.102"
 kaji-core = { path = "../kaji-core" }
 kaji-plugin-rust = { path = "../plugins/rust" }
 kaji-plugin-typescript = { path = "../plugins/typescript" }
+kaji-plugin-typescript-cli = { path = "../plugins/typescript-cli" }
+kaji-plugin-rust-cli = { path = "../plugins/rust-cli" }
 serde = { version = "1.0.219", features = ["derive"] }
 kaji-plugin-go = { path = "../plugins/go" }
 kaji-plugin-python = { path = "../plugins/python" }

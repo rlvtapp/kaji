@@ -38,3 +38,5 @@ jobs:
         run: go test ./...
       - name: Run generated SDK contract suite
         run: cargo test -p kaji --test sdk_to_mock_contract -- --ignored
+      - name: Compile generated Rust SDK warning-free
+        run: cargo test -p kaji-plugin-rust generated_retry_runtime_compiles_offline -- --ignored

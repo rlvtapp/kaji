@@ -38,7 +38,7 @@ npm run build
 import { PetStore } from "@acme/pet-store";
 
 const api = new PetStore({ baseUrl: "https://api.example.com" });
-const pet = await api.pets.getPet({ path: { petId: "pet_123" } }).unwrap();
+const pet = await api.pets.getPet({ path: { petId: "pet_123" } });
 ```
 
 Exact exports come from the contract. Each generated package has a local README

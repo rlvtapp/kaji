@@ -1,0 +1,102 @@
+openapi: 3.1.0
+info:
+  title: Notes API
+  version: 1.0.0
+servers:
+  - url: https://api.example.test/v1
+security:
+  - OAuth: [notes:read]
+paths:
+  /messages:
+    post:
+      operationId: sendMessage
+      x-kaji-cli:
+        group: messages
+        command: send
+      tags: [messages]
+      security:
+        - OAuth: [notes:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SendMessageRequest' }
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageAccepted' }
+  /notes/{noteId}:
+    get:
+      operationId: getNote
+      tags: [notes]
+      parameters:
+        - name: noteId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: A note
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Note' }
+    delete:
+      operationId: deleteNote
+      tags: [notes]
+      security:
+        - OAuth: [notes:write]
+      parameters:
+        - name: noteId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: Deleted }
+  /admin/users:
+    get:
+      operationId: listUsers
+      security:
+        - OAuth: [notes:read]
+      responses:
+        '200':
+          description: User list
+components:
+  securitySchemes:
+    OAuth:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://auth.example.test/oauth/authorize
+          tokenUrl: https://auth.example.test/oauth/token
+          scopes:
+            notes:read: Read notes
+            notes:write: Delete notes
+  schemas:
+    SendMessageRequest:
+      type: object
+      required: [from, to, subject]
+      properties:
+        from: { type: string, format: email }
+        to:
+          type: array
+          items: { type: string, format: email }
+        subject: { type: string }
+        html: { type: string }
+        text: { type: string }
+        tags:
+          type: array
+          items: { type: string }
+    MessageAccepted:
+      type: object
+      required: [id, status]
+      properties:
+        id: { type: string }
+        status: { type: string }
+    Note:
+      type: object
+      required: [id, body]
+      properties:
+        id: { type: string }
+        body: { type: string }

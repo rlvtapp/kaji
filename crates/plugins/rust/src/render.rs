@@ -249,6 +249,11 @@ fn render_client_runtime(api: &Api, include_resources: bool) -> String {
         1,
     );
     output = output.replacen(
+        "\nfn kaji_path_segment",
+        "\n#[allow(dead_code)] // Only operations with path parameters call this helper.\nfn kaji_path_segment",
+        1,
+    );
+    output = output.replacen(
         "    bearer_token: Option<String>,\n",
         "    bearer_token: Option<String>,\n    retry: RetryConfig,\n    hooks: Option<Arc<dyn ClientHooks>>,\n",
         1,
@@ -1938,6 +1943,7 @@ async fn retries_safe_requests_and_only_hooks_the_final_outcome() {
         let status = Command::new("cargo")
             .args(["test", "--offline", "--quiet"])
             .current_dir(temp.path())
+            .env("RUSTFLAGS", "-Dwarnings")
             .status()
             .expect("cargo should be available for generated SDK tests");
         assert!(

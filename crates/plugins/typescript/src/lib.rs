@@ -494,12 +494,8 @@ mod tests {
                 r#"
 import { listContacts, type Contact } from './raw/index';
 import { Contacts } from './full/index';
-const raw = await listContacts({}).unwrap();
-const rawData: Contact = raw.data;
-const direct = await listContacts({});
-const directData: Contact = direct.data;
-const full = await new Contacts().contacts.list({}).unwrap();
-const fullData: Contact = full.data;
+const rawData: Contact = await listContacts({});
+const fullData: Contact = await new Contacts().contacts.list({});
 const errorOrSuccess = await listContacts({ throwOnError: false });
 if (errorOrSuccess.status === 200) {
   const success: Contact = errorOrSuccess.data;
@@ -507,7 +503,9 @@ if (errorOrSuccess.status === 200) {
 }
 // @ts-expect-error: status-discriminated results are not bare response bodies.
 const incorrect: Contact = await listContacts({ throwOnError: false });
-console.log(rawData, directData, fullData, errorOrSuccess, incorrect);
+// @ts-expect-error: regular operations resolve to the body, not an unwrappable envelope.
+await listContacts({}).unwrap();
+console.log(rawData, fullData, errorOrSuccess, incorrect);
 "#,
             )
             .unwrap(),
