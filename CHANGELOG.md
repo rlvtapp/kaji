@@ -46,6 +46,20 @@
   ergonomics.
 - Added CI coverage for the canonical C# target and generated Rust SDK builds
   on fresh runners.
+- CI now builds Kaji once, generates a single cross-language fixture, and
+  validates the generated Rust, TypeScript, Go, Python, PHP, Java, C#, Elixir,
+  Ruby, and Swift packages in a native-toolchain matrix.
+
+### Fixed
+
+- Fixed generated C# operations and disposal code so emitted projects compile
+  with .NET 8.
+- Fixed Ruby model deserialization for schemas that retain additional
+  properties.
+- Fixed generated Java facades to inherit their internal operation partitions
+  through fully-qualified package names.
+- Fixed generated Elixir SDKs to use distinct chunk modules and compile without
+  warnings.
 
 - Established the standalone Kaji Rust workspace.
 - Added first-party SDK targets and language-neutral contract mocks.
