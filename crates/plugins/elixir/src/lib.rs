@@ -117,7 +117,7 @@ fn render_sdk(
             &mut tree,
             root,
             &format!("lib/{app}/api/operations_{:04}.ex", index + 1),
-            render_operation_chunk(&module, api, operations),
+            render_operation_chunk(&module, api, operations, index),
         )?;
     }
     for (index, operations) in api.operations.chunks(ERROR_OPERATIONS_PER_FILE).enumerate() {
@@ -140,14 +140,14 @@ fn render_sdk(
                 &mut tree,
                 root,
                 &format!("lib/{app}/resources/{file_name}.ex"),
-                render_resource_facade(&module, &resource),
+                render_resource_facade(&module, &resource, &operations),
             )?;
             for (index, chunk) in operations.chunks(RESOURCE_METHODS_PER_FILE).enumerate() {
                 insert(
                     &mut tree,
                     root,
                     &format!("lib/{app}/resources/{file_name}/chunk_{:04}.ex", index + 1),
-                    render_resource_chunk(&module, &resource, chunk),
+                    render_resource_chunk(&module, &resource, chunk, index),
                 )?;
             }
         }
@@ -570,15 +570,38 @@ fn render_model(module: &str, schema: &Schema) -> String {
 }
 
 fn render_api_facade(module: &str, api: &Api) -> String {
-    format!(
+    let mut output = format!(
         "{NOTICE}\ndefmodule {module}.API do\n  @moduledoc \"Typed API operations for {}.\"\n\n  alias {module}.Client\n\n",
         escape_elixir_string(&api.name)
-    ) + "end\n"
+    );
+    for (index, operations) in api.operations.chunks(OPERATIONS_PER_FILE).enumerate() {
+        let _ = writeln!(output, "  alias {module}.API.Operations{index:04}");
+        for operation in operations {
+            let name = snake_case(&operation.id);
+            let _ = writeln!(
+                output,
+                "\n  def {name}(client, options \\\\ []), do: Operations{index:04}.{name}(client, options)"
+            );
+            if cursor_pagination(operation).is_some() {
+                let _ = writeln!(
+                    output,
+                    "  def {name}_pages(client, options \\\\ []), do: Operations{index:04}.{name}_pages(client, options)"
+                );
+            }
+        }
+    }
+    output.push_str("end\n");
+    output
 }
 
-fn render_operation_chunk(module: &str, api: &Api, operations: &[Operation]) -> String {
+fn render_operation_chunk(
+    module: &str,
+    api: &Api,
+    operations: &[Operation],
+    index: usize,
+) -> String {
     let mut output = format!(
-        "{NOTICE}\ndefmodule {module}.API do\n  @moduledoc false\n\n  alias {module}.Client\n\n"
+        "{NOTICE}\ndefmodule {module}.API.Operations{index:04} do\n  @moduledoc false\n\n  alias {module}.Client\n\n"
     );
     for operation in operations {
         output.push_str(&render_operation(module, api, operation));
@@ -587,15 +610,41 @@ fn render_operation_chunk(module: &str, api: &Api, operations: &[Operation]) -> 
     output
 }
 
-fn render_resource_facade(module: &str, resource: &str) -> String {
-    format!(
+fn render_resource_facade(module: &str, resource: &str, operations: &[&Operation]) -> String {
+    let mut output = format!(
         "{NOTICE}\ndefmodule {module}.Resources.{resource} do\n  @moduledoc \"Resource-namespaced operations for {resource}.\"\n\n  alias {module}.{{API, Client}}\n"
-    ) + "end\n"
+    );
+    for (index, chunk) in operations.chunks(RESOURCE_METHODS_PER_FILE).enumerate() {
+        let _ = writeln!(
+            output,
+            "\n  alias {module}.Resources.{resource}.Chunk{index:04}"
+        );
+        for operation in chunk {
+            let name = snake_case(&operation.id);
+            let _ = writeln!(
+                output,
+                "  def {name}(client, options \\\\ []), do: Chunk{index:04}.{name}(client, options)"
+            );
+            if cursor_pagination(operation).is_some() {
+                let _ = writeln!(
+                    output,
+                    "  def {name}_pages(client, options \\\\ []), do: Chunk{index:04}.{name}_pages(client, options)"
+                );
+            }
+        }
+    }
+    output.push_str("end\n");
+    output
 }
 
-fn render_resource_chunk(module: &str, resource: &str, operations: &[&Operation]) -> String {
+fn render_resource_chunk(
+    module: &str,
+    resource: &str,
+    operations: &[&Operation],
+    index: usize,
+) -> String {
     let mut output = format!(
-        "{NOTICE}\ndefmodule {module}.Resources.{resource} do\n  @moduledoc false\n\n  alias {module}.{{API, Client}}\n"
+        "{NOTICE}\ndefmodule {module}.Resources.{resource}.Chunk{index:04} do\n  @moduledoc false\n\n  alias {module}.{{API, Client}}\n"
     );
     for operation in operations {
         let name = snake_case(&operation.id);

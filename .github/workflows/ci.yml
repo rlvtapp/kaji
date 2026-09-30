@@ -55,6 +55,7 @@ jobs:
         with:
           name: generated-sdk-fixture
           path: ${{ runner.temp }}/generated-sdk-fixture
+          include-hidden-files: true
           retention-days: 1
 
   generated-sdk:

@@ -485,7 +485,7 @@ fn render_client_facade(api: &Api, package: &str, style: SdkClientStyle, chunks:
     let parent = if chunks == 0 {
         "ClientBase".to_owned()
     } else {
-        format!("internal.Operations{:03}", chunks - 1)
+        format!("{package}.internal.Operations{:03}", chunks - 1)
     };
     let mut output = format!(
         "package {package};\n\n{NOTICE}\n/** Public API facade. Operations are inherited from bounded internal partitions. */\npublic final class Client extends {parent} {{\n"
@@ -1936,7 +1936,7 @@ mod tests {
         assert!(
             tree.get("java/src/main/java/com/kaji/email/Client.java")
                 .unwrap()
-                .contains("extends internal.Operations001")
+                .contains("extends com.kaji.email.internal.Operations001")
         );
     }
 
