@@ -27,19 +27,6 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: '8.0.x'
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.2'
-      - uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '3.1'
       - name: Verify Rust workspace
         run: |
           cargo fmt --all --check
@@ -50,23 +37,6 @@ jobs:
         run: go test ./...
       - name: Run generated SDK contract suite
         run: cargo test -p kaji --test sdk_to_mock_contract -- --ignored
-      - name: Compile generated Rust SDK warning-free
-        run: cargo test -p kaji-plugin-rust generated_retry_runtime_compiles_warning_free -- --ignored
-      - name: Compile generated C# SDK
-        run: cargo test -p kaji-plugin-csharp generated_csharp_project_builds_with_dotnet -- --ignored
-      - name: Compile generated Java SDK
-        run: cargo test -p kaji-plugin-java generated_package_compiles_with_maven -- --ignored
-      - name: Lint generated PHP SDK
-        run: cargo test -p kaji-plugin-php generated_package_passes_php_syntax_checks -- --ignored
-      - name: Validate generated Ruby SDK
-        run: cargo test -p kaji-plugin-ruby
-      - name: Install TypeScript compiler
-        run: npm install --prefix "$RUNNER_TEMP/kaji-typescript" --no-save typescript
-      - name: Compile generated TypeScript SDK
-        run: >-
-          KAJI_TSC_JS="$RUNNER_TEMP/kaji-typescript/node_modules/typescript/lib/tsc.js"
-          cargo test -p kaji-plugin-typescript
-          generated_fetch_consumer_compiles_with_strict_typescript -- --ignored
       - name: Build Kaji and OpenAPI sidecar
         run: |
           cargo build -p kaji-cli --locked
@@ -83,17 +53,6 @@ jobs:
           path: ${{ runner.temp }}/generated-sdk-fixture
           include-hidden-files: true
           retention-days: 1
-
-  verify-swift:
-    name: Compile generated Swift SDK
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - run: >-
-          CLANG_MODULE_CACHE_PATH="$RUNNER_TEMP/kaji-swift-cache/clang"
-          SWIFTPM_MODULECACHE_OVERRIDE="$RUNNER_TEMP/kaji-swift-cache/swiftpm"
-          cargo test -p kaji-plugin-swift generated_package_builds_with_swiftpm -- --ignored
 
   generated-sdk:
     name: Validate generated ${{ matrix.language }} SDK
@@ -250,7 +209,7 @@ jobs:
 
   publish:
     name: Publish to npm
-    needs: [verify, verify-swift, generated-sdk, native, launchers]
+    needs: [verify, generated-sdk, native, launchers]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -284,7 +243,7 @@ jobs:
 
   publish-python:
     name: Publish to PyPI
-    needs: [verify, verify-swift, generated-sdk, native, launchers]
+    needs: [verify, generated-sdk, native, launchers]
     runs-on: ubuntu-latest
     permissions:
       id-token: write

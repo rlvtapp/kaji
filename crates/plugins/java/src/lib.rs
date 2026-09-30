@@ -451,7 +451,10 @@ fn render_client_base(api: &Api, package: &str) -> String {
     );
     // Operation chunk subclasses need the transport helpers and state, but
     // they stay package-internal to generated SDK consumers.
-    output.replace("    private ", "    protected ")
+    output.replace("    private ", "    protected ").replace(
+        "protected record QueryParameter",
+        "public record QueryParameter",
+    )
 }
 
 fn render_operation_chunk(

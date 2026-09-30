@@ -34,7 +34,7 @@ sdk/java/pom.xml	898	8d14c135515c3eb7
 sdk/java/settings.gradle	41	7fa3266e374b692a
 sdk/java/src/main/java/io/kaji/kajicontractapi/ApiException.java	889	7ffd5a00b8eeceac
 sdk/java/src/main/java/io/kaji/kajicontractapi/Client.java	494	ac0f643182c760c7
-sdk/java/src/main/java/io/kaji/kajicontractapi/ClientBase.java	16034	d5f5f54dd56ce3a8
+sdk/java/src/main/java/io/kaji/kajicontractapi/ClientBase.java	16031	cdb2a280e2ce1749
 sdk/java/src/main/java/io/kaji/kajicontractapi/ClientConfig.java	1236	8282f5b1a05bafbf
 sdk/java/src/main/java/io/kaji/kajicontractapi/ClientHooks.java	361	855f116cb2c9a908
 sdk/java/src/main/java/io/kaji/kajicontractapi/ContactsResource.java	321	147fdfe8f5ff9edb
