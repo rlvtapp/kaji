@@ -37,6 +37,9 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.1'
       - name: Verify Rust workspace
         run: |
           cargo fmt --all --check
@@ -55,6 +58,8 @@ jobs:
         run: cargo test -p kaji-plugin-java generated_package_compiles_with_maven -- --ignored
       - name: Lint generated PHP SDK
         run: cargo test -p kaji-plugin-php generated_package_passes_php_syntax_checks -- --ignored
+      - name: Validate generated Ruby SDK
+        run: cargo test -p kaji-plugin-ruby
       - name: Install TypeScript compiler
         run: npm install --prefix "$RUNNER_TEMP/kaji-typescript" --no-save typescript
       - name: Compile generated TypeScript SDK
