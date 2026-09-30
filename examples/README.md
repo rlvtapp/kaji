@@ -13,6 +13,8 @@ together. Start small, then move to the complete stacks.
 | [React Query consumer](react-query-consumer/README.md) | Generated Fetch SDK and TanStack React Query hooks | Frontend integration |
 | [MCP API tools](mcp-api-tools/README.md) | OpenAPI operations exposed through a stdio MCP server | Agent/API evaluation |
 | [Reproducible generation](reproducible-generation/README.md) | Path slicing, generation lock, TypeScript, and C# | Focused, reviewable SDK updates |
+| [Ruby SDK](ruby-sdk/README.md) | Ruby 3.1+ standard-library client and gem output | Ruby consumers |
+| [Swift SDK](swift-sdk/README.md) | Swift 5.9+ URLSession package output | Apple and server-side Swift consumers |
 | [Rust embedded](rust-embedded/README.md) | Calling Kaji from a Rust application | Integrators and plugin authors |
 | [TypeScript stack](typescript-stack/README.md) | Transports, validation, hooks, and testing helpers | Frontend consumers |
 | [Microsoft Graph](microsoft-graph/README.md) | Remote large contract and Go scaling | Large specifications |

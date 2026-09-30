@@ -7,6 +7,9 @@ kaji init [--config <file>] [--input <file-or-url>] [--output <directory>]
 kaji generate                              # reads ./kaji.json
 kaji generate --config <file>
 kaji generate <file-or-url> --output <directory> --language <target>
+kaji show <openapi-file> [--include-path <pattern>] [--exclude-path <pattern>]
+kaji update [--output <directory>] [--force]
+kaji auth <login|logout|status> ...
 kaji discover <query> [--limit <count>] [--format human|json]
 kaji download <api-id> --output <file> [--version <version>]
 kaji languages
@@ -62,12 +65,46 @@ Commit this secret-free generation metadata with the generated files; it pins
 the Kaji version, contract/artifact hashes, path selection, targets, and
 selected operation list used for that output.
 
-Targets are `rust`, `typescript`, `go`, `python`, `php`, `java`, `csharp`, and
-`elixir`. Configuration errors exit with `2`; compiler, generation, and write
-errors exit with `1`.
+Targets are `rust`, `typescript`, `go`, `python`, `php`, `java`, `csharp`,
+`elixir`, `ruby`, and `swift`. Configuration errors exit with `2`; compiler,
+generation, and write errors exit with `1`.
 
 `csharp` generates a .NET 8 C# package. `dotnet` remains accepted as a legacy
 alias for existing scripts.
+
+`ruby` generates a Ruby 3.1+ gem with the standard library; `swift` generates
+a Swift Package Manager library targeting Swift 5.9+.
+
+## Inspect and update
+
+`show` compiles a local contract and prints the same path slice Kaji would
+generate. Use `--format json` when an agent needs the selected operations in a
+machine-readable form:
+
+```sh
+kaji show openapi.yaml --include-path '/messages*' --format json
+```
+
+`update --output generated` finds direct-generation lock files below the root.
+It replays a lock when its local source or artifacts changed, skips unchanged
+local inputs, and always re-fetches public URL inputs. Config-generated output
+has an explicit recipe already, so rerun `kaji generate --config kaji.json`.
+Use `--force` to regenerate every replayable lock.
+
+## Private-spec auth profiles
+
+Kaji auth profiles store only an environment-variable name, never a token.
+They make a named provider token reusable in authenticated remote inputs:
+
+```sh
+export GITHUB_TOKEN=…
+kaji auth login github --token-env GITHUB_TOKEN
+kaji auth status
+```
+
+Reference that profile in `kaji.json` with
+`"token": { "profile": "github" }`, then use `kaji auth logout github` to
+remove the mapping. `KAJI_CONFIG_HOME` overrides the profile-store directory.
 
 See [the complete CLI reference](../cli.md) for every option and source-build
 instructions.

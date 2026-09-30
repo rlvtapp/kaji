@@ -12,13 +12,16 @@ members = [
     "crates/plugins/python",
     "crates/plugins/php",
     "crates/plugins/java",
+    "crates/plugins/csharp",
     "crates/plugins/dotnet",
     "crates/plugins/elixir",
+    "crates/plugins/ruby",
+    "crates/plugins/swift",
 ]
 default-members = ["crates/kaji"]
 
 [workspace.package]
-version = "0.2.1"
+version = "0.3.0"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/rlvtapp/Kaji"

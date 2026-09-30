@@ -170,7 +170,8 @@ For a public document, `input` can be the URL string directly:
 
 For a private document, make `input` an object. It accepts `url`, optional
 `headers`, and one optional `auth` object. Header values and auth values can be
-literal strings or `{ "env": "VARIABLE_NAME" }`, which resolves only while
+literal strings, `{ "env": "VARIABLE_NAME" }`, or
+`{ "profile": "PROFILE_NAME" }`, which resolves only while
 Kaji runs. Prefer environment values and never commit API tokens/passwords.
 
 ```json
@@ -205,6 +206,24 @@ Bearer authentication is equally direct:
 }
 ```
 
+For a reusable provider mapping, keep the token in the environment and register
+only its variable name:
+
+```sh
+export GITHUB_TOKEN=…
+kaji auth login github --token-env GITHUB_TOKEN
+```
+
+Then use `{ "profile": "github" }` wherever a secret value is accepted:
+
+```json
+{ "auth": { "type": "bearer", "token": { "profile": "github" } } }
+```
+
+`kaji auth status` never exposes token values; `kaji auth logout github`
+removes the mapping. Set `KAJI_CONFIG_HOME` to relocate this local profile
+store, for example in a sandboxed agent workspace.
+
 Use `headers` for API-key schemes or nonstandard authentication, for example
 `"X-API-Key": { "env": "PARTNER_OPENAPI_KEY" }`. Header names and values are
 validated by the HTTP client. Kaji applies custom headers first, then Basic or
@@ -219,7 +238,7 @@ Every package contains:
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `language` | Yes | One of `typescript`, `typescript-cli`, `rust`, `rust-cli`, `go`, `python`, `php`, `java`, `csharp`, `elixir`, `mock`, or `artifacts`. `dotnet` remains a legacy alias for `csharp`. |
+| `language` | Yes | One of `typescript`, `typescript-cli`, `rust`, `rust-cli`, `go`, `python`, `php`, `java`, `csharp`, `elixir`, `ruby`, `swift`, `mock`, or `artifacts`. `dotnet` remains a legacy alias for `csharp`. |
 | `path` | Yes | Package directory below `output.path`. |
 | `name` | No | Ecosystem package identity for SDK languages. |
 | `client_style` | No | Package-level `namespaced` or `flat` override. |
@@ -227,7 +246,7 @@ Every package contains:
 
 ### SDK languages
 
-`rust`, `go`, `python`, `php`, `java`, `csharp`, and `elixir` require exactly
+`rust`, `go`, `python`, `php`, `java`, `csharp`, `elixir`, `ruby`, and `swift` require exactly
 one `{ "name": "sdk" }` plugin. Go accepts `jobs`, a bounded generation worker
 count. The other current SDK plugins have no package-specific JSON options
 beyond package name and client style.

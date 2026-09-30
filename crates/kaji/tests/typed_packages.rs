@@ -1,5 +1,5 @@
 mod support;
-use kaji::{csharp, prelude::*, ts};
+use kaji::{csharp, dotnet, prelude::*, ts};
 
 struct CommunityConsumer {
     meta: Meta,
@@ -138,7 +138,7 @@ fn shared_package_and_local_settings_resolve_per_instance() {
 }
 
 #[test]
-fn csharp_is_a_first_class_alias_for_the_dotnet_sdk_generator() {
+fn csharp_is_a_first_class_sdk_generator() {
     let tree = kaji::generate(
         &support::sdk_contract_api(),
         ProfileSet::new("sdk").package(
@@ -155,4 +155,16 @@ fn csharp_is_a_first_class_alias_for_the_dotnet_sdk_generator() {
             .unwrap()
             .contains("HttpClient")
     );
+}
+
+#[test]
+fn dotnet_remains_a_compatible_rust_target() {
+    let package: Package<dotnet::DotNet> = dotnet::package("dotnet");
+    let tree = kaji::generate(
+        &support::sdk_contract_api(),
+        ProfileSet::new("sdk").package(package.name("acme-email").with(dotnet::sdk().namespaced())),
+    )
+    .unwrap();
+
+    assert!(tree.get("sdk/dotnet/AcmeEmail.csproj").is_some());
 }

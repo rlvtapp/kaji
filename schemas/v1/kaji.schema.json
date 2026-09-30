@@ -41,7 +41,7 @@
       "description": "Namespaced resource client or direct operation methods."
     },
     "secret": {
-      "description": "Literal value or environment-variable reference. Prefer an environment reference for credentials.",
+      "description": "Literal value, environment-variable reference, or named Kaji auth profile. Prefer an environment or profile reference for credentials.",
       "oneOf": [
         { "type": "string" },
         {
@@ -49,6 +49,12 @@
           "additionalProperties": false,
           "required": ["env"],
           "properties": { "env": { "type": "string", "minLength": 1 } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["profile"],
+          "properties": { "profile": { "type": "string", "minLength": 1 } }
         }
       ]
     },
@@ -134,7 +140,7 @@
       "properties": {
         "language": {
           "type": "string",
-          "enum": ["typescript", "typescript-cli", "rust", "rust-cli", "go", "python", "php", "java", "csharp", "dotnet", "elixir", "mock", "artifacts"]
+          "enum": ["typescript", "typescript-cli", "rust", "rust-cli", "go", "python", "php", "java", "csharp", "dotnet", "elixir", "ruby", "swift", "mock", "artifacts"]
         },
         "path": { "type": "string", "minLength": 1, "description": "Safe path below output.path." },
         "name": { "type": "string", "minLength": 1, "description": "Generated package identity." },

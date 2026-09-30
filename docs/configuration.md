@@ -24,7 +24,7 @@ Import `kaji::prelude::*` to bring the package extension traits into scope.
 ## Complete release
 
 ```rust
-use kaji::{csharp, elixir, go, java, mock, php, prelude::*, python, rust, ts};
+use kaji::{csharp, elixir, go, java, mock, php, prelude::*, python, ruby, rust, swift, ts};
 
 let release = ProfileSet::new("sdk")
     .common(Common::default()
@@ -43,6 +43,8 @@ let release = ProfileSet::new("sdk")
     .package(java::package("java").with(java::sdk()))
     .package(csharp::package("csharp").with(csharp::sdk()))
     .package(elixir::package("elixir").with(elixir::sdk()))
+    .package(ruby::package("ruby").with(ruby::sdk()))
+    .package(swift::package("swift").with(swift::sdk()))
     .package(mock::package("mock-server")
         .with(mock::server().image("httpmock/httpmock:0.8.0").port(4010)));
 
@@ -108,6 +110,8 @@ style selection wins. All default to namespaced.
 | `java` | JDK HttpClient / Jackson | None beyond client style. |
 | `csharp` | .NET 8 `HttpClient` / `System.Text.Json` | None beyond client style. `dotnet` remains a compatibility alias. |
 | `elixir` | Finch / Jason | None beyond client style. |
+| `ruby` | Ruby 3.1 standard library (`Net::HTTP`) | None beyond client style. |
+| `swift` | Swift 5.9 `URLSession` | None beyond client style. |
 
 Package naming is configured on `language::package(...).name(...)`, not on
 the SDK plugin. Runtime credentials and retry knobs belong to the generated

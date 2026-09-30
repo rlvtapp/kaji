@@ -4,11 +4,16 @@
 > mental model. This page is the detailed authoring and API reference.
 
 Kaji uses language-scoped packages and a generic plugin engine.
-Core owns no Rust or TypeScript renderers. All eight maintained languages live
+Core owns no Rust or TypeScript renderers. All maintained languages live
 under `crates/plugins/`; community languages need no change to a central enum.
 
+The C# target is the canonical `crates/plugins/csharp` / `kaji-plugin-csharp`
+crate. `crates/plugins/dotnet` remains a thin compatibility facade that
+re-exports it, so existing embedded profiles continue to compile without a
+second generator implementation.
+
 ```rust
-use kaji::{prelude::*, rust, ts};
+use kaji::{prelude::*, ruby, rust, swift, ts};
 
 let release = ProfileSet::new("sdk")
     .common(Common::default().client_style(SdkClientStyle::Namespaced))
@@ -17,7 +22,9 @@ let release = ProfileSet::new("sdk")
         .with(ts::sdk().fetch().client_name("Acme")))
     .package(ts::package("typescript/axios")
         .with(ts::sdk().axios().raw()))
-    .package(rust::package("rust").with(rust::sdk()));
+    .package(rust::package("rust").with(rust::sdk()))
+    .package(ruby::package("ruby").with(ruby::sdk()))
+    .package(swift::package("swift").with(swift::sdk()));
 // kaji::generate(&api, release)?.write_to(output_directory)?;
 ```
 

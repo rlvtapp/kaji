@@ -40,6 +40,9 @@ npx @relevate/kaji generate <openapi-file> --output <directory> --language <targ
 npx @relevate/kaji generate --artifacts <directory> --output <directory> --language <target>...
 npx @relevate/kaji mock serve <openapi-file> [--port <port>]
 npx @relevate/kaji check <openapi-file> [--format human|json]
+npx @relevate/kaji show <openapi-file> [--include-path <pattern>] [--exclude-path <pattern>]
+npx @relevate/kaji update [--output <directory>] [--force]
+npx @relevate/kaji auth <login|logout|status> ...
 npx @relevate/kaji languages
 npx @relevate/kaji --version
 npx @relevate/kaji --help
@@ -64,7 +67,7 @@ npx @relevate/kaji --help
 | `--exclude-path` | Repeatable OpenAPI path glob to omit after inclusion | None |
 
 Targets: `rust`, `rust-cli`, `typescript`, `typescript-cli`, `go`, `python`, `php`,
-`java`, `csharp`, `elixir`. Each becomes a matching subdirectory, including when
+`java`, `csharp`, `elixir`, `ruby`, `swift`. Each becomes a matching subdirectory, including when
 only one target is selected. Advanced/custom plugin composition remains available
 through the [Rust API](typed-plugins.md). The CLI does not load JavaScript
 plugins; JSON names only select plugins built into the installed Kaji binary.
@@ -123,7 +126,7 @@ TypeScript multi-client examples are in the [`kaji.json` reference](config-file.
 | Package `language` | Built-in plugin names | Relevant plugin options |
 | --- | --- | --- |
 | `typescript` | `sdk`, `zod`, `tanstack-react-query`, `tanstack-vue-query`, `swr`, `faker`, `msw`, `cypress` | SDK: `transport` (`fetch`/`axios`), `surface` (`client`/`raw`), `client_name`, `group_by_tag`, `throw_on_error`. Artifacts: `output`, `clients_import`, `group_by_tag`. |
-| `rust`, `go`, `python`, `php`, `java`, `csharp`, `elixir` | `sdk` | Go SDK: `jobs`. |
+| `rust`, `go`, `python`, `php`, `java`, `csharp`, `elixir`, `ruby`, `swift` | `sdk` | Go SDK: `jobs`. |
 | `mock` | `server` | `image`, `port`. |
 | `artifacts` | `redoc`, `mcp` | `output`; ReDoc also accepts `openapi_spec`, `title`. |
 
@@ -138,7 +141,7 @@ Zod, TanStack, SWR, Faker, or MSW adds the matching runtime dependency to its
 project setup and framework peer dependencies remain the application's responsibility. Artifact-only TypeScript output intentionally
 does not invent a package manifest.
 
-`--language all` remains a direct-mode shortcut for the eight bundled SDK
+`--language all` remains a direct-mode shortcut for every bundled SDK
 languages; it uses the Fetch TypeScript transport. Use
 `--typescript-transport axios` when direct mode needs Axios. JSON can declare
 multiple TypeScript packages, each with its own `sdk.transport`. Direct mode
@@ -234,3 +237,7 @@ For a local launcher smoke test, set `KAJI_BINARY` to the built Rust binary and
 invoke `node packages/cli/bin/kaji.cjs --help`. Normal installed usage resolves the
 matching optional package and verifies its version matches the launcher. Do not
 install with `--omit=optional`; there is intentionally no postinstall downloader.
+`ruby` emits a Ruby 3.1+ gem using the standard-library HTTP stack. `swift`
+emits a Swift 5.9+ Swift Package Manager library. Each accepts
+`base_url:`, `api_key:`, `bearer_token:`, and per-client `headers:`; the
+namespaced surface adds resource facades without removing direct methods.

@@ -14,13 +14,14 @@ use kaji::ts::artifacts::{
     TypeScriptReactQuery, TypeScriptSwr, TypeScriptVueQuery, TypeScriptZod,
 };
 use kaji::{
-    SdkClientStyle, csharp, dotnet, elixir, go, java, mock, php, prelude::*, python, rust,
-    rust_cli, ts, ts_cli,
+    SdkClientStyle, csharp, dotnet, elixir, go, java, mock, php, prelude::*, python, ruby, rust,
+    rust_cli, swift, ts, ts_cli,
 };
 use kaji_core::{Api, GeneratedFile, GeneratedTree};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+mod credentials;
 mod mcp;
 mod registry;
 
@@ -36,6 +37,9 @@ Usage:
   kaji mcp generator
   kaji mock serve <openapi-file> [--port <port>]
   kaji check <openapi-file> [--format human|json]
+  kaji show <openapi-file> [--include-path <pattern>] [--exclude-path <pattern>]
+  kaji update [--output <directory>] [--force]
+  kaji auth <login|logout|status> ...
   kaji discover <query> [--limit <count>] [--format human|json]
   kaji download <api-id> --output <openapi-file> [--version <version>]
   kaji languages
@@ -63,7 +67,7 @@ Generate options (direct mode):
       --exclude-path <pattern>        Omit matching OpenAPI paths; repeatable
   -h, --help                          Show help
 
-Targets: rust, rust-cli, typescript, typescript-cli, go, python, php, java, csharp, dotnet (legacy alias), elixir
+Targets: rust, rust-cli, typescript, typescript-cli, go, python, php, java, csharp, dotnet (legacy alias), elixir, ruby, swift
 
 MCP commands:
   mcp                                   Serve an OpenAPI document as MCP tools over stdio
@@ -85,6 +89,20 @@ Contract commands:
       --baseline <file>                  Suppress matching, known diagnostic fingerprints
       --write-baseline <file>            Record current diagnostics as a baseline
       --ignore <rule>                    Suppress a rule entirely; repeatable
+
+Update commands:
+  show <openapi-file>                    Inspect the generated path and operation tree
+      --include-path <pattern>            Repeatable path filter
+      --exclude-path <pattern>            Repeatable path exclusion
+      --format <format>                   human (default) or json for automation
+  update                                 Replay direct-generation lock files below output
+      --output <directory>                Search root (default: current directory)
+      --force                             Regenerate even when local input is unchanged
+
+Auth commands:
+  auth login <profile> --token-env <name> Register a named, environment-backed token
+  auth logout <profile>                   Remove a named token profile
+  auth status                             List profiles without exposing tokens
 
 Registry commands:
   discover <query>                       Search the public OpenAPI directory
@@ -112,6 +130,8 @@ const LANGUAGES: &[&str] = &[
     "csharp",
     "dotnet",
     "elixir",
+    "ruby",
+    "swift",
 ];
 
 // `all` intentionally remains the established shortcut for SDK packages. A
@@ -126,6 +146,8 @@ const SDK_LANGUAGES: &[&str] = &[
     "java",
     "csharp",
     "elixir",
+    "ruby",
+    "swift",
 ];
 
 #[derive(Debug)]
@@ -627,6 +649,7 @@ struct RemoteInput {
 enum SecretValue {
     Literal(String),
     Environment { env: String },
+    Profile { profile: String },
 }
 
 impl SecretValue {
@@ -635,6 +658,8 @@ impl SecretValue {
             Self::Literal(value) => Ok(value.clone()),
             Self::Environment { env: variable } => env::var(variable)
                 .with_context(|| format!("read environment variable {variable:?} for {field}")),
+            Self::Profile { profile } => credentials::resolve(profile)
+                .with_context(|| format!("resolve Kaji auth profile {profile:?} for {field}")),
         }
     }
 }
@@ -720,6 +745,9 @@ enum Action {
     Help,
     Version,
     Languages,
+    Show(Show),
+    Update(Update),
+    Auth(Auth),
     Discover(Discover),
     Download(Download),
     Init(Init),
@@ -728,6 +756,33 @@ enum Action {
     MockServe(MockServe),
     Check(Check),
     Generate(Box<Generate>),
+}
+
+#[derive(Debug)]
+struct Show {
+    source: PathBuf,
+    compiler: Option<PathBuf>,
+    paths: PathSelection,
+    format: ShowFormat,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ShowFormat {
+    Human,
+    Json,
+}
+
+#[derive(Debug)]
+struct Update {
+    output: PathBuf,
+    force: bool,
+}
+
+#[derive(Debug)]
+enum Auth {
+    Login { profile: String, token_env: String },
+    Logout { profile: String },
+    Status,
 }
 
 #[derive(Debug)]
@@ -772,6 +827,15 @@ fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Action> {
     }
     if command == "check" {
         return parse_check(args);
+    }
+    if command == "show" {
+        return parse_show(args);
+    }
+    if command == "update" {
+        return parse_update(args);
+    }
+    if command == "auth" {
+        return parse_auth(args);
     }
     if command == "discover" {
         return parse_discover(args);
@@ -1060,6 +1124,138 @@ fn parse_download(args: impl IntoIterator<Item = OsString>) -> Result<Action> {
         version,
         output,
     }))
+}
+
+fn parse_show(args: impl IntoIterator<Item = OsString>) -> Result<Action> {
+    let mut source = None;
+    let mut compiler = None;
+    let mut paths = PathSelection::default();
+    let mut format = ShowFormat::Human;
+    let mut args = args.into_iter();
+    while let Some(argument) = args.next() {
+        let flag = argument.to_string_lossy();
+        if !flag.starts_with('-') {
+            if source.replace(argument.into()).is_some() {
+                bail!("show accepts exactly one OpenAPI file")
+            }
+            continue;
+        }
+        match flag.as_ref() {
+            "--help" | "-h" => return Ok(Action::Help),
+            "--openapi-compiler" => {
+                compiler = Some(
+                    args.next()
+                        .context("--openapi-compiler requires a value")?
+                        .into(),
+                );
+            }
+            "--include-path" => paths.include.push(
+                args.next()
+                    .context("--include-path requires a pattern")?
+                    .into_string()
+                    .map_err(|_| anyhow::anyhow!("--include-path requires UTF-8 text"))?,
+            ),
+            "--exclude-path" => paths.exclude.push(
+                args.next()
+                    .context("--exclude-path requires a pattern")?
+                    .into_string()
+                    .map_err(|_| anyhow::anyhow!("--exclude-path requires UTF-8 text"))?,
+            ),
+            "--format" => {
+                format = match args
+                    .next()
+                    .context("--format requires human or json")?
+                    .to_string_lossy()
+                    .as_ref()
+                {
+                    "human" => ShowFormat::Human,
+                    "json" => ShowFormat::Json,
+                    value => bail!("--format must be human or json, got {value:?}"),
+                }
+            }
+            "--json" => format = ShowFormat::Json,
+            value => bail!("unknown show option {value}; run kaji --help"),
+        }
+    }
+    validate_path_selection(&paths)?;
+    Ok(Action::Show(Show {
+        source: source.context("show requires an OpenAPI file")?,
+        compiler,
+        paths,
+        format,
+    }))
+}
+
+fn parse_update(args: impl IntoIterator<Item = OsString>) -> Result<Action> {
+    let mut output = PathBuf::from(".");
+    let mut force = false;
+    let mut args = args.into_iter();
+    while let Some(argument) = args.next() {
+        match argument.to_string_lossy().as_ref() {
+            "--help" | "-h" => return Ok(Action::Help),
+            "--output" | "-o" => {
+                output = args.next().context("--output requires a directory")?.into();
+            }
+            "--force" => force = true,
+            value if value.starts_with('-') => {
+                bail!("unknown update option {value}; run kaji --help")
+            }
+            _ => bail!("update accepts only --output and --force"),
+        }
+    }
+    Ok(Action::Update(Update { output, force }))
+}
+
+fn parse_auth(args: impl IntoIterator<Item = OsString>) -> Result<Action> {
+    let mut args = args.into_iter();
+    let command = args
+        .next()
+        .context("auth requires login, logout, or status")?
+        .into_string()
+        .map_err(|_| anyhow::anyhow!("auth command must be UTF-8 text"))?;
+    match command.as_str() {
+        "status" => {
+            if args.next().is_some() {
+                bail!("auth status does not accept arguments")
+            }
+            Ok(Action::Auth(Auth::Status))
+        }
+        "logout" => {
+            let profile = args
+                .next()
+                .context("auth logout requires a profile name")?
+                .into_string()
+                .map_err(|_| anyhow::anyhow!("auth profile must be UTF-8 text"))?;
+            if args.next().is_some() {
+                bail!("auth logout accepts exactly one profile name")
+            }
+            Ok(Action::Auth(Auth::Logout { profile }))
+        }
+        "login" => {
+            let profile = args
+                .next()
+                .context("auth login requires a profile name")?
+                .into_string()
+                .map_err(|_| anyhow::anyhow!("auth profile must be UTF-8 text"))?;
+            let flag = args
+                .next()
+                .context("auth login requires --token-env <name>")?;
+            if flag != "--token-env" {
+                bail!("auth login requires --token-env <name>")
+            }
+            let token_env = args
+                .next()
+                .context("--token-env requires an environment variable name")?
+                .into_string()
+                .map_err(|_| anyhow::anyhow!("--token-env requires UTF-8 text"))?;
+            if args.next().is_some() {
+                bail!("auth login accepts only --token-env <name>")
+            }
+            Ok(Action::Auth(Auth::Login { profile, token_env }))
+        }
+        "--help" | "-h" | "help" => Ok(Action::Help),
+        _ => bail!("auth requires login, logout, or status"),
+    }
 }
 
 fn parse_check(args: impl IntoIterator<Item = OsString>) -> Result<Action> {
@@ -1352,6 +1548,8 @@ fn profiles(options: &Generate) -> Result<ProfileSet> {
             // configuration and direct commands should use `csharp`.
             "dotnet" => profiles.package(dotnet::package("dotnet").with(dotnet::sdk())),
             "elixir" => profiles.package(elixir::package("elixir").with(elixir::sdk())),
+            "ruby" => profiles.package(ruby::package("ruby").with(ruby::sdk())),
+            "swift" => profiles.package(swift::package("swift").with(swift::sdk())),
             "typescript" => {
                 let mut sdk = match options
                     .typescript_transport
@@ -1652,6 +1850,26 @@ fn config_profiles(
                 };
                 profiles.package(package_builder.with(elixir::sdk()))
             }
+            "ruby" => {
+                has_only_known_plugins(package, &["sdk"])?;
+                let package_builder = ruby::package(&package.path).common(package_common(style));
+                let package_builder = if let Some(name) = &package.name {
+                    package_builder.name(name)
+                } else {
+                    package_builder
+                };
+                profiles.package(package_builder.with(ruby::sdk()))
+            }
+            "swift" => {
+                has_only_known_plugins(package, &["sdk"])?;
+                let package_builder = swift::package(&package.path).common(package_common(style));
+                let package_builder = if let Some(name) = &package.name {
+                    package_builder.name(name)
+                } else {
+                    package_builder
+                };
+                profiles.package(package_builder.with(swift::sdk()))
+            }
             "mock" => {
                 has_only_known_plugins(package, &["server"])?;
                 let servers = package
@@ -1687,7 +1905,7 @@ fn config_profiles(
                 profiles.package(ts::package(&package.path).common(package_common(style)))
             }
             other => bail!(
-                "unknown config language {other:?}; use typescript, typescript-cli, rust, rust-cli, go, python, php, java, csharp, dotnet (legacy alias), elixir, mock, or artifacts"
+                "unknown config language {other:?}; use typescript, typescript-cli, rust, rust-cli, go, python, php, java, csharp, dotnet (legacy alias), elixir, ruby, swift, mock, or artifacts"
             ),
         };
     }
@@ -2073,6 +2291,41 @@ struct GenerationLock {
     paths: PathSelection,
     targets: Vec<String>,
     settings: GenerationSettingsLock,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    replay: Option<GenerationReplayLock>,
+}
+
+/// Direct generation has no separate recipe to re-run. Preserve its
+/// non-secret inputs so `kaji update` can faithfully replay it later.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct GenerationReplayLock {
+    source: Option<String>,
+    artifacts: Option<String>,
+    languages: Vec<String>,
+    name: String,
+    version: String,
+    client_style: String,
+    typescript_transport: Option<String>,
+    typescript_surface: String,
+    typescript_client_name: Option<String>,
+    go_jobs: Option<usize>,
+    compiler: Option<String>,
+    paths: PathSelection,
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateLock {
+    version: u8,
+    input: UpdateInputLock,
+    #[serde(default)]
+    replay: Option<GenerationReplayLock>,
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateInputLock {
+    #[serde(default)]
+    source_sha256: Option<String>,
+    artifacts_sha256: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -2178,6 +2431,7 @@ fn write_generation_lock(
                 .as_ref()
                 .map(|compiler| compiler.to_string_lossy().into_owned()),
         },
+        replay: direct_generation_replay(options),
     };
     let destination = output.join(GENERATION_LOCK_PATH);
     if let Some(parent) = destination.parent() {
@@ -2190,6 +2444,208 @@ fn write_generation_lock(
         format!("{}\n", serde_json::to_string_pretty(&lock)?),
     )
     .with_context(|| format!("write generation metadata {}", destination.display()))
+}
+
+fn direct_generation_replay(options: &Generate) -> Option<GenerationReplayLock> {
+    options
+        .config_packages
+        .is_none()
+        .then(|| GenerationReplayLock {
+            source: options.source.as_ref().map(|source| match source {
+                OpenApiInput::Path(path) => path.to_string_lossy().into_owned(),
+                OpenApiInput::Remote(remote) => remote.url.clone(),
+            }),
+            artifacts: options
+                .artifacts
+                .as_ref()
+                .map(|path| path.to_string_lossy().into_owned()),
+            languages: options.languages.clone(),
+            name: options.name.clone(),
+            version: options.version.clone(),
+            client_style: match options.style {
+                SdkClientStyle::Namespaced => "namespaced".into(),
+                SdkClientStyle::Flat => "flat".into(),
+            },
+            typescript_transport: options
+                .typescript_transport
+                .map(|transport| match transport {
+                    TypeScriptTransport::Fetch => "fetch".into(),
+                    TypeScriptTransport::Axios => "axios".into(),
+                }),
+            typescript_surface: if options.raw { "raw" } else { "client" }.into(),
+            typescript_client_name: options.client_name.clone(),
+            go_jobs: (options.jobs != 0).then_some(options.jobs),
+            compiler: options
+                .compiler
+                .as_ref()
+                .map(|path| path.to_string_lossy().into_owned()),
+            paths: options.path_selection.clone(),
+        })
+}
+
+fn update(options: Update) -> Result<()> {
+    let root = std::fs::canonicalize(&options.output)
+        .with_context(|| format!("cannot read update output {}", options.output.display()))?;
+    if !root.is_dir() {
+        bail!("update output must be a directory")
+    }
+    let mut locks = Vec::new();
+    find_generation_locks(&root, &mut locks)?;
+    if locks.is_empty() {
+        bail!(
+            "no {GENERATION_LOCK_PATH} files were found below {}; run kaji generate first",
+            root.display()
+        )
+    }
+    let mut updated = 0;
+    let mut unchanged = 0;
+    let mut unsupported = 0;
+    for path in locks {
+        let document = std::fs::read_to_string(&path)
+            .with_context(|| format!("read generation lock {}", path.display()))?;
+        let lock: UpdateLock = serde_json::from_str(&document)
+            .with_context(|| format!("parse generation lock {}", path.display()))?;
+        if lock.version != GENERATION_LOCK_VERSION {
+            bail!(
+                "generation lock {} has unsupported version {}; expected {}",
+                path.display(),
+                lock.version,
+                GENERATION_LOCK_VERSION
+            )
+        }
+        let Some(replay) = lock.replay else {
+            eprintln!(
+                "kaji update: skipping {} (created by config generation; run kaji generate --config instead)",
+                path.display()
+            );
+            unsupported += 1;
+            continue;
+        };
+        let output = path
+            .parent()
+            .and_then(Path::parent)
+            .expect("generation lock is always nested below .kaji")
+            .to_path_buf();
+        if !options.force && replay_input_is_unchanged(&replay, &lock.input)? {
+            println!("Unchanged: {}", output.display());
+            unchanged += 1;
+            continue;
+        }
+        println!("Updating: {}", output.display());
+        generate(replay_generate_options(replay, output)?)?;
+        updated += 1;
+    }
+    println!(
+        "Update complete: {updated} regenerated, {unchanged} unchanged, {unsupported} need their config recipe"
+    );
+    Ok(())
+}
+
+fn auth(options: Auth) -> Result<()> {
+    match options {
+        Auth::Login { profile, token_env } => {
+            credentials::login(&profile, &token_env)?;
+            println!("Saved auth profile {profile:?}; token stays in ${token_env}.");
+        }
+        Auth::Logout { profile } => {
+            if credentials::logout(&profile)? {
+                println!("Removed auth profile {profile:?}.");
+            } else {
+                println!("No auth profile named {profile:?} was configured.");
+            }
+        }
+        Auth::Status => {
+            let profiles = credentials::profiles()?;
+            if profiles.is_empty() {
+                println!("No Kaji auth profiles are configured.");
+            } else {
+                for (profile, token_env) in profiles {
+                    println!("{profile}\t${token_env}");
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn find_generation_locks(directory: &Path, locks: &mut Vec<PathBuf>) -> Result<()> {
+    for entry in std::fs::read_dir(directory)
+        .with_context(|| format!("read update output {}", directory.display()))?
+    {
+        let entry = entry.with_context(|| format!("read update output {}", directory.display()))?;
+        let path = entry.path();
+        let file_type = entry
+            .file_type()
+            .with_context(|| format!("inspect update path {}", path.display()))?;
+        if file_type.is_dir() {
+            if entry.file_name() != ".git" {
+                find_generation_locks(&path, locks)?;
+            }
+        } else if file_type.is_file() && path.ends_with(GENERATION_LOCK_PATH) {
+            locks.push(path);
+        }
+    }
+    Ok(())
+}
+
+fn replay_input_is_unchanged(
+    replay: &GenerationReplayLock,
+    input: &UpdateInputLock,
+) -> Result<bool> {
+    if let Some(source) = &replay.source {
+        let source = Path::new(source);
+        // Remote URLs are intentionally re-fetched. Their lock records the
+        // downloaded hash, but a local check cannot establish freshness.
+        return Ok(source.is_file()
+            && input
+                .source_sha256
+                .as_ref()
+                .is_some_and(|hash| sha256_file(source).is_ok_and(|actual| actual == *hash)));
+    }
+    if let Some(artifacts) = &replay.artifacts {
+        let artifacts = Path::new(artifacts);
+        return Ok(artifacts.is_dir() && sha256_directory(artifacts)? == input.artifacts_sha256);
+    }
+    Ok(false)
+}
+
+fn replay_generate_options(replay: GenerationReplayLock, output: PathBuf) -> Result<Generate> {
+    let source = replay
+        .source
+        .map(|source| OpenApiInput::Path(PathBuf::from(source)));
+    let artifacts = replay.artifacts.map(PathBuf::from);
+    if source.is_some() == artifacts.is_some() {
+        bail!("generation replay must contain exactly one source or artifact directory")
+    }
+    let style = parse_style(Some(&replay.client_style))?;
+    let typescript_transport = replay
+        .typescript_transport
+        .as_deref()
+        .map(TypeScriptTransport::parse)
+        .transpose()?;
+    if replay.typescript_surface != "client" && replay.typescript_surface != "raw" {
+        bail!("generation replay has invalid TypeScript surface")
+    }
+    Ok(Generate {
+        source,
+        config: None,
+        config_packages: None,
+        artifacts,
+        output,
+        languages: replay.languages,
+        name: replay.name,
+        version: replay.version,
+        style,
+        raw: replay.typescript_surface == "raw",
+        typescript_transport,
+        client_name: replay.typescript_client_name,
+        compiler: replay.compiler.map(PathBuf::from),
+        path_selection: replay.paths,
+        config_sha256: None,
+        source_sha256: None,
+        jobs: replay.go_jobs.unwrap_or_default(),
+        color: ColorChoice::Auto,
+    })
 }
 
 fn sha256_file(path: &Path) -> Result<String> {
@@ -2641,6 +3097,97 @@ fn check(options: Check) -> Result<()> {
         bail!("check failed with {failures} issue(s)")
     }
     Ok(())
+}
+
+#[derive(Serialize)]
+struct ShownOperation {
+    method: String,
+    path: String,
+    operation_id: String,
+}
+
+#[derive(Default)]
+struct ShowTree {
+    operations: Vec<String>,
+    children: BTreeMap<String, ShowTree>,
+}
+
+fn show(options: Show) -> Result<()> {
+    let source = std::fs::canonicalize(&options.source)
+        .with_context(|| format!("cannot read OpenAPI source {}", options.source.display()))?;
+    if !source.is_file() {
+        bail!("OpenAPI source must be a file")
+    }
+    let temporary = tempfile::tempdir().context("cannot create compiler working directory")?;
+    let helper = compiler_path(options.compiler)?;
+    let mut compiler = Command::new(&helper);
+    compiler.arg("--out").arg(temporary.path()).arg(&source);
+    // JSON is an API for agent callers; compiler progress must not corrupt it.
+    if options.format == ShowFormat::Json {
+        compiler.stdout(Stdio::null());
+    }
+    let status = compiler
+        .status()
+        .with_context(|| format!("cannot start OpenAPI compiler {}", helper.display()))?;
+    if !status.success() {
+        bail!("OpenAPI compiler failed ({status})")
+    }
+    let api = kaji_core::adapter::openapi_sidecar::load_operations(
+        temporary.path(),
+        "API".into(),
+        "0.1.0".into(),
+    )?;
+    let api = slice_api_paths(api, &options.paths)?;
+    match options.format {
+        ShowFormat::Json => {
+            let operations = api
+                .operations
+                .iter()
+                .map(|operation| ShownOperation {
+                    method: operation.method.as_str().into(),
+                    path: operation.path.clone(),
+                    operation_id: operation.id.clone(),
+                })
+                .collect::<Vec<_>>();
+            println!("{}", serde_json::to_string_pretty(&operations)?);
+        }
+        ShowFormat::Human => print_show_tree(&api),
+    }
+    Ok(())
+}
+
+fn print_show_tree(api: &Api) {
+    let mut root = ShowTree::default();
+    for operation in &api.operations {
+        let mut node = &mut root;
+        for segment in operation
+            .path
+            .split('/')
+            .filter(|segment| !segment.is_empty())
+        {
+            node = node.children.entry(segment.into()).or_default();
+        }
+        node.operations
+            .push(format!("{} {}", operation.method.as_str(), operation.id));
+    }
+    println!("/");
+    print_show_children(&root, "");
+}
+
+fn print_show_children(node: &ShowTree, prefix: &str) {
+    let entries = node.children.iter().collect::<Vec<_>>();
+    for (index, (segment, child)) in entries.iter().enumerate() {
+        let last = index + 1 == entries.len();
+        let branch = if last { "└─" } else { "├─" };
+        let operations = if child.operations.is_empty() {
+            String::new()
+        } else {
+            format!(" [{}]", child.operations.join(", "))
+        };
+        println!("{prefix}{branch}{segment}{operations}");
+        let next_prefix = format!("{prefix}{}", if last { "  " } else { "│ " });
+        print_show_children(child, &next_prefix);
+    }
 }
 
 fn print_check_passed(operations: usize, suppressed: usize) {
@@ -3101,6 +3648,9 @@ fn main() -> ExitCode {
             println!("{}", LANGUAGES.join("\n"));
             Ok(())
         }
+        Action::Show(options) => show(options),
+        Action::Update(options) => update(options),
+        Action::Auth(options) => auth(options),
         Action::Discover(options) => discover(options),
         Action::Download(options) => download(options),
         Action::Init(init) => init_config(init),
@@ -3167,7 +3717,6 @@ mod tests {
             "generate -o sdk -l go",
             "generate api.yaml -l go",
             "generate api.yaml --artifacts cache -o sdk -l go",
-            "generate api.yaml -o sdk -l ruby",
             "generate api.yaml -o sdk -l go --typescript-surface raw",
             "generate api.yaml -o sdk -l go --client-style bad",
             "generate api.yaml -o sdk -l go --unknown nope",
@@ -3301,6 +3850,65 @@ mod tests {
         assert_eq!(options.compiler, Some(PathBuf::from("compiler")));
         assert!(parse(arguments("check one.yaml two.yaml")).is_err());
         assert!(parse(arguments("check openapi.yaml --wat")).is_err());
+    }
+
+    #[test]
+    fn parses_show_update_and_auth_commands() {
+        let Action::Show(options) = parse(arguments(
+            "show openapi.yaml --include-path /messages* --exclude-path /messages/audit* --json",
+        ))
+        .unwrap() else {
+            panic!()
+        };
+        assert_eq!(options.source, PathBuf::from("openapi.yaml"));
+        assert_eq!(options.paths.include, ["/messages*"]);
+        assert_eq!(options.paths.exclude, ["/messages/audit*"]);
+        assert_eq!(options.format, ShowFormat::Json);
+
+        let Action::Update(options) =
+            parse(arguments("update --output generated --force")).unwrap()
+        else {
+            panic!()
+        };
+        assert_eq!(options.output, PathBuf::from("generated"));
+        assert!(options.force);
+
+        let Action::Auth(Auth::Login { profile, token_env }) =
+            parse(arguments("auth login github --token-env GITHUB_TOKEN")).unwrap()
+        else {
+            panic!()
+        };
+        assert_eq!(profile, "github");
+        assert_eq!(token_env, "GITHUB_TOKEN");
+        assert!(parse(arguments("auth logout github extra")).is_err());
+    }
+
+    #[test]
+    fn update_detects_unchanged_local_direct_input() {
+        let temporary = tempfile::tempdir().unwrap();
+        let source = temporary.path().join("openapi.yaml");
+        std::fs::write(&source, "openapi: 3.1.0\n").unwrap();
+        let replay = GenerationReplayLock {
+            source: Some(source.to_string_lossy().into_owned()),
+            artifacts: None,
+            languages: vec!["go".into()],
+            name: "API".into(),
+            version: "1".into(),
+            client_style: "namespaced".into(),
+            typescript_transport: None,
+            typescript_surface: "client".into(),
+            typescript_client_name: None,
+            go_jobs: None,
+            compiler: None,
+            paths: PathSelection::default(),
+        };
+        let input = UpdateInputLock {
+            source_sha256: Some(sha256_file(&source).unwrap()),
+            artifacts_sha256: "irrelevant".into(),
+        };
+        assert!(replay_input_is_unchanged(&replay, &input).unwrap());
+        std::fs::write(&source, "openapi: 3.1.1\n").unwrap();
+        assert!(!replay_input_is_unchanged(&replay, &input).unwrap());
     }
 
     #[test]

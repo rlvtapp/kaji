@@ -1,58 +1,70 @@
-//! Typed package integration for the existing complete DotNet generator.
+//! Typed package integration for the Swift SDK generator.
 use anyhow::Result;
 use kaji_core::SdkClientStyle;
 use kaji_core::engine::{Language, Meta, Package, Plugin, PluginContext};
 
-pub struct DotNet;
+pub struct Swift;
+
 #[derive(Default)]
 pub struct Settings {
     pub package_name: Option<String>,
 }
-impl Language for DotNet {
-    const NAME: &'static str = "dotnet";
+
+impl Language for Swift {
+    const NAME: &'static str = "swift";
     type Settings = Settings;
     type Workspace = ();
 }
-pub fn package(dir: impl Into<String>) -> Package<DotNet> {
+
+pub fn package(dir: impl Into<String>) -> Package<Swift> {
     Package::new(dir)
 }
+
 pub trait PackageExt {
     fn name(self, name: impl Into<String>) -> Self;
 }
-impl PackageExt for Package<DotNet> {
+
+impl PackageExt for Package<Swift> {
     fn name(mut self, name: impl Into<String>) -> Self {
         self.settings_mut().package_name = Some(name.into());
         self
     }
 }
+
 pub struct Sdk {
     meta: Meta,
     client_style: Option<SdkClientStyle>,
 }
+
 pub fn sdk() -> Sdk {
     Sdk {
         meta: Meta::new(),
         client_style: None,
     }
 }
+
 impl Sdk {
     pub fn flat(mut self) -> Self {
         self.client_style = Some(SdkClientStyle::Flat);
         self
     }
+
     pub fn namespaced(mut self) -> Self {
         self.client_style = Some(SdkClientStyle::Namespaced);
         self
     }
 }
-impl Plugin<DotNet> for Sdk {
+
+impl Plugin<Swift> for Sdk {
     fn kind(&self) -> &'static str {
-        "dotnet-sdk"
+        "swift-sdk"
     }
+
     fn meta(&self) -> &Meta {
         &self.meta
     }
-    fn generate(&self, cx: &mut PluginContext<'_, DotNet>) -> Result<()> {
+
+    fn generate(&self, cx: &mut PluginContext<'_, Swift>) -> Result<()> {
         cx.files.append(crate::render_sdk(
             cx.api,
             ".",

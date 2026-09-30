@@ -473,18 +473,21 @@ dependencies = [
 
 [[package]]
 name = "kaji"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "kaji-core",
+ "kaji-plugin-csharp",
  "kaji-plugin-dotnet",
  "kaji-plugin-elixir",
  "kaji-plugin-go",
  "kaji-plugin-java",
  "kaji-plugin-php",
  "kaji-plugin-python",
+ "kaji-plugin-ruby",
  "kaji-plugin-rust",
  "kaji-plugin-rust-cli",
+ "kaji-plugin-swift",
  "kaji-plugin-typescript",
  "kaji-plugin-typescript-cli",
  "serde",
@@ -494,7 +497,7 @@ dependencies = [
 
 [[package]]
 name = "kaji-cli"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "kaji",
@@ -508,7 +511,7 @@ dependencies = [
 
 [[package]]
 name = "kaji-core"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "serde",
@@ -518,8 +521,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "kaji-plugin-dotnet"
-version = "0.2.1"
+name = "kaji-plugin-csharp"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "kaji-core",
@@ -528,8 +531,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "kaji-plugin-dotnet"
+version = "0.3.0"
+dependencies = [
+ "kaji-core",
+ "kaji-plugin-csharp",
+]
+
+[[package]]
 name = "kaji-plugin-elixir"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "kaji-core",
@@ -538,7 +549,7 @@ dependencies = [
 
 [[package]]
 name = "kaji-plugin-go"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "kaji-core",
@@ -548,7 +559,7 @@ dependencies = [
 
 [[package]]
 name = "kaji-plugin-java"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "kaji-core",
@@ -557,7 +568,7 @@ dependencies = [
 
 [[package]]
 name = "kaji-plugin-php"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "kaji-core",
@@ -566,7 +577,17 @@ dependencies = [
 
 [[package]]
 name = "kaji-plugin-python"
-version = "0.2.1"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "kaji-core",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "kaji-plugin-ruby"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "kaji-core",
@@ -576,7 +597,7 @@ dependencies = [
 
 [[package]]
 name = "kaji-plugin-rust"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "kaji-core",
@@ -586,7 +607,7 @@ dependencies = [
 
 [[package]]
 name = "kaji-plugin-rust-cli"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "kaji-core",
@@ -594,8 +615,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "kaji-plugin-swift"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "kaji-core",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "kaji-plugin-typescript"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "kaji-core",
@@ -604,7 +635,7 @@ dependencies = [
 
 [[package]]
 name = "kaji-plugin-typescript-cli"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "kaji-core",

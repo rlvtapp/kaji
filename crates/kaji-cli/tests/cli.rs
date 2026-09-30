@@ -73,6 +73,8 @@ fn generates_all_languages_from_artifacts_and_preserves_custom_files() {
         "java",
         "csharp",
         "elixir",
+        "ruby",
+        "swift",
     ] {
         assert!(output.join(target).is_dir(), "missing {target}");
     }
@@ -112,6 +114,18 @@ fn generates_all_languages_from_artifacts_and_preserves_custom_files() {
         fs::read_to_string(custom).unwrap(),
         "// user customization\n"
     );
+
+    let update = cli()
+        .args(["update", "--output"])
+        .arg(&output)
+        .output()
+        .unwrap();
+    assert!(
+        update.status.success(),
+        "{}",
+        String::from_utf8_lossy(&update.stderr)
+    );
+    assert!(String::from_utf8_lossy(&update.stdout).contains("1 unchanged"));
 
     let axios_output = working.path().join("axios sdk");
     let axios = cli()

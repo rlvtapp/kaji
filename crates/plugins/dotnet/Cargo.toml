@@ -1,17 +1,13 @@
 [package]
 name = "kaji-plugin-dotnet"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2024"
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "Native .NET SDK generator for Kaji"
+description = "Deprecated compatibility facade for Kaji's C# SDK generator"
 publish = false
 
 [dependencies]
-anyhow = "1.0.102"
 kaji-core = { path = "../../kaji-core" }
-serde_json = "1.0"
-
-[dev-dependencies]
-tempfile = "3.27.0"
+kaji-plugin-csharp = { path = "../csharp" }

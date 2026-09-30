@@ -60,12 +60,18 @@ package a separate safe relative `path`; `name` is its ecosystem identity.
 | `typescript` | `sdk`, `zod`, TanStack, SWR, Faker, MSW, Cypress |
 | `typescript-cli` | `cli` |
 | `rust-cli` | `cli` |
-| `rust`, `go`, `python`, `php`, `java`, `csharp`, `elixir` | `sdk` |
+| `rust`, `go`, `python`, `php`, `java`, `csharp`, `elixir`, `ruby`, `swift` | `sdk` |
 | `mock` | `server` |
 | `artifacts` | `redoc`, `mcp` |
 
 `csharp` emits a .NET 8 C# SDK using `HttpClient` and `System.Text.Json`.
 `dotnet` is retained as a compatibility alias for existing recipes.
+
+`ruby` emits a Ruby 3.1+ gem using only `Net::HTTP`, `URI`, and `JSON` from
+the standard library.
+
+`swift` emits a Swift 5.9+ Swift Package Manager package using Foundation
+`URLSession` and `Codable`, without third-party runtime dependencies.
 
 For private remote contracts, use environment references rather than committed
 tokens. The full [`kaji.json` reference](../config-file.md) covers every field,

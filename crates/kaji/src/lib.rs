@@ -8,19 +8,21 @@ use std::path::Path;
 pub mod mock;
 pub use kaji_core::SdkClientStyle;
 pub use kaji_core::engine::{Common, Enforce, Package, PluginPhase};
-pub use kaji_plugin_dotnet as dotnet;
 /// First-party C# SDK generator.
 ///
 /// This is the preferred name for the .NET/C# target. [`dotnet`] remains an
 /// alias so existing embedded generation profiles continue to compile.
-pub use kaji_plugin_dotnet as csharp;
+pub use kaji_plugin_csharp as csharp;
+pub use kaji_plugin_dotnet as dotnet;
 pub use kaji_plugin_elixir as elixir;
 pub use kaji_plugin_go as go;
 pub use kaji_plugin_java as java;
 pub use kaji_plugin_php as php;
 pub use kaji_plugin_python as python;
+pub use kaji_plugin_ruby as ruby;
 pub use kaji_plugin_rust as rust;
 pub use kaji_plugin_rust_cli as rust_cli;
+pub use kaji_plugin_swift as swift;
 pub use kaji_plugin_typescript as ts;
 pub use kaji_plugin_typescript_cli as ts_cli;
 
@@ -31,14 +33,16 @@ pub mod prelude {
         Requirement,
     };
     pub use kaji_core::{GeneratedFile, SdkClientStyle};
-    pub use kaji_plugin_dotnet::PackageExt as _;
+    pub use kaji_plugin_csharp::PackageExt as _;
     pub use kaji_plugin_elixir::PackageExt as _;
     pub use kaji_plugin_go::PackageExt as _;
     pub use kaji_plugin_java::PackageExt as _;
     pub use kaji_plugin_php::PackageExt as _;
     pub use kaji_plugin_python::PackageExt as _;
+    pub use kaji_plugin_ruby::PackageExt as _;
     pub use kaji_plugin_rust::PackageExt as _;
     pub use kaji_plugin_rust_cli::PackageExt as _;
+    pub use kaji_plugin_swift::PackageExt as _;
     pub use kaji_plugin_typescript::PackageExt as _;
     pub use kaji_plugin_typescript_cli::PackageExt as _;
 }

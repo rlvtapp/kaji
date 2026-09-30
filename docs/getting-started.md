@@ -81,7 +81,7 @@ sdk/
   mock-server/
 ```
 
-Add `php::package(...).with(php::sdk())`, `java`, `csharp`, or `elixir` in the
+Add `php::package(...).with(php::sdk())`, `java`, `csharp`, `elixir`, `ruby`, or `swift` in the
 same way. Directory names and package names are separate choices.
 
 Each SDK has its own README, manifest, and generated client. Install its

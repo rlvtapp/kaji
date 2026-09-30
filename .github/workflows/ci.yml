@@ -44,4 +44,4 @@ jobs:
       - name: Compile generated Rust SDK warning-free
         run: cargo test -p kaji-plugin-rust generated_retry_runtime_compiles_warning_free -- --ignored
       - name: Compile generated C# SDK
-        run: cargo test -p kaji-plugin-dotnet generated_csharp_project_builds_with_dotnet -- --ignored
+        run: cargo test -p kaji-plugin-csharp generated_csharp_project_builds_with_dotnet -- --ignored
