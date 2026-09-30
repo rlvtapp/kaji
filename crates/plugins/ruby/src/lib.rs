@@ -188,10 +188,14 @@ fn render_model(schema: &Schema) -> String {
                     .map(|field| ruby_string(&field.name))
                     .collect::<Vec<_>>()
                     .join(", ");
+                let values = if values.is_empty() {
+                    String::new()
+                } else {
+                    format!("{values}, ")
+                };
                 let _ = writeln!(
                     out,
-                    "        new({values}{}, additional_properties: value.reject {{ |key, _| [{}].include?(key) }})",
-                    if values.is_empty() { "" } else { "," },
+                    "        new({values}additional_properties: value.reject {{ |key, _| [{}].include?(key) }})",
                     known
                 );
             }
@@ -545,7 +549,7 @@ mod tests {
                         required: true,
                         annotations: Default::default(),
                     }],
-                    additional_properties: AdditionalProperties::Forbidden,
+                    additional_properties: AdditionalProperties::Any,
                 }),
             )],
             operations: vec![Operation {
@@ -588,12 +592,18 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         tree.write_to(root.path()).unwrap();
         if Command::new("ruby").arg("--version").status().is_ok() {
-            let status = Command::new("ruby")
-                .args(["-c", "sdk/lib/example_api_sdk/client.rb"])
-                .current_dir(root.path())
-                .status()
-                .unwrap();
-            assert!(status.success());
+            for path in [
+                "sdk/lib/example_api_sdk.rb",
+                "sdk/lib/example_api_sdk/client.rb",
+                "sdk/lib/example_api_sdk/models.rb",
+            ] {
+                let status = Command::new("ruby")
+                    .args(["-c", path])
+                    .current_dir(root.path())
+                    .status()
+                    .unwrap();
+                assert!(status.success(), "generated {path} must be valid Ruby");
+            }
         }
     }
 }

@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   workspace:
-    name: Workspace checks
+    name: Build generator and generate SDK fixtures
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -31,104 +31,120 @@ jobs:
         run: node --test packages/github-action/test/*.test.cjs packages/gitlab-ci/test/*.test.cjs
       - name: Test Python CLI launcher
         run: PYTHONPATH=packages/python/src python -m unittest discover -s packages/python/tests -v
-      - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
+      - name: Verify Rust workspace
+        run: |
+          cargo fmt --all --check
+          cargo clippy --workspace --all-targets -- -D warnings
+          cargo test --workspace --locked
       - name: Test embedded OpenAPI compiler
         working-directory: openapi
         run: go test ./...
-
-  generated-contract:
-    name: Generated SDK contract suite
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-go@v5
+      - name: Run generated SDK contract suite
+        run: cargo test -p kaji --test sdk_to_mock_contract -- --ignored
+      - name: Build Kaji once
+        run: cargo build -p kaji-cli --locked
+      - name: Generate cross-language SDK fixture once
+        run: >-
+          target/debug/kaji generate crates/kaji-cli/tests/fixtures/pets.yaml
+          --output "$RUNNER_TEMP/generated-sdk-fixture"
+          --language rust,typescript,go,python,php,java,csharp,elixir,ruby,swift
+          --name "CI Pets" --sdk-version 1.0.0 --color never
+      - uses: actions/upload-artifact@v7
         with:
-          go-version-file: openapi/go.mod
-          cache-dependency-path: openapi/go.sum
-      - run: cargo test -p kaji --test sdk_to_mock_contract -- --ignored
+          name: generated-sdk-fixture
+          path: ${{ runner.temp }}/generated-sdk-fixture
+          retention-days: 1
 
-  generated-rust:
-    name: Compile generated Rust SDK
-    runs-on: ubuntu-latest
+  generated-sdk:
+    name: Validate generated ${{ matrix.language }} SDK
+    needs: workspace
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: Rust
+            path: rust
+            runner: ubuntu-latest
+          - language: TypeScript
+            path: typescript
+            runner: ubuntu-latest
+          - language: Go
+            path: go
+            runner: ubuntu-latest
+          - language: Python
+            path: python
+            runner: ubuntu-latest
+          - language: PHP
+            path: php
+            runner: ubuntu-latest
+          - language: Java
+            path: java
+            runner: ubuntu-latest
+          - language: C#
+            path: csharp
+            runner: ubuntu-latest
+          - language: Elixir
+            path: elixir
+            runner: ubuntu-latest
+          - language: Ruby
+            path: ruby
+            runner: ubuntu-latest
+          - language: Swift
+            path: swift
+            runner: macos-14
+    runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test -p kaji-plugin-rust generated_retry_runtime_compiles_warning_free -- --ignored
-
-  generated-csharp:
-    name: Compile generated C# SDK
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/download-artifact@v8
         with:
-          dotnet-version: '8.0.x'
-      - run: cargo test -p kaji-plugin-csharp generated_csharp_project_builds_with_dotnet -- --ignored
-
-  generated-typescript:
-    name: Compile generated TypeScript SDK
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
+          name: generated-sdk-fixture
+          path: generated-sdk-fixture
       - uses: dtolnay/rust-toolchain@stable
+        if: matrix.language == 'Rust'
       - uses: actions/setup-node@v7
+        if: matrix.language == 'TypeScript'
         with:
           node-version: 22
-      - name: Install TypeScript compiler
-        run: npm install --prefix "$RUNNER_TEMP/kaji-typescript" --no-save typescript
-      - name: Compile strict generated consumer
-        run: >-
-          KAJI_TSC_JS="$RUNNER_TEMP/kaji-typescript/node_modules/typescript/lib/tsc.js"
-          cargo test -p kaji-plugin-typescript
-          generated_fetch_consumer_compiles_with_strict_typescript -- --ignored
-
-  generated-java:
-    name: Compile generated Java SDK
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-go@v5
+        if: matrix.language == 'Go'
+        with:
+          go-version: '1.25.7'
+      - uses: actions/setup-python@v7
+        if: matrix.language == 'Python'
+        with:
+          python-version: '3.12'
+      - uses: shivammathur/setup-php@v2
+        if: matrix.language == 'PHP'
+        with:
+          php-version: '8.2'
       - uses: actions/setup-java@v5
+        if: matrix.language == 'Java'
         with:
           distribution: temurin
           java-version: '17'
-          cache: maven
-      - run: cargo test -p kaji-plugin-java generated_package_compiles_with_maven -- --ignored
-
-  generated-php:
-    name: Lint generated PHP SDK
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: shivammathur/setup-php@v2
+      - uses: actions/setup-dotnet@v5
+        if: matrix.language == 'C#'
         with:
-          php-version: '8.2'
-      - run: cargo test -p kaji-plugin-php generated_package_passes_php_syntax_checks -- --ignored
-
-  generated-python:
-    name: Validate generated Python SDK
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-python@v7
+          dotnet-version: '8.0.x'
+      - uses: erlef/setup-beam@v1
+        if: matrix.language == 'Elixir'
         with:
-          python-version: '3.12'
-      - run: cargo test -p kaji-plugin-python generated_package_is_valid_python
-      - run: cargo test -p kaji-plugin-python partitions_model_exports_without_changing_model_imports
-
-  generated-swift:
-    name: Compile generated Swift SDK
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - run: >-
-          CLANG_MODULE_CACHE_PATH="$RUNNER_TEMP/kaji-swift-cache/clang"
-          SWIFTPM_MODULECACHE_OVERRIDE="$RUNNER_TEMP/kaji-swift-cache/swiftpm"
-          cargo test -p kaji-plugin-swift generated_package_builds_with_swiftpm -- --ignored
+          otp-version: '27.0'
+          elixir-version: '1.17.3'
+      - name: Validate generated SDK
+        working-directory: generated-sdk-fixture/${{ matrix.path }}
+        env:
+          CLANG_MODULE_CACHE_PATH: ${{ runner.temp }}/kaji-swift-cache/clang
+          SWIFTPM_MODULECACHE_OVERRIDE: ${{ runner.temp }}/kaji-swift-cache/swiftpm
+        run: |
+          case "${{ matrix.language }}" in
+            Rust) cargo test ;;
+            TypeScript) npm install --ignore-scripts && npm run build ;;
+            Go) go test ./... ;;
+            Python) python -m compileall -q src && PYTHONPATH=src python -c 'import ci_pets_sdk' ;;
+            PHP) find src -name '*.php' -print0 | xargs -0 -n1 php -l ;;
+            Java) mvn --batch-mode --no-transfer-progress -q -DskipTests compile ;;
+            C#) dotnet build --configuration Release ;;
+            Elixir) mix deps.get && mix compile --warnings-as-errors ;;
+            Ruby) find lib -name '*.rb' -print0 | xargs -0 -n1 ruby -c ;;
+            Swift) swift build --disable-sandbox ;;
+          esac
