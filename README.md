@@ -189,8 +189,8 @@ Existing detailed references remain available: [complete CLI reference](docs/cli
   documentation, and a mock service from one contract.
 - [API CLI](examples/typescript-cli/README.md): TypeScript and Rust command-line
   clients with OAuth, profiles, and nested commands.
-- [Mock scenarios](examples/mock-scenarios/README.md): generate a Docker mock
-  with contract-owned conditional responses.
+- [Mock scenarios](examples/mock-scenarios/README.md): run a native mock
+  locally or generate Docker fixtures with contract-owned conditional responses.
 - [React Query consumer](examples/react-query-consumer/README.md): wire a
   generated SDK and TanStack hooks into an application.
 - [MCP API tools](examples/mcp-api-tools/README.md): expose a contract through

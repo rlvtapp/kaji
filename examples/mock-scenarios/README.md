@@ -1,8 +1,16 @@
 # Mock scenarios example
 
-This contract generates a Docker HTTP mock with a normal response and an
-explicit rate-limit scenario. It is useful for SDK integration tests that need
-real requests but not a live API.
+This contract has a normal response and an explicit rate-limit scenario. It is
+useful for SDK integration tests that need real requests but not a live API.
+
+Run the native mock without Docker:
+
+```sh
+cd examples/mock-scenarios
+npx @relevate/kaji mock serve openapi.yaml --port 4010
+```
+
+Or generate and run the Docker fixture:
 
 ```sh
 cd examples/mock-scenarios

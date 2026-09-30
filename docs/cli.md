@@ -38,6 +38,7 @@ npx @relevate/kaji generate                         # reads ./kaji.json
 npx @relevate/kaji generate --config <file>
 npx @relevate/kaji generate <openapi-file> --output <directory> --language <target>...
 npx @relevate/kaji generate --artifacts <directory> --output <directory> --language <target>...
+npx @relevate/kaji mock serve <openapi-file> [--port <port>]
 npx @relevate/kaji check <openapi-file> [--format human|json]
 npx @relevate/kaji languages
 npx @relevate/kaji --version

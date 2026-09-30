@@ -16,10 +16,11 @@ For local development, Kaji can run the contract directly:
 kaji mock serve openapi.yaml --port 4010
 ```
 
-The mock API is available at `http://127.0.0.1:4010`. Its machine-readable
-request log is available at `http://127.0.0.1:4010/_kaji/requests`, with the
-matched operation ID, status code, and request body for each call. This keeps
-diagnosis useful for people and agents without shipping a separate dashboard.
+The mock API is available at `http://127.0.0.1:4010`. `GET /_kaji/health`
+returns `{ "ok": true }`. Its machine-readable `GET /_kaji/requests` log
+returns up to the 200 most recent calls, including the matched operation ID,
+scenario name, status code, and request body. This keeps diagnosis useful for
+people and agents without shipping a separate dashboard.
 
 Unless an `x-kaji-mock` scenario matches, unconstrained schema fields vary for
 every request: strings, IDs, emails, numbers, dates, arrays, and objects are
