@@ -447,8 +447,6 @@ fn render_operation(output: &mut String, operation: &Operation) {
             output,
             "        }}\n        catch (ApiException error)\n        {{\n            throw {map}(error);\n        }}"
         );
-    } else {
-        output.push_str("        }\n");
     }
     output.push_str("    }\n\n");
     if let Some(next_cursor_path) = dotnet_cursor_pagination(operation) {
@@ -1296,6 +1294,16 @@ mod tests {
         assert!(operations.contains("Uri.EscapeDataString(ParameterString(contactId))"));
         assert!(operations.contains("JsonContent.Create(body, options: JsonOptions)"));
         assert!(operations.contains("CreateContactAsync(Contact body, bool? dryRun = default"));
+        // Operations without declared status-specific errors must close their
+        // method directly. A conditional catch block is emitted only when an
+        // error mapper exists; emitting its closing brace unconditionally
+        // produces invalid C#.
+        assert!(operations.contains(
+            "return await SendWithRetryAsync<Contact>(request, cancellationToken).ConfigureAwait(false);\n    }\n"
+        ));
+        assert!(!operations.contains(
+            "return await SendWithRetryAsync<Contact>(request, cancellationToken).ConfigureAwait(false);\n        }\n    }\n"
+        ));
         let runtime = first.get("sdk/dotnet/KajiClient.cs").unwrap();
         assert!(runtime.contains("ApiKeyHeader"));
         assert!(runtime.contains("KajiRetryOptions"));
