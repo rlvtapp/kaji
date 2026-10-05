@@ -12,15 +12,15 @@ OpenAPI
   │
   ▼
 Kaji
-  ├── SDKs      TypeScript · Go · Python · Rust · Java · C#/.NET · PHP · Elixir · Ruby · Swift
+  ├── SDKs          TypeScript · Go · Python · Rust · Java · C#/.NET · PHP · Elixir · Ruby · Swift
   ├── Integrations  Symfony (wraps the generated PHP SDK)
-  ├── API CLIs  TypeScript (Node.js) · Rust (native)
-  ├── Clients   Fetch · Axios
-  ├── Frontend  TanStack React Query · Vue Query · SWR
-  ├── Schema    Zod · Faker
-  ├── Testing   MSW · Cypress · HTTP mocks
-  ├── Docs      ReDoc
-  └── AI        MCP
+  ├── API CLIs      TypeScript (Node.js) · Rust (native)
+  ├── Clients       Fetch · Axios
+  ├── Frontend      TanStack React Query · Vue Query · SWR
+  ├── Schema        Zod · Faker
+  ├── Testing       MSW · Cypress · HTTP mocks
+  ├── Docs          ReDoc
+  └── AI            MCP
 ```
 
 The goal is not just to produce an SDK. It is to keep every developer-facing
