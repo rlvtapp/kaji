@@ -99,7 +99,7 @@ impl GeneratorServer {
                         "properties": {
                             "source": { "type": "string", "description": "Local OpenAPI 2.0/3.x file" },
                             "output": { "type": "string", "description": "Generated SDK output directory" },
-                            "languages": { "type": "array", "items": { "type": "string", "enum": ["rust", "typescript", "go", "python", "php", "java", "csharp", "dotnet", "elixir", "ruby", "swift"] }, "minItems": 1 },
+                            "languages": { "type": "array", "items": { "type": "string", "enum": ["rust", "typescript", "go", "python", "php", "symfony", "java", "csharp", "dotnet", "elixir", "ruby", "swift"] }, "minItems": 1 },
                             "name": { "type": "string" },
                             "sdkVersion": { "type": "string" },
                             "clientStyle": { "type": "string", "enum": ["namespaced", "flat"] },
@@ -129,7 +129,7 @@ impl GeneratorServer {
             .context("tools/call requires params.name")?;
         match name {
             "kaji_languages" => Ok(json!({
-                "content": [{ "type": "text", "text": "rust, typescript, go, python, php, java, csharp, dotnet (legacy alias), elixir, ruby, swift" }],
+                "content": [{ "type": "text", "text": "rust, typescript, go, python, php, symfony, java, csharp, dotnet (legacy alias), elixir, ruby, swift; Terraform requires an explicit config-file resource mapping." }],
             })),
             "kaji_generate" => {
                 self.generate(params.get("arguments").cloned().unwrap_or(Value::Null))
@@ -164,6 +164,7 @@ impl GeneratorServer {
             "go",
             "python",
             "php",
+            "symfony",
             "java",
             "csharp",
             "dotnet",

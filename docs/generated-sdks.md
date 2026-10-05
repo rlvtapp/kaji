@@ -245,6 +245,30 @@ For structured TypeScript packages, `custom/index.ts` is special: Kaji creates
 it if absent and preserves it on future materialization. Use it for stable
 exports, product helpers, or a small wrapper around the generated class.
 
+## Existing npm manifests
+
+When materializing generated output, Kaji reads an existing `package.json` and
+appends missing generated requirements. Custom scripts, repository metadata,
+workspace settings, and other user-owned fields are preserved. Required file
+lists are combined without duplicates.
+
+Existing dependency declarations keep their version range and category. For
+example, TypeScript pinned in `devDependencies` remains pinned, and a TanStack
+package already configured as an optional peer is not duplicated in
+`dependencies`. Missing dependencies are added where the generator declares
+them. Kaji does not infer whether a custom version range is compatible; run
+your package build after generation.
+
+The recipe's generated package name and version are authoritative, as are
+matching generated export entries. Custom export entries remain available.
+Invalid existing JSON or malformed dependency maps fail generation before
+any generated files are written; the existing manifest is retained.
+
+This merge happens when writing the generated tree to disk, including through
+the Rust library's `GeneratedTree::write_to`. In-memory generation still
+returns the standalone generated manifest. Artifact-only profiles that do not
+emit a manifest do not modify an existing one.
+
 ## Per-operation documentation
 
 The embedded compiler preserves OpenAPI operation metadata and extensions in

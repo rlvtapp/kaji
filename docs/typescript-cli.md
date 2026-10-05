@@ -58,6 +58,35 @@ acme messages send --from hello@acme.test --to one@example.test --to two@example
   --subject Welcome --html-file ./welcome.html
 ```
 
+## Terminal experience
+
+Generated CLIs automatically choose their mode. In an interactive terminal,
+omitted required parameters and simple body fields are collected with concise
+prompts, credentials entered through `auth set-token` or `auth set-key` are
+masked, and completed operations receive a styled status line. For example,
+running `acme messages send` prompts only for the required values that were
+not already provided as flags.
+
+When stdin or stdout is piped—or when `--json` is passed—the CLI never prompts.
+Success values are compact JSON on stdout and failures are JSON on stderr. This
+makes the same commands safe to use from agents, shell scripts, and CI:
+
+```sh
+acme messages send --from hello@acme.test --to person@example.test \
+  --subject Welcome --text 'Hello' --json | jq .
+```
+
+Set `NO_COLOR=1` to suppress terminal colour. Complex request bodies remain
+explicit: terminal mode prompts for `--data` JSON rather than guessing nested
+object structure.
+
+## Generated references
+
+Each generated package includes factual OpenAPI-derived command references at
+`references/<command-group>.md`. They list operations, parameters, and simple
+request-body fields. Kaji deliberately does not generate `SKILL.md`: real agent
+workflow, safety, and product guidance belongs to the API provider.
+
 Nested, polymorphic, or otherwise complex request bodies retain `--data` and
 `--data-file` as the explicit JSON escape hatch. Kaji automatically groups
 known verb-style operation IDs by literal path segments: `sendMessage` on

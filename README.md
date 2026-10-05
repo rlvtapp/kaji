@@ -5,7 +5,8 @@
 Kaji turns a Swagger 2.0 or OpenAPI 3.0/3.1 document into production-ready SDKs,
 API CLIs, mocks, validation, framework integrations, documentation, and MCP
 tools. Generate for TypeScript, Rust, Go, Python, PHP, Java, C#/.NET, Elixir,
-Ruby, and Swift from the same contract.
+Ruby, and Swift from the same contract, with Symfony integration packages and
+explicitly mapped Terraform providers.
 
 ```text
 OpenAPI
@@ -13,6 +14,7 @@ OpenAPI
   ▼
 Kaji
   ├── SDKs      TypeScript · Go · Python · Rust · Java · C#/.NET · PHP · Elixir · Ruby · Swift
+  ├── Integrations  Symfony (wraps the generated PHP SDK) · Terraform provider (explicit CRUD map)
   ├── API CLIs  TypeScript (Node.js) · Rust (native)
   ├── Clients   Fetch · Axios
   ├── Frontend  TanStack React Query · Vue Query · SWR

@@ -21,6 +21,27 @@ Build the generated project with `cargo install --path .`. Query and path
 parameters become flags; simple object request bodies become body flags, with
 `--data` and `--data-file` available for arbitrary JSON.
 
+## Terminal experience
+
+The generated executable is interactive only when both standard input and
+output are terminals. It prompts for missing required parameters, simple body
+fields, and a missing base URL; `auth set-token` and `auth set-key` accept a
+masked credential prompt when no positional credential is given. Completed
+requests use concise status styling.
+
+Pipes, CI, and `--json` stay non-interactive: every value must be supplied as
+a flag or environment value, successful responses are emitted verbatim for
+machine consumption, and no prompt can block an agent. For nested request
+bodies, terminal mode requests a single `--data` JSON value rather than trying
+to infer a form.
+
+## Generated references
+
+Kaji emits factual OpenAPI-derived command references at
+`references/<command-group>.md`, containing operations, parameters, and simple
+request-body fields. It deliberately does not generate `SKILL.md`: a real agent
+skill needs provider-authored workflow, safety, and product guidance.
+
 ## Authentication and customization
 
 `auth set-token` stores a local bearer token and `<COMMAND>_TOKEN` supplies an

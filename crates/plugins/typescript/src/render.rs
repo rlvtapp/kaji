@@ -84,7 +84,7 @@ impl TypeScriptPackage {
             },
             "files": ["dist"],
             "scripts": { "build": "tsc -p tsconfig.json" },
-            "devDependencies": { "typescript": "^7.0.0" }
+            "devDependencies": { "typescript": "^5.9.3" }
         });
         Ok(vec![
             GeneratedFile::new(output_path(config, "index.ts"), index)?,

@@ -66,8 +66,8 @@ npx @relevate/kaji --help
 | `--include-path` | Repeatable OpenAPI path glob to include | Every path |
 | `--exclude-path` | Repeatable OpenAPI path glob to omit after inclusion | None |
 
-Targets: `rust`, `rust-cli`, `typescript`, `typescript-cli`, `go`, `python`, `php`,
-`java`, `csharp`, `elixir`, `ruby`, `swift`. Each becomes a matching subdirectory, including when
+Targets: `rust`, `rust-cli`, `typescript`, `typescript-cli`, `go`, `python`, `php`, `symfony`,
+`terraform` (config-file mappings required), `java`, `csharp`, `elixir`, `ruby`, `swift`. Each becomes a matching subdirectory, including when
 only one target is selected. Advanced/custom plugin composition remains available
 through the [Rust API](typed-plugins.md). The CLI does not load JavaScript
 plugins; JSON names only select plugins built into the installed Kaji binary.
@@ -127,6 +127,8 @@ TypeScript multi-client examples are in the [`kaji.json` reference](config-file.
 | --- | --- | --- |
 | `typescript` | `sdk`, `zod`, `tanstack-react-query`, `tanstack-vue-query`, `swr`, `faker`, `msw`, `cypress` | SDK: `transport` (`fetch`/`axios`), `surface` (`client`/`raw`), `client_name`, `group_by_tag`, `throw_on_error`. Artifacts: `output`, `clients_import`, `group_by_tag`. |
 | `rust`, `go`, `python`, `php`, `java`, `csharp`, `elixir`, `ruby`, `swift` | `sdk` | Go SDK: `jobs`. |
+| `symfony` | `sdk` | `sdk_package` to reference the generated PHP SDK Composer package. |
+| `terraform` | `provider` | Config-file only; explicit `resources` CRUD operation mappings are required. |
 | `mock` | `server` | `image`, `port`. |
 | `artifacts` | `redoc`, `mcp` | `output`; ReDoc also accepts `openapi_spec`, `title`. |
 

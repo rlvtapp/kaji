@@ -992,7 +992,7 @@ fn kaji_package(api: &Api, transport: SdkTransport, name: Option<&str>) -> Resul
         },
         "files": ["dist"],
         "scripts": { "build": "tsc -p tsconfig.json" },
-        "devDependencies": { "typescript": "^7.0.0" }
+        "devDependencies": { "typescript": "^5.9.3" }
     });
     if transport == SdkTransport::Axios {
         package["peerDependencies"] = serde_json::json!({ "axios": "^1.0.0" });

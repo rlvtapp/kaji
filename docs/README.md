@@ -1,6 +1,7 @@
 # Kaji documentation
 
-Release notes: [Kaji 0.3.0](releases/0.3.0.md).
+Release preparation: [Kaji 0.4.0](releases/0.4.0.md).
+Latest released notes: [Kaji 0.3.0](releases/0.3.0.md).
 
 Kaji supports two generation workflows. Both use the same compiler and SDK
 renderers; choose the one that fits where generation belongs.
