@@ -153,6 +153,17 @@ For embedding Kaji or writing custom plugins, a typed Rust interface is also
 available. See the [Rust API guide](docs/getting-started.md) and
 [plugin authoring reference](docs/typed-plugins.md).
 
+## New in 0.4.0
+
+- Existing npm manifests retain custom scripts, metadata, pinned dependencies,
+  and dependency categories while Kaji appends missing generated requirements.
+- Symfony bundles wrap the portable PHP SDK for container-managed clients.
+- Generated TypeScript and Rust API CLIs prompt in interactive terminals, mask
+  credentials, and stay non-interactive for pipes and `--json`.
+- Generated CLI packages include OpenAPI-derived command references.
+
+See the [0.4.0 release notes](docs/releases/0.4.0.md) for details.
+
 ## Documentation
 
 Start with the [documentation home](docs/README.md), then choose a workflow:
@@ -181,6 +192,13 @@ Existing detailed references remain available: [complete CLI reference](docs/cli
 [plugin authoring](docs/typed-plugins.md).
 
 ## Runnable examples
+
+- [Symfony SDK](examples/symfony-sdk/README.md): generate a PHP SDK and its
+  Symfony integration bundle together.
+- [Manifest merging](examples/manifest-merging/README.md): preserve custom npm
+  scripts, pinned TypeScript, and optional TanStack peers across generation.
+- [Native Rust CLI](examples/rust-cli/README.md): generate and build a native
+  command-line client with terminal prompts and command references.
 
 - [Examples index](examples/README.md): choose a minimal CLI recipe, a
   multi-package build, or an embedded Rust application.
