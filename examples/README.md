@@ -5,6 +5,9 @@ together. Start small, then move to the complete stacks.
 
 | Example | Shows | Best for |
 | --- | --- | --- |
+| [Symfony SDK](symfony-sdk/README.md) | Portable PHP SDK plus Symfony bundle | Symfony apps |
+| [Manifest merging](manifest-merging/README.md) | Preserve custom npm scripts and optional peers | Existing TypeScript packages |
+| [Rust API CLI](rust-cli/README.md) | Native CLI generation, terminal prompts, and references | Native command-line tools |
 | [CLI basic](cli-basic/README.md) | One config-first TypeScript SDK | First generation |
 | [TypeScript API CLI](typescript-cli/README.md) | Node.js API CLI, OAuth device flow, and PKCE | Command-line API tools |
 | [CLI multi-package](cli-multi-package/README.md) | TypeScript, Go, docs, and a mock from one contract | Team and CI setup |

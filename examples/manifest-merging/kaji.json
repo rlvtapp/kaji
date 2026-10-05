@@ -1,0 +1,27 @@
+{
+  "openapi": {
+    "input": "./openapi.yaml",
+    "name": "Notes",
+    "version": "1.0.0"
+  },
+  "output": {
+    "path": "./generated"
+  },
+  "packages": [
+    {
+      "language": "typescript",
+      "path": "typescript",
+      "name": "@example/notes",
+      "plugins": [
+        {
+          "name": "sdk"
+        },
+        {
+          "name": "tanstack-react-query",
+          "output": "react-query",
+          "clients_import": "../clients"
+        }
+      ]
+    }
+  ]
+}

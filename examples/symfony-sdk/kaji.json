@@ -1,0 +1,33 @@
+{
+  "openapi": {
+    "input": "./openapi.yaml",
+    "name": "Notes",
+    "version": "1.0.0"
+  },
+  "output": {
+    "path": "./generated"
+  },
+  "packages": [
+    {
+      "language": "php",
+      "path": "php",
+      "name": "example/notes-sdk",
+      "plugins": [
+        {
+          "name": "sdk"
+        }
+      ]
+    },
+    {
+      "language": "symfony",
+      "path": "symfony",
+      "name": "example/notes-symfony",
+      "plugins": [
+        {
+          "name": "sdk",
+          "sdk_package": "example/notes-sdk"
+        }
+      ]
+    }
+  ]
+}

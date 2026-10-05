@@ -41,6 +41,8 @@ jobs:
         run: |
           cargo build -p kaji-cli --locked
           (cd openapi && go build -o ../target/debug/kaji-openapi .)
+      - name: Verify release examples
+        run: python scripts/check-release-examples.py
       - name: Generate cross-language SDK fixture
         run: >-
           target/debug/kaji generate crates/kaji-cli/tests/fixtures/pets.yaml

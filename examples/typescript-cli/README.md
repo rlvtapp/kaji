@@ -60,3 +60,10 @@ cargo run -- messages send --from hello@example.test --to recipient@example.test
 
 The Rust CLI preserves `src/kaji_extension.rs` on regeneration. Implement its
 `login` hook for provider-specific OAuth or SSO; `notes auth login` calls it.
+
+## Terminal and reference behavior in 0.4.0
+
+In a terminal, commands prompt for missing required inputs and mask credential
+entry. Pipes and --json remain non-interactive; supply required flags in CI.
+Inspect generated references/<command-group>.md for OpenAPI-derived command
+parameters and body fields. These references are not generated agent skills.

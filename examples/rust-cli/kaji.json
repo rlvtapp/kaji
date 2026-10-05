@@ -1,0 +1,23 @@
+{
+  "openapi": {
+    "input": "./openapi.yaml",
+    "name": "Notes",
+    "version": "1.0.0"
+  },
+  "output": {
+    "path": "./generated"
+  },
+  "packages": [
+    {
+      "language": "rust-cli",
+      "path": "notes",
+      "name": "notes-cli",
+      "plugins": [
+        {
+          "name": "cli",
+          "command_name": "notes"
+        }
+      ]
+    }
+  ]
+}
