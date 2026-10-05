@@ -140,7 +140,7 @@
       "properties": {
         "language": {
           "type": "string",
-          "enum": ["typescript", "typescript-cli", "rust", "rust-cli", "go", "python", "php", "symfony", "terraform", "java", "csharp", "dotnet", "elixir", "ruby", "swift", "mock", "artifacts"]
+          "enum": ["typescript", "typescript-cli", "rust", "rust-cli", "go", "python", "php", "symfony", "java", "csharp", "dotnet", "elixir", "ruby", "swift", "mock", "artifacts"]
         },
         "path": { "type": "string", "minLength": 1, "description": "Safe path below output.path." },
         "name": { "type": "string", "minLength": 1, "description": "Generated package identity." },
@@ -151,7 +151,6 @@
     "plugin": {
       "anyOf": [
         { "$ref": "#/$defs/sdkPlugin" },
-        { "$ref": "#/$defs/terraformProviderPlugin" },
         { "$ref": "#/$defs/typescriptCliPlugin" },
         { "$ref": "#/$defs/rustCliPlugin" },
         { "$ref": "#/$defs/typescriptArtifactPlugin" },
@@ -173,31 +172,6 @@
         "throw_on_error": { "type": "boolean", "default": true },
         "jobs": { "type": "integer", "minimum": 1, "description": "Go generation worker count." }
         ,"sdk_package": { "type": "string", "minLength": 1, "description": "Composer package identity of the PHP SDK wrapped by a Symfony package." }
-      }
-    },
-    "terraformProviderPlugin": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["name", "resources"],
-      "properties": {
-        "name": { "const": "provider" },
-        "module": { "type": "string", "minLength": 1, "description": "Generated Go module path." },
-        "provider_name": { "type": "string", "minLength": 1, "description": "Terraform provider type name." },
-        "resources": {
-          "type": "array", "minItems": 1,
-          "items": {
-            "type": "object", "additionalProperties": false,
-            "required": ["name", "create", "read", "update", "delete"],
-            "properties": {
-              "name": { "type": "string", "minLength": 1 },
-              "create": { "type": "string", "minLength": 1 },
-              "read": { "type": "string", "minLength": 1 },
-              "update": { "type": "string", "minLength": 1 },
-              "delete": { "type": "string", "minLength": 1 },
-              "id_parameter": { "type": "string", "minLength": 1 }
-            }
-          }
-        }
       }
     },
     "typescriptArtifactPlugin": {

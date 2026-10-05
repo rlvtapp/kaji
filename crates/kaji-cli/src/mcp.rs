@@ -129,7 +129,7 @@ impl GeneratorServer {
             .context("tools/call requires params.name")?;
         match name {
             "kaji_languages" => Ok(json!({
-                "content": [{ "type": "text", "text": "rust, typescript, go, python, php, symfony, java, csharp, dotnet (legacy alias), elixir, ruby, swift; Terraform requires an explicit config-file resource mapping." }],
+                "content": [{ "type": "text", "text": "rust, typescript, go, python, php, symfony, java, csharp, dotnet (legacy alias), elixir, ruby, swift." }],
             })),
             "kaji_generate" => {
                 self.generate(params.get("arguments").cloned().unwrap_or(Value::Null))

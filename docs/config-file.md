@@ -238,7 +238,7 @@ Every package contains:
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `language` | Yes | One of `typescript`, `typescript-cli`, `rust`, `rust-cli`, `go`, `python`, `php`, `symfony`, `terraform`, `java`, `csharp`, `elixir`, `ruby`, `swift`, `mock`, or `artifacts`. `dotnet` remains a legacy alias for `csharp`. |
+| `language` | Yes | One of `typescript`, `typescript-cli`, `rust`, `rust-cli`, `go`, `python`, `php`, `symfony`, `java`, `csharp`, `elixir`, `ruby`, `swift`, `mock`, or `artifacts`. `dotnet` remains a legacy alias for `csharp`. |
 | `path` | Yes | Package directory below `output.path`. |
 | `name` | No | Ecosystem package identity for SDK languages. |
 | `client_style` | No | Package-level `namespaced` or `flat` override. |
@@ -254,38 +254,6 @@ beyond package name and client style.
 `symfony` requires one `sdk` plugin. It produces a Symfony bundle that wraps the
 portable PHP SDK; set `sdk_package` when its Composer name differs from Kaji's
 default `kaji/<api>-sdk`.
-
-### Terraform provider
-
-Terraform providers are generated only from a config file because OpenAPI
-does not define a Terraform resource lifecycle. Each resource explicitly maps
-its CRUD lifecycle to operation IDs. The initial generated resource uses an
-opaque JSON `body` argument and stores the API response as state; its create
-response must contain a string `id`.
-
-```json
-{
-  "language": "terraform",
-  "path": "terraform",
-  "plugins": [{
-    "name": "provider",
-    "module": "github.com/acme/terraform-provider-acme",
-    "provider_name": "acme",
-    "resources": [{
-      "name": "project",
-      "create": "createProject",
-      "read": "getProject",
-      "update": "updateProject",
-      "delete": "deleteProject",
-      "id_parameter": "projectId"
-    }]
-  }]
-}
-```
-
-Kaji verifies the operation IDs and HTTP methods (`POST`, `GET`, `PUT`/`PATCH`,
-`DELETE`), and requires the read, update, and delete paths to contain the
-declared ID parameter. It will not infer these choices from path names.
 
 ### TypeScript
 

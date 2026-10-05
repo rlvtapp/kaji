@@ -15,7 +15,7 @@ use kaji::ts::artifacts::{
 };
 use kaji::{
     SdkClientStyle, csharp, dotnet, elixir, go, java, mock, php, prelude::*, python, ruby, rust,
-    rust_cli, swift, symfony, terraform, ts, ts_cli,
+    rust_cli, swift, symfony, ts, ts_cli,
 };
 use kaji_core::{Api, GeneratedFile, GeneratedTree};
 use serde::{Deserialize, Serialize};
@@ -67,7 +67,7 @@ Generate options (direct mode):
       --exclude-path <pattern>        Omit matching OpenAPI paths; repeatable
   -h, --help                          Show help
 
-Targets: rust, rust-cli, typescript, typescript-cli, go, python, php, symfony, terraform (config only), java, csharp, dotnet (legacy alias), elixir, ruby, swift
+Targets: rust, rust-cli, typescript, typescript-cli, go, python, php, symfony, java, csharp, dotnet (legacy alias), elixir, ruby, swift
 
 MCP commands:
   mcp                                   Serve an OpenAPI document as MCP tools over stdio
@@ -127,7 +127,6 @@ const LANGUAGES: &[&str] = &[
     "python",
     "php",
     "symfony",
-    "terraform",
     "java",
     "csharp",
     "dotnet",
@@ -721,21 +720,6 @@ struct PluginConfig {
     base_url: Option<String>,
     oauth: Option<CliOAuthConfig>,
     sdk_package: Option<String>,
-    module: Option<String>,
-    provider_name: Option<String>,
-    #[serde(default)]
-    resources: Vec<TerraformResourceConfig>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct TerraformResourceConfig {
-    name: String,
-    create: String,
-    read: String,
-    update: String,
-    delete: String,
-    id_parameter: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -1561,9 +1545,6 @@ fn profiles(options: &Generate) -> Result<ProfileSet> {
             "python" => profiles.package(python::package("python").with(python::sdk())),
             "php" => profiles.package(php::package("php").with(php::sdk())),
             "symfony" => profiles.package(symfony::package("symfony").with(symfony::sdk())),
-            "terraform" => bail!(
-                "Terraform generation requires a config file with explicit provider resource mappings"
-            ),
             "java" => profiles.package(java::package("java").with(java::sdk())),
             "csharp" => profiles.package(csharp::package("csharp").with(csharp::sdk())),
             // Keep the established selector for existing scripts. New
@@ -1858,53 +1839,6 @@ fn config_profiles(
                 };
                 profiles.package(package_builder.with(symfony::sdk()))
             }
-            "terraform" => {
-                has_only_known_plugins(package, &["provider"])?;
-                let plugins = package
-                    .plugins
-                    .iter()
-                    .filter(|plugin| plugin.name == "provider")
-                    .collect::<Vec<_>>();
-                let [plugin] = plugins.as_slice() else {
-                    bail!(
-                        "terraform package {:?} requires exactly one {{\"name\":\"provider\"}} plugin",
-                        package.path
-                    )
-                };
-                if plugin.resources.is_empty() {
-                    bail!(
-                        "terraform package {:?} requires at least one mapped resource",
-                        package.path
-                    );
-                }
-                let mut generator = terraform::sdk();
-                for resource in &plugin.resources {
-                    let mapped = terraform::TerraformResource::new(
-                        &resource.name,
-                        &resource.create,
-                        &resource.read,
-                        &resource.update,
-                        &resource.delete,
-                    );
-                    generator = generator.resource(match &resource.id_parameter {
-                        Some(id) => mapped.id_parameter(id),
-                        None => mapped,
-                    });
-                }
-                let package_builder =
-                    terraform::package(&package.path).common(package_common(style));
-                let package_builder = if let Some(module) = &plugin.module {
-                    package_builder.module(module)
-                } else {
-                    package_builder
-                };
-                let package_builder = if let Some(provider_name) = &plugin.provider_name {
-                    package_builder.provider_name(provider_name)
-                } else {
-                    package_builder
-                };
-                profiles.package(package_builder.with(generator))
-            }
             "java" => {
                 has_only_known_plugins(package, &["sdk"])?;
                 let package_builder = java::package(&package.path).common(package_common(style));
@@ -1990,7 +1924,7 @@ fn config_profiles(
                 profiles.package(ts::package(&package.path).common(package_common(style)))
             }
             other => bail!(
-                "unknown config language {other:?}; use typescript, typescript-cli, rust, rust-cli, go, python, php, symfony, terraform, java, csharp, dotnet (legacy alias), elixir, ruby, swift, mock, or artifacts"
+                "unknown config language {other:?}; use typescript, typescript-cli, rust, rust-cli, go, python, php, symfony, java, csharp, dotnet (legacy alias), elixir, ruby, swift, mock, or artifacts"
             ),
         };
     }

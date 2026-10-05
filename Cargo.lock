@@ -489,7 +489,6 @@ dependencies = [
  "kaji-plugin-rust-cli",
  "kaji-plugin-swift",
  "kaji-plugin-symfony",
- "kaji-plugin-terraform",
  "kaji-plugin-typescript",
  "kaji-plugin-typescript-cli",
  "serde",

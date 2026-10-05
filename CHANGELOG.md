@@ -10,7 +10,6 @@
   scripts, dependency ranges, and dependency categories while appending missing
   requirements. Recipe package identity and generated exports remain authoritative.
 - Symfony integration packages wrapping the generated PHP SDK.
-- Terraform providers with explicit resource CRUD mappings.
 - Interactive terminal prompts for required parameters, simple request bodies,
   and base URLs in generated TypeScript and Rust API CLIs.
 - Masked credential prompts, styled terminal status output, and non-interactive

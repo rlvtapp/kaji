@@ -20,7 +20,6 @@ kaji-plugin-go = { path = "../plugins/go" }
 kaji-plugin-python = { path = "../plugins/python" }
 kaji-plugin-php = { path = "../plugins/php" }
 kaji-plugin-symfony = { path = "../plugins/symfony" }
-kaji-plugin-terraform = { path = "../plugins/terraform" }
 kaji-plugin-java = { path = "../plugins/java" }
 kaji-plugin-csharp = { path = "../plugins/csharp" }
 kaji-plugin-dotnet = { path = "../plugins/dotnet" }

@@ -24,7 +24,6 @@ pub use kaji_plugin_rust as rust;
 pub use kaji_plugin_rust_cli as rust_cli;
 pub use kaji_plugin_swift as swift;
 pub use kaji_plugin_symfony as symfony;
-pub use kaji_plugin_terraform as terraform;
 pub use kaji_plugin_typescript as ts;
 pub use kaji_plugin_typescript_cli as ts_cli;
 
@@ -46,7 +45,6 @@ pub mod prelude {
     pub use kaji_plugin_rust_cli::PackageExt as _;
     pub use kaji_plugin_swift::PackageExt as _;
     pub use kaji_plugin_symfony::PackageExt as _;
-    pub use kaji_plugin_terraform::PackageExt as _;
     pub use kaji_plugin_typescript::PackageExt as _;
     pub use kaji_plugin_typescript_cli::PackageExt as _;
 }
