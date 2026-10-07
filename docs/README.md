@@ -24,7 +24,7 @@ For complete projects, use [examples](../examples/README.md). If your contract i
 
 The generated package's README is the first reference for its installation, exports, authentication, and native requirements. The [generated SDK guide](generated-sdks.md) explains client layouts, models, errors, and capabilities across languages. For application-level request policies, follow [runtime middleware](guides/runtime-middleware.md); an author's bundled policy is already enabled.
 
-Choose the guide for the task around your client: [pagination](guides/pagination.md) for declared continuation and target capabilities, [TypeScript helpers](guides/typescript-helpers.md) for validation/data fetching, [contract mocking](mocking.md) for local APIs, or [testing generated SDKs](guides/testing.md) for executable fixtures. Those artifacts are selected by the SDK author; they are not automatically present in every package.
+Choose the guide for the task around your client: [pagination](guides/pagination.md) for declared continuation and target capabilities, [idempotency](guides/idempotency.md) for bundled keys and safe mutation retries, [TypeScript helpers](guides/typescript-helpers.md) for validation/data fetching, [contract mocking](mocking.md) for local APIs, or [testing generated SDKs](guides/testing.md) for executable fixtures. Those artifacts are selected by the SDK author; they are not automatically present in every package.
 
 ## Plugin developers: extend generation through contracts
 

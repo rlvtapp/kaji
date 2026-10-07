@@ -148,3 +148,13 @@ PHP and Elixir native pagination probes are selected in their toolchain jobs;
 Swift was executed locally, while PHP/Elixir probes await CI execution. Native
 Java/.NET pagination execution remains unverified. The [pagination guide](guides/pagination.md)
 records current forms and unsupported bindings explicitly.
+
+The shared export also includes a POST operation with a custom automatic
+idempotency header, so the native matrix compiles this policy in every target.
+Dedicated executed probes cover TypeScript Fetch/Axios, Go, Python sync/async,
+Rust, Ruby, and Swift UUID generation and caller preservation; targets with
+retries additionally verify stable keys across attempts and operation-scoped
+custom headers. Retry-capable targets reject empty/whitespace-only keys as replay
+protection. PHP/Elixir behavior and Java/C# retry parsing have native CI probes;
+they remain unexecuted locally. The [idempotency guide](guides/idempotency.md)
+explains server requirements and recipe precedence.

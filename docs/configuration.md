@@ -222,3 +222,44 @@ The JSON CLI selects all current built-in SDK packages, auxiliary artifacts,
 and the mock package. Model options, custom plugins, and typed inter-plugin
 contracts remain Rust API work for now. See the [CLI reference](cli.md) for
 the supported JSON fields and direct-mode flags.
+
+## Idempotency keys
+
+Idempotency is opt-in. An operation may declare `x-kaji-idempotency: true`, or
+an object such as `{ "header": "Idempotency-Key", "auto_generate": true }`.
+The default header is `Idempotency-Key`; automatic key generation defaults to
+`false`. Setting `enabled: false` explicitly disables the policy.
+
+Each SDK package can override operation extensions independently:
+
+```json
+{
+  "language": "typescript",
+  "path": "typescript",
+  "plugins": [{ "name": "sdk" }],
+  "idempotency": {
+    "defaults": { "enabled": false },
+    "operations": {
+      "createOrder": { "enabled": true, "header": "X-Request-Key", "auto_generate": true }
+    }
+  }
+}
+```
+
+Package defaults override operation extensions; named operation rules override
+both. Rules are complete replacements, rather than partial merges. Unknown or
+ambiguous operation IDs fail generation. The core adds an optional string header
+parameter to enabled operations and preserves an existing header's spelling
+when it matches without regard to case. Duplicate, required, referenced,
+constrained, or non-string idempotency header schemas fail generation. Policies
+cannot use transport/authentication headers such as `Authorization`, `Host`,
+`Content-Type`, or `Cookie`, and cannot collide with another parameter’s native
+identifier after punctuation and case normalization.
+
+Rust authors use `.idempotency(kaji_core::idempotency::IdempotencyConfig { ... })`
+on their typed package. Generation prepares a package-local API copy, so one
+SDK's policy does not change another SDK's inputs. Native runtime renderers
+consume `x-kaji-idempotency-resolved` metadata; automatic generation must keep a
+single key for all retry attempts and preserve a caller-supplied key. A header
+policy does not add retry loops to targets without them or promise server-side
+deduplication. See [the author and customer guide](guides/idempotency.md).

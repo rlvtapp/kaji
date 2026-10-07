@@ -14,6 +14,7 @@ system lets you compose or extend generation for your own needs.
 | --- | --- | --- |
 | Generate my first SDK | [Quickstart](docs/cli/quickstart.md) | Turn an OpenAPI file into a package you can build and use. |
 | Ship SDKs to my customers | [SDK author guides](docs/README.md) | Generate, customize, check, and release packages. |
+| Bundle idempotency keys and safe mutation retries | [Idempotency guide](docs/guides/idempotency.md) | Configure supported endpoints through OpenAPI or `kaji.json`. |
 | Add my own HTTP behavior | [Bundled middleware example](examples/bundled-middleware/README.md) | Ship policies that run without customer setup. |
 | Modify generated code safely | [Customization](docs/sdk-customization.md) | Apply package overrides and preserve custom files across regeneration. |
 | Automate GitHub delivery | [Repository automation](docs/sdk-automation.md) | Open SDK PRs and give each language repository its own workflows. |

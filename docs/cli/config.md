@@ -76,3 +76,9 @@ the standard library.
 For private remote contracts, use environment references rather than committed
 tokens. The full [`kaji.json` reference](../config-file.md) covers every field,
 remote inputs, download limits, and plugin-specific options.
+
+## Bundle idempotency keys
+
+A package `idempotency` field resolves supported operations, optional caller keys,
+and automatic UUID generation. See [the idempotency guide](../guides/idempotency.md)
+for OpenAPI extensions, recipe precedence, server requirements, and runtime limits.

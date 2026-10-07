@@ -238,7 +238,7 @@ An operation declaring `text/event-stream` can generate an event-stream surface 
 
 This table identifies usable boundaries rather than asserting identical capabilities. Check generated source and package tests for the specific contract/media type you distribute. Native transports classify status and decode errors at different points; a middleware chain is not automatically a schema validator.
 
-For runtime retries, TypeScript/Rust/Go default to three total attempts. Python expresses the corresponding setting as `max_retries=2`. Eligible methods/statuses still depend on the generated operation and replay safety; POST requires an idempotency key. Set TypeScript `retry: false`, Go/Rust one total attempt, or Python `max_retries=0` when the application owns retry policy. Do not assume Swift or Ruby shares that default.
+For runtime retries, TypeScript/Rust/Go default to three total attempts. Python expresses the corresponding setting as `max_retries=2`. Eligible methods/statuses still depend on the generated operation and replay safety; POST and PATCH require an idempotency key. SDK authors can bundle automatic keys through [idempotency configuration](guides/idempotency.md), with native caller overrides. Set TypeScript `retry: false`, Go/Rust one total attempt, or Python `max_retries=0` when the application owns retry policy. Do not assume Swift or Ruby shares that default.
 
 Lifecycle hooks are notifications with native timing, not a portable replacement for middleware. Python's `before_request` runs per attempt; TypeScript/Go/Rust logical-call hooks have different timing. Use the [runtime middleware guide](guides/runtime-middleware.md) to choose the correct extension point.
 

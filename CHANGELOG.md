@@ -6,6 +6,12 @@
 
 ### Added
 
+- Opt-in `x-kaji-idempotency` and per-package recipe rules across ten SDK targets,
+  secure automatic UUIDs, native caller overrides, retry-stable keys, and generated
+  API reference documentation. Custom plugins receive the resolved policy.
+- Bounded `retry-after-ms` handling and HTTP-date retry delay improvements in native
+  runtimes, with replay safety tests. PATCH now requires an idempotency key.
+
 - A shared executable HTTP runtime contract with ten native harnesses and explicit
   unsupported-scenario reporting, wired into the language CI matrix.
 - Optional Python and Go generated operation smoke tests, a package-local API
