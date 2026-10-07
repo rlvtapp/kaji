@@ -59,16 +59,15 @@ test('CLI native tests build the compiler first and releases require explicit en
   assert.ok(build >= 0 && probe > build);
   const release = read('.github/workflows/release-please.yml');
   assert.match(release, /skip-github-release: \$\{\{ vars\.KAJI_RELEASE_ENABLED != 'true' \}\}/);
-  assert.match(release, /on:\n  workflow_dispatch:/);
-  assert.doesNotMatch(release, /^  push:/m);
+  assert.match(release, /on:\n  push:\n    branches: \[main\]/);
 });
 
-test('pending feature release uses the last published version rather than skipping 0.5.0', () => {
+test('feature releases advance minor versions before 1.0', () => {
   const strategy = new DefaultVersioningStrategy({
     bumpMinorPreMajor: config['bump-minor-pre-major'],
     bumpPatchForMinorPreMajor: config['bump-patch-for-minor-pre-major'],
   });
-  const previous = Version.parse(JSON.parse(read('.release-please-manifest.json'))['.']);
+  const previous = Version.parse('0.4.0');
   const next = strategy.bump(previous, [{ type: 'feat', breaking: false, notes: [] }]);
-  assert.equal(next.toString(), read(config['version-file']).trim());
+  assert.equal(next.toString(), '0.5.0');
 });

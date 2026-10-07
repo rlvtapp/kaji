@@ -7,8 +7,8 @@ regenerate the SDK, create its tag, register an account or establish registry tr
 
 ## Kaji's own repository releases
 
-Kaji's root release workflow runs only through manual dispatch. Pushes to `main`
-run checks without preparing or creating releases.
+Kaji's root release workflow prepares and updates Release Please pull requests
+when commits reach `main`. The PR can remain open while development continues.
 It uses the simple strategy and explicit TOML updates because member crates inherit
 `workspace.package.version`. `version.txt` tracks the source version; the release
 manifest tracks the last published version, currently `0.4.0`. Minor features bump
