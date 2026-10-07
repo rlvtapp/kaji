@@ -28,8 +28,8 @@ supported. Version 0.5.0 is on the branch; use a source build until published.
 | Capability | Status and scope | Guide |
 | --- | --- | --- |
 | Swagger 2.0; OpenAPI 3.0/3.1 | Local JSON/YAML and downloaded contracts; normalization through the bundled Go compiler | [Compiler](openapi-compiler.md) |
-| OpenAPI 3.2 | Ordinary contracts, QUERY, nullable bodies and webhook-only specs; unsupported 3.2 additions fail before writes | [Compiler](openapi-compiler.md) |
-| External references, recursive schemas | Local file references and recursive schemas; remote references require explicit bundling; native representation varies by target | [Shared fixtures](shared-sdk-fixtures.md) |
+| OpenAPI 3.2 | Ordinary contracts, QUERY, custom HTTP operations, nullable bodies and webhook-only specs; remaining unsupported 3.2 additions fail before writes | [Compiler](openapi-compiler.md) |
+| External references, recursive schemas | Local files and bounded public-HTTPS references, with closure provenance; recursive native representation varies by target | [Shared fixtures](shared-sdk-fixtures.md) |
 | Operation parameters and body/response media | Path/query/header inputs, declared media, examples and security alternatives carried into the neutral model | [Architecture](architecture.md) |
 | Package-specific settings | Multiple packages/languages/providers; naming, client style, manifests, versions and plugins | [Configuration](configuration.md) |
 | Typed plugin graph | Named capabilities, explicit handles, ordering, ambiguity/cycle checks before emission | [Typed plugins](typed-plugins.md) |
@@ -70,17 +70,17 @@ and selector restrictions are in the [pagination guide](guides/pagination.md).
 | Feature | What you can do | Boundary |
 | --- | --- | --- |
 | Authentication | Configure declared bearer, Basic or API-key credentials through the native client | Scheme/binding details vary; use generated package docs |
-| OAuth client credentials | Python sync/async and opt-in Go/Ruby/TypeScript/Rust/Java/C# providers, coordinated refresh and bounded unauthorized recovery | Replay scope and cancellation follow each native driver; Swift/PHP/Elixir require supplied credentials |
+| OAuth client credentials | Python sync/async plus optional providers across all ten targets; native refresh/cache and bounded safe unauthorized recovery | Replay, concurrency and cancellation follow each native driver; PHP uses synchronous cache and injected issuer driver policy |
 | Consumer middleware | Rewrite requests/responses, short-circuit or recover through native supported hooks | Java/C#/PHP use native HTTP decorators; hook signatures differ |
 | Bundled author middleware | Ship policy modules and register them by default during generation | Customers need no middleware registration for bundled policies |
 | Retry and backoff | Replay safe operations with bounded attempts and server delay handling | Ruby/Swift default to one attempt; retry settings enable replay-safe retries |
 | Idempotency keys | `x-kaji-idempotency` or per-package rules; secure UUIDs, caller overrides, operation-scoped header | Requires server semantics; blank keys do not protect replay; PATCH requires a key |
 | Pagination | Lazy helpers reuse the actual operation, transport/auth and middleware | Helpers yield pages; forms/body controls differ by target |
-| Per-call headers and timeouts | TypeScript/Ruby request options; Go context options; Python/Rust/Java/C# scoped clients | [Native timeout scope differs](guides/request-controls.md); Swift/PHP/Elixir use driver/client settings |
+| Per-call headers and timeouts | TypeScript/Ruby request options; Go context options; Python/Rust/Java/C# scoped clients | [Native timeout scope differs](guides/request-controls.md); Swift/Elixir offer native scopes; PHP scopes can inject a timeout-configured PSR driver |
 | Cancellation | Native context/signal/task cancellation; tests cover supported transports and pagers | Custom drivers retain native cancellation responsibilities |
 | Structural response checks | Opt-in TypeScript, Go, Python and Ruby checks; native model decoders also reject some invalid shapes | Java/PHP/Elixir shared cases remain permissive |
 | Errors and raw results | Declared native errors and response envelopes where supported | Inspect each target's surface; raw response/stream ownership differs |
-| Streaming and file media | Selected SSE/binary forms; multipart upload APIs in TypeScript/Go/Python/Rust/Java/C#/Swift | Buffered upload limits and shapes vary; Swift requires closed named roots. Ruby/PHP/Elixir need upload adapters. Shared corpus is not exhaustive |
+| Streaming and file media | Selected SSE/binary forms; multipart upload APIs in all ten SDK targets | Buffered upload limits and shapes vary; Swift requires closed named roots. Ruby/PHP/Elixir expose explicit buffered part builders, with declared multipart media gating. Shared corpus is not exhaustive; see [uploads](guides/uploads.md) |
 | Forward-compatible models | Opt-in Java/C#/Swift open enums and Java/C# optional presence wrappers; transparent named scalar/union JSON; Rust opt-in unmatched union fallback; selected unknown-property and nullable handling; TypeScript int64 string/bigint options | Unknown enum/union roundtrip and omitted-vs-null behavior are not universal |
 | Webhook verification | Opt-in verifiers in all ten SDKs: raw-body HMAC verification, timestamp checks and secret rotation | Native probes passed across ten languages; Swift Linux crypto unverified; HMAC v1, no durable replay store |
 
@@ -156,5 +156,6 @@ tests establish delivery. Keep those evidence levels separate. Optional operatio
 Complex contracts, SSE/uploads and real API semantics still need focused tests.
 
 [Verification](verification.md) has commands and prerequisites. The
+[roadmap](sdk-roadmap.md) tracks remaining work. Different native APIs are
 intentional; behavior and evidence should be comparable where the capabilities
 overlap.

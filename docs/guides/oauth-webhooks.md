@@ -59,7 +59,9 @@ configured API origin. Injected issuer drivers must refuse redirects.
 Native tests exercise sixteen concurrent callers, expiry, cancellation or
 interruption, issuer error redaction, explicit headers and unsafe-mutation
 protection. Rust also tests a dropped refresh leader; TypeScript tests response
-envelopes and cancellation. Swift, PHP and Elixir do not yet emit these providers.
+envelopes and cancellation. Swift, PHP and Elixir also emit optional providers; see their native integration
+below. PHP uses synchronous PSR-18 execution; it does not promise fiber
+singleflight.
 
 ## Verify signed webhook bodies
 
@@ -130,3 +132,21 @@ bound, independent of configured transient retries. Explicit Authorization heade
 remain customer-owned. Synchronous HTTP interruption is transport-owned; a
 cancellation callback stops waiting or token publication. Native fake-issuer tests
 cover these semantics; no live identity provider has been used.
+
+## Swift, PHP and Elixir client credentials
+
+Add `{"name":"oauth"}` beside `sdk` in the recipe, or use `swift::oauth()`,
+`php::oauth()` or `elixir::oauth()` in the Rust plugin API.
+
+| Target | Native integration | Scope |
+| --- | --- | --- |
+| Swift | `KajiOAuthClientCredentials(tokenURL:clientID:clientSecret:scope:transport:)`, then `KajiOAuthTransport(inner:provider:origin:)` as the client's transport | Actor-coordinated refresh; buffered transport; caller supplies a bounded issuer transport with redirects disabled |
+| PHP | Generated `OAuthClient` wrapping the API PSR-18 client, a separate issuer client, PSR request/stream factories and API origin | Cached synchronous tokens; issuer timeout/redirect policy belongs to its PSR driver; non-seekable request bodies cannot be replayed |
+| Elixir | `OAuthClientCredentials.start_link(token_url: ..., client_id: ..., client_secret: ..., fetch: fetch)`, then `OAuthClientCredentials.middleware(provider, origin)` | GenServer-coordinated refresh; a supplied fetch callback performs issuer HTTP; callback execution is bounded to 30 seconds |
+
+All three confine generated authorization to the configured API origin and preserve
+explicit caller Authorization. Their 401 recovery makes at most one replay of a
+repeatable GET, HEAD, OPTIONS, QUERY, TRACE, PUT or DELETE. POST/PATCH are not
+replayed by these wrappers. Token bodies and credentials are redacted from provider
+errors. Cancellation and timeout scope remain native; these providers do not
+promise a single deadline spanning token acquisition and API execution.

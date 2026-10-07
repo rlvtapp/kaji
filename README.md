@@ -10,6 +10,16 @@ system lets you compose or extend generation for your own needs.
 
 Read the [full feature catalog](docs/features.md) for capabilities, language differences, configuration entry points and verification limits.
 
+## Why Kaji?
+
+Kaji is the best fit when you want to own and extend the whole SDK workflow.
+Compose typed plugins, bundle your HTTP policies, modify the generator sources,
+and ship native SDKs and API artifacts with editable checks and release workflows.
+
+Read [why choose Kaji and how it compares](docs/comparison.md) to SDK platforms,
+plugin generators and language-specific tools, with official sources and clear
+tradeoffs.
+
 ## What do you want to do?
 
 | Your goal | Start here | Kaji helps you |

@@ -4,6 +4,13 @@
 
 ## 0.5.0 — 2026-10-07
 
+- Add optional Swift/PHP/Elixir OAuth providers and native call scopes, and
+  buffered Ruby/PHP/Elixir multipart builders with native regression probes.
+- Resolve bounded public-HTTPS reference closures with provenance invalidation,
+  and retain OpenAPI 3.2 custom HTTP methods with unsafe-by-default retries.
+- Add a sourced SDK-generator comparison and Kaji ownership/plugin positioning.
+
+
 ### Added
 
 - Rebuildable `kaji eject` source bundles with SHA-256 manifests, preserving the

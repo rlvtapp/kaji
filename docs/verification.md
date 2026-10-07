@@ -110,6 +110,7 @@ The Node broker integration test opens a local port; the publisher's archive
 reader probe needs Python 3.11+ (set `KAJI_TEST_PYTHON` when necessary). Registry
 and GitHub API tests use mocked services. Production delivery still requires an
 end-to-end repository trial with a registered App, protected release environment,
+and registry trust configuration. See the [roadmap](sdk-roadmap.md) for
 remaining runtime consistency and delivery validation work.
 
 ## Postman and Terraform artifacts

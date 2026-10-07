@@ -19,6 +19,7 @@ version is already published. Match instructions to the user's installed version
 | Typed plugin composition | [Plugins](typed-plugins.md), [native providers](native-sdk-providers.md) |
 | API tools or generator tools through MCP | [MCP](mcp-server.md) |
 | Source build and modification | [Source customization](source-customization.md) |
+| Implemented features and remaining gaps | [Changelog](../CHANGELOG.md), [roadmap](sdk-roadmap.md) |
 
 ## Information to give your assistant
 

@@ -45,7 +45,8 @@ in the API repository. Routine App tokens cannot replace workflow definitions.
 
 ## Hosted App with OIDC broker
 
-Kaji includes the broker sources for the same architecture, without depending on
+A hosted App can exchange a workflow OIDC identity for an installation token.
+Kaji includes editable broker sources so you can host this architecture yourself:
 
 ```sh
 kaji sdk sync --root generated --config kaji.json \

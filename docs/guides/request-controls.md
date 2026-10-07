@@ -89,5 +89,15 @@ driver. Java stream consumption and custom drivers retain their native timeout
 and cancellation responsibilities. Per-attempt timeouts in Python/Rust/Java do
 not impose a deadline on token acquisition or the complete retry loop.
 
-Swift, PHP and Elixir retain their existing driver/client configuration and native
-cancellation APIs; they do not yet expose these maintained call-scope helpers.
+## Swift, PHP and Elixir scopes
+
+| Target | Native scope API | Timeout meaning |
+| --- | --- | --- |
+| Swift | `try client.forCall(headers: ["X-Trace-ID": "trace_123"], timeout: 5)` | Seconds; URLRequest timeout per attempt; custom transports retain native responsibility |
+| PHP | `$client->forCall(headers: ['X-Trace-ID' => 'trace_123'], httpClient: $boundedDriver)` | PSR-18 has no standard per-request timeout; supply a driver configured with your timeout policy |
+| Elixir | `Client.for_call(client, headers: [{"x-trace-id", "trace_123"}], timeout: 5_000)` | Milliseconds; Finch receive timeout per request attempt |
+
+Each scope leaves the original client unchanged. PHP scopes share or replace the
+PSR driver; this is deliberate native driver injection, not a portable numeric
+timeout argument. Swift/Elixir scopes retain their native cancellation and streaming
+behavior. Timeout values do not impose a deadline on the entire pagination traversal.

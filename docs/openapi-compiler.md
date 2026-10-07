@@ -64,13 +64,20 @@ overwriting another operation. See [large-spec verification](large-specs.md).
 OpenAPI 3.2 ordinary contracts, `QUERY` operations, nullable request bodies and
 webhook-only descriptions are accepted. SDK methods preserve QUERY on the wire,
 including its request body. `HEAD`, `OPTIONS` and `TRACE` are also retained.
-Custom `additionalOperations`, `querystring` parameters, streaming `itemSchema`
-and multipart `prefixEncoding`/`itemEncoding` currently fail with a capability
+Custom `additionalOperations` are retained as case-sensitive HTTP tokens (1–256
+ASCII token bytes), with standard-method shadowing rejected. Custom methods default
+to unsafe retry semantics and retain native transport restrictions. `querystring`
+parameters, streaming `itemSchema` and multipart `prefixEncoding`/`itemEncoding`
+currently fail with a capability
 diagnostic before compiler artifacts are modified. Future versions also fail.
 This is bounded 3.2 support; changing a version string cannot remove unsupported
 semantics. See the [OpenAPI 3.2 specification](https://spec.openapis.org/oas/v3.2.0.html).
 
 Local referenced files contribute to the compiler cache digest and `source.json`
 manifest, so editing a child document invalidates the cache. Generation provenance
-records this closure digest. Remote `$ref` URLs are rejected: bundle them explicitly
-rather than forwarding download credentials to referenced hosts.
+records this closure digest. Remote `$ref` documents are supported over public HTTPS, including relative remote
+references. All fetched bytes contribute to the closure digest. Fetching forwards
+no credentials, uses no proxy, follows no redirects, and pins validated public DNS
+addresses before dialing. Requests have a 30-second timeout; each document is
+limited to 16 MiB and the closure to 256 MiB / 16,384 documents. Private-network,
+HTTP and authenticated reference servers require explicit local bundling.

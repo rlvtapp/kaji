@@ -53,7 +53,13 @@ Native Rust plugins are composed through the library API. Installing an arbitrar
 
 A generated source snapshot, a native compile, a mock lifecycle test, and a live registry upload prove different things. Read [verification](verification.md), [native providers](native-sdk-providers.md), and the relevant language guide before choosing production checks. Some native tests require a toolchain and run explicitly; bounded [schema fixtures](shared-sdk-fixtures.md) are not exhaustive protocol tests. Add tests for your API's authentication, errors, pagination, and any bundled policy.
 
+Generate portable [Postman collections](postman.md) and a supported subset of [typed Terraform providers](terraform-provider.md) through the CLI or native plugins. Their design plans retain advanced follow-up work; the [roadmap](sdk-roadmap.md) distinguishes implemented behavior from future stages.
 
 ## API artifacts
 
 Generate [Postman collections](postman.md) and [typed Terraform providers](terraform-provider.md), with a [Speakeasy comparison](terraform-speakeasy.md), beside your SDKs. The [combined example](../examples/api-artifacts/README.md) includes a recipe and editable CI checks.
+
+Compare the options in [Why choose Kaji?](comparison.md), including the strengths
+of its plugin architecture, source ownership and integrated delivery.
+
+For file and JSON-part uploads, see [multipart uploads](guides/uploads.md).
