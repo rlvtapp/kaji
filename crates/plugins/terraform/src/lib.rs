@@ -13,12 +13,14 @@ use kaji_core::{Api, GeneratedFile, GeneratedTree, HttpMethod, Operation};
 
 pub mod plan;
 mod provider;
+mod release;
 mod typed_render;
 pub use plan::{
     AttributePlan, AuthenticationPlan, EntityCatalog, PlanDiagnostic, ResourceBinding,
     ResourcePlan, ScalarType, analyze, analyze_with_security,
 };
 pub use provider::{Entities, Provider, entities, provider};
+pub use release::{ReleaseScaffold, release_scaffold};
 mod package;
 pub use package::{PackageExt, Sdk, Settings, Terraform, TerraformResource, package, sdk};
 
@@ -160,7 +162,7 @@ fn go_mod(module: &str) -> String {
 }
 fn main_go(module: &str, provider: &str) -> String {
     format!(
-        "package main\n\nimport (\n  \"context\"\n  \"log\"\n  \"github.com/hashicorp/terraform-plugin-framework/providerserver\"\n  \"{module}/internal/provider\"\n)\n\nfunc main() {{\n  err := providerserver.Serve(context.Background(), provider.New(\"dev\"), providerserver.ServeOpts{{Address: \"registry.terraform.io/kaji/{provider}\"}})\n  if err != nil {{ log.Fatal(err) }}\n}}\n"
+        "package main\n\nimport (\n  \"context\"\n  \"log\"\n  \"github.com/hashicorp/terraform-plugin-framework/providerserver\"\n  \"{module}/internal/provider\"\n)\n\nvar version = \"dev\"\n\nfunc main() {{\n  err := providerserver.Serve(context.Background(), provider.New(version), providerserver.ServeOpts{{Address: \"registry.terraform.io/kaji/{provider}\"}})\n  if err != nil {{ log.Fatal(err) }}\n}}\n"
     )
 }
 fn provider_go(provider: &str, resources: &[ResolvedResource]) -> String {

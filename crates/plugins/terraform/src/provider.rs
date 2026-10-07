@@ -147,6 +147,14 @@ impl Plugin<Terraform> for Provider {
                 .as_deref()
                 .unwrap_or(&inferred_name),
         )?;
+        let namespace = cx.settings.registry_namespace.as_deref().unwrap_or("kaji");
+        ensure!(
+            namespace
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+                && !namespace.is_empty(),
+            "registry_namespace must contain lowercase letters, digits or hyphens"
+        );
         let module = cx
             .settings
             .module
@@ -163,6 +171,21 @@ impl Plugin<Terraform> for Provider {
             "Terraform module must be a safe Go module path"
         );
         let mut tree = crate::typed_render::render(cx.api, &catalog, &module, &provider)?;
+        for path in ["main.go", "README.md"] {
+            let contents = tree.get(path).unwrap().replace(
+                "registry.terraform.io/kaji/",
+                &format!("registry.terraform.io/{namespace}/"),
+            );
+            let contents = if path == "README.md" {
+                contents.replace(
+                    &format!("source = \"kaji/{provider}\""),
+                    &format!("source = \"{namespace}/{provider}\""),
+                )
+            } else {
+                contents
+            };
+            tree.replace(GeneratedFile::new(path, contents)?)?;
+        }
         if self.data_sources {
             crate::typed_render::add_data_sources(&mut tree, &catalog, &provider)?;
         }

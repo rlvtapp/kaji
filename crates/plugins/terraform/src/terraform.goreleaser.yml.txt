@@ -1,0 +1,28 @@
+# Editable Kaji scaffold following Terraform Registry release requirements.
+version: 2
+project_name: terraform-provider-__PROVIDER__
+builds:
+  - env: [CGO_ENABLED=0]
+    flags: [-trimpath]
+    ldflags: ['-s -w -X main.version={{ .Version }}']
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    binary: '{{ .ProjectName }}_v{{ .Version }}'
+archives:
+  - formats: [zip]
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+checksum:
+  algorithm: sha256
+  name_template: '{{ .ProjectName }}_{{ .Version }}_SHA256SUMS'
+  extra_files:
+    - glob: terraform-registry-manifest.json
+      name_template: '{{ .ProjectName }}_{{ .Version }}_manifest.json'
+signs:
+  - artifacts: checksum
+    args: ['--batch', '--local-user', '{{ .Env.GPG_FINGERPRINT }}', '--output', '${signature}', '--detach-sign', '${artifact}']
+release:
+  extra_files:
+    - glob: terraform-registry-manifest.json
+      name_template: '{{ .ProjectName }}_{{ .Version }}_manifest.json'
+changelog:
+  disable: true

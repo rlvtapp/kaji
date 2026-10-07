@@ -6,6 +6,7 @@ pub struct Terraform;
 pub struct Settings {
     pub module: Option<String>,
     pub provider_name: Option<String>,
+    pub registry_namespace: Option<String>,
 }
 impl Language for Terraform {
     const NAME: &'static str = "terraform";
@@ -18,8 +19,13 @@ pub fn package(dir: impl Into<String>) -> Package<Terraform> {
 pub trait PackageExt {
     fn module(self, name: impl Into<String>) -> Self;
     fn provider_name(self, name: impl Into<String>) -> Self;
+    fn registry_namespace(self, namespace: impl Into<String>) -> Self;
 }
 impl PackageExt for Package<Terraform> {
+    fn registry_namespace(mut self, namespace: impl Into<String>) -> Self {
+        self.settings_mut().registry_namespace = Some(namespace.into());
+        self
+    }
     fn module(mut self, name: impl Into<String>) -> Self {
         self.settings_mut().module = Some(name.into());
         self
