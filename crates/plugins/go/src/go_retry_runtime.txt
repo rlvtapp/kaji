@@ -158,6 +158,7 @@ func (client *Client) doWithRetry(request *http.Request, destination any) error 
 	requestInfo := KajiRequestInfo{Method: request.Method, URL: request.URL.String()}
 	client.beforeRequest(requestInfo)
 	for attempt := 1; ; attempt++ {
+		if err := request.Context().Err(); err != nil { client.onError(requestInfo, err); return err }
 		response, err := client.httpClient.Do(request)
 		if err != nil {
 			if !retryAllowed || attempt >= client.retry.maxAttempts || request.Context().Err() != nil {
@@ -196,7 +197,7 @@ func (client *Client) doWithRetry(request *http.Request, destination any) error 
 				*textDestination = string(body)
 				return nil
 			}
-			if err := json.NewDecoder(response.Body).Decode(destination); err != nil && err != io.EOF {
+			if err := client.decodeResponse(response.Body, destination); err != nil {
 				result := fmt.Errorf("kaji: decode response: %w", err)
 				client.onError(requestInfo, result)
 				return result
@@ -208,10 +209,13 @@ func (client *Client) doWithRetry(request *http.Request, destination any) error 
 			delay := client.retry.delay(response, attempt)
 			response.Body.Close()
 			if err := waitForRetry(request.Context(), delay); err != nil {
-				return fmt.Errorf("kaji: execute request: %w", err)
+				result := fmt.Errorf("kaji: execute request: %w", err)
+				client.onError(requestInfo, result)
+				return result
 			}
 			request, err = replayRequest(request)
 			if err != nil {
+				client.onError(requestInfo, err)
 				return err
 			}
 			continue
@@ -234,6 +238,7 @@ func (client *Client) stream(request *http.Request) (io.ReadCloser, error) {
 	requestInfo := KajiRequestInfo{Method: request.Method, URL: request.URL.String()}
 	client.beforeRequest(requestInfo)
 	for attempt := 1; ; attempt++ {
+		if err := request.Context().Err(); err != nil { client.onError(requestInfo, err); return nil, err }
 		response, err := client.httpClient.Do(request)
 		if err != nil {
 			if !retryAllowed || attempt >= client.retry.maxAttempts || request.Context().Err() != nil {

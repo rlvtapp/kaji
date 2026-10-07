@@ -53,6 +53,9 @@ fn plan(value: &SchemaValue, options: &ModelOptions) -> Value {
     };
     if !descriptor.is_null() {
         descriptor["nullable"] = Value::Bool(value.nullable || value.nullish);
+        if value.write_only {
+            descriptor["writeOnly"] = Value::Bool(true);
+        }
         if let Some(literal) = &value.const_value {
             descriptor["literals"] = json!([literal]);
         } else if !value.enum_values.is_empty() {
@@ -77,9 +80,6 @@ pub(crate) fn operation_plan(
     operation: &kaji_core::Operation,
     options: &ModelOptions,
 ) -> Option<Value> {
-    if !options.integer_as_string && options.int64_type == Int64Type::Number {
-        return None;
-    }
     let schemas = api
         .schemas
         .iter()
@@ -146,12 +146,14 @@ pub(crate) fn operation_plan(
             refs.insert(name, descriptor);
         }
     }
-    Some(json!({"refs":refs,"requests":requests,"responses":responses}))
+    Some(
+        json!({"lossless":options.integer_as_string || options.int64_type != Int64Type::Number,"refs":refs,"requests":requests,"responses":responses}),
+    )
 }
 
 pub(crate) const RUNTIME: &str = r#"
-export type JsonShape = { kind?: string; nullable?: boolean; literals?: unknown[]; required?: string[]; integer?: 'string' | 'bigint'; ref?: string; fields?: Record<string, JsonShape | null>; additional?: JsonShape | null; items?: JsonShape | null; variants?: (JsonShape | null)[] }
-export type JsonPlan = { refs: Record<string, JsonShape | null>; requests: Record<string, JsonShape | null>; responses: Record<string, Record<string, JsonShape | null>> }
+export type JsonShape = { kind?: string; nullable?: boolean; writeOnly?: boolean; literals?: unknown[]; required?: string[]; integer?: 'string' | 'bigint'; ref?: string; fields?: Record<string, JsonShape | null>; additional?: JsonShape | null; items?: JsonShape | null; variants?: (JsonShape | null)[] }
+export type JsonPlan = { lossless?: boolean; refs: Record<string, JsonShape | null>; requests: Record<string, JsonShape | null>; responses: Record<string, Record<string, JsonShape | null>> }
 class JsonNumber { constructor(readonly text: string) {} }
 // Parse tokens before converting numbers. JSON.parse validates the complete
 // document first; the second pass preserves integer digits exactly.
@@ -178,7 +180,7 @@ const rawJson = (text: string): unknown => {
 }
 const resolvedShape = (shape: JsonShape | null | undefined, refs: JsonPlan['refs'], seen = new Set<string>()): JsonShape | null => {
   if (!shape) return null
-  if (shape.ref) { if (seen.has(shape.ref)) return null; seen.add(shape.ref); return resolvedShape(refs[shape.ref], refs, seen) }
+  if (shape.ref) { if (seen.has(shape.ref)) return null; seen.add(shape.ref); const target = resolvedShape(refs[shape.ref], refs, seen); return target ? { ...target, nullable: shape.nullable || target.nullable, writeOnly: shape.writeOnly || target.writeOnly } : null }
   return shape
 }
 const integerDigits = (token: string): string => {
@@ -237,6 +239,71 @@ const decodeJsonValue = (value: unknown, shape: JsonShape | null | undefined, re
   if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, decodeJsonValue(item, fieldJsonShape(resolved,key), refs)]))
   return value
 }
+/** Structural response checks; enum values and unknown object fields remain forward compatible. */
+export class ResponseDecodeError extends TypeError {
+  constructor(public readonly path: string, public readonly expected: string) {
+    super(`Kaji response decoding failed at ${path}: expected ${expected}`)
+    this.name = 'ResponseDecodeError'
+  }
+}
+export const assertResponseShape = (value: unknown, shape: JsonShape | null | undefined, refs: JsonPlan['refs'] = {}, path = '$', depth = 0): void => {
+  const schema = resolvedShape(shape, refs)
+  if (!schema) return
+  if (depth > 128) throw new ResponseDecodeError(path, 'a bounded response structure')
+  if (value === null && (schema.nullable || schema.kind === 'null')) return
+  if (schema.variants) {
+    if (schema.kind === 'allOf') {
+      for (const variant of schema.variants) assertResponseShape(value, variant, refs, path, depth + 1)
+      return
+    }
+    for (const variant of schema.variants) {
+      try { assertResponseShape(value, variant, refs, path, depth + 1); return }
+      catch (error) { if (!(error instanceof ResponseDecodeError)) throw error }
+    }
+    throw new ResponseDecodeError(path, 'a declared union shape')
+  }
+  if (value === null) throw new ResponseDecodeError(path, schema.kind ?? 'a non-null value')
+  const fail = (expected: string): never => { throw new ResponseDecodeError(path, expected) }
+  switch (schema.kind) {
+    case 'string': if (typeof value !== 'string') fail('string'); break
+    case 'boolean': if (typeof value !== 'boolean') fail('boolean'); break
+    case 'number': if (typeof value !== 'number' || !Number.isFinite(value)) fail('finite number'); break
+    case 'integer':
+      if (schema.integer === 'bigint') { if (typeof value !== 'bigint') fail('bigint') }
+      else if (schema.integer === 'string') { if (typeof value !== 'string' || !/^-?(?:0|[1-9]\d*)$/.test(value)) fail('integer string') }
+      else if (typeof value !== 'number' || !Number.isInteger(value)) fail('integer')
+      break
+    case 'null': fail('null'); break
+    case 'array':
+      if (!Array.isArray(value)) fail('array')
+      for (const [index, item] of (value as unknown[]).entries()) assertResponseShape(item, schema.items, refs, `${path}[${index}]`, depth + 1)
+      break
+    case 'object': {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) fail('object')
+      const object = value as Record<string, unknown>
+      for (const key of schema.required ?? []) {
+        if (!resolvedShape(schema.fields?.[key], refs)?.writeOnly && !Object.hasOwn(object, key)) throw new ResponseDecodeError(`${path}[${JSON.stringify(key)}]`, 'required property')
+      }
+      for (const [key, child] of Object.entries(schema.fields ?? {})) {
+        if (Object.hasOwn(object, key)) assertResponseShape(object[key], child, refs, `${path}[${JSON.stringify(key)}]`, depth + 1)
+      }
+      if (schema.additional) for (const [key, item] of Object.entries(object)) {
+        if (!Object.hasOwn(schema.fields ?? {}, key)) assertResponseShape(item, schema.additional, refs, `${path}[${JSON.stringify(key)}]`, depth + 1)
+      }
+      break
+    }
+  }
+}
+const checkResponseEnvelope = (response: unknown, plan: JsonPlan | undefined): unknown => {
+  if (!plan) return response
+  if (!response || typeof response !== 'object' || !('status' in response)) throw new ResponseDecodeError('$', 'response envelope')
+  const envelope = response as { status: number; data?: unknown; contentType?: string }
+  if (!Number.isInteger(envelope.status) || envelope.status < 100 || envelope.status > 599) throw new ResponseDecodeError('$.status', 'HTTP status')
+  if (envelope.status >= 200 && envelope.status < 300 && envelope.status !== 204) {
+    assertResponseShape(envelope.data, responseJsonShape(plan, envelope.status, envelope.contentType ?? ''), plan.refs)
+  }
+  return response
+}
 export const parseJson = (text: string, shape?: JsonShape | null, refs: JsonPlan['refs'] = {}): unknown => decodeJsonValue(rawJson(text), shape, refs)
 export const stringifyJson = (value: unknown, shape?: JsonShape | null, refs: JsonPlan['refs'] = {}): string => {
   const encode = (item: unknown, current?: JsonShape | null): string | undefined => {
@@ -261,7 +328,8 @@ const eventStreamStatus = (value: unknown): number => value instanceof Response 
 const requestJsonShape = (plan: JsonPlan | undefined, contentType: string | undefined) => plan?.requests[(contentType ?? 'application/json').split(';')[0].trim()]
 const responseJsonShape = (plan: JsonPlan | undefined, status: number, contentType: string) => {
   const statusSchemas = plan?.responses[String(status)] ?? plan?.responses[`${Math.floor(status / 100)}XX`] ?? plan?.responses.default
-  return statusSchemas?.[contentType.split(';')[0].trim()]
+  const media = contentType.split(';')[0].trim().toLowerCase()
+  return Object.entries(statusSchemas ?? {}).find(([key]) => key.toLowerCase() === media)?.[1] ?? statusSchemas?.[`${media.split('/')[0]}/*`] ?? statusSchemas?.['*/*']
 }
 "#;
 
@@ -413,6 +481,14 @@ mod tests {
         }
     }
     #[test]
+    fn default_number_operations_also_publish_response_shapes() {
+        let api = api();
+        let plan = operation_plan(&api, &api.operations[0], &ModelOptions::default()).unwrap();
+        assert!(plan["responses"]["200"]["application/json"].is_object());
+        assert!(plan["refs"].as_object().unwrap().contains_key("Record"));
+    }
+
+    #[test]
     fn integer_models_and_wire_plans_agree() {
         for (representation, expected) in [
             (Int64Type::String, "id: string"),
@@ -514,12 +590,14 @@ async function run(name, integer) {
   const body = { id: integer('9223372036854775807'), count: 7, ratio: 2, label: inputWire.label, ids: [integer('-9223372036854775808'), integer('9223372036854775807')] };
   let requestBody;
   const transport = name === 'axios'
-    ? createClient({ client: { request: async config => { requestBody = config.data; assert.equal(config.responseType,'text'); assert.ok(config.transformResponse); return { status:200, headers:{'content-type':'application/json'}, data:wire }; } } })
-    : createClient({ fetch: async (_,config) => { requestBody = config.body; return new Response(wire,{headers:{'content-type':'application/json'}}); } });
+    ? createClient({ validateResponses:true, client: { request: async config => { requestBody = config.data; assert.equal(config.responseType,'text'); assert.ok(config.transformResponse); return { status:200, headers:{'content-type':'application/json'}, data:wire }; } } })
+    : createClient({ validateResponses:true, fetch: async (_,config) => { requestBody = config.body; return new Response(wire,{headers:{'content-type':'application/json'}}); } });
   const result = await echoRecord({body,client:transport});
   assert.equal(result.id, integer('9223372036854775807'));
   assert.equal(result.ids[0], integer('-9223372036854775808'));
   assert.equal(result.count,7); assert.equal(result.ratio,2); assert.equal(result.label,inputWire.label);
+  const malformed = createClient({validateResponses:true,middleware:[async()=>({status:200,contentType:'application/json',data:{...result,count:'wrong'}})]});
+  await assert.rejects(()=>echoRecord({body,client:malformed}),error=>error.name==='ResponseDecodeError' && error.path.includes('count'));
   assert.match(requestBody,/"id":9223372036854775807/); assert.match(requestBody,/-9223372036854775808/);
   assert.equal(JSON.parse(requestBody).label,inputWire.label);
   assert.equal(parseJson('{"__proto__":{"polluted":true},"n":12}').n,12);

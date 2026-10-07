@@ -99,6 +99,44 @@ for (const [index, runtime] of runtimes.entries()) {
   }
   const duplicate=runtime.createClient({middleware:[async(req,next)=>{await next(req);return next(req)},async()=>({status:200,data:null})]})
   await assert.rejects(()=>duplicate({method:'GET',url:'/unused'}),/only be called once/)
+  const shape={kind:'object',required:['id','rows','secret'],fields:{id:{kind:'integer'},rows:{kind:'array',items:{ref:'Row'}},secret:{kind:'string',writeOnly:true}}}
+  const refs={Row:{kind:'object',required:['name'],fields:{name:{kind:'string',literals:['known']},child:{ref:'Row',nullable:true}}}}
+  const plan={refs,requests:{},responses:{'2XX':{'application/json':shape}}}
+  const request={method:'GET',url:'/shape',jsonPlan:plan}
+  const valid={id:3,rows:[{name:'future-enum',child:null}],extra:'retained'}
+  const strict=runtime.createClient({validateResponses:true,middleware:[async()=>({status:201,contentType:'application/json; charset=utf-8',data:valid})]})
+  assert.deepEqual((await strict(request)).data,valid)
+  for(const bad of [{id:'credential-value',rows:[]},{id:1,rows:[{name:42}]},{id:1,rows:null},{rows:[]},{id:1.5,rows:[]}]) {
+    let terminalCalls=0
+    const invalid=runtime.createClient({validateResponses:true,middleware:[async()=>({status:200,contentType:'application/json',data:bad}),async()=>{terminalCalls++;throw new Error('must not run')}]})
+    await assert.rejects(()=>invalid(request),error=>error instanceof runtime.ResponseDecodeError && error.path.startsWith('$') && !error.message.includes('credential-value'))
+    assert.equal(terminalCalls,0)
+    assert.deepEqual((await invalid({...request,validateResponses:false})).data,bad)
+  }
+  let strictAttempts=0
+  const invalidWire=JSON.stringify({id:'bad',rows:[]})
+  const strictTransport=index===0?{fetch:async()=>{strictAttempts++;return new Response(invalidWire,{headers:{'content-type':'application/json'}})}}:{client:axios.create({adapter:async config=>{strictAttempts++;return {status:200,data:invalidWire,headers:{'content-type':'application/json'},config,statusText:'ok'}}})}
+  await assert.rejects(()=>runtime.createClient({...strictTransport,validateResponses:true,retry:{maxAttempts:3}})({...request,url:'https://example.test/shape'}),runtime.ResponseDecodeError)
+  assert.equal(strictAttempts,1)
+  const decoded=runtime.createClient({...strictTransport,validateResponses:true,codecs:{'application/json':{decode:()=>valid}}})
+  assert.deepEqual((await decoded({...request,url:'https://example.test/shape'})).data,valid)
+  const statuses={refs:{},requests:{},responses:{'200':{'application/json':{kind:'string'}},'2XX':{'application/json':{kind:'integer'}},default:{'application/json':{kind:'boolean'}}}}
+  const envelope=(status,data)=>runtime.createClient({validateResponses:true,middleware:[async()=>({status,contentType:'application/json',data})]})({...request,jsonPlan:statuses})
+  await envelope(200,'exact');await envelope(201,2)
+  await assert.rejects(()=>envelope(200,2),runtime.ResponseDecodeError)
+  await envelope(204,undefined)
+  await runtime.createClient({validateResponses:true,middleware:[async()=>({status:200,contentType:'application/json',data:undefined})]})({...request,method:'HEAD'})
+  await runtime.createClient({validateResponses:true,middleware:[async()=>({status:202,contentType:'application/json',data:true})]})({...request,jsonPlan:{...statuses,responses:{default:statuses.responses.default}}})
+  const rewrite=runtime.createClient({validateResponses:true,middleware:[async(req,next)=>({...await next(req),data:{id:false,rows:[]}}),async()=>({status:200,contentType:'application/json',data:valid})]})
+  await assert.rejects(()=>rewrite(request),runtime.ResponseDecodeError)
+  const unconstrained=runtime.createClient({validateResponses:true,middleware:[async()=>({status:200,contentType:'application/json',data:'anything'})]})
+  assert.equal((await unconstrained({...request,jsonPlan:undefined})).data,'anything')
+  runtime.assertResponseShape({a:'ok',b:true},{kind:'allOf',variants:[{kind:'object',required:['a'],fields:{a:{kind:'string'}}},{kind:'object',required:['b'],fields:{b:{kind:'boolean'}}}]})
+  assert.throws(()=>runtime.assertResponseShape({a:'ok',b:4},{kind:'allOf',variants:[{kind:'object',fields:{a:{kind:'string'}}},{kind:'object',fields:{b:{kind:'boolean'}}}]}),runtime.ResponseDecodeError)
+  runtime.assertResponseShape(null,{kind:'union',variants:[{kind:'string'},{kind:'null'}]})
+  runtime.assertResponseShape(null,{ref:'Nullable'},{Nullable:{kind:'string',nullable:true}})
+  runtime.assertResponseShape('ok',{kind:'union',variants:[{kind:'string'},{kind:'integer'}]})
+  assert.throws(()=>runtime.assertResponseShape(false,{kind:'union',variants:[{kind:'string'},{kind:'integer'}]}),runtime.ResponseDecodeError)
   const stream=new ReadableStream({start(controller){controller.enqueue(new TextEncoder().encode('data: {"ok":true}\n\n'));controller.close()}})
   const streamClient=runtime.createClient({middleware:[async()=>index===0?new Response(stream):{status:200,data:stream,headers:{},contentType:'text/event-stream'}]})
   const events=await runtime.toEventStream(streamClient({method:'GET',url:'/events',responseType:'stream'})); const values=[];for await(const event of events)values.push(event);assert.deepEqual(values,[{ok:true}])

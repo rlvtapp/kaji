@@ -1,0 +1,102 @@
+
+// ResponseValidationError identifies a structural mismatch without including response values.
+type ResponseValidationError struct { Path string; Expected string }
+func (failure *ResponseValidationError) Error() string { return "kaji: invalid response at " + failure.Path + ": expected " + failure.Expected }
+type kajiResponseField struct { Required bool `json:"required"`; Shape kajiResponseShape `json:"shape"` }
+type kajiResponseShape struct {
+    Kind string `json:"kind"`
+    Nullable bool `json:"nullable"`
+    Reference string `json:"reference"`
+    Items *kajiResponseShape `json:"items"`
+    Additional *kajiResponseShape `json:"additional"`
+    Fields map[string]kajiResponseField `json:"fields"`
+}
+var kajiResponseShapes = func() map[string]kajiResponseShape {
+    var shapes map[string]kajiResponseShape
+    if err := json.Unmarshal([]byte(KAJI_SCHEMA_LITERAL), &shapes); err != nil { panic("kaji: invalid generated response descriptors") }
+    return shapes
+}()
+func kajiValidateResponse(value any, destination reflect.Type, path string, depth int) error {
+    if destination == nil { return nil }
+    if depth > 128 { return &ResponseValidationError{Path:path,Expected:"maximum validation depth 128"} }
+    if value == nil && destination.Kind() == reflect.Pointer { return nil }
+    for destination.Kind() == reflect.Pointer { destination = destination.Elem() }
+    if shape, ok := kajiResponseShapes[destination.Name()]; ok { return kajiValidateShape(value, shape, path, depth) }
+    if destination == reflect.TypeOf(json.RawMessage{}) { return nil }
+    // Anonymous arrays/maps can still contain generated named models.
+    if value == nil && destination.Kind()==reflect.Interface { return nil }
+    if value == nil { return &ResponseValidationError{Path:path,Expected:"non-null Go value"} }
+    switch destination.Kind() {
+    case reflect.String:
+        if _,ok:=value.(string); !ok { return &ResponseValidationError{Path:path,Expected:"string"} }
+    case reflect.Bool:
+        if _,ok:=value.(bool); !ok { return &ResponseValidationError{Path:path,Expected:"boolean"} }
+    case reflect.Int,reflect.Int8,reflect.Int16,reflect.Int32,reflect.Int64,reflect.Uint,reflect.Uint8,reflect.Uint16,reflect.Uint32,reflect.Uint64:
+        if _,ok:=value.(json.Number); !ok { return &ResponseValidationError{Path:path,Expected:"integer"} }
+    case reflect.Float32,reflect.Float64:
+        if _,ok:=value.(json.Number); !ok { return &ResponseValidationError{Path:path,Expected:"number"} }
+    case reflect.Interface: return nil
+    case reflect.Slice, reflect.Array:
+        if _,ok:=value.([]any); !ok { return &ResponseValidationError{Path:path,Expected:"array"} }
+        if values, ok := value.([]any); ok { for index, item := range values { if err := kajiValidateResponse(item, destination.Elem(), fmt.Sprintf("%s[%d]", path,index),depth+1); err != nil { return err } } }
+    case reflect.Map:
+        if _,ok:=value.(map[string]any); !ok { return &ResponseValidationError{Path:path,Expected:"object"} }
+        if values, ok := value.(map[string]any); ok { for key,item := range values { if err := kajiValidateResponse(item, destination.Elem(),path+"["+strconv.Quote(key)+"]",depth+1); err != nil { return err } } }
+    }
+    return nil
+}
+func kajiValidateShape(value any, shape kajiResponseShape, path string, depth int) error {
+    failure := func(expected string) error { return &ResponseValidationError{Path:path,Expected:expected} }
+    if depth > 128 { return failure("maximum validation depth 128") }
+    if shape.Kind == "any" { return nil }
+    if value == nil && (shape.Nullable || shape.Kind == "null") { return nil }
+    if shape.Kind == "reference" {
+        target, ok := kajiResponseShapes[shape.Reference]
+        if !ok { return nil }
+        return kajiValidateShape(value,target,path,depth+1)
+    }
+    switch shape.Kind {
+    case "null": return failure("null")
+    case "string": if _,ok := value.(string); !ok { return failure("string") }
+    case "boolean": if _,ok := value.(bool); !ok { return failure("boolean") }
+    case "number", "integer":
+        number,ok := value.(json.Number); if !ok { return failure(shape.Kind) }
+        if shape.Kind == "integer" { if _,err := number.Int64(); err != nil { return failure("int64 integer") } }
+    case "array":
+        values,ok := value.([]any); if !ok { return failure("array") }
+        if shape.Items != nil { for index,item := range values { if err := kajiValidateShape(item,*shape.Items,fmt.Sprintf("%s[%d]",path,index),depth+1); err != nil { return err } } }
+    case "object":
+        fields,ok := value.(map[string]any); if !ok { return failure("object") }
+        if shape.Additional != nil { for name,item := range fields { if _,known:=shape.Fields[name]; !known { if err := kajiValidateShape(item,*shape.Additional,path+"["+strconv.Quote(name)+"]",depth+1); err != nil { return err } } } }
+        for name,field := range shape.Fields {
+            item,present := fields[name]; fieldPath := path+"["+strconv.Quote(name)+"]"
+            if !present { if field.Required { return &ResponseValidationError{Path:fieldPath,Expected:"required field"} }; continue }
+            if err := kajiValidateShape(item,field.Shape,fieldPath,depth+1); err != nil { return err }
+        }
+    }
+    return nil
+}
+func (client *Client) decodeResponse(body io.Reader, destination any) error {
+    if !client.validateResponses {
+        if err := json.NewDecoder(body).Decode(destination); err != nil && err != io.EOF { return err }
+        return nil
+    }
+    const maximum = 10 << 20
+    encoded,err := io.ReadAll(io.LimitReader(body, maximum+1))
+    if err != nil {
+        if errors.Is(err,context.Canceled) { return context.Canceled }
+        if errors.Is(err,context.DeadlineExceeded) { return context.DeadlineExceeded }
+        return &ResponseValidationError{Path:"$",Expected:"readable response body"}
+    }
+    if len(encoded) > maximum { return &ResponseValidationError{Path:"$",Expected:"response at most 10 MiB"} }
+    decoder := json.NewDecoder(bytes.NewReader(encoded)); decoder.UseNumber()
+    var value any
+    if err := decoder.Decode(&value); err != nil { return &ResponseValidationError{Path:"$",Expected:"one JSON value"} }
+    var trailing any
+    if err := decoder.Decode(&trailing); err != io.EOF { return &ResponseValidationError{Path:"$",Expected:"one JSON value"} }
+    destinationType := reflect.TypeOf(destination)
+    if destinationType != nil && destinationType.Kind() == reflect.Pointer { destinationType = destinationType.Elem() }
+    if err := kajiValidateResponse(value,destinationType,"$",0); err != nil { return err }
+    if err := json.Unmarshal(encoded,destination); err != nil { return &ResponseValidationError{Path:"$",Expected:"generated Go model representation"} }
+    return nil
+}

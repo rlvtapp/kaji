@@ -2985,6 +2985,10 @@ assert order == ['outer-before', 'inner', 'outer-after']
 response = Response()
 assert BaseClient('https://example.test', middleware=(lambda request, following: response,))._request('GET', '/') == {'rewritten': True}
 assert response.closed
+# A middleware that delegates must preserve terminal failures.
+try: BaseClient('https://example.test', middleware=(outer,))._request('GET', '/')
+except URLError as error: assert error.reason == 'offline'
+else: raise AssertionError('transport error swallowed')
 class AsyncResponse:
     status_code = 200
     headers = {'content-type': 'application/json'}
@@ -3007,6 +3011,14 @@ async def main():
     client = AsyncBaseClient('https://example.test', http_client=Transport(), async_middleware=(first, recover))
     assert await client._request('GET', '/') == {'async': True}
     assert seen == ['before', 'after'] and result.closed
+    async def shortcut(request, following): return AsyncResponse()
+    client = AsyncBaseClient('https://example.test', http_client=Transport(), async_middleware=(shortcut,))
+    assert await client._request('GET', '/') == {'async': True}
+    # Transport would reject the absent header if short circuit delegated.
+    client = AsyncBaseClient('https://example.test', http_client=Transport(), async_middleware=(first,))
+    try: await client._request('GET', '/')
+    except ValueError as error: assert str(error) == 'offline'
+    else: raise AssertionError('async transport error swallowed')
     async def cancelled(request, following): raise asyncio.CancelledError()
     client = AsyncBaseClient('https://example.test', http_client=Transport(), async_middleware=(cancelled,))
     try: await client._request('GET', '/')

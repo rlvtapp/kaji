@@ -225,7 +225,7 @@ An operation declaring `text/event-stream` can generate an event-stream surface 
 
 | Target | Retry/paging/streaming summary | Extension boundary |
 | --- | --- | --- |
-| TypeScript Fetch/Axios | Conservative retries; declared pagination and SSE | Logical-call middleware, hooks, native driver injection, optional codecs/validation |
+| TypeScript Fetch/Axios | Conservative retries; declared pagination and SSE | Logical-call middleware, hooks, native driver injection, optional codecs/validation and opt-in `validateResponses` structural buffered-success checks |
 | Python | Conservative retries; declared cursor/offset/URL pages and SSE; async is opt-in | Per-attempt sync/async middleware and native async driver; lifecycle callbacks; managed OAuth |
 | Go | Conservative retries; declared cursor/offset/URL pages and SSE | Per-attempt `KajiMiddleware`, injectable `KajiHTTPClient`, lifecycle hooks |
 | Rust | Conservative retries; declared pagination/SSE supported by generated operation surface | Per-attempt `MiddlewareTransport`, native `Transport`, lifecycle hooks |
@@ -239,6 +239,21 @@ This table identifies usable boundaries rather than asserting identical capabili
 For runtime retries, TypeScript/Rust/Go default to three total attempts. Python expresses the corresponding setting as `max_retries=2`. Eligible methods/statuses still depend on the generated operation and replay safety; POST requires an idempotency key. Set TypeScript `retry: false`, Go/Rust one total attempt, or Python `max_retries=0` when the application owns retry policy. Do not assume Swift or Ruby shares that default.
 
 Lifecycle hooks are notifications with native timing, not a portable replacement for middleware. Python's `before_request` runs per attempt; TypeScript/Go/Rust logical-call hooks have different timing. Use the [runtime middleware guide](guides/runtime-middleware.md) to choose the correct extension point.
+
+For TypeScript, `validateResponses: true` opts into checks of declared successful
+buffered JSON shapes after middleware. It also checks synthetic/cache results and
+custom-decoder outputs. It accepts extra fields and new enum strings, and does not
+validate all OpenAPI constraints or SSE events. See
+[response shape checks](guides/runtime-middleware.md#opt-into-typescript-response-shape-checks)
+for the scope. Author-bundled middleware is already active in an ordinary client;
+a customer's `middleware` option adds application-specific behavior.
+
+Go's `ClientConfig.ValidateResponses` similarly defaults to false. Its structural
+JSON checks cover named generated models and containers of them after native
+middleware, with a 10 MiB limit and one JSON value. Inline anonymous objects,
+composition constraints and SSE are outside that scope. See
+[Go response shape checks](guides/runtime-middleware.md#opt-into-go-response-shape-checks)
+for the exact boundaries.
 
 ## Keep improvements when regenerating
 

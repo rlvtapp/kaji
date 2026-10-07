@@ -1042,6 +1042,14 @@ struct Terminal: KajiTransport {
         let cachedValue = try await cached.send(request, as: String.self)
         precondition(cachedValue == "cached")
         let after = await events.snapshot(); precondition(after == order)
+        let cancellation = KajiMiddlewareTransport(inner: Terminal(events: events)) { _, _ in
+            throw CancellationError()
+        }
+        let cancelled = KajiClient(options: .init(baseURL: URL(string: "https://unused.example")!), transport: cancellation)
+        do {
+            let _: String = try await cancelled.send(request, as: String.self)
+            preconditionFailure("cancellation swallowed")
+        } catch is CancellationError { }
     }
 }
 "#).unwrap();

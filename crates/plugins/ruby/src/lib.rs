@@ -648,6 +648,13 @@ raise 'response/order' unless result == {'rewritten' => true} && seen == ['befor
 short = ->(request, following) { Response.new('200', '{"cached":true}') }
 client = ExampleSdk::Client.new(base_url: 'https://example.test', middleware: [short])
 raise 'short circuit failed' unless client.send(:request, 'get', '/', query: {}, headers: {}, body: nil) == {'cached' => true}
+client = ExampleSdk::Client.new(base_url: 'https://example.test', transport: transport, middleware: [outer])
+begin
+  client.send(:request, 'get', '/', query: {}, headers: {}, body: nil)
+  raise 'transport error swallowed'
+rescue IOError => error
+  raise 'transport error changed' unless error.message == 'offline'
+end
 "#;
         let output = Command::new("ruby")
             .args(["-Ilib", "-e", script])

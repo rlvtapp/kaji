@@ -29,7 +29,50 @@ console.log(note.body)
 
 The wrapper receives operation-level request data before serialization and authentication. Fetch and Axios expose `ClientMiddleware(request, next)`; ordinary results use a `MiddlewareResponse` envelope containing `status`, `contentType`, `data` and `headers`. Transform that envelope to replace response data, or return an envelope immediately to skip the remaining chain. Preserve native Fetch `Response` objects for streams and Axios envelopes containing their readable stream.
 
-TypeScript middleware runs once per logical call. Its `next` contains the transport's retry loop. Call `next(updatedRequest)` at most once: application replay policy belongs outside this continuation. A short circuit bypasses remaining middleware, driver execution, transport hooks and runtime validation. Generated operation/result adapters still consume the returned shape, so return a compatible response.
+TypeScript middleware runs once per logical call. Its `next` contains the transport's retry loop. Call `next(updatedRequest)` at most once: application replay policy belongs outside this continuation. A short circuit bypasses remaining middleware, driver execution, transport hooks and transport-level validation callbacks. The optional structural response check runs after the completed middleware chain, including short circuits. Generated operation/result adapters still consume the returned shape, so return a compatible response.
+
+## Opt into TypeScript response shape checks
+
+A customer can enable structural checking when constructing a Fetch or Axios
+client. This option is independent of the middleware already bundled by the SDK
+author:
+
+```ts
+const client = new Notes({
+  baseUrl: 'http://localhost:4010',
+  validateResponses: true,
+  middleware: [tenantHeader],
+})
+```
+
+The default is disabled. When enabled, declared successful buffered JSON response
+bodies are checked after the outer middleware chain completes. Results rewritten
+by a middleware layer, returned from its cache, or produced by a custom decoder
+must satisfy the same declared structural shape. A validation failure is terminal;
+it does not replay a successful HTTP call. Diagnostics identify the failing path
+without including the response payload.
+
+Checks cover required fields, primitive types, nullability, references, nested
+arrays/objects and supported intersections/unions. Extra object fields and new
+enum strings remain accepted for forward compatibility. Union checks cover the
+supported generated alternatives; they do not promise full JSON Schema `oneOf`
+exclusivity or every discriminator/constraint combination. This is not complete
+OpenAPI validation: bounds, patterns, formats and other schema constraints are
+outside this option. SSE events, error responses, HEAD/204 responses, undeclared/no-schema response
+bodies and mismatched content types are outside the buffered successful-response
+scope. A per-request `validateResponses: false` can disable a client’s default.
+
+Existing `validation` callbacks/Standard Schema assertions remain separate and
+retain their transport timing. Generating Zod schemas alone does not register
+operation response validation. Lossless integer parsing handles numeric precision;
+it is not proof that the response satisfies its schema.
+
+Generated Fetch/Axios executable tests cover terminal malformed-wire failures
+without an extra transport attempt, custom-codec outputs, cached/middleware
+rewrites, request overrides, required/null/array/reference checks, supported
+unions/intersections, status selection and open enum/extra-field compatibility.
+These fake-driver tests exercise generated runtime behavior; they do not establish
+live API compatibility or complete schema validation.
 
 ## Use Python's native request boundary
 
@@ -97,6 +140,40 @@ client, err := sdk.NewClient(sdk.ClientConfig{
 ```
 
 `KajiMiddleware` wraps `KajiHTTPClient`, whose native ABI is `Do(*http.Request) (*http.Response, error)`. `KajiHTTPClientFunc` adapts a function to that interface. Wrappers run for each attempt and may rewrite requests/responses, recover errors or short circuit. Keep the request context: it carries cancellation/deadlines. The SDK consumes returned response bodies; wrappers close discarded bodies. Native status and decoding errors are classified after this boundary, so a wrapper receives the HTTP response rather than the eventual typed operation error.
+
+## Opt into Go response shape checks
+
+Set `ClientConfig.ValidateResponses` when creating the generated client:
+
+```go
+client, err := NewClient(ClientConfig{
+    BaseURL: "http://localhost:4010",
+    ValidateResponses: true,
+})
+if err != nil {
+    return err
+}
+```
+
+The default is false. Buffered JSON is checked after the native HTTP driver and
+its middleware return, before the typed result reaches the caller. This covers
+named generated model responses, including anonymous arrays/maps whose elements
+are named models. Required fields, nonnullable nulls, scalar types and nested
+objects/arrays/references are checked. Required write-only fields are exempt
+from responses, including referenced write-only schemas. Declared typed additional
+properties are checked; otherwise unknown fields and future enum strings are accepted. Validation reads at most 10 MiB, permits one JSON value and bounds
+recursive validation at depth 128.
+
+`ResponseValidationError` exposes `Path` and `Expected`, without response values.
+Composition constraints, enum membership, formats and bounds are outside this
+check. Anonymous inline response objects retain native decoder checks only;
+SSE, binary and text responses bypass structural validation. A driver wrapper can
+replace a response, but it cannot catch validation performed later by the
+operation decoder. Anonymous scalars and containers also receive native shape checks.
+Nullable pointer destinations accept null; nullable named object value structs
+still cannot distinguish a root null from their zero value. Enabling validation
+does not repair that representation limit or change method return types.
+Preserve bodies and context as described above.
 
 ## Use the native extension in your language
 

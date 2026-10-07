@@ -36,6 +36,9 @@
 
 ### Changed
 
+- TypeScript Fetch/Axios and Go clients expose opt-in structural response checks.
+  Consumer middleware tests cover rewrites, short circuits, error propagation,
+  retries, and cancellation; TypeScript checks include middleware-produced results.
 - TypeScript preserves wide integers with string/bigint support. Model handling
   improves unknown fields and nullable values; Java supports open enums.
 - Python SDKs gain async/httpx support, OAuth client credentials, and webhook HMAC.

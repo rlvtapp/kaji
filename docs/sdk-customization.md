@@ -124,13 +124,30 @@ different ABI do not automatically support these contracts. Community language
 plugins can implement `Language::bundle_middleware`; unsupported language hooks
 fail explicitly.
 
+### Author defaults and customer choices
+
+A bundled policy is generation input: its source ships in the SDK and registration
+is automatic. A customer's runtime `middleware` array adds behavior for that
+application; it is not needed to activate the author’s defaults. In TypeScript,
+author layers are outermost and precede customer layers in recipe order.
+
+TypeScript customers separately choose `validateResponses: true` for structural
+checks of declared successful buffered JSON. That check sees the final result
+after both middleware layers, including short circuits and custom decoding.
+Bundling middleware does not enable this option or imply full OpenAPI validation.
+See the [scope and limitations](guides/runtime-middleware.md#opt-into-typescript-response-shape-checks).
+
 ### Test the policy before shipping it
 
 Build the SDK and call an actual generated operation through a fake native
 HTTP driver. Do not pass a middleware option in that test. Assert the request
 change and the decoded result; test error recovery and short circuits when your
-policy uses them. The checked-in example demonstrates this and supplies those
-commands to release automation.
+policy uses them. For TypeScript, also test a malformed synthetic response with
+`validateResponses: true`; check the failure path without logging the payload.
+Keep enum expansion and extra-field compatibility tests. These fake-driver tests
+verify the generated boundary and registration, not live API behavior, full schema
+constraints or SSE validation. The checked-in example demonstrates middleware
+registration and supplies its commands to release automation.
 
 ```sh
 kaji generate --config kaji.json

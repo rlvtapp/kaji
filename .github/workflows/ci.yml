@@ -43,6 +43,14 @@ jobs:
           cargo fmt --all --check
           cargo clippy --workspace --all-targets -- -D warnings
           cargo test --workspace --locked
+      - name: Verify generated TypeScript middleware and response decoding
+        run: |
+          npm install --prefix "$RUNNER_TEMP/kaji-ts-runtime" --no-audit --no-fund typescript@5.9.3 axios@1.20.0
+          export KAJI_TSC_JS="$RUNNER_TEMP/kaji-ts-runtime/node_modules/typescript/lib/tsc.js"
+          export KAJI_AXIOS_NODE_MODULES="$RUNNER_TEMP/kaji-ts-runtime/node_modules"
+          cargo test -p kaji-plugin-typescript generated_middleware_fetch_and_axios_execute -- --ignored
+          cargo test -p kaji-plugin-typescript bundled_middleware_is_enabled_without_customer_registration -- --ignored
+          cargo test -p kaji-plugin-typescript generated_lossless_fetch_axios_and_sse_round_trip -- --ignored
       - name: Verify generated Postman exports against the official schema
         run: cargo test -p kaji-plugin-postman validates_actual_official_draft04_schema -- --ignored
       - name: Verify generated Terraform lifecycle with native Framework state
