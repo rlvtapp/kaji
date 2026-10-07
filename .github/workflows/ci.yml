@@ -220,7 +220,7 @@ jobs:
           npm install --prefix "$RUNNER_TEMP/kaji-runtime-ts" --no-audit --no-fund typescript@5.9.3
           echo "KAJI_TSC_JS=$RUNNER_TEMP/kaji-runtime-ts/node_modules/typescript/lib/tsc.js" >> "$GITHUB_ENV"
       - uses: actions/setup-go@v7
-        if: matrix.language == 'Go'
+        if: matrix.language == 'Go' || matrix.language == 'Swift'
         with:
           go-version: '1.25.7'
       - uses: actions/setup-python@v7
