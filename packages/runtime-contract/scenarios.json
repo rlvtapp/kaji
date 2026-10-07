@@ -1,0 +1,172 @@
+{
+  "schema_version": 1,
+  "operation": {
+    "id": "getContact",
+    "method": "GET",
+    "path": "/v1/contacts/current"
+  },
+  "scenarios": [
+    {
+      "id": "success",
+      "responses": [
+        {
+          "status": 200,
+          "body": "{\"id\":\"contact_123\"}"
+        }
+      ],
+      "outcome": "success",
+      "contact_id": "contact_123",
+      "requests": 1
+    },
+    {
+      "id": "future_fields",
+      "responses": [
+        {
+          "status": 200,
+          "body": "{\"id\":\"future\",\"extension\":{\"value\":true}}"
+        }
+      ],
+      "outcome": "success",
+      "contact_id": "future",
+      "requests": 1
+    },
+    {
+      "id": "retry_503",
+      "responses": [
+        {
+          "status": 503,
+          "body": "{}"
+        },
+        {
+          "status": 200,
+          "body": "{\"id\":\"retried\"}"
+        }
+      ],
+      "outcome": "success",
+      "contact_id": "retried",
+      "requests": 2
+    },
+    {
+      "id": "status_400",
+      "responses": [
+        {
+          "status": 400,
+          "body": "{\"message\":\"bad request\"}"
+        }
+      ],
+      "outcome": "error",
+      "requests": 1
+    },
+    {
+      "id": "invalid_json",
+      "responses": [
+        {
+          "status": 200,
+          "body": "{broken"
+        }
+      ],
+      "outcome": "error",
+      "requests": 1
+    }
+  ],
+  "coverage": {
+    "typescript": {
+      "supported": [
+        "success",
+        "future_fields",
+        "retry_503",
+        "status_400",
+        "invalid_json"
+      ]
+    },
+    "go": {
+      "supported": [
+        "success",
+        "future_fields",
+        "retry_503",
+        "status_400",
+        "invalid_json"
+      ]
+    },
+    "python": {
+      "supported": [
+        "success",
+        "future_fields",
+        "retry_503",
+        "status_400",
+        "invalid_json"
+      ]
+    },
+    "rust": {
+      "supported": [
+        "success",
+        "future_fields",
+        "retry_503",
+        "status_400",
+        "invalid_json"
+      ]
+    },
+    "swift": {
+      "supported": [
+        "success",
+        "future_fields",
+        "status_400",
+        "invalid_json"
+      ],
+      "unsupported": {
+        "retry_503": "This Foundation runtime has no automatic retry policy."
+      }
+    },
+    "ruby": {
+      "supported": [
+        "success",
+        "future_fields",
+        "status_400"
+      ],
+      "unsupported": {
+        "retry_503": "This Net::HTTP runtime has no automatic retries.",
+        "invalid_json": "The current runtime returns raw response text when JSON parsing fails."
+      }
+    },
+    "java": {
+      "supported": [
+        "success",
+        "future_fields",
+        "retry_503",
+        "status_400",
+        "invalid_json"
+      ],
+      "verification": "Harness implemented; native execution is required in CI. Not verified locally."
+    },
+    "csharp": {
+      "supported": [
+        "success",
+        "future_fields",
+        "retry_503",
+        "status_400",
+        "invalid_json"
+      ],
+      "verification": "Harness implemented; native execution is required in CI. Not verified locally."
+    },
+    "php": {
+      "supported": [
+        "success",
+        "future_fields",
+        "retry_503",
+        "status_400",
+        "invalid_json"
+      ],
+      "verification": "Harness implemented; native execution is required in CI. Not verified locally."
+    },
+    "elixir": {
+      "supported": [
+        "success",
+        "future_fields",
+        "retry_503",
+        "status_400",
+        "invalid_json"
+      ],
+      "verification": "Harness implemented; native execution is required in CI. Not verified locally."
+    }
+  }
+}

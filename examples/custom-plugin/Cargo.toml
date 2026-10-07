@@ -1,0 +1,11 @@
+[package]
+name = "kaji-custom-plugin-example"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+anyhow = "1"
+kaji-core = { path = "../../crates/kaji-core" }
+
+[workspace]

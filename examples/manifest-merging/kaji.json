@@ -18,8 +18,7 @@
         },
         {
           "name": "tanstack-react-query",
-          "output": "react-query",
-          "clients_import": "../clients"
+          "output": "react-query"
         }
       ]
     }
