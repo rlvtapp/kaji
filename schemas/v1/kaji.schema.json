@@ -454,7 +454,12 @@
         },
         "open_enums": {
           "type": "boolean",
-          "description": "Generate forward-compatible Java or C# enum value classes."
+          "description": "Generate forward-compatible Java, C# or Swift named string enum value classes."
+        },
+        "preserve_presence": {
+          "type": "boolean",
+          "default": false,
+          "description": "Opt-in Java/C# Presence wrappers for omitted versus explicit-null optional properties; changes the optional-property API."
         }
       }
     },
@@ -1033,6 +1038,69 @@
         "id_field": {
           "type": "string",
           "minLength": 1
+        },
+        "schema_version": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16,
+          "default": 0,
+          "description": "Current Terraform resource schema version; explicitly cover every prior version in state_upgrades."
+        },
+        "state_upgrades": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "version",
+              "rename_fields"
+            ],
+            "properties": {
+              "version": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 15
+              },
+              "rename_fields": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          "description": "Explicit old-state version to current-schema root attribute renames. No inferred type conversions."
+        },
+        "identity": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "parameter",
+              "field"
+            ],
+            "properties": {
+              "parameter": {
+                "type": "string",
+                "minLength": 1
+              },
+              "field": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "description": "Explicit composite identity components: item path parameter mapped to a required string response field. Omit legacy id_parameter/id_field."
         }
       }
     },

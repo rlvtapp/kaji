@@ -77,3 +77,28 @@ bytes and offer an explicit decoder; Python/TypeScript return decoded JSON after
 verification. Do not parse first and reserialize when calculating signatures.
 Trusted `whsec_` keys and HMAC v1 are supported; this is not asymmetric signature
 verification or durable replay storage.
+
+## Ruby client credentials
+
+Select `{"name":"oauth"}` beside Ruby's SDK plugin, or use `ruby::oauth()` in the
+Rust package API. Require the generated `<package>/oauth` module, then configure:
+
+```ruby
+provider = MySdk::OAuthClientCredentials.new(
+  token_url: 'https://auth.example.com/token',
+  client_id: ENV.fetch('CLIENT_ID'),
+  client_secret: ENV.fetch('CLIENT_SECRET'),
+  scopes: ['read']
+)
+client = MySdk::Client.new(base_url: 'https://api.example.com', token_provider: provider)
+```
+
+The provider caches tokens and coordinates concurrent refreshes. Expiry, canceled
+leaders/waiters and obsolete rejected-token observations are handled without
+exposing credentials in errors or inspection. A buffered operation may recover
+from a rejected token once when its replay-safe/idempotency policy permits; an
+unkeyed POST/PATCH is not replayed. The refresh recovery has its own one-replay
+bound, independent of configured transient retries. Explicit Authorization headers
+remain customer-owned. Synchronous HTTP interruption is transport-owned; a
+cancellation callback stops waiting or token publication. Native fake-issuer tests
+cover these semantics; no live identity provider has been used.

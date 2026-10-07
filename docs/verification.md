@@ -214,3 +214,18 @@ Postman environment synchronization adds mocked checks for reviewed publication,
 secret preservation, manual-variable preservation, duplicate rejection, read-back
 failure, response size limits and redacted transport errors. No live Postman API
 call has been made.
+
+## Additional native coverage
+
+Terraform Framework probes exercise nested lists/maps, unknown-child hydration,
+known-plan consistency, composite parent/child identity, import diagnostics and
+actual versioned state upgrades. The real local CLI lifecycle also passed with
+Terraform 1.13.4. Swift native probes exercise incremental SSE before EOF, socket
+cancellation, offset/URL pagination and unknown enum roundtrips. Rust's URL probe
+also checks typed errors preserve raw response bytes. Ruby OAuth probes cover
+concurrent refresh, cancellation, expiry and bounded 401 recovery.
+
+Java/C# presence and multipart probes are selected in CI; their local native
+execution requires unavailable toolchains. Two checksum-pinned official Open-Meteo
+contracts compile locally in Rust, TypeScript, Go, Python, Ruby and Swift. CI adds
+Java, C#, PHP and Elixir. These checks never call production API endpoints.

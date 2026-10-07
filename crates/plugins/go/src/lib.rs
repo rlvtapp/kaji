@@ -2767,7 +2767,11 @@ func TestScopedKeys(t *testing.T) {
         let output = Command::new("go")
             .args(["test", "./..."])
             .current_dir(root.path().join("sdk"))
-            .env("GOCACHE", "/private/tmp/kaji-go-cache")
+            .env(
+                "GOCACHE",
+                std::env::var_os("GOCACHE")
+                    .unwrap_or_else(|| std::env::temp_dir().join("kaji-go-cache").into_os_string()),
+            )
             .output()
             .unwrap();
         assert!(
@@ -2801,7 +2805,11 @@ func TestCancelBackoff(t *testing.T){
         let output = Command::new("go")
             .args(["test", "-race", "./..."])
             .current_dir(root.path().join("sdk"))
-            .env("GOCACHE", "/private/tmp/kaji-go-cache")
+            .env(
+                "GOCACHE",
+                std::env::var_os("GOCACHE")
+                    .unwrap_or_else(|| std::env::temp_dir().join("kaji-go-cache").into_os_string()),
+            )
             .output()
             .unwrap();
         assert!(

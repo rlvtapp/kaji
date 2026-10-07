@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, "0.5.0"]
 
 permissions:
   contents: read
@@ -29,7 +29,9 @@ jobs:
         with:
           python-version: '3.12'
       - name: Test CI integration templates
-        run: node --test packages/github-action/test/*.test.cjs packages/gitlab-ci/test/*.test.cjs
+        run: |
+          node --test packages/github-action/test/*.test.cjs packages/gitlab-ci/test/*.test.cjs
+          python3 scripts/test-public-contracts.test.py
       - name: Test editable SDK delivery and App broker sources
         run: node --test packages/sdk-check/test/*.mjs packages/sdk-publish/test/*.mjs packages/github-app-broker/*.test.mjs packages/spec-sync/test/*.test.mjs packages/sdk-delivery-test/test/*.test.mjs packages/runtime-contract/test.mjs packages/postman-sync/test/*.mjs
       - name: Test portable collection checker
@@ -63,7 +65,10 @@ jobs:
           node --test packages/postman-execute/test/*.test.mjs
           cargo test -p kaji-plugin-postman generated_collection_executes_with_newman_local_mock -- --ignored
       - name: Verify generated Terraform lifecycle with native Framework state
-        run: cargo test -p kaji-plugin-terraform generated_provider_executes_native_framework_lifecycle -- --ignored
+        run: |
+          cargo test -p kaji-plugin-terraform generated_provider_executes_native_framework_lifecycle -- --ignored
+          cargo test -p kaji-plugin-terraform generated_nested_provider_executes_native_framework_lifecycle -- --ignored
+          cargo test -p kaji-plugin-terraform generated_composite_provider_executes_native_framework_lifecycle -- --ignored
       - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: '1.13.4'
@@ -108,6 +113,17 @@ jobs:
           target/debug/kaji generate --config examples/api-artifacts/kaji.json --check --format json
       - name: Verify release examples
         run: python scripts/check-release-examples.py
+      - name: Generate checksum-pinned public contracts for every SDK target
+        env:
+          KAJI_BINARY: ${{ github.workspace }}/target/debug/kaji
+          KAJI_PUBLIC_CONTRACT_ROOT: ${{ runner.temp }}/public-contract-fixtures
+        run: bash scripts/test-public-contracts.sh generate
+      - uses: actions/upload-artifact@v7
+        with:
+          name: public-contract-fixtures
+          path: ${{ runner.temp }}/public-contract-fixtures
+          include-hidden-files: true
+          retention-days: 1
       - name: Generate cross-language SDK fixture once
         run: >-
           target/debug/kaji generate crates/kaji-cli/tests/fixtures/pets.yaml
@@ -213,6 +229,16 @@ jobs:
       - name: Initialize Hex for the generated Elixir runtime probe
         if: matrix.language == 'Elixir'
         run: mix local.hex --force && mix local.rebar --force
+      - uses: actions/download-artifact@v7
+        with:
+          name: public-contract-fixtures
+          path: public-contract-fixtures
+      - name: Compile pinned public contracts with the native language toolchain
+        env:
+          KAJI_PUBLIC_CONTRACT_ROOT: ${{ github.workspace }}/public-contract-fixtures
+          CLANG_MODULE_CACHE_PATH: ${{ runner.temp }}/kaji-swift-cache/clang
+          SWIFTPM_MODULECACHE_OVERRIDE: ${{ runner.temp }}/kaji-swift-cache/swiftpm
+        run: bash scripts/test-public-contracts.sh check "${{ matrix.path }}"
       - name: Validate generated SDK
         working-directory: generated-sdk-fixture/${{ matrix.path }}
         env:
@@ -240,6 +266,8 @@ jobs:
           cargo test -p kaji-plugin-java native_webhook_verification_executes_canonical_vectors -- --ignored
           cargo test -p kaji-plugin-java native_generated_operation_tests_execute -- --ignored
           cargo test -p kaji-plugin-java native_models_preserve_alias_union_and_unknown_enum_wire_values -- --ignored
+          cargo test -p kaji-plugin-java native_omitted_and_null_presence_roundtrip -- --ignored
+          cargo test -p kaji-plugin-java native_multipart_http_bytes_preserve_unicode_falsy_and_binary -- --ignored
       - name: Verify generated C# retry parser
         if: matrix.language == 'C#'
         run: |
@@ -248,6 +276,8 @@ jobs:
           cargo test -p kaji-plugin-csharp native_webhook_verification_executes_canonical_vectors -- --ignored
           cargo test -p kaji-plugin-csharp native_generated_operation_tests_execute -- --ignored
           cargo test -p kaji-plugin-csharp native_models_preserve_alias_union_and_unknown_enum_wire_values -- --ignored
+          cargo test -p kaji-plugin-csharp native_omitted_and_null_presence_roundtrip -- --ignored
+          cargo test -p kaji-plugin-csharp native_multipart_http_bytes_preserve_unicode_falsy_and_binary -- --ignored
       - name: Verify native PHP pagination generation and iteration
         if: matrix.language == 'PHP'
         run: |
@@ -276,10 +306,14 @@ jobs:
         run: |
           (cd openapi && go build -o ../target/debug/kaji-openapi .)
           cargo test -p kaji --test complex_contract -- --ignored
+      - name: Verify native C# URL pagination
+        if: matrix.language == 'C#'
+        run: cargo test -p kaji-plugin-csharp native_url_pages_reject_unsafe_origins_preserve_auth_and_cancel_lazily -- --ignored
       - name: Verify generated Rust operation tests
         if: matrix.language == 'Rust'
         run: |
           cargo test -p kaji-plugin-rust native_generated_rust_operation_tests_execute -- --ignored
+          cargo test -p kaji-plugin-rust native_url_pages_preserve_origin_auth_and_raw_error_responses -- --ignored
           cargo test -p kaji-plugin-rust native_standard_webhook_vectors_execute -- --ignored
       - name: Execute generated public operations against shared runtime scenarios
         run: node packages/runtime-contract/runner.mjs "${{ matrix.path }}" "$GITHUB_WORKSPACE/runtime-contract-fixture/sdk/${{ matrix.path }}"

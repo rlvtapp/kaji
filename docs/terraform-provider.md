@@ -47,8 +47,8 @@ and excluded operations. Examine it even when generation succeeds.
 
 ## Understand the supported state behavior
 
-The current implementation handles flat JSON objects with string, boolean,
-integer and number attributes; string identity; resource import; ordinary CRUD;
+The current implementation handles fixed nested JSON objects, typed lists/maps,
+string, boolean, integer and number attributes; single or composite string identity; resource import; ordinary CRUD;
 and supported single-scheme HTTP bearer/basic/API-key authentication.
 Configured values, computed response fields, identity and replacement decisions
 have distinct roles in the plan. Create/update must preserve known planned values;
@@ -59,12 +59,40 @@ responses fail without treating pending work as completed. Delete
 also treats an already-missing object as success. Error messages avoid dumping
 HTTP response bodies or credentials.
 
-Nested collections/objects, nullable values, unions, composite identities,
-write-only secrets, polling, independent/list data sources, state migrations and advanced actions
-are excluded from this version. Unsupported schema constraints need explicit
-support before those resources can be emitted. These exclusions are explainable
-in the catalog; the full [Terraform roadmap](terraform-provider-plan.md) remains
-the plan for expanding the implementation.
+Nullable values, unions, recursive shapes, unsupported constraints, differing nested
+read/write projections, write-only secrets, polling, independent/list data sources
+and advanced actions remain excluded. See the [Speakeasy comparison](terraform-speakeasy.md)
+for the supported subset and remaining work.
+
+## Composite identities and state upgrades
+
+For a configured parent ID and server-generated child ID, replace `id_parameter`
+and `id_field` with explicit mappings:
+
+```json
+"identity": [
+  {"parameter": "organization", "field": "organizationId"},
+  {"parameter": "id", "field": "id"}
+]
+```
+
+The planner validates every lifecycle path and response mapping. Composite imports
+use a JSON object keyed by parameter names, such as
+`'{"organization":"acme","id":"widget-1"}'`. Parent configuration stays out of
+the create body unless the API declares it there. Generated documentation includes
+nested HCL examples and the exact import shape.
+
+For a root attribute rename, explicitly declare each prior version's direct
+upgrade to the current schema:
+
+```json
+"schema_version": 1,
+"state_upgrades": [{"version": 0, "rename_fields": {"old_name": "name"}}]
+```
+
+Framework upgrade callbacks preserve values and reject collisions or incompatible
+state. These are root-field renames, not arbitrary type conversions. Test stored
+old state before releasing a changed provider; migrations are never inferred.
 
 ## Read existing objects through data sources
 
@@ -78,12 +106,11 @@ data "widgets_widget" "existing" {
 }
 ```
 
-The string `id` is required; scalar response fields are computed, with sensitive
+The string `id` is required; supported nested and scalar response fields are computed, with sensitive
 flags preserved. Reads use the declared GET operation, authentication and identity
 encoding. HTTP 404, malformed bodies and identity mismatches report diagnostics.
 Data sources never create/update/delete an object or remove managed resource
-state. Independent read-only endpoints, lists, nested/composite identities and
-polling remain unsupported. See HashiCorp's
+state. Independent read-only endpoints, lists and polling remain unsupported. See HashiCorp's
 [data-source lifecycle](https://developer.hashicorp.com/terraform/plugin/framework/data-sources).
 
 Reserved root names such as `count`, `for_each` and `depends_on` are rejected by
@@ -155,8 +182,7 @@ keep those changes automatically.
 The older `terraform::sdk().resource(TerraformResource)` API remains a legacy
 raw-JSON prototype for source compatibility. It is not the typed provider path
 and does not gain the new state guarantees. Migrate its resource mappings to
-`ResourceBinding` and `provider()` before using the new recipe target. Existing
-Terraform state migrations are not automatically generated or promised.
+`ResourceBinding` and `provider()` before using the new recipe target. State upgrades require explicit versioned mappings and validation against old state.
 
 ## Prepare a registry release
 

@@ -56,7 +56,11 @@ mod tests {
         .unwrap();
         let output = std::process::Command::new("go")
             .args(["test", "-race", "./..."])
-            .env("GOCACHE", "/private/tmp/kaji-go-cache")
+            .env(
+                "GOCACHE",
+                std::env::var_os("GOCACHE")
+                    .unwrap_or_else(|| std::env::temp_dir().join("kaji-go-cache").into_os_string()),
+            )
             .current_dir(dir.path().join("sdk"))
             .output()
             .unwrap();

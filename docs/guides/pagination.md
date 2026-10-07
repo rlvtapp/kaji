@@ -51,12 +51,12 @@ limits below for legacy paginator selector differences.
 | TypeScript | Async generator, `<operation>Pages` | Cursor, page, offset/limit, next URL |
 | Go | Pager with `Next(ctx)` | Cursor, page, offset/limit, next URL |
 | Python | Generator or async generator, `<operation>_pages` | Cursor, page, offset/limit, next URL |
-| Rust | Lazy `Stream`, `<operation>_pages` | Cursor, page, offset/limit; no next-URL helper |
+| Rust | Lazy `Stream`, `<operation>_pages` | Cursor, page, offset/limit, absolute same-origin URL |
 | Java | Lazy `Iterable`, `<operation>Pages` | Cursor, page, offset/limit, next URL |
-| C# | `IAsyncEnumerable`, `<operation>PagesAsync` | Cursor, page, offset/limit |
+| C# | `IAsyncEnumerable`, `<operation>PagesAsync` | Cursor, page, offset/limit, absolute same-origin URL |
 | PHP | `Generator`, `<operation>Pages` | Cursor, page, offset/limit, next URL |
 | Ruby | `Enumerator`, `<operation>_pages` | Page |
-| Swift | Native async sequence, `<operation>Pages` | Cursor, page |
+| Swift | Native async sequence, `<operation>Pages` | Cursor, page, offset/limit, absolute same-origin URL |
 | Elixir | Lazy `Stream`, `<operation>_pages` | Cursor, page, offset, absolute same-origin URL |
 
 These are capability forms, not a guarantee that every schema/control binding
@@ -100,3 +100,8 @@ origin; relative URLs, userinfo, fragments, scheme/host/port changes are rejecte
 before authentication or transport. Repeated continuations stop iteration and a
 page cap bounds traversal. Body controls remain unsupported. Native execution of
 these additions is selected in CI and requires Elixir.
+
+Rust, C# and Swift URL helpers accept absolute same-origin HTTP(S) URLs only.
+They reject userinfo, fragments and origin changes before authentication or
+middleware. Swift offset controls require inline nonnullable integer parameters;
+reference and body controls remain unsupported.

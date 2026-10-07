@@ -128,3 +128,15 @@ SDK project's compile inputs. PHP/Elixir/Java/C# native execution is selected in
 and has not been run on the local machine. Ruby and Swift have native local probes.
 These six JSON recipes infer the bundled SDK; custom typed-provider selection, where
 exposed by the plugin, uses the Rust API instead of ignored JSON `uses` bindings.
+
+## Pinned public contract compilation
+
+`bash scripts/test-public-contracts.sh generate` downloads two immutable official
+Open-Meteo contracts, verifies their SHA-256 hashes and generates all ten native
+SDK targets. Set `KAJI_PUBLIC_CONTRACT_ROOT` to a disposable directory. Use
+`bash scripts/test-public-contracts.sh check LANGUAGE` for each generated language.
+`KAJI_PUBLIC_SPEC_DIR` allows a local input cache but still verifies exact hashes.
+Neither generation nor compilation contacts the weather APIs. CI compiles each
+contract in the language job with its native toolchain; these are compile/import
+checks, complementing the separate operation/wire tests. Pins are recorded in
+`scripts/fixtures/public-contracts.json`; changing a pin requires deliberate review.

@@ -806,6 +806,7 @@ struct PluginConfig {
     int64: Option<String>,
     async_client: Option<bool>,
     open_enums: Option<bool>,
+    preserve_presence: Option<bool>,
     transport: Option<String>,
     surface: Option<String>,
     client_name: Option<String>,
@@ -2075,6 +2076,15 @@ fn config_profiles(
     }
     let mut profiles = ProfileSet::new(".").common(Common::default().client_style(default_style));
     for package in packages {
+        if !matches!(package.language.as_str(), "java" | "csharp" | "dotnet") {
+            ensure!(
+                package
+                    .plugins
+                    .iter()
+                    .all(|plugin| plugin.preserve_presence.is_none()),
+                "preserve_presence is only supported by Java and C# SDK plugins"
+            );
+        }
         if matches!(
             package.language.as_str(),
             "php" | "java" | "csharp" | "dotnet" | "elixir" | "ruby" | "swift"
@@ -2314,8 +2324,11 @@ fn config_profiles(
                     package_builder
                 };
                 let plugin = sdk_plugin(package)?;
-                let mut package_builder = package_builder
-                    .with(java::sdk().open_enums(plugin.open_enums.unwrap_or(false)));
+                let mut package_builder = package_builder.with(
+                    java::sdk()
+                        .open_enums(plugin.open_enums.unwrap_or(false))
+                        .preserve_presence(plugin.preserve_presence.unwrap_or(false)),
+                );
                 if package.plugins.iter().any(|p| p.name == "webhooks") {
                     package_builder = package_builder.with(java::webhooks());
                 }
@@ -2334,8 +2347,11 @@ fn config_profiles(
                     package_builder
                 };
                 let plugin = sdk_plugin(package)?;
-                let mut package_builder = package_builder
-                    .with(csharp::sdk().open_enums(plugin.open_enums.unwrap_or(false)));
+                let mut package_builder = package_builder.with(
+                    csharp::sdk()
+                        .open_enums(plugin.open_enums.unwrap_or(false))
+                        .preserve_presence(plugin.preserve_presence.unwrap_or(false)),
+                );
                 if package.plugins.iter().any(|p| p.name == "webhooks") {
                     package_builder = package_builder.with(csharp::webhooks());
                 }
@@ -2363,7 +2379,7 @@ fn config_profiles(
                 profiles.package(with_configured_middleware(package_builder, package))
             }
             "ruby" => {
-                has_only_known_plugins(package, &["sdk", "webhooks", "operation-tests"])?;
+                has_only_known_plugins(package, &["sdk", "webhooks", "operation-tests", "oauth"])?;
                 let package_builder =
                     ruby::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
@@ -2380,6 +2396,9 @@ fn config_profiles(
                 if package.plugins.iter().any(|p| p.name == "operation-tests") {
                     package_builder = package_builder.with(ruby::operation_tests());
                 }
+                if package.plugins.iter().any(|p| p.name == "oauth") {
+                    package_builder = package_builder.with(ruby::oauth());
+                }
                 profiles.package(with_configured_middleware(package_builder, package))
             }
             "swift" => {
@@ -2391,7 +2410,9 @@ fn config_profiles(
                 } else {
                     package_builder
                 };
-                let mut package_builder = package_builder.with(swift::sdk());
+                let plugin = sdk_plugin(package)?;
+                let mut package_builder = package_builder
+                    .with(swift::sdk().open_enums(plugin.open_enums.unwrap_or(false)));
                 if package.plugins.iter().any(|p| p.name == "webhooks") {
                     package_builder = package_builder.with(swift::webhooks());
                 }
@@ -5004,6 +5025,78 @@ mod tests {
                 .get("./terraform/.github/workflows/terraform-release.yml")
                 .is_none()
         );
+        let mut migration_recipe = configured.clone();
+        migration_recipe[1]["plugins"][0]["resources"][0]["schema_version"] = serde_json::json!(1);
+        migration_recipe[1]["plugins"][0]["resources"][0]["state_upgrades"] =
+            serde_json::json!([{"version":0,"rename_fields":{"old_name":"name"}}]);
+        let migration_packages: Vec<PackageConfig> =
+            serde_json::from_value(migration_recipe).unwrap();
+        assert_eq!(
+            migration_packages[1].plugins[0].resources[0].schema_version,
+            1
+        );
+        let migration_tree = kaji::generate(
+            &api,
+            config_profiles(SdkClientStyle::Namespaced, &migration_packages).unwrap(),
+        )
+        .unwrap();
+        assert!(
+            migration_tree
+                .get("./terraform/internal/provider/resource_item.go")
+                .unwrap()
+                .contains("UpgradeState")
+        );
+        let mut composite_api = api.clone();
+        let parent = OperationParameter {
+            name: "organization".into(),
+            location: "path".into(),
+            required: true,
+            schema: Some(string()),
+            description: None,
+            annotations: Default::default(),
+        };
+        for operation in &mut composite_api.operations {
+            operation.path = format!("/organizations/{{organization}}{}", operation.path);
+            operation.parameters.push(parent.clone());
+            for response in &mut operation.responses {
+                for media in &mut response.media_types {
+                    if let Some(SchemaValue {
+                        kind: SchemaKind::Object { fields, .. },
+                        ..
+                    }) = &mut media.schema
+                    {
+                        fields.push(Field {
+                            name: "organizationId".into(),
+                            value: {
+                                let mut value = string();
+                                value.read_only = true;
+                                value
+                            },
+                            required: true,
+                            annotations: Default::default(),
+                        });
+                    }
+                }
+            }
+        }
+        let mut composite_recipe = configured.clone();
+        let resource = &mut composite_recipe[1]["plugins"][0]["resources"][0];
+        resource.as_object_mut().unwrap().remove("id_parameter");
+        resource.as_object_mut().unwrap().remove("id_field");
+        resource["identity"] = serde_json::json!([{"parameter":"organization","field":"organizationId"},{"parameter":"id","field":"id"}]);
+        let composite_packages: Vec<PackageConfig> =
+            serde_json::from_value(composite_recipe).unwrap();
+        let composite_tree = kaji::generate(
+            &composite_api,
+            config_profiles(SdkClientStyle::Namespaced, &composite_packages).unwrap(),
+        )
+        .unwrap();
+        assert!(
+            composite_tree
+                .get("./terraform/internal/provider/resource_item.go")
+                .unwrap()
+                .contains("ParseIdentity")
+        );
         let mut defaults = configured;
         for package in defaults.as_array_mut().unwrap() {
             package.as_object_mut().unwrap().remove("api_reference");
@@ -5082,7 +5175,7 @@ mod tests {
             {"language":"typescript","path":"ts","plugins":[{"name":"sdk","id":"native"},{"name":"operation-tests","uses":{"operations":"native","transport":"native"}}]},
             {"language":"rust","path":"rust","plugins":[{"name":"sdk"},{"name":"operation-tests"}]},
             {"language":"go","path":"go","plugins":[{"name":"sdk"},{"name":"operation-tests"},{"name":"oauth"},{"name":"webhooks"}]},
-            {"language":"ruby","path":"ruby","plugins":[{"name":"sdk"},{"name":"webhooks"}]}
+            {"language":"ruby","path":"ruby","plugins":[{"name":"sdk"},{"name":"webhooks"},{"name":"oauth"}]}
         ])).unwrap();
         let api = Api {
             name: "Consumer".into(),
@@ -5110,6 +5203,7 @@ mod tests {
             "./go/webhooks.go",
             "./go/.kaji/operation-test-diagnostics.json",
             "./ruby/lib/consumer_sdk/webhooks.rb",
+            "./ruby/lib/consumer_sdk/oauth.rb",
         ] {
             assert!(tree.get(path).is_some(), "missing {path}");
         }
@@ -5118,6 +5212,33 @@ mod tests {
             .uses
             .insert("client".into(), "native".into());
         assert!(config_profiles(SdkClientStyle::Namespaced, &malformed).is_err());
+    }
+    #[test]
+    fn presence_recipe_selects_explicit_model_abi_and_rejects_unsupported_targets() {
+        let packages: Vec<PackageConfig> = serde_json::from_value(serde_json::json!([
+            {"language":"java","path":"java","plugins":[{"name":"sdk","preserve_presence":true}]},
+            {"language":"csharp","path":"csharp","plugins":[{"name":"sdk","preserve_presence":true}]}
+        ])).unwrap();
+        let api = Api {
+            name: "Presence".into(),
+            ..Default::default()
+        };
+        let tree = kaji::generate(
+            &api,
+            config_profiles(SdkClientStyle::Namespaced, &packages).unwrap(),
+        )
+        .unwrap();
+        for language in ["java", "csharp"] {
+            assert!(
+                tree.iter()
+                    .any(|(path, _)| path.starts_with(format!("./{language}"))
+                        && path.to_string_lossy().contains("Presence")),
+                "missing presence helper for {language}"
+            );
+        }
+        let mut unsupported = packages;
+        unsupported[0].language = "go".into();
+        assert!(config_profiles(SdkClientStyle::Namespaced, &unsupported).is_err());
     }
     #[test]
     fn every_sdk_recipe_can_select_native_operation_tests() {
@@ -5204,7 +5325,50 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("recipe.json");
         std::fs::write(&path, serde_json::to_string(&config).unwrap()).unwrap();
-        let script = "import json,sys,jsonschema; schema=json.load(open(sys.argv[1])); config=json.load(open(sys.argv[2])); validator=jsonschema.Draft202012Validator(schema); validator.check_schema(schema); assert validator.is_valid(config); config['packages'][0]['idempotency']['defaults']['enabled']='yes'; assert not validator.is_valid(config); config['packages'][0]['idempotency']['defaults']['enabled']=False; config['packages'][0]['idempotency']['operations']['createItem']['header']='bad header'; assert not validator.is_valid(config); config['packages'][0]['idempotency']['operations']['createItem']['header']='X-Key'; config['packages'][0]['api_reference']='yes'; assert not validator.is_valid(config); config['packages'][0]['api_reference']=True; config['packages'][1]['plugins'][0]['data_sources']='yes'; assert not validator.is_valid(config); config['packages'][1]['plugins'][0]['data_sources']=True; config['packages'][0]['plugins'][1]['name']='unsupported-operation-tests'; assert not validator.is_valid(config)";
+        let script = r#"
+import json, sys, jsonschema
+schema = json.load(open(sys.argv[1]))
+config = json.load(open(sys.argv[2]))
+validator = jsonschema.Draft202012Validator(schema)
+validator.check_schema(schema)
+assert validator.is_valid(config)
+python = config['packages'][0]
+terraform = config['packages'][1]['plugins'][0]
+python['idempotency']['defaults']['enabled'] = 'yes'
+assert not validator.is_valid(config)
+python['idempotency']['defaults']['enabled'] = False
+python['idempotency']['operations']['createItem']['header'] = 'bad header'
+assert not validator.is_valid(config)
+python['idempotency']['operations']['createItem']['header'] = 'X-Key'
+python['api_reference'] = 'yes'
+assert not validator.is_valid(config)
+python['api_reference'] = True
+terraform['data_sources'] = 'yes'
+assert not validator.is_valid(config)
+terraform['data_sources'] = True
+java = {'language':'java', 'path':'java', 'plugins':[{'name':'sdk','preserve_presence':True,'open_enums':True}]}
+config['packages'].append(java)
+assert validator.is_valid(config)
+java['plugins'][0]['preserve_presence'] = 'yes'
+assert not validator.is_valid(config)
+java['plugins'][0]['preserve_presence'] = True
+resource = terraform['resources'][0]
+resource['schema_version'] = 1
+resource['state_upgrades'] = [{'version':0,'rename_fields':{'old_name':'name'}}]
+assert validator.is_valid(config)
+resource['state_upgrades'][0]['version'] = 'zero'
+assert not validator.is_valid(config)
+resource['state_upgrades'][0]['version'] = 0
+resource.pop('id_parameter',None)
+resource.pop('id_field',None)
+resource['identity'] = [{'parameter':'organization','field':'organization_id'},{'parameter':'id','field':'id'}]
+assert validator.is_valid(config)
+resource['identity'] = resource['identity'][:1]
+assert not validator.is_valid(config)
+resource.pop('identity')
+python['plugins'][1]['name'] = 'unsupported-operation-tests'
+assert not validator.is_valid(config)
+"#;
         let output = std::process::Command::new(
             std::env::var("KAJI_TEST_PYTHON").unwrap_or_else(|_| "python3".into()),
         )

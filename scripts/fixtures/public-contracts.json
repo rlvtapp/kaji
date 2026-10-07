@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "contracts": [
+    {
+      "name": "forecast",
+      "url": "https://raw.githubusercontent.com/open-meteo/open-meteo/290493ffb9b5ee66fb1336219487a346eb27d191/openapi/forecast.yml",
+      "sha256": "512e29bca2afb06a088cc27fae5c6793a05e272c6404a67e3632cecb87f8516f"
+    },
+    {
+      "name": "air-quality",
+      "url": "https://raw.githubusercontent.com/open-meteo/open-meteo/290493ffb9b5ee66fb1336219487a346eb27d191/openapi/air-quality.yml",
+      "sha256": "e614b50a40457e51876ee092b6be74599a1fd87f24dce24493c94becf4c61f03"
+    }
+  ]
+}

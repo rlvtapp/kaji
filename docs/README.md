@@ -55,4 +55,4 @@ A generated source snapshot, a native compile, a mock lifecycle test, and a live
 
 ## API artifacts
 
-Generate [Postman collections](postman.md) and [typed Terraform providers](terraform-provider.md) beside your SDKs. The [combined example](../examples/api-artifacts/README.md) includes a recipe and editable CI checks.
+Generate [Postman collections](postman.md) and [typed Terraform providers](terraform-provider.md), with a [Speakeasy comparison](terraform-speakeasy.md), beside your SDKs. The [combined example](../examples/api-artifacts/README.md) includes a recipe and editable CI checks.

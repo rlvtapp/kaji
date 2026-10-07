@@ -6,6 +6,16 @@
 
 ### Added
 
+- Typed Terraform nested objects/lists/maps, composite identities including configured
+  parent IDs, and explicit versioned root-field state renames, with native Framework tests.
+- Swift incremental cancellable SSE and opt-in open enums; Rust/C#/Swift same-origin
+  URL pagination and Swift offset pagination.
+- Java/C# optional presence wrappers and scalar/binary multipart bodies; opt-in Ruby
+  OAuth client credentials with coordinated refresh and bounded unauthorized replay.
+- Checksum-pinned public OpenAPI compilation across ten CI toolchains, corruption
+  tests and portable native test caches. Speakeasy Terraform comparison documents
+  polling, transformations and general migrations still outside the supported subset.
+
 - Full feature catalog with SDK target differences, configuration entry points and
   verification limits, linked from the main README and documentation index.
 - Opt-in Standard Webhooks HMAC v1 verifiers across ten SDK targets, with shared
@@ -20,7 +30,7 @@
 - Reviewed Postman environment synchronization preserves remote secrets and manually
   added variables, with bounded responses, hash review and verified read-back.
 - Java/C# named scalar and union wrappers preserve their underlying JSON value
-  during round-trip serialization. Optional-null/omission ambiguity remains.
+  during round-trip serialization. Opt-in presence wrappers distinguish optional null from omission.
 - Swift cursor pagination, checked-in complex-model OpenAPI regressions and a
   checksum-pinned Microsoft Graph native test with manual read-only CI.
 - Reviewed-hash Postman collection synchronization and optional editable Terraform
@@ -102,11 +112,11 @@
 ### Scope and verification
 
 - Postman workspace synchronization and publication are not included.
-- Typed Terraform currently supports flat scalar resources; nested schemas, data
-  sources, composite IDs, asynchronous polling, state upgrades, and registry
+- Typed Terraform supports a bounded typed schema subset; independent collection data
+  sources, asynchronous polling, general type migrations and registry
   publishing remain future work. The legacy raw-JSON Terraform API remains.
 - Terraform lifecycle tests run against the native Go Plugin Framework; Terraform
-  CLI apply is not yet covered. Some native SDK probes require external toolchains.
+  CLI lifecycle runs against a local mock. Some native SDK probes require external toolchains.
 - Workflow scaffolding and setup PR support do not create GitHub repositories,
   install Apps, or configure registry trust automatically.
 

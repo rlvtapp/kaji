@@ -52,13 +52,13 @@ than imposing one runtime interface on every language.
 | TypeScript | npm; Fetch or Axios; full or raw functions | Cursor, page, offset, next URL | Yes | Fetch 17/17; separate Axios probes |
 | Python | Python package; urllib sync, opt-in httpx async | Cursor, page, offset, next URL | Yes | Sync 17/17; separate async probes |
 | Go | Go module; native HTTP driver | Cursor, page, offset, next URL | Yes | 17/17 |
-| Rust | Cargo; native transport contract | Cursor, page, offset | Yes | 17/17 |
+| Rust | Cargo; native transport contract | Cursor, page, offset, next URL | Yes | 17/17 |
 | Java | Maven; HttpClient | Cursor, page, offset, next URL | Yes | Harness 15/17; native CI execution required |
-| C#/.NET | .NET; HttpClient/DelegatingHandler | Cursor, page, offset | Yes | Harness 17/17; native CI execution required |
+| C#/.NET | .NET; HttpClient/DelegatingHandler | Cursor, page, offset, next URL | Yes | Harness 17/17; native CI execution required |
 | PHP | Composer; PSR-18 | Cursor, page, offset, next URL | Yes | Harness 15/17; native CI execution required |
 | Elixir | Mix; Finch | Cursor, page, offset, absolute same-origin URL | Yes | Harness 15/17; native CI execution required |
 | Ruby | Ruby package; native HTTP | Page | Opt-in | 16/17; retries opt-in |
-| Swift | Swift package; Foundation | Cursor, page | Opt-in | 17/17; retries opt-in |
+| Swift | Swift package; Foundation | Cursor, page, offset, next URL | Opt-in | 17/17; retries opt-in |
 
 The corpus contains 17 scenarios per target. Unsupported scenarios are recorded,
 not counted as passes. See the [executable manifest](../packages/runtime-contract/scenarios.json)
@@ -70,7 +70,7 @@ and selector restrictions are in the [pagination guide](guides/pagination.md).
 | Feature | What you can do | Boundary |
 | --- | --- | --- |
 | Authentication | Configure declared bearer, Basic or API-key credentials through the native client | Scheme/binding details vary; use generated package docs |
-| OAuth client credentials | Python sync/async and opt-in Go cached providers, coordinated refresh and bounded unauthorized recovery | Go refresh covers buffered operations; other targets require caller-supplied providers/tokens |
+| OAuth client credentials | Python sync/async and opt-in Go/Ruby cached providers, coordinated refresh and bounded unauthorized recovery | Go refresh covers buffered operations; other targets require caller-supplied providers/tokens |
 | Consumer middleware | Rewrite requests/responses, short-circuit or recover through native supported hooks | Java/C#/PHP use native HTTP decorators; hook signatures differ |
 | Bundled author middleware | Ship policy modules and register them by default during generation | Customers need no middleware registration for bundled policies |
 | Retry and backoff | Replay safe operations with bounded attempts and server delay handling | Ruby/Swift default to one attempt; retry settings enable replay-safe retries |
@@ -79,8 +79,8 @@ and selector restrictions are in the [pagination guide](guides/pagination.md).
 | Cancellation | Native context/signal/task cancellation; tests cover selected transports and pagers | Not a universal per-call timeout option |
 | Structural response checks | Opt-in TypeScript, Go, Python and Ruby checks; native model decoders also reject some invalid shapes | Java/PHP/Elixir shared cases remain permissive |
 | Errors and raw results | Declared native errors and response envelopes where supported | Inspect each target's surface; raw response/stream ownership differs |
-| Streaming and file media | Target renderers support selected SSE/binary forms; Java/C# frame multiline SSE payloads | Swift SSE is unsupported; Swift/Java/C# reject unsupported multipart requests. Shared corpus is not exhaustive |
-| Forward-compatible models | Opt-in Java/C# open enums; transparent named scalar/union JSON; selected unknown-property and nullable handling; TypeScript int64 string/bigint options | Unknown enum/union roundtrip and omitted-vs-null behavior are not universal |
+| Streaming and file media | Target renderers support selected SSE/binary forms; Java/C# frame multiline SSE payloads | Swift supports incremental SSE; Java/C# support bounded scalar/binary multipart bodies; Swift multipart remains unsupported. Shared corpus is not exhaustive |
+| Forward-compatible models | Opt-in Java/C#/Swift open enums and Java/C# optional presence wrappers; transparent named scalar/union JSON; selected unknown-property and nullable handling; TypeScript int64 string/bigint options | Unknown enum/union roundtrip and omitted-vs-null behavior are not universal |
 | Webhook verification | Opt-in verifiers in all ten SDKs: raw-body HMAC verification, timestamp checks and secret rotation | Java/C#/PHP/Elixir probes require native CI; Swift Linux crypto unverified; HMAC v1, no durable replay store |
 
 Start from [generated SDKs](generated-sdks.md), then follow
@@ -116,10 +116,10 @@ Read [auxiliary generators](auxiliary-generators.md), [mocking](mocking.md),
 | Postman environment | Create-once template; customer credentials are not overwritten | [Postman](postman.md) |
 | Collection checks | Official pinned schema validation; bounded local Newman execution | [Execution](../packages/postman-execute/README.md) |
 | Postman remote sync | Collection and environment existing UIDs; secrets/manual environment variables preserved; read-only check and reviewed-hash publication; mocked tests, live service unverified | [Sync helper](../packages/postman-sync/README.md) |
-| Typed Terraform provider | Framework CRUD bindings, scalar plan/state, import, authentication, drift and diagnostics | [Terraform](terraform-provider.md) |
+| Typed Terraform provider | Framework CRUD bindings, typed nested plan/state, single/composite import, authentication, drift and diagnostics | [Terraform](terraform-provider.md) |
 | Terraform data sources | Supported single-entity reads | [Terraform](terraform-provider.md) |
 | Terraform native verification | Framework object tests and real local CLI lifecycle against a mock | [Verification](verification.md) |
-| Advanced Terraform lifecycle | Nested schemas, composite identities and state migrations are not generally generated | [Provider boundaries](terraform-provider.md) |
+| Advanced Terraform lifecycle | Nested objects/lists/maps, composite IDs and explicit root-rename upgrades; polling and general type migrations remain unsupported | [Provider boundaries](terraform-provider.md) |
 | Terraform registry release | Opt-in editable GoReleaser/signing/workflow scaffold with explicit namespace; not activated or live-verified | [Terraform](terraform-provider.md) |
 
 ## GitHub delivery and publication
@@ -143,7 +143,7 @@ presence is not evidence that registry trust or live delivery works.
 
 ## Tests and confidence
 
-The current verification baseline includes 399 passing workspace tests, 101 native
+The current verification baseline includes 415 passing workspace tests, 101 native
 wire scenarios across six available runtimes, 37 runner/delivery/sync tests and an
 installed TypeScript package consumer check. Ignored native probes need explicit
 toolchain execution; they are not passes. Counts describe the recorded baseline,

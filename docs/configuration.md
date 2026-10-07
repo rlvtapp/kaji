@@ -263,3 +263,11 @@ consume `x-kaji-idempotency-resolved` metadata; automatic generation must keep a
 single key for all retry attempts and preserve a caller-supplied key. A header
 policy does not add retry loops to targets without them or promise server-side
 deduplication. See [the author and customer guide](guides/idempotency.md).
+
+Java and C# SDK recipes support `"preserve_presence": true` on the `sdk` plugin.
+This opt-in changes optional-property types to generated `Presence<T>` wrappers,
+so missing properties round-trip separately from explicit null. Required property
+types stay unchanged; the generated `PRESENCE.md` describes native construction
+and inspection. Leave the option unset to preserve the existing public model API.
+The option is rejected on other languages. `"open_enums": true` also works for
+C# alongside Java and retains unknown enum strings.

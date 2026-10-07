@@ -76,8 +76,11 @@ mod tests {
         }
         command.env(
             "CARGO_TARGET_DIR",
-            std::env::var("KAJI_RUNTIME_RUST_TARGET")
-                .unwrap_or_else(|_| "/private/tmp/kaji-runtime-contract-rust-target".into()),
+            std::env::var_os("KAJI_RUNTIME_RUST_TARGET").unwrap_or_else(|| {
+                std::env::temp_dir()
+                    .join("kaji-runtime-contract-rust-target")
+                    .into_os_string()
+            }),
         );
         let output = command.current_dir(cwd).output().unwrap();
         assert!(
