@@ -520,6 +520,19 @@ fn resolve(
             attribute_name(&read_field.name)?
         };
         ensure!(
+            !matches!(
+                name.as_str(),
+                "count"
+                    | "depends_on"
+                    | "for_each"
+                    | "provider"
+                    | "lifecycle"
+                    | "connection"
+                    | "provisioner"
+            ),
+            "Terraform reserved root attribute {name} requires an explicit schema mapping"
+        );
+        ensure!(
             names.insert(name.clone()),
             "Terraform attribute name collision {name}"
         );
@@ -908,14 +921,14 @@ mod tests {
         let input = object(vec![
             field("name", SchemaKind::String, true),
             field("enabled", SchemaKind::Boolean, true),
-            field("count", SchemaKind::Integer, false),
+            field("quantity", SchemaKind::Integer, false),
             field("ratio", SchemaKind::Number, false),
         ]);
         let output = object(vec![
             id,
             field("name", SchemaKind::String, true),
             field("enabled", SchemaKind::Boolean, true),
-            field("count", SchemaKind::Integer, false),
+            field("quantity", SchemaKind::Integer, false),
             field("ratio", SchemaKind::Number, false),
         ]);
         let mut create = Operation {
@@ -997,7 +1010,7 @@ mod tests {
         let count = resource
             .attributes
             .iter()
-            .find(|a| a.name == "count")
+            .find(|a| a.name == "quantity")
             .unwrap();
         assert!(count.optional && count.computed && count.replace_on_change && !count.update_input);
         assert_eq!(count.ty, ScalarType::Int64);
@@ -1261,5 +1274,28 @@ mod tests {
                 assert!(format!("{explicit:#}").contains("polling"));
             }
         }
+    }
+    #[test]
+    fn reserved_root_attributes_fail_with_mapping_diagnostic() {
+        let mut api = fixture();
+        let schema = api.operations[1].responses[0].media_types[0]
+            .schema
+            .as_mut()
+            .unwrap();
+        if let SchemaKind::Object { fields, .. } = &mut schema.kind {
+            fields
+                .iter_mut()
+                .find(|field| field.name == "quantity")
+                .unwrap()
+                .name = "count".into();
+        }
+        let catalog = analyze(&api, &[], true).unwrap();
+        assert!(catalog.resources.is_empty());
+        assert!(
+            catalog
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.reason.contains("reserved root attribute count"))
+        );
     }
 }

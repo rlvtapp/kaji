@@ -380,3 +380,32 @@ fn validates_actual_official_draft04_schema() {
         );
     }
 }
+
+#[test]
+#[ignore = "requires npm ci in packages/postman-execute and permission for ephemeral loopback mock"]
+fn generated_collection_executes_with_newman_local_mock() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("collection.json");
+    std::fs::write(
+        &path,
+        serde_json::to_string(&document(&generate(&api(), None))).unwrap(),
+    )
+    .unwrap();
+    let output = std::process::Command::new(
+        std::env::var("KAJI_TEST_NODE").unwrap_or_else(|_| "node".into()),
+    )
+    .arg(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../../packages/postman-execute/run.mjs"
+    ))
+    .arg(path)
+    .output()
+    .unwrap();
+    assert!(
+        output.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("\"requests\":1"));
+}

@@ -1,6 +1,8 @@
 //! Rust-native, target-neutral primitives for OpenAPI code generation.
 
 pub mod adapter;
+pub mod api_reference;
+pub use api_reference::api_reference;
 pub mod ast;
 pub mod customization;
 pub mod engine;

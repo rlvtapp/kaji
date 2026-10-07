@@ -54,6 +54,7 @@ impl Plugin<Terraform> for Entities {
 }
 pub struct Provider {
     meta: Meta,
+    data_sources: bool,
     infer: bool,
     resources: Vec<ResourceBinding>,
     catalog: Option<Handle<EntityCatalog>>,
@@ -61,12 +62,18 @@ pub struct Provider {
 pub fn provider() -> Provider {
     Provider {
         meta: Meta::new(),
+        data_sources: false,
         infer: true,
         resources: Vec::new(),
         catalog: None,
     }
 }
 impl Provider {
+    /// Emit read-only single-identity data sources from validated resource read plans.
+    pub fn data_sources(mut self, enabled: bool) -> Self {
+        self.data_sources = enabled;
+        self
+    }
     pub fn infer(mut self, value: bool) -> Self {
         self.infer = value;
         self
@@ -156,6 +163,9 @@ impl Plugin<Terraform> for Provider {
             "Terraform module must be a safe Go module path"
         );
         let mut tree = crate::typed_render::render(cx.api, &catalog, &module, &provider)?;
+        if self.data_sources {
+            crate::typed_render::add_data_sources(&mut tree, &catalog, &provider)?;
+        }
         tree.insert(GeneratedFile::new(
             ".kaji/terraform-plan.json",
             serde_json::to_string_pretty(&catalog.explanation())?,

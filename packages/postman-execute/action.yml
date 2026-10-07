@@ -1,0 +1,23 @@
+name: Kaji local Postman execution
+description: Execute portable collections against an ephemeral loopback mock only.
+inputs:
+  collection:
+    description: Generated collection JSON path relative to checkout.
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v6
+      with:
+        node-version: '22'
+    - name: Install pinned Newman runner
+      shell: bash
+      env:
+        KAJI_ACTION_PATH: ${{ github.action_path }}
+      run: npm ci --prefix "$KAJI_ACTION_PATH" --ignore-scripts --no-audit --no-fund
+    - name: Execute against local mock
+      shell: bash
+      env:
+        KAJI_ACTION_PATH: ${{ github.action_path }}
+        KAJI_COLLECTION: ${{ inputs.collection }}
+      run: node "$KAJI_ACTION_PATH/run.mjs" "$KAJI_COLLECTION"

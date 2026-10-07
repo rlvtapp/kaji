@@ -7,6 +7,7 @@ use std::path::Path;
 
 pub mod mock;
 pub use kaji_core::SdkClientStyle;
+pub use kaji_core::api_reference::{ApiReference, ApiReferenceDocument, api_reference};
 pub use kaji_core::customization::{
     BundledMiddleware, CodeCustomization, apply_code_customizations,
 };

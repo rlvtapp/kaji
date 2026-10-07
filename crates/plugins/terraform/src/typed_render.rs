@@ -111,7 +111,7 @@ pub(crate) fn render(
             resource.name
         );
     }
-    readme.push_str("## Lifecycle behavior\n\nCreate sends known configurable values and saves the returned identity. Create/update preserve known planned configuration and report a diagnostic if the API returns different values. Unknown computed values are hydrated; diagnostic create failures retain known identity and resolve remaining unknown state for recovery. Update sends only fields allowed by the update operation, then reads the object to hydrate final computed values, including after HTTP 204. PATCH sends supported known fields, not a changed-fields diff. Read refreshes drift and removes state on HTTP 404; HTTP authentication/transport/decoding failures retain state. Delete succeeds for an already-missing object and removes state. Import initializes identity, then Read refreshes the object.\n\nThe initial renderer supports scalar CRUD resources with a single string identity. Compound identities, nested/collection schemas, data sources, asynchronous polling, Terraform write-only arguments, state upgrades and Terraform CLI acceptance testing require further implementation. The emitted Go unit tests do not perform `terraform apply`; verify your API's lifecycle behavior before distributing the provider.\n");
+    readme.push_str("## Lifecycle behavior\n\nCreate sends known configurable values and saves the returned identity. Create/update preserve known planned configuration and report a diagnostic if the API returns different values. Unknown computed values are hydrated; diagnostic create failures retain known identity and resolve remaining unknown state for recovery. Update sends only fields allowed by the update operation, then reads the object to hydrate final computed values, including after HTTP 204. PATCH sends supported known fields, not a changed-fields diff. Read refreshes drift and removes state on HTTP 404; HTTP authentication/transport/decoding failures retain state. Delete succeeds for an already-missing object and removes state. Import initializes identity, then Read refreshes the object.\n\nThe initial renderer supports scalar CRUD resources with a single string identity. Compound identities, nested/collection schemas, data sources, asynchronous polling, Terraform write-only arguments and state upgrades require further implementation. The emitted Go unit tests do not perform `terraform apply`; the Kaji repository provides an opt-in Terraform CLI lifecycle test against its local mock. Verify your API's lifecycle behavior before distributing the provider.\n");
     tree.insert(GeneratedFile::new("README.md", readme)?)?;
     Ok(tree)
 }
@@ -246,6 +246,7 @@ func(p *generatedProvider)Configure(ctx context.Context,req provider.ConfigureRe
  __CREDENTIALS__
  client:=&apiClient{baseURL:strings.TrimRight(endpoint.String(),"/"),token:data.AuthToken.ValueString(),username:data.Username.ValueString(),password:data.Password.ValueString(),httpClient:&http.Client{Timeout:30*time.Second,CheckRedirect:func(*http.Request,[]*http.Request)error{return http.ErrUseLastResponse}}}
  resp.ResourceData=client
+ resp.DataSourceData=client
 }
 func(p *generatedProvider)Resources(_ context.Context)[]func()resource.Resource{return []func()resource.Resource{__RESOURCES__}}
 func(p *generatedProvider)DataSources(_ context.Context)[]func()datasource.DataSource{return nil}
@@ -519,4 +520,79 @@ func TestDeclaredCredentialsApplyOnlyToSecuredOperations(t *testing.T){{
 }}
 "#
     )
+}
+
+/// Opt-in data sources reuse validated response hydration without resource mutation.
+pub(crate) fn add_data_sources(
+    tree: &mut GeneratedTree,
+    catalog: &EntityCatalog,
+    provider: &str,
+) -> Result<()> {
+    let factories = catalog
+        .resources
+        .iter()
+        .map(|plan| format!("new{}DataSource", field(&plan.name)))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let path = "internal/provider/provider.go";
+    let source = tree.get(path).expect("provider exists").replace("DataSources(_ context.Context)[]func()datasource.DataSource{return nil}", &format!("DataSources(_ context.Context)[]func()datasource.DataSource{{return []func()datasource.DataSource{{{factories}}}}}"));
+    tree.replace(GeneratedFile::new(path, source)?)?;
+    for plan in &catalog.resources {
+        tree.insert(GeneratedFile::new(
+            format!("internal/provider/data_source_{}.go", plan.name),
+            data_source(plan),
+        )?)?;
+    }
+    let mut readme = tree.get("README.md").unwrap().replace(
+        "data sources, asynchronous",
+        "independent/list data sources, asynchronous",
+    );
+    readme.push_str("\n## Read-only data sources\n\nOpt-in data sources reuse each validated resource GET operation. Supply a required string `id`; scalar response attributes are computed. Missing objects produce diagnostics rather than removing a managed resource. Lists, nested objects and independent read-only endpoint inference are unsupported.\n");
+    for plan in &catalog.resources {
+        let _ = writeln!(
+            readme,
+            "\n```hcl\ndata \"{provider}_{}\" \"existing\" {{\n  id = \"remote-object-id\"\n}}\n```",
+            plan.name
+        );
+    }
+    tree.replace(GeneratedFile::new("README.md", readme)?)?;
+    Ok(())
+}
+fn data_source(plan: &ResourcePlan) -> String {
+    let name = field(&plan.name);
+    let ty = format!("{name}DataSource");
+    let model = format!("{name}ResourceModel");
+    let mut output = format!(
+        r#"package provider
+import("context";"strings";"github.com/hashicorp/terraform-plugin-framework/datasource";"github.com/hashicorp/terraform-plugin-framework/datasource/schema")
+var _ datasource.DataSourceWithConfigure = &{ty}{{}}
+type {ty} struct{{client *apiClient}}
+func new{ty}() datasource.DataSource{{return &{ty}{{}}}}
+func(d *{ty})Metadata(_ context.Context,req datasource.MetadataRequest,resp *datasource.MetadataResponse){{resp.TypeName=req.ProviderTypeName+{suffix}}}
+func(d *{ty})Schema(_ context.Context,_ datasource.SchemaRequest,resp *datasource.SchemaResponse){{resp.Schema=schema.Schema{{Attributes:map[string]schema.Attribute{{"id":schema.StringAttribute{{Required:true}},
+"#,
+        suffix = quoted(&format!("_{}", plan.name))
+    );
+    for attribute in &plan.attributes {
+        if attribute.name != "id" {
+            let _ = writeln!(
+                output,
+                "{}:schema.{}Attribute{{Computed:true,Sensitive:{}}},",
+                quoted(&attribute.name),
+                native(attribute.ty),
+                attribute.sensitive
+            );
+        }
+    }
+    let _ = writeln!(
+        output,
+        r#"}}}}}}
+func(d *{ty})Configure(_ context.Context,req datasource.ConfigureRequest,resp *datasource.ConfigureResponse){{if req.ProviderData==nil{{return}};client,ok:=req.ProviderData.(*apiClient);if !ok{{resp.Diagnostics.AddError("Unexpected provider data","Provider client type mismatch.");return}};d.client=client}}
+func(d *{ty})Read(ctx context.Context,req datasource.ReadRequest,resp *datasource.ReadResponse){{var data {model};resp.Diagnostics.Append(req.Config.Get(ctx,&data)...);if resp.Diagnostics.HasError(){{return}};if d.client==nil{{resp.Diagnostics.AddError("Unconfigured provider","Configure the provider before reading.");return}};if data.ID.IsUnknown()||data.ID.IsNull()||data.ID.ValueString()==""{{resp.Diagnostics.AddError("Invalid identity","A known nonempty string ID is required.");return}};expected:=data.ID.ValueString();route:=strings.Replace({route},{placeholder},identityPath(expected),1);body,err:=d.client.call(ctx,"GET",route,nil,{secure});if err!=nil{{resp.Diagnostics.AddError("Data source read failed",err.Error());return}};id,err:={name}ResourceIdentity(body);if err!=nil||id!=expected{{resp.Diagnostics.AddError("Invalid response identity","Read response identity must match the requested ID.");return}};if err:=data.hydrate(body,true,true);err!=nil{{resp.Diagnostics.AddError("Invalid read response",err.Error());return}};resp.Diagnostics.Append(resp.State.Set(ctx,&data)... )}}
+"#,
+        route = quoted(&plan.read.path),
+        placeholder = quoted(&format!("{{{}}}", plan.id_parameter)),
+        secure = plan.requires_auth
+    );
+    output
 }

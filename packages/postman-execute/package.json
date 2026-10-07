@@ -1,0 +1,1 @@
+{"name":"@kaji/postman-execute","version":"0.5.0","private":true,"type":"module","scripts":{"test":"node --test test/*.test.mjs"},"dependencies":{"newman":"6.2.1"}}
