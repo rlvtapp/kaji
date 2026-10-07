@@ -1,0 +1,62 @@
+{
+  "openapi": "3.2.0",
+  "info": {
+    "title": "Query",
+    "version": "1"
+  },
+  "components": {
+    "schemas": {
+      "Criteria": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "term"
+        ],
+        "properties": {
+          "term": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/search": {
+      "query": {
+        "operationId": "search",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Criteria"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "ok",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Criteria"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/create": {
+      "post": {
+        "operationId": "create",
+        "responses": {
+          "204": {
+            "description": "created"
+          }
+        }
+      }
+    }
+  }
+}

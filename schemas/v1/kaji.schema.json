@@ -452,6 +452,11 @@
           "type": "boolean",
           "description": "Generate an optional httpx async Python client."
         },
+        "open_unions": {
+          "type": "boolean",
+          "default": false,
+          "description": "Opt-in Rust named union Unknown(JSON) fallback for future variants; default decoding remains strict."
+        },
         "open_enums": {
           "type": "boolean",
           "description": "Generate forward-compatible Java, C# or Swift named string enum value classes."
@@ -1209,8 +1214,36 @@
             "oauth",
             "release-scaffold"
           ]
+        },
+        "uses": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "transport": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "name": {
+                "const": "oauth"
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "uses"
+              ]
+            }
+          }
+        }
+      ]
     },
     "operationTestsPlugin": {
       "type": "object",

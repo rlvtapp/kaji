@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 mod credentials;
+mod eject;
 mod mcp;
 mod registry;
 mod sdk_automation;
@@ -47,6 +48,7 @@ Usage:
   kaji discover <query> [--limit <count>] [--format human|json]
   kaji download <api-id> --output <openapi-file> [--version <version>]
   kaji languages
+  kaji eject --language <target> --out <source-workspace>
   kaji sdk <init|sync|app|list|run|diff|pr|releases|connect|install|status|doctor|inspect> ...
   kaji --version
 
@@ -806,6 +808,7 @@ struct PluginConfig {
     int64: Option<String>,
     async_client: Option<bool>,
     open_enums: Option<bool>,
+    open_unions: Option<bool>,
     preserve_presence: Option<bool>,
     transport: Option<String>,
     surface: Option<String>,
@@ -855,6 +858,7 @@ fn default_sdk_version() -> String {
 }
 
 enum Action {
+    Eject(Vec<OsString>),
     Sdk(sdk_automation::Options),
     Help,
     Version,
@@ -932,6 +936,9 @@ fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Action> {
     }
     if command == "init" {
         return parse_init(args);
+    }
+    if command == "eject" {
+        return Ok(Action::Eject(args.collect()));
     }
     if command == "sdk" {
         return sdk_automation::parse(args).map(Action::Sdk);
@@ -1799,6 +1806,7 @@ fn typescript_profile(
             "cypress",
             "operation-tests",
             "webhooks",
+            "oauth",
         ],
     )?;
     if package.plugins.is_empty() {
@@ -1948,7 +1956,21 @@ fn typescript_profile(
                 .to_string_lossy()
                 .into_owned()
         });
-        if plugin.name == "webhooks" {
+        if plugin.name == "oauth" {
+            let mut consumer = ts::oauth();
+            for (role, id) in &plugin.uses {
+                ensure!(
+                    role == "transport",
+                    "OAuth accepts only a transport provider binding"
+                );
+                consumer = consumer.using_transport(
+                    *transports
+                        .get(id)
+                        .with_context(|| format!("no transport provider {id:?}"))?,
+                );
+            }
+            output = output.with(consumer);
+        } else if plugin.name == "webhooks" {
             ensure!(
                 plugin.uses.is_empty(),
                 "webhooks does not accept provider bindings"
@@ -2076,6 +2098,14 @@ fn config_profiles(
     }
     let mut profiles = ProfileSet::new(".").common(Common::default().client_style(default_style));
     for package in packages {
+        ensure!(
+            package
+                .plugins
+                .iter()
+                .all(|plugin| plugin.open_unions.is_none()
+                    || (package.language == "rust" && plugin.name == "sdk")),
+            "open_unions is only supported by the Rust SDK plugin"
+        );
         if !matches!(package.language.as_str(), "java" | "csharp" | "dotnet") {
             ensure!(
                 package
@@ -2083,6 +2113,16 @@ fn config_profiles(
                     .iter()
                     .all(|plugin| plugin.preserve_presence.is_none()),
                 "preserve_presence is only supported by Java and C# SDK plugins"
+            );
+        }
+        if !matches!(package.language.as_str(), "typescript" | "ts") {
+            ensure!(
+                package
+                    .plugins
+                    .iter()
+                    .filter(|plugin| plugin.name == "oauth")
+                    .all(|plugin| plugin.uses.is_empty()),
+                "OAuth recipe bindings are supported only for TypeScript; use the native library API for other targets"
             );
         }
         if matches!(
@@ -2205,7 +2245,7 @@ fn config_profiles(
                 ))
             }
             "rust" => {
-                has_only_known_plugins(package, &["sdk", "operation-tests", "webhooks"])?;
+                has_only_known_plugins(package, &["sdk", "operation-tests", "webhooks", "oauth"])?;
                 let package_builder =
                     rust::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
@@ -2213,12 +2253,22 @@ fn config_profiles(
                 } else {
                     package_builder
                 };
-                let mut package_builder = package_builder.with(rust::sdk());
+                let open_unions = package
+                    .plugins
+                    .iter()
+                    .find(|plugin| plugin.name == "sdk")
+                    .and_then(|plugin| plugin.open_unions)
+                    .unwrap_or(false);
+                let mut package_builder =
+                    package_builder.open_unions(open_unions).with(rust::sdk());
                 if package.plugins.iter().any(|p| p.name == "operation-tests") {
                     package_builder = package_builder.with(rust::operation_tests());
                 }
                 if package.plugins.iter().any(|p| p.name == "webhooks") {
                     package_builder = package_builder.with(rust::webhooks());
+                }
+                if package.plugins.iter().any(|plugin| plugin.name == "oauth") {
+                    package_builder = package_builder.with(rust::oauth());
                 }
                 profiles.package(with_configured_middleware(package_builder, package))
             }
@@ -2315,7 +2365,7 @@ fn config_profiles(
                 ))
             }
             "java" => {
-                has_only_known_plugins(package, &["sdk", "webhooks", "operation-tests"])?;
+                has_only_known_plugins(package, &["sdk", "webhooks", "operation-tests", "oauth"])?;
                 let package_builder =
                     java::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
@@ -2335,10 +2385,13 @@ fn config_profiles(
                 if package.plugins.iter().any(|p| p.name == "operation-tests") {
                     package_builder = package_builder.with(java::operation_tests());
                 }
+                if package.plugins.iter().any(|plugin| plugin.name == "oauth") {
+                    package_builder = package_builder.with(java::oauth());
+                }
                 profiles.package(with_configured_middleware(package_builder, package))
             }
             "csharp" | "dotnet" => {
-                has_only_known_plugins(package, &["sdk", "webhooks", "operation-tests"])?;
+                has_only_known_plugins(package, &["sdk", "webhooks", "operation-tests", "oauth"])?;
                 let package_builder =
                     csharp::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
@@ -2357,6 +2410,9 @@ fn config_profiles(
                 }
                 if package.plugins.iter().any(|p| p.name == "operation-tests") {
                     package_builder = package_builder.with(csharp::operation_tests());
+                }
+                if package.plugins.iter().any(|plugin| plugin.name == "oauth") {
+                    package_builder = package_builder.with(csharp::oauth());
                 }
                 profiles.package(with_configured_middleware(package_builder, package))
             }
@@ -2940,6 +2996,23 @@ fn generate(mut options: Generate) -> Result<()> {
             bail!("OpenAPI compiler failed ({status}); no SDK files were written")
         }
         reporter.phase("OpenAPI", started.elapsed());
+        // The compiler hashes the complete local reference closure. A root-only
+        // digest would miss changes in referenced files in generation provenance.
+        let source_manifest = temporary.path().join("source.json");
+        if source_manifest.is_file() {
+            let manifest: serde_json::Value = serde_json::from_slice(
+                &std::fs::read(&source_manifest).context("read compiler source manifest")?,
+            )
+            .context("decode compiler source manifest")?;
+            let digest = manifest
+                .get("sha256")
+                .and_then(serde_json::Value::as_str)
+                .filter(|value| {
+                    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+                })
+                .context("compiler source manifest must contain a SHA-256 digest")?;
+            options.source_sha256 = Some(digest.to_owned());
+        }
         temporary.path()
     };
     write_sdk(artifacts, &options, &reporter)
@@ -4397,6 +4470,7 @@ fn main() -> ExitCode {
         Action::Check(options) => check(options),
         Action::Generate(options) => generate(*options),
         Action::Sdk(options) => sdk_automation::run(options),
+        Action::Eject(arguments) => eject::run(arguments),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -5198,10 +5272,12 @@ mod tests {
     fn optional_security_and_operation_test_consumers_are_available_in_recipes() {
         use kaji_core::{HttpMethod, OperationResponse, SchemaKind, SchemaValue};
         let packages: Vec<PackageConfig> = serde_json::from_value(serde_json::json!([
-            {"language":"typescript","path":"ts","plugins":[{"name":"sdk","id":"native"},{"name":"operation-tests","uses":{"operations":"native","transport":"native"}}]},
-            {"language":"rust","path":"rust","plugins":[{"name":"sdk"},{"name":"operation-tests"}]},
+            {"language":"typescript","path":"ts","plugins":[{"name":"sdk","id":"native"},{"name":"operation-tests","uses":{"operations":"native","transport":"native"}},{"name":"oauth","uses":{"transport":"native"}}]},
+            {"language":"rust","path":"rust","plugins":[{"name":"sdk"},{"name":"operation-tests"},{"name":"oauth"}]},
             {"language":"go","path":"go","plugins":[{"name":"sdk"},{"name":"operation-tests"},{"name":"oauth"},{"name":"webhooks"}]},
-            {"language":"ruby","path":"ruby","plugins":[{"name":"sdk"},{"name":"webhooks"},{"name":"oauth"}]}
+            {"language":"ruby","path":"ruby","plugins":[{"name":"sdk"},{"name":"webhooks"},{"name":"oauth"}]},
+            {"language":"java","path":"java","plugins":[{"name":"sdk"},{"name":"oauth"}]},
+            {"language":"csharp","path":"csharp","plugins":[{"name":"sdk"},{"name":"oauth"}]}
         ])).unwrap();
         let api = Api {
             name: "Consumer".into(),
@@ -5224,7 +5300,9 @@ mod tests {
         .unwrap();
         for path in [
             "./ts/tests/operation-tests.ts",
+            "./ts/oauth.ts",
             "./rust/src/operation_tests.rs",
+            "./rust/src/oauth.rs",
             "./go/oauth.go",
             "./go/webhooks.go",
             "./go/.kaji/operation-test-diagnostics.json",
@@ -5233,12 +5311,58 @@ mod tests {
         ] {
             assert!(tree.get(path).is_some(), "missing {path}");
         }
+        for (language, helper) in [
+            ("java", "OAuthClientCredentials.java"),
+            ("csharp", "OAuthClientCredentials.cs"),
+        ] {
+            assert!(
+                tree.iter()
+                    .any(|(path, _)| path.starts_with(format!("./{language}"))
+                        && path.ends_with(helper)),
+                "missing {language} OAuth helper"
+            );
+        }
         let mut malformed = packages;
         malformed[0].plugins[1]
             .uses
             .insert("client".into(), "native".into());
         assert!(config_profiles(SdkClientStyle::Namespaced, &malformed).is_err());
     }
+    #[test]
+    fn rust_open_union_recipe_is_explicit_and_rejects_other_targets() {
+        let mut packages: Vec<PackageConfig> = serde_json::from_value(serde_json::json!([
+            {"language":"rust","path":"rust","plugins":[{"name":"sdk","open_unions":true}]}
+        ]))
+        .unwrap();
+        let api = Api {
+            name: "Future".into(),
+            schemas: vec![kaji_core::Schema::new(
+                "Event",
+                kaji_core::SchemaValue::new(kaji_core::SchemaKind::OneOf {
+                    variants: vec![kaji_core::SchemaValue::new(kaji_core::SchemaKind::String)],
+                }),
+            )],
+            ..Default::default()
+        };
+        let tree = kaji::generate(
+            &api,
+            config_profiles(SdkClientStyle::Namespaced, &packages).unwrap(),
+        )
+        .unwrap();
+        assert!(
+            tree.iter()
+                .any(|(_, source)| source.contains("Unknown(serde_json::Value)"))
+        );
+        packages[0].language = "go".into();
+        assert!(
+            config_profiles(SdkClientStyle::Namespaced, &packages)
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("open_unions")
+        );
+    }
+
     #[test]
     fn presence_recipe_selects_explicit_model_abi_and_rejects_unsupported_targets() {
         let packages: Vec<PackageConfig> = serde_json::from_value(serde_json::json!([
