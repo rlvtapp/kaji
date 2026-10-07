@@ -13,6 +13,8 @@ import (
 
 	"github.com/cespare/xxhash/v2"
 	"github.com/pb33f/libopenapi"
+
+	"github.com/pb33f/libopenapi/datamodel"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
@@ -40,25 +42,40 @@ func runWithHash(specPath, outDir string, prevHash *uint64) (uint64, bool, int, 
 		return 0, false, 0, err
 	}
 
-	newHash := computeSpecHash(data)
+	source, err := collectSourceClosure(specPath, data)
+	if err != nil {
+		return 0, false, 0, err
+	}
+	newHash := source.Hash
 
 	if prevHash != nil && *prevHash == newHash {
 		return newHash, false, 0, nil
 	}
 
-	doc, err := libopenapi.NewDocument(data)
+	configuration := datamodel.NewDocumentConfiguration()
+	if len(source.Files) > 1 {
+		configuration.ExcludeExtensionRefs = true
+		data, err = bundleLocalSources(source, specPath)
+		if err != nil {
+			return 0, false, 0, fmt.Errorf("bundle local references: %w", err)
+		}
+	}
+	doc, err := libopenapi.NewDocumentWithConfiguration(data, configuration)
 	if err != nil {
 		return 0, false, 0, fmt.Errorf("parse spec: %w", err)
 	}
 
 	model, v3Err := doc.BuildV3Model()
-	if v3Err != nil {
+	if v3Err != nil && !(model != nil && onlySchemaCircularErrors(v3Err)) {
 		// libopenapi intentionally exposes separate models for Swagger 2 and
 		// OpenAPI 3: their object shapes differ materially. Keep the existing
 		// v3 compiler path intact and normalize the legacy v2 model below.
 		v2Model, v2Err := doc.BuildV2Model()
 		if v2Err != nil {
 			return 0, false, 0, fmt.Errorf("build OpenAPI model (v3: %v; v2: %w)", v3Err, v2Err)
+		}
+		if len(source.Files) > 1 {
+			return 0, false, 0, fmt.Errorf("local multifile references currently require OpenAPI 3; bundle Swagger 2 input explicitly")
 		}
 		count, err := compileSwaggerV2(&v2Model.Model, outDir)
 		if err != nil {
@@ -68,11 +85,17 @@ func runWithHash(specPath, outDir string, prevHash *uint64) (uint64, bool, int, 
 	}
 
 	spec := model.Model
+	if err := validateCompilerCapabilities(&spec); err != nil {
+		return 0, false, 0, err
+	}
 
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return 0, false, 0, fmt.Errorf("create output directory: %w", err)
 	}
 
+	if err := writeJSON(filepath.Join(outDir, "source.json"), source.Manifest); err != nil {
+		return 0, false, 0, err
+	}
 	operationsDir := filepath.Join(outDir, "operations")
 	if err := os.RemoveAll(operationsDir); err != nil && !os.IsNotExist(err) {
 		return 0, false, 0, fmt.Errorf("cleanup operations dir: %w", err)

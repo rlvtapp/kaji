@@ -8,7 +8,7 @@ import (
 )
 
 func TestVersionBoundaryPreservesArtifacts(t *testing.T) {
-	for _, version := range []string{"3.2.0", "3.2.1", "4.0.0"} {
+	for _, version := range []string{"3.3.0", "4.0.0"} {
 		t.Run(version, func(t *testing.T) {
 			root := t.TempDir()
 			spec := filepath.Join(root, "spec.json")
@@ -24,7 +24,7 @@ func TestVersionBoundaryPreservesArtifacts(t *testing.T) {
 				t.Fatal(err)
 			}
 			_, _, _, err := runWithHash(spec, out, nil)
-			if err == nil || !strings.Contains(err.Error(), "unsupported OpenAPI version") || !strings.Contains(err.Error(), "itemSchema") {
+			if err == nil || !strings.Contains(err.Error(), "unsupported OpenAPI version") {
 				t.Fatalf("expected precise capability diagnostic, got %v", err)
 			}
 			bytes, err := os.ReadFile(marker)
@@ -36,12 +36,12 @@ func TestVersionBoundaryPreservesArtifacts(t *testing.T) {
 }
 
 func TestSupportedDocumentVersions(t *testing.T) {
-	for _, input := range []string{`{"openapi":"3.0.4"}`, `{"openapi":"3.1.2"}`, "openapi: 3.1.0\n", "swagger: '2.0'\n"} {
+	for _, input := range []string{`{"openapi":"3.0.4"}`, `{"openapi":"3.1.2"}`, "openapi: 3.1.0\n", "openapi: 3.2.0\n", "openapi: 3.2.1\n", "swagger: '2.0'\n"} {
 		if err := validateDocumentVersion([]byte(input)); err != nil {
 			t.Fatalf("%s: %v", input, err)
 		}
 	}
-	for _, input := range []string{"openapi: 3.2.0\n", "openapi: 3.1evil\n", "info: {}\n"} {
+	for _, input := range []string{"openapi: 3.3.0\n", "openapi: 3.1evil\n", "info: {}\n"} {
 		if err := validateDocumentVersion([]byte(input)); err == nil {
 			t.Fatalf("accepted %s", input)
 		}
