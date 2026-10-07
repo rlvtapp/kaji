@@ -69,6 +69,16 @@ pub enum SelectorSegment {
     Index(i64),
 }
 
+fn pointer_index(name: &str) -> Option<usize> {
+    if name.is_empty()
+        || (name.len() > 1 && name.starts_with('0'))
+        || !name.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return None;
+    }
+    name.parse().ok()
+}
+
 impl Selector {
     /// Supported portable paths: $.items, $.pages[-1].next and JSON pointers.
     /// Wildcards, filters and script expressions are rejected rather than guessed.
@@ -133,7 +143,7 @@ impl Selector {
         for segment in &self.segments {
             value = match segment {
                 SelectorSegment::Field(name) => match value {
-                    Value::Array(items) => items.get(name.parse::<usize>().ok()?)?,
+                    Value::Array(items) => items.get(pointer_index(name)?)?,
                     _ => value.get(name)?,
                 },
                 SelectorSegment::Index(index) => {
@@ -398,7 +408,7 @@ fn selected_schema<'a>(
             }
             (SchemaKind::Array { items }, SelectorSegment::Index(_)) => items,
             (SchemaKind::Array { items }, SelectorSegment::Field(name))
-                if name.parse::<usize>().is_ok() =>
+                if pointer_index(name).is_some() =>
             {
                 items
             }
@@ -483,6 +493,31 @@ mod tests {
                 .is_none()
         );
     }
+    #[test]
+    fn pointer_array_indices_are_canonical_without_restricting_object_keys() {
+        let array = json!([10, 20]);
+        for name in ["01", "-1", "+1", ""] {
+            let selector = Selector::parse(&format!("/{name}")).unwrap();
+            assert!(selector.select(&array).is_none());
+            let schema = SchemaValue::new(SchemaKind::Array {
+                items: Box::new(SchemaValue::new(SchemaKind::Integer)),
+            });
+            assert!(selected_schema(&Api::default(), &schema, &selector).is_err());
+        }
+        assert_eq!(
+            Selector::parse("/1").unwrap().select(&array),
+            Some(&json!(20))
+        );
+        assert_eq!(
+            Selector::parse("$[-1]").unwrap().select(&array),
+            Some(&json!(20))
+        );
+        assert_eq!(
+            Selector::parse("/01").unwrap().select(&json!({"01":20})),
+            Some(&json!(20))
+        );
+    }
+
     #[test]
     fn validates_page_and_offset_parameters_and_result_arrays() {
         let mut operation = operation();

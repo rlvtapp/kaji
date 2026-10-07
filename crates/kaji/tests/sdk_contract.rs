@@ -42,6 +42,28 @@ fn contract_api() -> Api {
             additional_properties: Default::default(),
         }),
     );
+    let page = Schema::new(
+        "ContactPage",
+        SchemaValue::new(SchemaKind::Object {
+            fields: vec![
+                Field {
+                    name: "items".into(),
+                    value: SchemaValue::new(SchemaKind::Array {
+                        items: Box::new(reference("Contact")),
+                    }),
+                    required: true,
+                    annotations: Default::default(),
+                },
+                Field {
+                    name: "nextCursor".into(),
+                    value: SchemaValue::new(SchemaKind::String),
+                    required: false,
+                    annotations: Default::default(),
+                },
+            ],
+            additional_properties: Default::default(),
+        }),
+    );
     let error = Schema::new(
         "ErrorResponse",
         SchemaValue::new(SchemaKind::Object {
@@ -69,7 +91,7 @@ fn contract_api() -> Api {
     Api {
         name: "Kaji Email".into(),
         version: "1.0.0".into(),
-        schemas: vec![contact, error],
+        schemas: vec![contact, page, error],
         operations: vec![
             Operation {
                 id: "listContacts".into(),
@@ -88,9 +110,7 @@ fn contract_api() -> Api {
                     OperationResponse {
                         status: "200".into(),
                         description: Some("Contacts".into()),
-                        media_types: vec![json(SchemaValue::new(SchemaKind::Array {
-                            items: Box::new(reference("Contact")),
-                        }))],
+                        media_types: vec![json(reference("ContactPage"))],
                     },
                     error_response.clone(),
                 ],

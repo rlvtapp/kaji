@@ -317,6 +317,28 @@ pub(crate) fn render_operation_files(
     config: &RenderOptions,
 ) -> Result<Vec<GeneratedFile>> {
     let mut files = Vec::new();
+    let mut diagnostics = Vec::new();
+    for operation in &api.operations {
+        let Some(extension) = operation
+            .annotations
+            .get("x-kaji-pagination")
+            .or_else(|| operation.annotations.get("x-speakeasy-pagination"))
+        else {
+            continue;
+        };
+        if extension.get("type").and_then(Value::as_str) == Some("page") {
+            kaji_core::pagination::normalize_pagination(api, operation, None)?;
+        }
+        if rust_pagination(operation).is_none() {
+            diagnostics.push(serde_json::json!({"operationId":operation.id,"type":extension.get("type"),"reason":"Native Rust helper does not support this declaration; page controls require scalar integer parameters, cursor controls require scalar string parameters, and responses must be buffered JSON."}));
+        }
+    }
+    if !diagnostics.is_empty() {
+        files.push(GeneratedFile::new(
+            ".kaji/pagination-diagnostics.json",
+            serde_json::to_string_pretty(&diagnostics)?,
+        )?);
+    }
     let mut module_index = String::new();
     for (index, operations) in api.operations.chunks(OPERATIONS_PER_FILE).enumerate() {
         let module = format!("chunk_{:04}", index + 1);
@@ -555,6 +577,11 @@ enum RequestMediaKind<'a> {
 /// path escaping, header serialization, auth, retries, and hooks stay intact.
 #[derive(Clone, Debug)]
 enum RustPagination {
+    Page {
+        field: RustPaginationField,
+        limit: Option<RustPaginationField>,
+        results_path: String,
+    },
     Cursor {
         field: RustPaginationField,
         next_cursor_path: String,
@@ -610,26 +637,43 @@ fn rust_pagination(operation: &Operation) -> Option<RustPagination> {
             )
             .ok()
             .flatten()?;
-            let selector = plan.continuation?;
-            let mut path = String::from("$");
-            for segment in selector.segments {
-                match segment {
-                    kaji_core::pagination::SelectorSegment::Field(name)
-                        if !name.contains(['.', '[', ']']) =>
-                    {
-                        path.push('.');
-                        path.push_str(&name);
-                    }
-                    kaji_core::pagination::SelectorSegment::Index(index) => {
-                        path.push_str(&format!("[{index}]"))
-                    }
-                    _ => return None,
-                }
-            }
+            let path = plan.continuation?.expression;
             let field = rust_cursor_parameter_field(operation, inputs, "cursor")?;
             Some(RustPagination::Cursor {
                 field,
                 next_cursor_path: path,
+            })
+        }
+        Some("page") => {
+            let mut projected = operation.clone();
+            projected.responses.clear();
+            let plan =
+                kaji_core::pagination::normalize_pagination(&Api::default(), &projected, None)
+                    .ok()??;
+            let scalar_field = |role: &str| -> Option<RustPaginationField> {
+                let input = plan.inputs.iter().find(|input| input.role == role)?;
+                if input.location == "requestBody" {
+                    return None;
+                }
+                let parameter = operation.parameters.iter().find(|p| p.name == input.name)?;
+                if !matches!(parameter.schema.as_ref()?.kind, SchemaKind::Integer) {
+                    return None;
+                }
+                Some(RustPaginationField {
+                    name: rust_field_name(&input.name),
+                    optional: !input.required,
+                })
+            };
+            let field = scalar_field("page")?;
+            let limit = if plan.inputs.iter().any(|input| input.role == "limit") {
+                Some(scalar_field("limit")?)
+            } else {
+                None
+            };
+            Some(RustPagination::Page {
+                field,
+                limit,
+                results_path: plan.results?.expression,
             })
         }
         Some("offsetLimit") => {
@@ -735,30 +779,40 @@ fn rust_pagination_query_field(
 
 fn render_pagination_runtime() -> &'static str {
     r#"
-/// Looks up a conservative JSONPath used by a declared pagination extension.
-/// Object segments and a single numeric (including negative) array index per
-/// segment are supported, for example `$.data[-1].nextCursor`.
+/// Read declared JSONPath fields/indices or RFC 6901 pointers without evaluating code.
 fn kaji_json_path<'a>(value: &'a serde_json::Value, path: &str) -> Option<&'a serde_json::Value> {
-    let mut current = value;
-    for segment in path.strip_prefix('$')?.split('.').filter(|segment| !segment.is_empty()) {
-        let (key, index) = match segment.find('[') {
-            Some(start) => {
-                let end = segment.strip_suffix(']')?;
-                let index = end.get(start + 1..)?.parse::<isize>().ok()?;
-                (&segment[..start], Some(index))
-            }
-            None => (segment, None),
-        };
-        if !key.is_empty() {
-            current = current.get(key)?;
+    if path.starts_with('/') {
+        let mut chars = path.chars();
+        while let Some(c) = chars.next() {
+            if c == '~' && !matches!(chars.next(), Some('0' | '1')) { return None; }
         }
-        if let Some(index) = index {
+        return value.pointer(path);
+    }
+    let mut rest = path.strip_prefix('$')?;
+    let mut current = value;
+    while !rest.is_empty() {
+        if let Some(after) = rest.strip_prefix('.') {
+            let end = after.find(['.', '[']).unwrap_or(after.len());
+            if end == 0 { return None; }
+            current = current.as_object()?.get(&after[..end])?;
+            rest = &after[end..];
+        } else if let Some(after) = rest.strip_prefix('[') {
+            let end = after.find(']')?;
+            let token = &after[..end];
+            let digits = token.strip_prefix('-').unwrap_or(token);
+            if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) { return None; }
+            let index = token.parse::<isize>().ok()?;
             let values = current.as_array()?;
             let index = if index < 0 { values.len().checked_add_signed(index)? } else { index as usize };
             current = values.get(index)?;
-        }
+            rest = &after[end + 1..];
+        } else { return None; }
     }
     Some(current)
+}
+
+fn kaji_pagination_error(message: &'static str) -> serde_json::Error {
+    serde_json::Error::io(std::io::Error::new(std::io::ErrorKind::InvalidData, message))
 }
 
 "#
@@ -773,7 +827,51 @@ fn render_rust_pagination_iterator(
     let response = operation_response_type(operation);
     let error = operation_error_name(operation);
     let pages_method = format!("{method_name}_pages");
+    let mut initial = String::new();
+    let mut before = String::new();
     let (state, next) = match pagination {
+        RustPagination::Page {
+            field,
+            limit,
+            results_path,
+        } => {
+            let name = &field.name;
+            if field.optional {
+                initial = format!(
+                    "        let mut input = input;\n        if input.{name}.is_none() {{ input.{name} = Some(1); }}\n"
+                );
+            }
+            let current = if field.optional {
+                format!("input.{name}.unwrap_or(1)")
+            } else {
+                format!("input.{name}")
+            };
+            before = format!(
+                "            if {current} < 0 {{ return Err({error}::Pagination(kaji_pagination_error(\"page must be nonnegative\"))); }}\n"
+            );
+            let limit = limit.as_ref().map_or_else(
+                || "None::<i64>".into(),
+                |field| {
+                    if field.optional {
+                        format!("input.{}", field.name)
+                    } else {
+                        format!("Some(input.{})", field.name)
+                    }
+                },
+            );
+            before.push_str(&format!("            if ({limit}).is_some_and(|limit| limit <= 0) {{ return Err({error}::Pagination(kaji_pagination_error(\"limit must be positive\"))); }}\n"));
+            let assignment = if field.optional {
+                format!("input.{name} = Some(next_page);")
+            } else {
+                format!("input.{name} = next_page;")
+            };
+            (
+                "true".into(),
+                format!(
+                    "            let next = serde_json::to_value(&response).map_err({error}::Pagination)?;\n            let items = kaji_json_path(&next, {results_path:?}).and_then(serde_json::Value::as_array).ok_or_else(|| {error}::Pagination(kaji_pagination_error(\"pagination results must be an array\")))?;\n            let limit = {limit};\n            if items.is_empty() || limit.is_some_and(|limit| limit > 0 && (items.len() as i64) < limit) {{ return Ok(Some((response, (client, input, false, page_count + 1)))); }}\n            let Some(next_page) = ({current}).checked_add(1) else {{ return Ok(Some((response, (client, input, false, page_count + 1)))); }};\n            {assignment}\n            Ok(Some((response, (client, input, true, page_count + 1))))"
+                ),
+            )
+        }
         RustPagination::Cursor {
             field,
             next_cursor_path,
@@ -786,7 +884,7 @@ fn render_rust_pagination_iterator(
             (
                 "true".to_owned(),
                 format!(
-                    "            let next = serde_json::to_value(&response).map_err({error}::Pagination)?;\n            let Some(cursor) = kaji_json_path(&next, {next_cursor_path:?}).and_then(serde_json::Value::as_str).filter(|cursor| !cursor.is_empty()) else {{\n                return Ok(Some((response, (client, input, false))));\n            }};\n            {assignment}\n            Ok(Some((response, (client, input, true))))"
+                    "            let next = serde_json::to_value(&response).map_err({error}::Pagination)?;\n            let Some(cursor) = kaji_json_path(&next, {next_cursor_path:?}).and_then(serde_json::Value::as_str).filter(|cursor| !cursor.is_empty()) else {{\n                return Ok(Some((response, (client, input, false, page_count + 1))));\n            }};\n            {assignment}\n            Ok(Some((response, (client, input, true, page_count + 1))))"
                 ),
             )
         }
@@ -799,9 +897,17 @@ fn render_rust_pagination_iterator(
             let field = match step {
                 RustOffsetStep::Page { field } | RustOffsetStep::Offset { field } => field,
             };
+            let default = if matches!(step, RustOffsetStep::Page { .. }) {
+                1
+            } else {
+                0
+            };
+            initial = format!(
+                "        let mut input = input;\n        if input.{field}.is_none() {{ input.{field} = Some({default}); }}\n"
+            );
             let continue_condition = match step {
                 RustOffsetStep::Page { .. } => format!(
-                    "            let Some(current) = input.{field} else {{ return Ok(Some((response, (client, input, false)))); }};\n            let next = serde_json::to_value(&response).map_err({error}::Pagination)?;\n            let Some(num_pages) = kaji_json_path(&next, {path:?}).and_then(serde_json::Value::as_i64) else {{ return Ok(Some((response, (client, input, false)))); }};\n            let next_page = current.saturating_add(1);\n            if next_page > num_pages {{ return Ok(Some((response, (client, input, false)))); }};\n            input.{field} = Some(next_page);\n            Ok(Some((response, (client, input, true))))",
+                    "            let Some(current) = input.{field} else {{ return Ok(Some((response, (client, input, false, page_count + 1)))); }};\n            let next = serde_json::to_value(&response).map_err({error}::Pagination)?;\n            let Some(num_pages) = kaji_json_path(&next, {path:?}).and_then(serde_json::Value::as_i64) else {{ return Ok(Some((response, (client, input, false, page_count + 1)))); }};\n            let Some(next_page) = current.checked_add(1) else {{ return Ok(Some((response, (client, input, false, page_count + 1)))); }};\n            if next_page > num_pages {{ return Ok(Some((response, (client, input, false, page_count + 1)))); }};\n            input.{field} = Some(next_page);\n            Ok(Some((response, (client, input, true, page_count + 1))))",
                     path = num_pages_path
                         .as_deref()
                         .expect("validated page pagination"),
@@ -814,7 +920,7 @@ fn render_rust_pagination_iterator(
                         .as_ref()
                         .map_or_else(|| "None".to_owned(), |field| format!("input.{field}"));
                     format!(
-                        "            let Some(current) = input.{field} else {{ return Ok(Some((response, (client, input, false)))); }};\n            let next = serde_json::to_value(&response).map_err({error}::Pagination)?;\n            let Some(items) = kaji_json_path(&next, {results_path:?}).and_then(serde_json::Value::as_array) else {{ return Ok(Some((response, (client, input, false)))); }};\n            let item_count = items.len() as i64;\n            let limit = {limit};\n            if item_count == 0 || limit.is_some_and(|limit| item_count < limit) {{ return Ok(Some((response, (client, input, false)))); }};\n            input.{field} = Some(current.saturating_add(item_count));\n            Ok(Some((response, (client, input, true))))"
+                        "            let Some(current) = input.{field} else {{ return Ok(Some((response, (client, input, false, page_count + 1)))); }};\n            let next = serde_json::to_value(&response).map_err({error}::Pagination)?;\n            let Some(items) = kaji_json_path(&next, {results_path:?}).and_then(serde_json::Value::as_array) else {{ return Ok(Some((response, (client, input, false, page_count + 1)))); }};\n            let item_count = items.len() as i64;\n            let limit = {limit};\n            if item_count == 0 || limit.is_some_and(|limit| item_count < limit) {{ return Ok(Some((response, (client, input, false, page_count + 1)))); }};\n            let Some(next_offset) = current.checked_add(item_count) else {{ return Ok(Some((response, (client, input, false, page_count + 1)))); }};\n            input.{field} = Some(next_offset);\n            Ok(Some((response, (client, input, true, page_count + 1))))"
                     )
                 }
             };
@@ -822,7 +928,7 @@ fn render_rust_pagination_iterator(
         }
     };
     format!(
-        "    /// Lazily fetches every page using this operation's declared pagination contract.\n    pub fn {pages_method}(&self, input: {request}) -> impl futures_util::Stream<Item = Result<{response}, {error}>> {{\n        let client = self.clone();\n        futures_util::stream::try_unfold((client, input, {state}), |(client, mut input, has_next)| async move {{\n            if !has_next {{ return Ok(None); }}\n            let response = client.{method_name}(input.clone()).await?;\n{next}\n        }})\n    }}\n\n"
+        "    /// Lazily fetches every page using this operation's declared pagination contract.\n    pub fn {pages_method}(&self, input: {request}) -> impl futures_util::Stream<Item = Result<{response}, {error}>> {{\n        let client = self.clone();\n{initial}        futures_util::stream::try_unfold((client, input, {state}, 0usize), |(client, mut input, has_next, page_count)| async move {{\n            if !has_next {{ return Ok(None); }}\n            if page_count >= 10000 {{ return Err({error}::Pagination(kaji_pagination_error(\"pagination exceeded 10000 pages\"))); }}\n            {before}            let response = client.{method_name}(input.clone()).await?;\n{next}\n        }})\n    }}\n\n"
     )
 }
 
@@ -1286,6 +1392,13 @@ pub(crate) fn render_readme(api: &Api, crate_name: &str, config: &RenderOptions)
         "# {} Rust SDK\n\nGenerated by Kaji with the **{surface}** client surface.\n\n```sh\ncargo add {crate_name}\n```\n\nUse it from an async context:\n\n```rust\nuse {crate_import}::*;\n\nlet client = Client::new(\"https://api.example.com\");\n{call}\n```\n\nSee [STYLE_GUIDE.md](STYLE_GUIDE.md) for the public surface.\n",
         api.name
     );
+    if api
+        .operations
+        .iter()
+        .any(|operation| rust_pagination(operation).is_some())
+    {
+        output.push_str("\n## Pagination\n\nDeclared helpers return lazy `<operation>_pages(input)` streams of full response pages. They call the original operation and preserve its transport/authentication. Optional page/offset starts default to 1/0; explicit starts remain unchanged. Empty/short results or declared final pages terminate iteration. Counter overflow stops continuation, and a 10,000-page guard reports a pagination error. Supported declarations are scalar parameter cursors, page numbers and legacy offset/limit; body controls and URL continuation remain unsupported. Inspect `.kaji/pagination-diagnostics.json` when a declared helper is absent.\n");
+    }
     output.push_str(&r#"
 ## Customer middleware
 
@@ -1417,6 +1530,126 @@ mod tests {
             .map(|file| file.contents.as_str())
             .collect::<Vec<_>>()
             .join("\n")
+    }
+
+    #[test]
+    fn native_page_stream_defaults_and_preserves_required_controls() {
+        use kaji_core::engine::Packages;
+        let mut operation = Operation {
+            id: "listItems".into(),
+            method: HttpMethod::Get,
+            path: "/items".into(),
+            parameters: ["page", "limit"]
+                .into_iter()
+                .map(|name| OperationParameter {
+                    name: name.into(),
+                    location: "query".into(),
+                    required: false,
+                    schema: Some(SchemaValue::new(SchemaKind::Integer)),
+                    description: None,
+                    annotations: Default::default(),
+                })
+                .collect(),
+            responses: vec![OperationResponse::json(
+                "200",
+                SchemaValue::new(SchemaKind::Object {
+                    fields: vec![Field {
+                        name: "items".into(),
+                        value: SchemaValue::new(SchemaKind::Array {
+                            items: Box::new(SchemaValue::new(SchemaKind::Integer)),
+                        }),
+                        required: true,
+                        annotations: Default::default(),
+                    }],
+                    additional_properties: AdditionalProperties::Any,
+                }),
+            )],
+            ..Default::default()
+        };
+        operation.annotations.insert("x-kaji-pagination".into(),serde_json::json!({"type":"page","inputs":[{"name":"page","in":"parameters","type":"page"},{"name":"limit","in":"parameters","type":"limit"}],"outputs":{"results":"/items"}}));
+        let mut required = operation.clone();
+        required.id = "requiredItems".into();
+        required.parameters[0].location = "header".into();
+        required.parameters[0].required = true;
+        let mut legacy = operation.clone();
+        legacy.id = "legacyItems".into();
+        legacy.annotations.insert("x-kaji-pagination".into(),serde_json::json!({"type":"offsetLimit","inputs":[{"name":"page","in":"parameters","type":"page"}],"outputs":{"numPages":"$.numPages"}}));
+        let mut offset = operation.clone();
+        offset.id = "offsetItems".into();
+        offset.parameters[0].name = "offset".into();
+        offset.annotations.insert("x-kaji-pagination".into(),serde_json::json!({"type":"offsetLimit","inputs":[{"name":"offset","in":"parameters","type":"offset"},{"name":"limit","in":"parameters","type":"limit"}],"outputs":{"results":"/items"}}));
+        let api = Api {
+            name: "page".into(),
+            version: "1.0.0".into(),
+            operations: vec![operation, required, legacy, offset],
+            ..Default::default()
+        };
+        let tree = Packages::new()
+            .package(crate::package("sdk").with(crate::sdk()))
+            .generate(&api, None)
+            .unwrap();
+        let root = tempfile::tempdir().unwrap();
+        tree.write_to(root.path()).unwrap();
+        let sdk = root.path().join("sdk");
+        let manifest = sdk.join("Cargo.toml");
+        let mut cargo = fs::read_to_string(&manifest).unwrap();
+        cargo.push_str("\n[dev-dependencies]\nhttp = \"1\"\n");
+        fs::write(manifest, cargo).unwrap();
+        let runtime = sdk.join("src/client/mod.rs");
+        let mut source = fs::read_to_string(&runtime).unwrap();
+        source.push_str(r#"
+#[cfg(test)] mod selector_checks {
+    #[test] fn portable_selectors() {
+        let value=serde_json::json!({"a/b":{"~items":[[1,2]]}});
+        assert_eq!(super::kaji_json_path(&value,"/a~1b/~0items/0/1"),Some(&serde_json::json!(2)));
+        assert_eq!(super::kaji_json_path(&serde_json::json!([{"items":[1,2]}]),"$[0].items[-1]"),Some(&serde_json::json!(2)));
+        for pointer in ["/items/01","/items/-1","/items/+1","/items/", "/bad~2"] { assert!(super::kaji_json_path(&serde_json::json!({"items":[1,2]}),pointer).is_none()); }
+    }
+}
+"#);
+        fs::write(runtime, source).unwrap();
+        fs::create_dir(sdk.join("tests")).unwrap();
+        fs::write(sdk.join("tests/page.rs"),r#"
+use page_sdk::{Client,client::{ListItemsRequest,RequiredItemsRequest,LegacyItemsRequest,OffsetItemsRequest},transport::{Transport,TransportFuture}};
+use std::{future::Future,sync::{Arc,Mutex},task::{Context,Poll,Waker}};
+use futures_util::StreamExt;
+fn ready<F:Future>(future:F)->F::Output {let mut future=Box::pin(future);match future.as_mut().poll(&mut Context::from_waker(Waker::noop())) {Poll::Ready(value)=>value,Poll::Pending=>panic!("mock pending")}}
+struct Mock(Arc<Mutex<Vec<i64>>>);
+impl Transport for Mock {fn execute(&self, request:reqwest::Request)->TransportFuture<'_>{
+ let page=request.url().query_pairs().find(|(key,_)|key=="page" || key=="offset").map(|(_,value)|value.parse::<i64>().unwrap()).or_else(||request.headers().get("page").map(|v|v.to_str().unwrap().parse().unwrap())).unwrap();self.0.lock().unwrap().push(page);
+ let items=if page<3 || page==i64::MAX {serde_json::json!([page])} else {serde_json::json!([])};
+ let body=serde_json::json!({"items":items,"numPages":if page==i64::MAX {i64::MAX} else {3}}).to_string();Box::pin(async move{Ok(http::Response::builder().status(200).header("content-type","application/json").body(reqwest::Body::from(body)).unwrap().into())})
+}}
+#[test] fn page_stream(){
+ let seen=Arc::new(Mutex::new(Vec::new()));let client=Client::new("https://unused.test").with_transport(Arc::new(Mock(seen.clone())));
+ let input=ListItemsRequest{page:None,limit:None};let mut pages=Box::pin(client.list_items_pages(input.clone()));let mut count=0;while let Some(page)=ready(pages.next()){page.unwrap();count+=1;}assert_eq!(count,3);assert_eq!(*seen.lock().unwrap(),[1,2,3]);assert_eq!(input.page,None);
+ seen.lock().unwrap().clear();let mut pages=Box::pin(client.list_items_pages(ListItemsRequest{page:Some(0),limit:Some(2)}));assert!(ready(pages.next()).unwrap().is_ok());assert!(ready(pages.next()).is_none());assert_eq!(*seen.lock().unwrap(),[0]);
+ seen.lock().unwrap().clear();let mut pages=Box::pin(client.required_items_pages(RequiredItemsRequest{page:2,limit:Some(2)}));assert!(ready(pages.next()).unwrap().is_ok());assert!(ready(pages.next()).is_none());assert_eq!(*seen.lock().unwrap(),[2]);
+ seen.lock().unwrap().clear();let mut pages=Box::pin(client.list_items_pages(ListItemsRequest{page:Some(i64::MAX),limit:None}));assert!(ready(pages.next()).unwrap().is_ok());assert!(ready(pages.next()).is_none());assert_eq!(*seen.lock().unwrap(),[i64::MAX]);
+ seen.lock().unwrap().clear();let mut pages=Box::pin(client.legacy_items_pages(LegacyItemsRequest{page:None,limit:None}));let mut count=0;while let Some(page)=ready(pages.next()){page.unwrap();count+=1;}assert_eq!(count,3);assert_eq!(*seen.lock().unwrap(),[1,2,3]);
+ seen.lock().unwrap().clear();let mut pages=Box::pin(client.offset_items_pages(OffsetItemsRequest{offset:None,limit:Some(2)}));assert!(ready(pages.next()).unwrap().is_ok());assert!(ready(pages.next()).is_none());assert_eq!(*seen.lock().unwrap(),[0]);
+ seen.lock().unwrap().clear();let mut pages=Box::pin(client.legacy_items_pages(LegacyItemsRequest{page:Some(i64::MAX),limit:None}));assert!(ready(pages.next()).unwrap().is_ok());assert!(ready(pages.next()).is_none());assert_eq!(*seen.lock().unwrap(),[i64::MAX]);
+ for limit in [0,-1] { seen.lock().unwrap().clear();let mut pages=Box::pin(client.list_items_pages(ListItemsRequest{page:None,limit:Some(limit)}));assert!(ready(pages.next()).unwrap().is_err());assert!(seen.lock().unwrap().is_empty()); }
+ seen.lock().unwrap().clear();let mut pages=Box::pin(client.list_items_pages(ListItemsRequest{page:Some(-1),limit:None}));assert!(ready(pages.next()).unwrap().is_err());assert!(seen.lock().unwrap().is_empty());
+}
+"#).unwrap();
+        let output = Command::new("cargo")
+            .args(["test", "--offline", "--quiet"])
+            .env("RUSTFLAGS", "-Dwarnings")
+            .env(
+                "CARGO_TARGET_DIR",
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("../../../target/generated-rust-providers"),
+            )
+            .current_dir(sdk)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     #[test]

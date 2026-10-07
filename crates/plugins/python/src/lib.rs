@@ -1190,7 +1190,7 @@ fn render_page_paginator(api: &Api, operation: &Operation) -> Option<String> {
         .unwrap_or("None".into());
     let results = &plan.results?.expression;
     Some(format!(
-        "    def {name}_pages(self{signature}) -> Iterator[{}]:\n{state}        if type(kaji_page) is not int or kaji_page < 0:\n            raise ValueError('page must be a nonnegative integer')\n        for _kaji_page_count in range(10000):\n            response = self.{name}({forwarded})\n            items = _kaji_json_path(response, {results:?})\n            if not isinstance(items, list):\n                raise ValueError('pagination results must be an array')\n            yield response\n            if not items or (type({limit}) is int and {limit} > 0 and len(items) < {limit}):\n                return\n            kaji_page += 1\n{update}        raise ValueError('pagination exceeded 10000 pages')\n\n",
+        "    def {name}_pages(self{signature}) -> Iterator[{}]:\n{state}        if type(kaji_page) is not int or kaji_page < 0:\n            raise ValueError('page must be a nonnegative integer')\n        if {limit} is not None and (type({limit}) is not int or {limit} <= 0):\n            raise ValueError('limit must be a positive integer')\n        for _kaji_page_count in range(10000):\n            response = self.{name}({forwarded})\n            items = _kaji_json_path(response, {results:?})\n            if not isinstance(items, list):\n                raise ValueError('pagination results must be an array')\n            yield response\n            if not items or (type({limit}) is int and {limit} > 0 and len(items) < {limit}):\n                return\n            kaji_page += 1\n{update}        raise ValueError('pagination exceeded 10000 pages')\n\n",
         response_type(operation)
     ))
 }
@@ -2986,6 +2986,11 @@ class Pages(Client):
         return {'items':[page] if page < 3 else []}
 p=Pages(); assert len(list(p.list_items_pages()))==3 and p.seen==[1,2,3]
 p=Pages(); assert len(list(p.list_items_pages(page=0,limit=2)))==1 and p.seen==[0]
+for limit in [True,0,-1,1.5]:
+    p=Pages()
+    try: list(p.list_items_pages(limit=limit)); raise AssertionError('bad limit accepted')
+    except ValueError: pass
+    assert p.seen==[]
 for bad in [True,-1,1.5]:
     try: list(Pages().list_items_pages(page=bad)); raise AssertionError('bad page accepted')
     except ValueError: pass

@@ -844,8 +844,20 @@ fn render_pagination_iterator_with_client(
     {
         let value = pagination_input_value(input);
         let update = pagination_input_update(input, "initialPage");
+        let validate_limit = if let Pagination::OffsetLimit(OffsetPagination {
+            limit: Some(limit),
+            ..
+        }) = pagination
+        {
+            let value = pagination_input_value(limit);
+            format!(
+                "        const initialLimit = {value}\n        if (initialLimit !== undefined && initialLimit !== null && (!Number.isSafeInteger(initialLimit) || Number(initialLimit) <= 0)) throw new Error('limit must be a positive safe integer')\n"
+            )
+        } else {
+            String::new()
+        };
         format!(
-            "        const initialPage = {value} ?? 1\n        if (!Number.isSafeInteger(initialPage) || Number(initialPage) < 0) throw new Error('page must be a nonnegative safe integer')\n        current = {update}\n        if (current === undefined) throw new Error('invalid pagination request body')\n"
+            "{validate_limit}        const initialPage = {value} ?? 1\n        if (!Number.isSafeInteger(initialPage) || Number(initialPage) < 0) throw new Error('page must be a nonnegative safe integer')\n        current = {update}\n        if (current === undefined) throw new Error('invalid pagination request body')\n"
         )
     } else {
         String::new()
@@ -1791,7 +1803,7 @@ mod tests {
             }),
         );
         let source = format!(
-            "type ClientInstance = (request: any) => Promise<any>;\nconst seen: number[]=[];\nconst listItems=async (options: any) => {{ seen.push(options.query.page); return {{'a/b':{{'~items':[options.query.page < 3 || options.query.page === Number.MAX_SAFE_INTEGER ? [options.query.page] : []]}}}} }};\n{}\nclass Pages {{ transport: ClientInstance=async request=>request; listItemsPages!: (options: any) => AsyncGenerator<any>; constructor() {{ {} }} }}\n(async()=>{{ const p=new Pages(); let count=0; for await (const page of p.listItemsPages({{}})) count++; if(count!==3 || seen.join(',')!=='1,2,3') throw Error('default page failed'); seen.length=0; for await (const page of p.listItemsPages({{query:{{page:0,limit:2}}}})) {{}}; if(seen.join(',')!=='0') throw Error('zero or short limit failed'); if(kajiJsonPath([{{items:[1,2]}}], '$[0].items[-1]')!==2) throw Error('selector failed'); if(kajiJsonPath([10,20], '/01')!==undefined || kajiJsonPath([10,20], '/-1')!==undefined || kajiJsonPath([10,20], '/')!==undefined || kajiJsonPath({{'a/b': 1}}, '/a~2b')!==undefined) throw Error('invalid pointer accepted'); const original={{query:{{page:0,limit:2}}}}; for await (const page of p.listItemsPages(original)) {{}}; if(original.query.page!==0) throw Error('caller mutated'); seen.length=0; for await(const page of p.listItemsPages({{query:{{page:Number.MAX_SAFE_INTEGER}}}})) {{}}; if(seen.length!==1) throw Error('unsafe page advanced'); for(const page of [-1,1.5,NaN]) {{ let failed=false; try {{ for await (const result of p.listItemsPages({{query:{{page}}}})) {{}} }} catch {{ failed=true }} if(!failed) throw Error('bad page accepted'); }} }})().catch(error=>{{ console.error(error); throw error }});",
+            "type ClientInstance = (request: any) => Promise<any>;\nconst seen: number[]=[];\nconst listItems=async (options: any) => {{ seen.push(options.query.page); return {{'a/b':{{'~items':[options.query.page < 3 || options.query.page === Number.MAX_SAFE_INTEGER ? [options.query.page] : []]}}}} }};\n{}\nclass Pages {{ transport: ClientInstance=async request=>request; listItemsPages!: (options: any) => AsyncGenerator<any>; constructor() {{ {} }} }}\n(async()=>{{ const p=new Pages(); let count=0; for await (const page of p.listItemsPages({{}})) count++; if(count!==3 || seen.join(',')!=='1,2,3') throw Error('default page failed'); seen.length=0; for await (const page of p.listItemsPages({{query:{{page:0,limit:2}}}})) {{}}; if(seen.join(',')!=='0') throw Error('zero or short limit failed'); if(kajiJsonPath([{{items:[1,2]}}], '$[0].items[-1]')!==2) throw Error('selector failed'); if(kajiJsonPath([10,20], '/01')!==undefined || kajiJsonPath([10,20], '/-1')!==undefined || kajiJsonPath([10,20], '/')!==undefined || kajiJsonPath({{'a/b': 1}}, '/a~2b')!==undefined) throw Error('invalid pointer accepted'); const original={{query:{{page:0,limit:2}}}}; for await (const page of p.listItemsPages(original)) {{}}; if(original.query.page!==0) throw Error('caller mutated'); seen.length=0; for await(const page of p.listItemsPages({{query:{{page:Number.MAX_SAFE_INTEGER}}}})) {{}}; if(seen.length!==1) throw Error('unsafe page advanced'); for(const limit of [true,0,-1,1.5]) {{ let failed=false; try {{ for await (const result of p.listItemsPages({{query:{{limit}}}})) {{}} }} catch {{ failed=true }} if(!failed) throw Error('bad limit accepted'); }} for(const page of [-1,1.5,NaN]) {{ let failed=false; try {{ for await (const result of p.listItemsPages({{query:{{page}}}})) {{}} }} catch {{ failed=true }} if(!failed) throw Error('bad page accepted'); }} }})().catch(error=>{{ console.error(error); throw error }});",
             pagination_helpers(),
             iterator
         );
