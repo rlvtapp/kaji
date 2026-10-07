@@ -40,7 +40,9 @@
 - Typed Terraform Plugin Framework provider generation with explicit or inferred
   CRUD bindings, scalar state/schema mapping, import, authentication, safe HTTP
   transport, lifecycle handling, diagnostics, and generated native transport tests.
-- Shared pagination plans and SDK fixture infrastructure; initial Go integration.
+- Shared pagination plans and SDK fixture infrastructure; native page-number
+  helpers across all ten targets, preserving each language's iteration API.
+  Rust pagers now preserve optional starts and avoid saturating-counter loops.
 - SDK author guides and examples covering generation, customization, publishing,
   GitHub automation, per-language repositories, Postman, and Terraform.
 

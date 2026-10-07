@@ -2,6 +2,10 @@
 
 This suite generates one neutral API and drives its public `getContact` operation through a real loopback HTTP server. Every harness registers SDK-consumer middleware and sends a dummy bearer credential. The server checks the encoded method/path, authentication, middleware header, exact number of transport attempts, and the client's decoded result/error outcome. It does not contact a remote API.
 
+The fixture also declares a page-number operation and checks that every target
+emits its native helper. Native matrix builds compile those helpers; the five
+wire scenarios below still exercise `getContact`, not pagination.
+
 Generate all fixtures from the repository root:
 
 ```sh

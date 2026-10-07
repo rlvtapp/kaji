@@ -39,6 +39,13 @@ Round-trip coverage includes additional properties and optional nullable fields.
 
 Go cursor and URL renderers consume shared normalized plans, including selector projection and schema checks. Offset rendering shares input and selector validation while retaining legacy opaque response envelopes. Optional Go JSON request bodies retain their existing continuation behavior. Unsupported native capabilities still omit a pager instead of implementing guessed behavior.
 
+Rust supports native page-number streams for scalar integer parameter controls,
+including required headers/paths and optional starts. Optional legacy page/offset
+controls now default to 1/0, and checked arithmetic prevents saturating-counter
+loops. Shared declarations and selectors preserve the native public stream API.
+Body and next-URL continuations remain unsupported and are reported in pagination
+diagnostics. See the [target capability table](guides/pagination.md).
+
 Rust cursor rendering now shares scalar input and selector normalization. Rust response-reference validation and legacy offset/page rules remain in its maintained renderer. Neither this work nor the shared plan automatically adds every pagination kind to both language runtimes. The standalone normalized-plan API provides stricter diagnostics for consumers that require complete declaration validation.
 
 These provider recipes are native Rust generator APIs. The CLI configuration has not yet gained explicit Rust/Go provider bindings.

@@ -222,6 +222,9 @@ available. See the [Rust API guide](docs/getting-started.md) and
   and each repository's own editable build, test, release, and publishing actions.
 - Generate optional API references and Python/Go operation tests. Exercise SDK
   wire behavior in a shared ten-language CI suite with explicit coverage limits.
+- Use native page-number pagination in every SDK target, retaining streams,
+  generators and async iteration. [Pagination capabilities](docs/guides/pagination.md)
+  list the supported forms and bindings.
 - Enable structural response checks in TypeScript, Go, Python and Ruby; generate
   Terraform data sources and run Postman collections against local test APIs.
 - Extend SDK runtimes and models with Python async/OAuth/webhook support,

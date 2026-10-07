@@ -223,5 +223,16 @@ jobs:
             Ruby) find lib -name '*.rb' -print0 | xargs -0 -n1 ruby -c ;;
             Swift) swift build --disable-sandbox ;;
           esac
+      - uses: dtolnay/rust-toolchain@stable
+        if: matrix.language == 'Swift' || matrix.language == 'Elixir' || matrix.language == 'PHP'
+      - name: Verify native PHP pagination generation and iteration
+        if: matrix.language == 'PHP'
+        run: cargo test -p kaji-plugin-php page_pagination_executes_native_query_body_and_selectors -- --ignored
+      - name: Verify native Elixir pagination generation and iteration
+        if: matrix.language == 'Elixir'
+        run: cargo test -p kaji-plugin-elixir generated_page_stream_executes_lazily -- --ignored
+      - name: Verify native Swift pagination generation and iteration
+        if: matrix.language == 'Swift'
+        run: cargo test -p kaji-plugin-swift pagination -- --ignored
       - name: Execute generated public operations against shared runtime scenarios
         run: node packages/runtime-contract/runner.mjs "${{ matrix.path }}" "$GITHUB_WORKSPACE/runtime-contract-fixture/sdk/${{ matrix.path }}"

@@ -215,7 +215,9 @@ Flat and namespaced clients use the same underlying operation implementation. Na
 
 ## Pagination and streaming depend on the contract
 
-A list response alone does not create a pager. Kaji needs declared pagination inputs and response selectors, typically through the contract's `x-pagination` metadata or explicit generation configuration. Pagination helpers keep using the generated operation's authentication, serialization and error handling. URL continuation helpers validate the origin before carrying credentials forward.
+A list response alone does not create a pager. Kaji needs declared pagination inputs and response selectors, through `x-kaji-pagination` or compatible `x-speakeasy-pagination` metadata. Pagination helpers keep using the generated operation's authentication, serialization and error handling. URL continuation helpers validate the origin before carrying credentials forward.
+
+See the [pagination guide](guides/pagination.md) for declarations, native helper forms, tested behavior and target limits.
 
 For supported Python contracts, direct helpers are named `<operation>_pages`; namespaced resources also expose their page helper. Synchronous helpers yield pages; async helpers use `async for`. TypeScript, Go and Rust expose their own generated page helper types/functions. Inspect the generated operation reference to distinguish a page from an item: a pager does not universally flatten arrays into individual models.
 

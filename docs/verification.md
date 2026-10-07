@@ -129,7 +129,7 @@ Java, C#, PHP and Elixir harnesses are wired into CI but were not executed on th
 local implementation host. A configured CI job is not evidence of a passing run.
 
 Additional native checks execute Python sync/async and Ruby response validation,
-Python/TypeScript/Go page pagination, and Python/Go generated operation smoke
+Python/TypeScript/Go/Rust/Ruby/Swift page pagination, and Python/Go generated operation smoke
 tests. Optional API reference and Terraform data source recipes are covered by
 CLI output assertions and actual JSON Schema validation. Newman executes an
 exported collection against a local mock; a real Terraform CLI exercises
@@ -140,3 +140,11 @@ The [delivery test workflow](../packages/sdk-delivery-test/README.md) is prepare
 only. Local drift, immutable-tag mock publishing and workflow validation passed;
 no workflow dispatch, GitHub App installation, registry trust configuration or
 real package publication has been performed.
+
+The pagination fixture declares `listContacts` with optional integer page/limit
+controls and a typed results array. Generation asserts a helper in all ten
+SDKs, and the runtime CI matrix builds the resulting packages. Dedicated Swift,
+PHP and Elixir native pagination probes are selected in their toolchain jobs;
+Swift was executed locally, while PHP/Elixir probes await CI execution. Native
+Java/.NET pagination execution remains unverified. The [pagination guide](guides/pagination.md)
+records current forms and unsupported bindings explicitly.
