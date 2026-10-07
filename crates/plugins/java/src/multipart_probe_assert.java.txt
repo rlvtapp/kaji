@@ -1,0 +1,9 @@
+        void assertRequest(HttpRequest request) {
+            calls++;check(request.method().equals("POST") && request.uri().getPath().equals("/upload"),"method/path");
+            var type=request.headers().allValues("Content-Type");check(type.size()==1 && type.get(0).startsWith("multipart/form-data; boundary="),"multipart media");
+            var boundary=type.get(0).substring(type.get(0).indexOf("boundary=")+9);
+            var raw=new String(requestBody(request),StandardCharsets.ISO_8859_1);var chunks=raw.split(java.util.regex.Pattern.quote("--"+boundary),-1);
+            check(chunks.length==6 && chunks[0].isEmpty() && chunks[5].equals("--\r\n"),"boundaries");var parsed=new HashMap<String,byte[]>();
+            for(int i=1;i<5;i++){var part=chunks[i];check(part.startsWith("\r\n")&&part.endsWith("\r\n"),"CRLF");part=part.substring(2,part.length()-2);int split=part.indexOf("\r\n\r\n");check(split>=0,"part separator");var header=part.substring(0,split);var match=java.util.regex.Pattern.compile("name=\"([^\"]+)\"").matcher(header);check(match.find(),"part name");var name=match.group(1);check(parsed.put(name,part.substring(split+4).getBytes(StandardCharsets.ISO_8859_1))==null,"duplicate part");if(name.equals("file"))check(header.contains("filename=\"blob.bin\"")&&header.contains("application/octet-stream"),"file metadata");}
+            check(Arrays.equals(parsed.get("title"),"café雪\r\n".getBytes(StandardCharsets.UTF_8)),"Unicode scalar");check(Arrays.equals(parsed.get("flag"),"false".getBytes(StandardCharsets.UTF_8)),"false scalar");check(Arrays.equals(parsed.get("count"),"0".getBytes(StandardCharsets.UTF_8)),"zero scalar");check(Arrays.equals(parsed.get("file"),new byte[]{0,(byte)255,13,10,34,92,127}),"raw binary/copied bytes");check(!parsed.containsKey("missing"),"optional omission");
+        }

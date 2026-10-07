@@ -1,0 +1,35 @@
+require 'probe_sdk'
+require 'probe_sdk/oauth'
+Reply=Struct.new(:code,:body)
+lock=Mutex.new;issued=0
+issuer=->(request){raise 'missing Basic/form' unless request['Authorization'].start_with?('Basic ') && URI.decode_www_form(request.body).to_h['grant_type']=='client_credentials';number=lock.synchronize{issued+=1;issued};sleep 0.02;Reply.new('200',JSON.generate(access_token:"token#{number}",token_type:'Bearer',expires_in:3600))}
+provider=ProbeSdk::OAuthClientCredentials.new(token_url:'https://issuer.example/token',client_id:'id',client_secret:'private-secret',transport:issuer)
+threads=16.times.map{Thread.new{provider.token}}
+raise 'refresh not single flight' unless threads.map(&:value).uniq==['token1'] && issued==1
+raise 'refresh/rejected mismatch' unless provider.token(rejected_token:'token1')=='token2' && provider.token(rejected_token:'token1')=='token2' && issued==2
+raise 'inspect leaked' if provider.inspect.include?('private-secret')
+calls=0;seen=[];keys=[]
+transport=->(request){calls+=1;seen<<request['Authorization'];keys<<request['X-Once'];Reply.new(calls==1 ? '401' : '204','')}
+client=ProbeSdk::Client.new(base_url:'https://unused.example',transport:transport,token_provider:provider)
+client.retry_thing
+raise '401 replay/key' unless calls==2 && seen==['Bearer token2','Bearer token3'] && keys[0]==keys[1] && keys[0].match?(/\A[0-9a-f-]{36}\z/)
+calls=0
+begin;client.unsafe_create;raise 'unsafe401 accepted';rescue ProbeSdk::ApiError;end
+raise 'unsafe401 replayed' unless calls==1
+calls=0
+always=ProbeSdk::Client.new(base_url:'https://unused.example',transport:->(_){calls+=1;Reply.new('401','')},token_provider:provider,max_attempts:3,retry_base_delay:0)
+begin;always.delete_thing;raise '401 accepted';rescue ProbeSdk::ApiError;end
+raise 'unbounded401' unless calls==2
+ready=Queue.new;release=Queue.new;wait_provider=ProbeSdk::OAuthClientCredentials.new(token_url:'https://issuer.example',client_id:'id',client_secret:'private-secret',transport:->(_){ready<<true;release.pop;Reply.new('200','{"access_token":"wait","expires_in":3600}')})
+leader=Thread.new{wait_provider.token};ready.pop
+begin;wait_provider.token(cancelled:->{true});raise 'wait cancellation missing';rescue ProbeSdk::KajiCancellationError;end
+release<<true;raise 'leader disturbed' unless leader.value=='wait'
+cancel=false;calls=0
+cancel_provider=ProbeSdk::OAuthClientCredentials.new(token_url:'https://issuer.example',client_id:'id',client_secret:'private-secret',transport:->(_){calls+=1;cancel=true;Reply.new('200','{"access_token":"unpublished","expires_in":3600}')})
+begin;cancel_provider.token(cancelled:->{cancel});raise 'leader cancellation missing';rescue ProbeSdk::KajiCancellationError;end
+cancel=false;cancel_provider.token;raise 'cancelled token cached' unless calls==2
+expired=0;expiry=ProbeSdk::OAuthClientCredentials.new(token_url:'https://issuer.example',client_id:'id',client_secret:'private-secret',transport:->(_){expired+=1;Reply.new('200','{"access_token":"zero","expires_in":0}')});2.times{expiry.token};raise 'zero lifetime cached' unless expired==2
+[Reply.new('400','private-secret'),Reply.new('200','{"access_token":"secret\r\n","expires_in":10}'),Reply.new('200','{"access_token":"secret","expires_in":-1}'),Reply.new('200','{"access_token":"secret","token_type":"Other","expires_in":10}')].each do |reply|
+ bad=ProbeSdk::OAuthClientCredentials.new(token_url:'https://issuer.example',client_id:'id',client_secret:'private-secret',transport:->(_){reply})
+ begin;bad.token;raise 'invalid accepted';rescue ProbeSdk::OAuthError=>error;raise 'error leak' if error.message.include?('private-secret')||error.message.include?(reply.body);end
+end

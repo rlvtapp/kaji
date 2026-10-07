@@ -1,0 +1,78 @@
+require '__IMPORT__'
+require 'json'
+require 'net/http'
+require 'uri'
+module __MODULE__
+  class OAuthError < StandardError; end
+  # Client-credentials token provider. Cached refreshes are coordinated across threads.
+  class OAuthClientCredentials
+    def initialize(token_url:, client_id:, client_secret:, scopes: [], refresh_leeway: 30, timeout: 30, transport: nil)
+      begin
+        @uri=URI.parse(token_url)
+        raise OAuthError, 'OAuth configuration invalid' unless @uri.is_a?(URI::HTTPS) && @uri.host && !@uri.host.empty? && !@uri.userinfo && !@uri.fragment && !client_id.empty? && !client_secret.empty?
+      rescue URI::InvalidURIError, NoMethodError
+        raise OAuthError, 'OAuth configuration invalid'
+      end
+      raise OAuthError, 'OAuth configuration invalid' unless refresh_leeway.is_a?(Numeric) && refresh_leeway.finite? && refresh_leeway>=0 && timeout.is_a?(Numeric) && timeout.finite? && timeout>0
+      @client_id=client_id.dup.freeze;@client_secret=client_secret.dup.freeze
+      @scopes=scopes.map { |scope| scope.to_s.dup.freeze }.freeze;@leeway=refresh_leeway;@timeout=timeout;@transport=transport
+      @mutex=Mutex.new;@condition=ConditionVariable.new;@refreshing=false;@token=nil;@expires=0
+    end
+    def inspect; '#<OAuthClientCredentials>'; end
+    def check_cancelled(cancelled)
+      raise KajiCancellationError, 'request cancelled' if cancelled && cancelled.call
+    end
+    def token(rejected_token: nil, cancelled: nil)
+      @mutex.synchronize do
+        loop do
+          check_cancelled(cancelled)
+          now=Process.clock_gettime(Process::CLOCK_MONOTONIC)
+          return @token if @token && now<@expires && (rejected_token.nil? || rejected_token!=@token)
+          unless @refreshing;@refreshing=true;break;end
+          @condition.wait(@mutex,0.05)
+        end
+      end
+      begin
+        access,lifetime=fetch_token(cancelled)
+        check_cancelled(cancelled)
+        @mutex.synchronize do
+          @token=access;@expires=Process.clock_gettime(Process::CLOCK_MONOTONIC)+lifetime-[@leeway,lifetime/2.0].min
+        end
+        access
+      ensure
+        @mutex.synchronize{@refreshing=false;@condition.broadcast}
+      end
+    end
+    private
+    def fetch_token(cancelled)
+      check_cancelled(cancelled)
+      request=Net::HTTP::Post.new(@uri);request.basic_auth(@client_id,@client_secret)
+      fields={'grant_type'=>'client_credentials'};fields['scope']=@scopes.join(' ') unless @scopes.empty?
+      request.set_form_data(fields)
+      if @transport
+        response=@transport.call(request);body=response.body
+      else
+        body='';response=nil
+        Net::HTTP.start(@uri.host,@uri.port,use_ssl:true,open_timeout:@timeout,read_timeout:@timeout) do |http|
+          http.request(request) do |reply|
+            response=reply
+            reply.read_body do |chunk|
+              check_cancelled(cancelled);body<<chunk
+              raise OAuthError,'OAuth token response exceeds limit' if body.bytesize>1_048_576
+            end
+          end
+        end
+      end
+      check_cancelled(cancelled)
+      raise OAuthError,'OAuth token issuer rejected request' unless response.code.to_i==200
+      raise OAuthError,'OAuth token response invalid' unless body.is_a?(String) && body.bytesize<=1_048_576
+      payload=JSON.parse(body);access=payload['access_token'];kind=payload['token_type'];lifetime=payload.fetch('expires_in',0)
+      raise OAuthError,'OAuth token response invalid' unless access.is_a?(String) && !access.empty? && !access.match?(/[\r\n]/) && (kind.nil? || (kind.is_a?(String) && kind.casecmp('Bearer')==0)) && lifetime.is_a?(Numeric) && lifetime.finite? && lifetime>=0
+      [access.dup.freeze,lifetime.to_f]
+    rescue KajiCancellationError,OAuthError
+      raise
+    rescue StandardError
+      raise OAuthError,'OAuth token request failed'
+    end
+  end
+end

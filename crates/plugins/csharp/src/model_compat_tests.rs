@@ -73,13 +73,13 @@ class Probe {
  static void Main() {
   var count=JsonSerializer.Deserialize<Count>("42")!;
   if(count.Value!=42 || JsonSerializer.Serialize(count)!="42")throw new Exception("scalar alias");
-  foreach(var wire in new[]{"42","true","\\\"future\\\"","{\\\"unknown\\\":[1,null]}"}) {
+  foreach(var wire in new[]{"42","true","\"future\"","{\"unknown\":[1,null]}"}) {
    var choice=JsonSerializer.Deserialize<Choice>(wire)!;
    if(JsonSerializer.Serialize(choice)!=wire)throw new Exception("union wire");
   }
-  var state=JsonSerializer.Deserialize<State>("\\\"future\\\"")!;
-  if(state.Value!="future" || JsonSerializer.Serialize(state)!="\\\"future\\\"")throw new Exception("unknown enum");
-  if(JsonSerializer.Serialize(State.KnownValue)!="\\\"known-value\\\"")throw new Exception("known wire name");
+  var state=JsonSerializer.Deserialize<State>("\"future\"")!;
+  if(state.Value!="future" || JsonSerializer.Serialize(state)!="\"future\"")throw new Exception("unknown enum");
+  if(JsonSerializer.Serialize(State.KnownValue)!="\"known-value\"")throw new Exception("known wire name");
  }
 }"#).unwrap();
     let result = std::process::Command::new("dotnet")

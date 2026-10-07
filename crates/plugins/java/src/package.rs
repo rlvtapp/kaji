@@ -44,15 +44,21 @@ pub struct Sdk {
     meta: Meta,
     client_style: Option<SdkClientStyle>,
     open_enums: bool,
+    preserve_presence: bool,
 }
 pub fn sdk() -> Sdk {
     Sdk {
         meta: Meta::new(),
         client_style: None,
         open_enums: false,
+        preserve_presence: false,
     }
 }
 impl Sdk {
+    pub fn preserve_presence(mut self, enabled: bool) -> Self {
+        self.preserve_presence = enabled;
+        self
+    }
     /// Preserve future wire enum values using extensible value classes.
     /// Known constants remain available; Java enum switches require the default policy.
     pub fn open_enums(mut self, enabled: bool) -> Self {
@@ -84,7 +90,7 @@ impl Plugin<Java> for Sdk {
         vec![Provision::of::<NativeSdk>()]
     }
     fn generate(&self, cx: &mut PluginContext<'_, Java>) -> Result<()> {
-        cx.files.append(crate::render_sdk_with_policy(
+        cx.files.append(crate::presence::render(
             cx.api,
             ".",
             cx.settings.package_name.as_deref(),
@@ -92,6 +98,7 @@ impl Plugin<Java> for Sdk {
                 .or(cx.common.client_style)
                 .unwrap_or(SdkClientStyle::Namespaced),
             self.open_enums,
+            self.preserve_presence,
         )?)?;
         cx.publish(NativeSdk {
             namespace: crate::java_package_name(

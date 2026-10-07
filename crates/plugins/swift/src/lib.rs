@@ -9,6 +9,7 @@ mod webhooks;
 pub use webhooks::{Webhooks, webhooks};
 mod bundled;
 mod cursor_pagination;
+mod open_enums;
 mod package;
 mod pagination;
 pub use package::{PackageExt, Settings, Swift, package, sdk};
@@ -67,23 +68,6 @@ pub(crate) fn render_sdk(
                 operation.id
             );
         }
-        if operation
-            .responses
-            .iter()
-            .flat_map(|response| &response.media_types)
-            .any(|media| {
-                media
-                    .content_type
-                    .split(';')
-                    .next()
-                    .is_some_and(|value| value.trim().eq_ignore_ascii_case("text/event-stream"))
-            })
-        {
-            bail!(
-                "Swift operation '{}' requires SSE streaming, which the native Swift SDK does not yet support",
-                operation.id
-            );
-        }
     }
     let root = normalized_root(output_dir)?;
     let package = package_name
@@ -107,7 +91,7 @@ pub(crate) fn render_sdk(
             + if pagination.is_empty() {
                 ""
             } else {
-                "\n## Pagination\n\nDeclared string-cursor operations also expose `<operation>Pages(...)`. Their lazy `KajiCursorSequence` preserves the initial caller cursor, yields full responses, stops on missing/null/empty or repeated continuation tokens, and checks cancellation before each request. String query/header/path controls are supported; body and integer cursors fail generation.\n\nDeclared page-number operations expose `<operation>Pages(...)`, an `AsyncSequence` of full decoded pages. Iterate with `for try await page in client.<operation>Pages(...)`. Requests run only when the iterator advances and retain the ordinary operation transport, middleware, headers, and body. Optional page defaults to 1; explicit 0 is preserved. Required page remains a required argument. A positive declared limit stops after a short page; an empty page always stops and is yielded once. Invalid controls, malformed results selectors, integer overflow, and 10,000 pages terminate with `KajiPaginationError`. Cancellation is checked before each request. Page/limit must be nonnullable scalar integer parameter controls; body-bound controls are rejected during generation.\n"
+                "\n## Pagination\n\nDeclared string-cursor operations also expose `<operation>Pages(...)`. Their lazy `KajiCursorSequence` preserves the initial caller cursor, yields full responses, stops on missing/null/empty or repeated continuation tokens, and checks cancellation before each request. String query/header/path controls are supported; body and integer cursors fail generation.\n\nDeclared page-number operations expose `<operation>Pages(...)`, an `AsyncSequence` of full decoded pages. Iterate with `for try await page in client.<operation>Pages(...)`. Requests run only when the iterator advances and retain the ordinary operation transport, middleware, headers, and body. Optional page defaults to 1; explicit 0 is preserved. Required page remains a required argument. A positive declared limit stops after a short page; an empty page always stops and is yielded once. Invalid controls, malformed results selectors, integer overflow, and 10,000 pages terminate with `KajiPaginationError`. Cancellation is checked before each request. Offset/limit operations use the same lazy sequence, default offset to 0 and advance by the actual result count. URL continuation operations use `KajiURLSequence`, require absolute HTTP(S) URLs with the configured origin, preserve authentication and reject credentials, fragments, repeated URLs and relative continuations before sending a request. Page/offset/limit must be nonnullable scalar integer parameter controls; body-bound controls are rejected during generation.\n"
             },
     )?;
     insert(
@@ -126,7 +110,11 @@ pub(crate) fn render_sdk(
         &mut tree,
         &root,
         &format!("Sources/{module}/KajiClient.swift"),
-        client_runtime(),
+        if api.operations.iter().any(operation_is_sse) {
+            client_runtime_with_streaming()
+        } else {
+            client_runtime()
+        },
     )?;
     for schema in &api.schemas {
         insert(
@@ -142,6 +130,14 @@ pub(crate) fn render_sdk(
         &format!("Sources/{module}/Operations.swift"),
         render_operations(api).replace("\n}\n", &format!("\n{pagination}\n}}\n")),
     )?;
+    if api.operations.iter().any(operation_is_sse) {
+        insert(
+            &mut tree,
+            &root,
+            &format!("Sources/{module}/Streaming.swift"),
+            include_str!("sse_runtime.swift.txt").into(),
+        )?;
+    }
     if !pagination.is_empty() {
         insert(
             &mut tree,
@@ -227,6 +223,9 @@ let client = KajiClient(options: .init(baseURL: URL(string: "https://api.example
 
 Nest wrappers for composition; outer layers see requests first and responses last. Implement `KajiTransport` directly to substitute execution, or return a response without calling `next`. Existing `session:` initialization remains supported. Middleware wraps the buffered transport once per attempt. Enable automatic retries with `KajiClientOptions(baseURL: ..., maxAttempts: 3, retryBaseDelay: 0.5, retryMaxDelay: 30)`; the default is one attempt. Attempts are capped at 10, delays at 60 seconds. Exponential backoff honors bounded `retry-after-ms` and `Retry-After` (seconds or HTTP date). GET/HEAD/OPTIONS/PUT/DELETE may replay; POST/PATCH require a nonblank standard idempotency key or an operation-declared custom key. Generated keys remain stable across attempts. Transient URLSession errors and HTTP 408/429/500/502/503/504 are eligible. Task cancellation interrupts backoff and is never retried. Buffered response decoding happens after retry selection, so decode errors do not replay requests. Errors from HTTP status validation and decoding occur after middleware. Captures must satisfy Swift `Sendable` rules. Lifecycle hooks remain separate notifications.
 "#.replace("MODULE", module));
+    if api.operations.iter().any(operation_is_sse) {
+        output.push_str("\n## Server-sent events\n\nDeclared SSE operations return a lazy `KajiEventSequence`: use `for try await data in client.<operation>(...)`. Each element is the raw joined `data:` string; JSON decoding remains your choice. The first iterator advance opens the connection. Split UTF-8, CR/LF framing, comments and multiline data are supported; incomplete events at EOF are discarded. Cancellation or iterator destruction closes the stream. Streams have bounded queues and 1 MiB frame/line limits; overflow fails explicitly. SSE does not automatically retry or reconnect.\n\nThe default URLSession transport streams incrementally and denies redirects. A custom URLSession delegate requires an explicit `KajiStreamingTransport`. Buffered `KajiMiddlewareTransport` cannot intercept streaming requests and fails with an actionable capability error. Use `KajiStreamingMiddlewareTransport(inner: KajiURLSessionTransport()) { request, next in ... }` for streaming policies, or implement `KajiStreamingTransport.stream(_:)` returning `KajiByteStream`. Streaming middleware must retain cancellation and bounded delivery; lifecycle hooks receive headers with an empty buffered body.\n");
+    }
     output
 }
 
@@ -286,6 +285,16 @@ public final class KajiClient: @unchecked Sendable {"#)
     .replace("    public var timeout: TimeInterval", "    public var timeout: TimeInterval\n    public var maxAttempts: Int\n    public var retryBaseDelay: Double\n    public var retryMaxDelay: Double")
     .replace("timeout: TimeInterval = 30)", "timeout: TimeInterval = 30, maxAttempts: Int = 1, retryBaseDelay: Double = 0.5, retryMaxDelay: Double = 30)")
     .replace("        self.timeout = timeout", "        self.timeout = timeout\n        self.maxAttempts = min(10,max(1,maxAttempts))\n        self.retryBaseDelay = retryBaseDelay.isFinite ? max(0,min(60,retryBaseDelay)) : 0.5\n        self.retryMaxDelay = retryMaxDelay.isFinite ? max(0,min(60,retryMaxDelay)) : 30")
+    .replace("    internal func makeRequest", &(r#"    internal func kajiContinuationURL(_ next: URL?) throws -> URL? {
+        guard let next else { return nil }
+        let baseURL=options.baseURL
+        func port(_ url: URL) -> Int? { url.port ?? (url.scheme?.lowercased() == "https" ? 443 : url.scheme?.lowercased() == "http" ? 80 : nil) }
+        guard let scheme=next.scheme?.lowercased(), ["http", "https"].contains(scheme), scheme == baseURL.scheme?.lowercased(),
+              let host=next.host?.lowercased(), host == baseURL.host?.lowercased(), port(next) == port(baseURL),
+              next.user == nil, next.password == nil, next.fragment == nil else { throw KajiAPIError.invalidResponse }
+        return next
+    }
+"#.to_owned()+"    internal func makeRequest"))
     .replace("_ request: URLRequest, as type: T.Type)", "_ request: URLRequest, as type: T.Type, idempotencyHeader: String? = nil)")
     .replace("sendVoid(_ request: URLRequest)", "sendVoid(_ request: URLRequest, idempotencyHeader: String? = nil)")
     .replace("        hooks.forEach { $0.willSend(request) }\n", "")
@@ -294,6 +303,50 @@ public final class KajiClient: @unchecked Sendable {"#)
     .replace("    internal func encode<T:", &(include_str!("retry_runtime.swift.txt").to_owned()+"\n    internal func encode<T:"))
     // Preserve the default adapter's direct Foundation execution.
     .replace("        try await transport.execute(request)\n    }\n}\npublic typealias", "        try await session.data(for: request)\n    }\n}\npublic typealias")
+}
+
+fn operation_is_sse(operation: &Operation) -> bool {
+    operation
+        .responses
+        .iter()
+        .find(|response| response.status.starts_with('2'))
+        .is_some_and(|response| {
+            response.media_types.iter().any(|media| {
+                media
+                    .content_type
+                    .split(';')
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .eq_ignore_ascii_case("text/event-stream")
+            })
+        })
+}
+fn client_runtime_with_streaming() -> String {
+    let source = client_runtime().replace(
+        "public struct KajiURLSessionTransport: KajiTransport",
+        "public struct KajiURLSessionTransport: KajiStreamingTransport",
+    );
+    let source = source.replacen(
+        "    public func execute(_ request: URLRequest) async throws -> (Data, URLResponse) {",
+        r#"    public func stream(_ request: URLRequest) async throws -> KajiByteStream {
+        guard session.delegate == nil else {throw KajiStreamingError.customSessionDelegate}
+        return try await KajiURLSessionStream(configuration:session.configuration).open(request)
+    }
+    public func execute(_ request: URLRequest) async throws -> (Data, URLResponse) {"#,
+        1,
+    );
+    source.replace("    internal func encode<T:",r#"    internal func streamEvents(_ request:URLRequest) async throws -> KajiByteStream {
+        try Task.checkCancellation()
+        guard let streaming=transport as? any KajiStreamingTransport else {throw KajiStreamingError.unsupportedTransport}
+        hooks.forEach {$0.willSend(request)}
+        let stream=try await streaming.stream(request)
+        hooks.forEach {$0.didReceive(stream.response,body:Data())}
+        guard (200..<300).contains(stream.response.statusCode) else {stream.cancel();throw KajiAPIError.status(code:stream.response.statusCode,body:Data())}
+        guard stream.response.value(forHTTPHeaderField:"Content-Type")?.split(separator:";",maxSplits:1).first?.trimmingCharacters(in:.whitespaces).lowercased()=="text/event-stream" else {stream.cancel();throw KajiStreamingError.invalidContentType}
+        return stream
+    }
+    internal func encode<T:"#)
 }
 
 fn render_model_for_api(api: &Api, schema: &Schema) -> String {
@@ -529,10 +582,15 @@ fn render_operations(api: &Api) -> String {
 fn render_operation(operation: &Operation, indent: &str) -> String {
     let name = function_name(&operation.id);
     let parameters = operation_parameters(operation);
-    let response = operation
-        .success_schema()
-        .map(|schema| swift_type(schema, false))
-        .unwrap_or_else(|| "Void".to_owned());
+    let sse = operation_is_sse(operation);
+    let response = if sse {
+        "KajiByteStream".to_owned()
+    } else {
+        operation
+            .success_schema()
+            .map(|schema| swift_type(schema, false))
+            .unwrap_or_else(|| "Void".to_owned())
+    };
     let mut output = String::new();
     let _ = write!(output, "{indent}func {name}(");
     for (index, parameter) in parameters.iter().enumerate() {
@@ -558,7 +616,16 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
             &format!("\\({value}Path)"),
         );
     }
-    let request_binding = if operation.request_body.is_some()
+    let url_pagination = operation
+        .annotations
+        .get("x-kaji-pagination")
+        .or_else(|| operation.annotations.get("x-speakeasy-pagination"))
+        .and_then(|value| value.get("type"))
+        .and_then(serde_json::Value::as_str)
+        == Some("url");
+    let request_binding = if sse
+        || url_pagination
+        || operation.request_body.is_some()
         || operation
             .parameters
             .iter()
@@ -681,7 +748,12 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
     let retry_header = kaji_core::idempotency::resolved(operation)
         .map(|p| format!("{:?}", p.header))
         .unwrap_or_else(|| "nil".into());
-    if response == "Void" {
+    if sse {
+        let _ = writeln!(
+            output,
+            "{indent}    request.setValue(\"text/event-stream\", forHTTPHeaderField: \"Accept\")\n{indent}    return try await streamEvents(request)"
+        );
+    } else if response == "Void" {
         let _ = writeln!(
             output,
             "{indent}    try await sendVoid(request, idempotencyHeader: {retry_header})"
@@ -693,6 +765,63 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
         );
     }
     let _ = writeln!(output, "{indent}}}\n");
+    if sse {
+        output = output.replace(
+            ") async throws -> KajiByteStream {",
+            ") -> KajiEventSequence {\n        KajiEventSequence { [self] in",
+        );
+        let end = output.rfind(&format!("{indent}}}")).unwrap();
+        output.insert_str(end, &format!("{indent}    }}\n"));
+    }
+    if url_pagination {
+        let original = output.clone();
+        let signature_end = original.find(") async throws").unwrap();
+        let mut helper = original.clone();
+        helper.insert_str(
+            signature_end,
+            &format!(
+                "{}_kajiURL: URL?",
+                if parameters.is_empty() { "" } else { ", " }
+            ),
+        );
+        helper = helper.replacen(
+            &format!("func {name}("),
+            &format!("internal func {name}KajiURL("),
+            1,
+        );
+        let brace = helper.find(" {\n").unwrap() + 3;
+        helper.insert_str(
+            brace,
+            &format!("{indent}    let _kajiValidatedURL = try kajiContinuationURL(_kajiURL)\n"),
+        );
+        let send = helper
+            .rfind(&format!("{indent}    return try await send"))
+            .or_else(|| helper.rfind(&format!("{indent}    try await send")))
+            .unwrap();
+        helper.insert_str(
+            send,
+            &format!(
+                "{indent}    if let _kajiValidatedURL {{ request.url = _kajiValidatedURL }}\n"
+            ),
+        );
+        let args = parameters
+            .iter()
+            .map(|parameter| {
+                let label = parameter.signature.split(':').next().unwrap();
+                format!("{label}: {label}")
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        let args = if args.is_empty() {
+            String::new()
+        } else {
+            format!("{args}, ")
+        };
+        output = format!(
+            "{} {{\n{indent}    return try await {name}KajiURL({args}_kajiURL: nil)\n{indent}}}\n\n{helper}",
+            &original[..signature_end + format!(") async throws -> {response}").len()]
+        );
+    }
     output
 }
 
@@ -761,10 +890,15 @@ fn render_resource(api: &Api, resource: &str, operations: &[&Operation]) -> Stri
     for operation in operations {
         let name = function_name(&operation.id);
         let parameters = operation_parameters(operation);
-        let response = operation
-            .success_schema()
-            .map(|schema| swift_type(schema, false))
-            .unwrap_or_else(|| "Void".to_owned());
+        let sse = operation_is_sse(operation);
+        let response = if sse {
+            "KajiEventSequence".to_owned()
+        } else {
+            operation
+                .success_schema()
+                .map(|schema| swift_type(schema, false))
+                .unwrap_or_else(|| "Void".to_owned())
+        };
         let _ = write!(output, "\n    public func {name}(");
         for (index, parameter) in parameters.iter().enumerate() {
             if index > 0 {
@@ -772,7 +906,8 @@ fn render_resource(api: &Api, resource: &str, operations: &[&Operation]) -> Stri
             }
             output.push_str(&parameter.signature);
         }
-        let _ = writeln!(output, ") async throws -> {response} {{");
+        let effect = if sse { "" } else { " async throws" };
+        let _ = writeln!(output, "){effect} -> {response} {{");
         let call_args = parameters
             .iter()
             .map(|parameter| {
@@ -781,7 +916,9 @@ fn render_resource(api: &Api, resource: &str, operations: &[&Operation]) -> Stri
             })
             .collect::<Vec<_>>()
             .join(", ");
-        if response == "Void" {
+        if sse {
+            let _ = writeln!(output, "        return client.{name}({call_args})");
+        } else if response == "Void" {
             let _ = writeln!(output, "        try await client.{name}({call_args})");
         } else {
             let _ = writeln!(
@@ -800,7 +937,8 @@ fn render_resource(api: &Api, resource: &str, operations: &[&Operation]) -> Stri
             &pages
                 .replace("    func ", "    public func ")
                 .replace("self.", "client.")
-                .replace("{ current in", "{ [client] current in"),
+                .replace("{ current in", "{ [client] current in")
+                .replace("{ nextURL in", "{ [client] nextURL in"),
         );
     }
     output.push_str("}\n");
@@ -1164,7 +1302,7 @@ precondition(value["optional"] == nil)
     }
 
     #[test]
-    fn unsupported_streaming_and_multipart_fail_before_emission() {
+    fn streaming_is_native_and_multipart_fails_before_emission() {
         let mut api = Api::default();
         let mut operation = Operation {
             id: "events".into(),
@@ -1179,12 +1317,7 @@ precondition(value["optional"] == nil)
             }],
         });
         api.operations.push(operation);
-        assert!(
-            render_sdk(&api, "swift", None, SdkClientStyle::Flat)
-                .unwrap_err()
-                .to_string()
-                .contains("requires SSE streaming")
-        );
+        assert!(render_sdk(&api, "swift", None, SdkClientStyle::Flat).is_ok());
         api.operations[0].responses.clear();
         api.operations[0].request_body = Some(kaji_core::OperationRequestBody {
             required: true,
@@ -1424,3 +1557,5 @@ struct Terminal: KajiTransport {
         );
     }
 }
+
+mod streaming;

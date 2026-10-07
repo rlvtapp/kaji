@@ -1,0 +1,17 @@
+using System;
+using System.Net.Http;
+using System.Net.Http.Headers;
+namespace __NAMESPACE__;
+/// <summary>Buffered raw bytes and explicit file metadata; data is copied.</summary>
+public sealed class MultipartFile {
+ private readonly byte[] _data;
+ public byte[] Data => (byte[])_data.Clone();
+ public string FileName {get;}
+ public string ContentType {get;}
+ public MultipartFile(byte[] data,string fileName="blob",string contentType="application/octet-stream") {
+  if(string.IsNullOrEmpty(fileName)||!System.Linq.Enumerable.All(fileName,c=>c>=32&&c<=126&&c!=34&&c!=92))throw new ArgumentException("Invalid multipart filename");
+  if(!System.Text.RegularExpressions.Regex.IsMatch(contentType,"\\A[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+\\z"))throw new ArgumentException("Invalid multipart media type");
+  _data=(byte[])(data??throw new ArgumentNullException(nameof(data))).Clone();FileName=fileName;ContentType=contentType;
+ }
+ internal HttpContent ToContent(){var content=new ByteArrayContent(Data);content.Headers.ContentType=new MediaTypeHeaderValue(ContentType);return content;}
+}

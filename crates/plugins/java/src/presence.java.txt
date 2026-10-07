@@ -1,0 +1,26 @@
+package __PACKAGE__.model;
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.deser.ContextualDeserializer;
+import com.fasterxml.jackson.databind.annotation.*;
+import com.fasterxml.jackson.databind.ser.std.StdSerializer;
+import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
+import java.io.IOException;
+/** An optional field: null wrapper means omitted; of(null) means explicit JSON null. */
+@JsonSerialize(using=Presence.Serializer.class)
+@JsonDeserialize(using=Presence.Deserializer.class)
+public record Presence<T>(T value) {
+ public static <T> Presence<T> of(T value){return new Presence<>(value);}
+ public static final class Serializer extends StdSerializer<Presence<?>> {
+  @SuppressWarnings("unchecked") public Serializer(){super((Class<Presence<?>>)(Class<?>)Presence.class);}
+  @Override public void serialize(Presence<?> value,JsonGenerator writer,SerializerProvider provider)throws IOException {provider.defaultSerializeValue(value.value(),writer);}
+ }
+ public static final class Deserializer extends StdDeserializer<Presence<?>> implements ContextualDeserializer {
+  private final JavaType valueType;
+  public Deserializer(){this(null);}private Deserializer(JavaType type){super(Presence.class);valueType=type;}
+  @Override public JsonDeserializer<?> createContextual(DeserializationContext context,BeanProperty property){JavaType type=property==null?context.getContextualType():property.getType();return new Deserializer(type==null?context.constructType(Object.class):type.containedTypeOrUnknown(0));}
+  @Override public Presence<?> deserialize(JsonParser parser,DeserializationContext context)throws IOException{return Presence.of(context.readValue(parser,valueType));}
+  @Override public Presence<?> getNullValue(DeserializationContext context){return Presence.of(null);}
+  @Override public Presence<?> getAbsentValue(DeserializationContext context){return null;}
+ }
+}

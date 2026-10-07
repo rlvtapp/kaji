@@ -8,23 +8,24 @@ pub(super) fn render(api: &Api) -> Result<String> {
             .annotations
             .get("x-kaji-pagination")
             .or_else(|| operation.annotations.get("x-speakeasy-pagination"));
-        if extension
+        let kind = extension
             .and_then(|value| value.get("type"))
-            .and_then(serde_json::Value::as_str)
-            != Some("page")
-        {
+            .and_then(serde_json::Value::as_str);
+        if !matches!(kind, Some("page" | "offsetLimit" | "url")) {
             continue;
         }
         let Some(plan) = normalize_pagination(api, operation, None)? else {
             continue;
         };
-        if plan.kind != PaginationKind::Page {
+        if plan.kind == PaginationKind::Url {
+            render_url(&mut output, operation, &plan)?;
             continue;
         }
+        let offset = plan.kind == PaginationKind::OffsetLimit;
         let page = plan
             .inputs
             .iter()
-            .find(|input| input.role == "page")
+            .find(|input| input.role == if offset { "offset" } else { "page" })
             .unwrap();
         let limit = plan.inputs.iter().find(|input| input.role == "limit");
         // Body bindings need immutable model copying, which this native API does not provide.
@@ -44,37 +45,24 @@ pub(super) fn render(api: &Api) -> Result<String> {
                 .iter()
                 .find(|parameter| parameter.name == input.name)
                 .unwrap();
-            let mut value = parameter.schema.as_ref().unwrap();
-            for _ in 0..128 {
-                if value.nullable || value.optional || !value.enum_values.is_empty() {
-                    bail!(
-                        "Swift page controls must be nonnullable integer scalars: {}",
-                        input.name
-                    );
-                }
-                match &value.kind {
-                    SchemaKind::Reference { reference } => {
-                        let name = reference.rsplit('/').next().unwrap();
-                        value = &api
-                            .schemas
-                            .iter()
-                            .find(|schema| schema.name == name)
-                            .unwrap()
-                            .value;
-                    }
-                    SchemaKind::Integer => break,
-                    _ => bail!(
-                        "Swift page controls must be integer scalars: {}",
-                        input.name
-                    ),
-                }
+            let value = parameter.schema.as_ref().unwrap();
+            if value.nullable
+                || value.optional
+                || value.nullish
+                || !value.enum_values.is_empty()
+                || !matches!(value.kind, SchemaKind::Integer)
+            {
+                bail!(
+                    "Swift page controls must be nonnullable inline integer scalars: {}",
+                    input.name
+                );
             }
         }
         let page_name = identifier(&page.name);
         let initial = if page.required {
             page_name.clone()
         } else {
-            format!("{page_name} ?? 1")
+            format!("{page_name} ?? {}", if offset { 0 } else { 1 })
         };
         let limit_expr = limit
             .map(|input| identifier(&input.name))
@@ -113,10 +101,65 @@ pub(super) fn render(api: &Api) -> Result<String> {
         let name = function_name(&operation.id);
         writeln!(
             output,
-            "    func {name}Pages({signature}) -> KajiPageSequence<{response}> {{\n        KajiPageSequence(page: {initial}, limit: {limit_expr}) {{ current in\n            let response = try await self.{name}({args})\n            return (response, try kajiPageCount(response, [{selectors}]))\n        }}\n    }}"
+            "    func {name}Pages({signature}) -> KajiPageSequence<{response}> {{\n        KajiPageSequence(page: {initial}, limit: {limit_expr}, offset: {offset}) {{ current in\n            let response = try await self.{name}({args})\n            return (response, try kajiPageCount(response, [{selectors}]))\n        }}\n    }}"
         )?;
     }
     Ok(output)
+}
+
+fn render_url(
+    output: &mut String,
+    operation: &Operation,
+    plan: &kaji_core::pagination::PaginationPlan,
+) -> Result<()> {
+    anyhow::ensure!(
+        operation
+            .responses
+            .iter()
+            .filter(|response| response.status.starts_with('2'))
+            .flat_map(|response| &response.media_types)
+            .all(|media| media.content_type == "application/json"
+                || media.content_type.ends_with("+json")),
+        "Swift URL pagination requires buffered JSON responses"
+    );
+    let parameters = operation_parameters(operation);
+    let signature = parameters
+        .iter()
+        .map(|parameter| parameter.signature.clone())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let args = parameters
+        .iter()
+        .map(|parameter| {
+            let name = parameter.signature.split(':').next().unwrap();
+            format!("{name}: {name}")
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    let args = if args.is_empty() {
+        String::new()
+    } else {
+        format!("{args}, ")
+    };
+    let response = swift_type(operation.success_schema().unwrap(), false);
+    let name = function_name(&operation.id);
+    let selectors = plan
+        .continuation
+        .as_ref()
+        .unwrap()
+        .segments
+        .iter()
+        .map(|segment| match segment {
+            SelectorSegment::Field(field) => format!(".field({})", swift_literal(field)),
+            SelectorSegment::Index(index) => format!(".index({index})"),
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    writeln!(
+        output,
+        "    func {name}Pages({signature}) -> KajiURLSequence<{response}> {{\n        KajiURLSequence {{ nextURL in\n            let response = try await self.{name}KajiURL({args}_kajiURL: nextURL)\n            return (response, try kajiNextURL(response, [{selectors}]))\n        }}\n    }}"
+    )?;
+    Ok(())
 }
 
 pub(super) fn swift_literal(value: &str) -> String {
@@ -137,6 +180,121 @@ pub(super) fn swift_literal(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    #[ignore = "Requires Swift6; real generated offset/URL operations and fake native transport"]
+    fn native_offset_and_url_pagination_preserves_auth_and_laziness() {
+        use super::*;
+        use kaji_core::{
+            AdditionalProperties, Field, HttpMethod, OperationParameter, OperationResponse, Schema,
+        };
+        let integer = |name: &str| OperationParameter {
+            name: name.into(),
+            location: "query".into(),
+            required: false,
+            schema: Some(SchemaValue::new(SchemaKind::Integer)),
+            description: None,
+            annotations: Default::default(),
+        };
+        let mut offset = Operation {
+            id: "listItems".into(),
+            method: HttpMethod::Get,
+            path: "/items".into(),
+            parameters: vec![integer("offset"), integer("limit")],
+            responses: vec![OperationResponse::json(
+                "200",
+                SchemaValue::new(SchemaKind::Array {
+                    items: Box::new(SchemaValue::new(SchemaKind::String)),
+                }),
+            )],
+            ..Default::default()
+        };
+        offset.annotations.insert("x-kaji-pagination".into(),serde_json::json!({"type":"offsetLimit","inputs":[{"name":"offset","type":"offset"},{"name":"limit","type":"limit"}],"outputs":{"results":"$"}}));
+        let mut url = Operation {
+            id: "listLinks".into(),
+            method: HttpMethod::Get,
+            path: "/links".into(),
+            parameters: vec![OperationParameter {
+                name: "tenant".into(),
+                location: "query".into(),
+                required: false,
+                schema: Some(SchemaValue::new(SchemaKind::String)),
+                description: None,
+                annotations: Default::default(),
+            }],
+            responses: vec![OperationResponse::json(
+                "200",
+                SchemaValue::reference("#/components/schemas/Page"),
+            )],
+            ..Default::default()
+        };
+        url.annotations.insert(
+            "x-kaji-pagination".into(),
+            serde_json::json!({"type":"url","outputs":{"nextUrl":"/next"}}),
+        );
+        let api = Api {
+            name: "Pages".into(),
+            version: "1.0.0".into(),
+            operations: vec![offset, url],
+            schemas: vec![Schema::new(
+                "Page",
+                SchemaValue::new(SchemaKind::Object {
+                    fields: vec![Field {
+                        name: "next".into(),
+                        value: SchemaValue::new(SchemaKind::String),
+                        required: false,
+                        annotations: Default::default(),
+                    }],
+                    additional_properties: AdditionalProperties::Forbidden,
+                }),
+            )],
+            ..Default::default()
+        };
+        let root = tempfile::tempdir().unwrap();
+        render_sdk(&api, "sdk", Some("Pages"), SdkClientStyle::Namespaced)
+            .unwrap()
+            .write_to(root.path())
+            .unwrap();
+        let main = root.path().join("main.swift");
+        std::fs::write(&main, include_str!("pagination_probe.swift.txt")).unwrap();
+        fn sources(path: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+            for entry in std::fs::read_dir(path).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    sources(&path, out)
+                } else if path.extension().is_some_and(|ext| ext == "swift") {
+                    out.push(path)
+                }
+            }
+        }
+        let mut files = vec![];
+        sources(&root.path().join("sdk/Sources"), &mut files);
+        let output = std::process::Command::new("swiftc")
+            .args([
+                "-parse-as-library",
+                "-swift-version",
+                "6",
+                "-warnings-as-errors",
+                "-module-cache-path",
+            ])
+            .arg(root.path().join("cache"))
+            .args(files)
+            .arg(main)
+            .arg("-o")
+            .arg(root.path().join("probe"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            std::process::Command::new(root.path().join("probe"))
+                .status()
+                .unwrap()
+                .success()
+        );
+    }
     #[test]
     #[ignore = "requires Swift toolchain"]
     fn native_page_sequence_is_lazy_and_bounded() {

@@ -333,8 +333,14 @@ let cancelled=Task {try await slow.deleteThing()};try await Task.sleep(nanosecon
         let mut command = std::process::Command::new("swiftc");
         command
             .arg("-parse-as-library")
-            .env("CLANG_MODULE_CACHE_PATH", "/private/tmp/kaji-swift-cache")
-            .env("SWIFT_MODULECACHE_PATH", "/private/tmp/kaji-swift-cache");
+            .env(
+                "CLANG_MODULE_CACHE_PATH",
+                std::env::temp_dir().join("kaji-swift-cache"),
+            )
+            .env(
+                "SWIFT_MODULECACHE_PATH",
+                std::env::temp_dir().join("kaji-swift-cache"),
+            );
         for (path, _) in tree.iter() {
             if path.to_string_lossy().ends_with(".swift") && !path.ends_with("Package.swift") {
                 command.arg(dir.path().join(path));

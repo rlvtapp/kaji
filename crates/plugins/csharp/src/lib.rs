@@ -15,8 +15,10 @@ use kaji_core::{
 
 #[cfg(test)]
 mod model_compat_tests;
+mod multipart;
 mod operation_samples;
 mod operation_tests;
+mod presence;
 pub use operation_tests::{OperationTests, operation_tests};
 pub use package::NativeSdk;
 mod webhooks;
@@ -64,21 +66,7 @@ fn render_sdk_with_policy(
     client_style: SdkClientStyle,
     open_enums: bool,
 ) -> Result<GeneratedTree> {
-    for operation in &api.operations {
-        if operation.request_body.as_ref().is_some_and(|body| {
-            body.media_types.iter().any(|media| {
-                media
-                    .content_type
-                    .to_ascii_lowercase()
-                    .starts_with("multipart/")
-            })
-        }) {
-            anyhow::bail!(
-                "csharp operation '{}' requires multipart encoding, which the native SDK does not yet support",
-                operation.id
-            );
-        }
-    }
+    multipart::validate(api)?;
 
     for schema in &api.schemas {
         if let SchemaKind::Object { fields, .. } = &schema.value.kind {
@@ -107,7 +95,7 @@ fn render_sdk_with_policy(
             extension
                 .and_then(|extension| extension.get("type"))
                 .and_then(serde_json::Value::as_str),
-            Some("page" | "offsetLimit")
+            Some("page" | "offsetLimit" | "url")
         ) {
             pagination::validate(api, operation)?;
         }
@@ -124,6 +112,7 @@ fn render_sdk_with_policy(
         output_path(&root, &project),
         render_project(api, &package),
     )?)?;
+    multipart::emit(api, &root, &namespace, &mut tree)?;
     for (index, schema) in api.schemas.iter().enumerate() {
         tree.insert(GeneratedFile::new(
             output_path(
@@ -481,6 +470,7 @@ fn render_client(api: &Api, namespace: &str, client_style: SdkClientStyle) -> St
 }
 
 fn render_operation(output: &mut String, operation: &Operation) {
+    let operation_start = output.len();
     let name = pascal_case(&operation.id);
     let response = operation_response_surface(operation);
     let mut required_parameters = Vec::new();
@@ -593,8 +583,14 @@ fn render_operation(output: &mut String, operation: &Operation) {
             policy.header
         );
     }
+    if multipart::selected(operation) && operation.request_body.as_ref().is_some_and(|b| b.required)
+    {
+        output.push_str("        ArgumentNullException.ThrowIfNull(body);\n");
+    }
     if body.is_some() {
-        if binary_body {
+        if multipart::selected(operation) {
+            output.push_str("        if (body is not null) request.Content = body.ToContent();\n");
+        } else if binary_body {
             output.push_str("        if (body is not null)\n        {\n            request.Content = new ByteArrayContent(body);\n            request.Content.Headers.ContentType = new MediaTypeHeaderValue(\"application/octet-stream\");\n        }\n");
         } else {
             output.push_str("        if (body is not null)\n        {\n            request.Content = JsonContent.Create(body, options: JsonOptions);\n        }\n");
@@ -632,6 +628,53 @@ fn render_operation(output: &mut String, operation: &Operation) {
         );
     }
     output.push_str("    }\n\n");
+    if operation
+        .annotations
+        .get("x-kaji-pagination")
+        .or_else(|| operation.annotations.get("x-speakeasy-pagination"))
+        .and_then(|value| value.get("type"))
+        .and_then(serde_json::Value::as_str)
+        == Some("url")
+        && matches!(
+            operation_response_surface(operation),
+            DotnetResponseSurface::Json(_)
+        )
+    {
+        let original = output[operation_start..].to_owned();
+        let mut helper = original.clone();
+        let end = helper.find("\n    {").unwrap();
+        helper.insert_str(end - 1, ", string? kajiURL = null");
+        helper = helper.replacen(
+            &format!("public async {return_type} {name}Async("),
+            &format!("private async {return_type} {name}KajiURLAsync("),
+            1,
+        );
+        let request = helper.find("        var request = CreateRequest").unwrap();
+        helper.insert_str(request,&format!("        var paginationURL = kajiURL is null ? null : {name}KajiURLTarget(kajiURL);\n"));
+        let lineend = helper[request..].find(";\n").unwrap() + request + 2;
+        // The inserted validation line comes first; locate the actual request line afterwards.
+        let request = helper[lineend..]
+            .find("        var request = CreateRequest")
+            .unwrap()
+            + lineend;
+        let lineend = helper[request..].find(";\n").unwrap() + request + 2;
+        helper.insert_str(
+            lineend,
+            "        if (paginationURL is not null) request.RequestUri = paginationURL;\n",
+        );
+        let args = facade_arguments(operation).join(", ");
+        let args = if args.is_empty() {
+            String::new()
+        } else {
+            format!("{args}, ")
+        };
+        output.truncate(operation_start);
+        let header = &original[..original.find("\n    {").unwrap()];
+        let _ = writeln!(
+            output,
+            "{header}\n    {{\n        return await {name}KajiURLAsync({args}null).ConfigureAwait(false);\n    }}\n{helper}"
+        );
+    }
     if let Some(next_cursor_path) = dotnet_cursor_pagination(operation) {
         render_cursor_pager(output, operation, &next_cursor_path);
     }
@@ -985,6 +1028,9 @@ fn is_sse_media(content_type: &str) -> bool {
 }
 
 fn request_body_is_binary(operation: &Operation) -> bool {
+    if multipart::selected(operation) {
+        return false;
+    }
     operation.request_body.as_ref().is_some_and(|body| {
         body.media_types
             .iter()
@@ -1035,6 +1081,9 @@ fn operation_response_surface(operation: &Operation) -> DotnetResponseSurface {
 }
 
 fn operation_request_type(operation: &Operation) -> Option<String> {
+    if multipart::selected(operation) {
+        return Some(format!("{}MultipartBody", pascal_case(&operation.id)));
+    }
     operation
         .request_body
         .as_ref()
@@ -1790,7 +1839,7 @@ mod tests {
             render_test_sdk(&source, "sdk/dotnet", None)
                 .unwrap_err()
                 .to_string()
-                .contains("requires multipart encoding")
+                .contains("multipart operation")
         );
     }
 

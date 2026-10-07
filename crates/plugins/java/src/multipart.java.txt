@@ -1,0 +1,29 @@
+package __PACKAGE__;
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.UUID;
+/** Buffered multipart bodies: scalars use UTF-8, files retain original bytes. */
+public interface MultipartBody {
+ Encoded encode();
+ record Encoded(String contentType, byte[] bytes) {}
+ record FilePart(String filename,String contentType,byte[] bytes) {
+  public FilePart {filename=headerParameter(filename);if(contentType==null||!contentType.matches("[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+"))throw new IllegalArgumentException("invalid multipart file media type");bytes=java.util.Objects.requireNonNull(bytes,"multipart bytes").clone();}
+  @Override public byte[] bytes(){return bytes.clone();}
+  public static FilePart bytes(byte[] bytes){return new FilePart("blob","application/octet-stream",bytes);}
+ }
+ record Part(String name,String value,FilePart file) {}
+ static String headerParameter(String value){if(value==null||value.isEmpty()||!value.chars().allMatch(c->c>=32&&c<=126&&c!=34&&c!=92))throw new IllegalArgumentException("invalid multipart header parameter");return value;}
+ static String quote(String value){return headerParameter(value).replace("\\","\\\\").replace("\"","\\\"");}
+ static Encoded encodeParts(List<Part> parts){
+  var boundary="kaji-"+UUID.randomUUID();var output=new ByteArrayOutputStream();
+  for(var part:parts){
+   var header="--"+boundary+"\r\nContent-Disposition: form-data; name=\""+quote(part.name())+"\"";
+   byte[] data;
+   if(part.file()!=null){header+="; filename=\""+quote(part.file().filename())+"\"\r\nContent-Type: "+part.file().contentType();data=part.file().bytes();}
+   else{header+="\r\nContent-Type: text/plain; charset=utf-8";data=part.value().getBytes(StandardCharsets.UTF_8);}
+   output.writeBytes((header+"\r\n\r\n").getBytes(StandardCharsets.UTF_8));output.writeBytes(data);output.writeBytes("\r\n".getBytes(StandardCharsets.US_ASCII));
+  }
+  output.writeBytes(("--"+boundary+"--\r\n").getBytes(StandardCharsets.US_ASCII));return new Encoded("multipart/form-data; boundary="+boundary,output.toByteArray());
+ }
+}

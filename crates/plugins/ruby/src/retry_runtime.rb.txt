@@ -32,6 +32,9 @@
       method = request.method.upcase
       key = request[idempotency_header || 'Idempotency-Key']
       replay_safe = %w[GET HEAD OPTIONS PUT DELETE].include?(method) || (%w[POST PATCH].include?(method) && key && !key.strip.empty?)
+      token = @token_provider && @token_provider.token(cancelled: @cancelled)
+      request["Authorization"] = "Bearer #{token}" if token
+      refreshed = false
       attempt = 0
       loop do
         check_cancellation
@@ -41,6 +44,13 @@
         rescue IOError, EOFError, SystemCallError, Timeout::Error
           raise unless replay_safe && attempt < @max_attempts
           retry_pause([@retry_max_delay, @retry_base_delay * (2.0 ** [attempt - 1, 20].min)].min)
+          next
+        end
+        if response.code.to_i == 401 && @token_provider && replay_safe && !refreshed
+          refreshed = true
+          token = @token_provider.token(rejected_token: token, cancelled: @cancelled)
+          request["Authorization"] = "Bearer #{token}"
+          attempt -= 1
           next
         end
         return response unless replay_safe && attempt < @max_attempts && [408, 429, 500, 502, 503, 504].include?(response.code.to_i)

@@ -7,8 +7,10 @@
 
 #[cfg(test)]
 mod model_compat_tests;
+mod multipart;
 mod operation_samples;
 mod operation_tests;
+mod presence;
 pub use operation_tests::{OperationTests, operation_tests};
 pub use package::NativeSdk;
 mod webhooks;
@@ -63,21 +65,7 @@ fn render_sdk_with_policy(
     style: SdkClientStyle,
     open_enums: bool,
 ) -> Result<GeneratedTree> {
-    for operation in &api.operations {
-        if operation.request_body.as_ref().is_some_and(|body| {
-            body.media_types.iter().any(|media| {
-                media
-                    .content_type
-                    .to_ascii_lowercase()
-                    .starts_with("multipart/")
-            })
-        }) {
-            anyhow::bail!(
-                "java operation '{}' requires multipart encoding, which the native SDK does not yet support",
-                operation.id
-            );
-        }
-    }
+    multipart::validate(api)?;
 
     for schema in &api.schemas {
         if let SchemaKind::Object { fields, .. } = &schema.value.kind {
@@ -177,6 +165,7 @@ fn render_sdk_with_policy(
         &format!("src/main/java/{package_path}/ClientHooks.java"),
         client_hooks(&package),
     )?;
+    multipart::emit(api, &root, &package, &mut tree)?;
     for schema in &api.schemas {
         insert(
             &mut tree,
@@ -661,10 +650,15 @@ fn render_client_base(api: &Api, package: &str) -> String {
     output.truncate(output.len() - 2);
     output.push_str(sse_parser());
     output.push_str("}\n");
-    output.replace("    private ", "    protected ").replace(
+    let output = output.replace("    private ", "    protected ").replace(
         "protected record QueryParameter",
         "public record QueryParameter",
-    )
+    );
+    if api.operations.iter().any(multipart::selected) {
+        multipart::runtime(output)
+    } else {
+        output
+    }
 }
 
 fn sse_parser() -> &'static str {
@@ -785,7 +779,9 @@ fn render_operation(output: &mut String, operation: &Operation) {
         if let Some(schema) = body_schema {
             fields.push(format!(
                 "            {} body",
-                if binary_body {
+                if multipart::selected(operation) {
+                    format!("{}MultipartBody", type_name(&operation.id))
+                } else if binary_body {
                     "byte[]".to_owned()
                 } else {
                     java_type(schema)
@@ -820,6 +816,12 @@ fn render_operation(output: &mut String, operation: &Operation) {
     );
     if has_input {
         output.push_str("        Objects.requireNonNull(input, \"input\");\n");
+    }
+    if multipart::selected(operation) && operation.request_body.as_ref().is_some_and(|b| b.required)
+    {
+        output.push_str(
+            "        Objects.requireNonNull(input.body(), \"required multipart body\");\n",
+        );
     }
     let maps_declared_errors = !declared_error_responses(operation).is_empty()
         && !matches!(response, ResponseSurface::Sse);
@@ -2401,7 +2403,7 @@ mod tests {
             render_test_sdk(&source, "java", None)
                 .unwrap_err()
                 .to_string()
-                .contains("requires multipart encoding")
+                .contains("multipart operation")
         );
     }
 

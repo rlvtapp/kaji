@@ -69,12 +69,12 @@ public final class ModelsProbe {
  public static void main(String[] args)throws Exception {
   var mapper=new ObjectMapper();
   var count=mapper.readValue("42",Count.class);if(count.value()!=42L || !mapper.writeValueAsString(count).equals("42"))throw new AssertionError("scalar alias");
-  for(var wire:new String[]{"42","true","\\\"future\\\"","{\\\"unknown\\\":[1,null]}"}) {
+  for(var wire:new String[]{"42","true","\"future\"","{\"unknown\":[1,null]}"}) {
    var choice=mapper.readValue(wire,Choice.class);
    if(!mapper.readTree(mapper.writeValueAsString(choice)).equals(mapper.readTree(wire)))throw new AssertionError("union wire");
   }
-  var state=mapper.readValue("\\\"future\\\"",State.class);
-  if(!state.value().equals("future") || !mapper.writeValueAsString(state).equals("\\\"future\\\""))throw new AssertionError("unknown enum");
+  var state=mapper.readValue("\"future\"",State.class);
+  if(!state.value().equals("future") || !mapper.writeValueAsString(state).equals("\"future\""))throw new AssertionError("unknown enum");
  }
 }"#).unwrap();
     let result = std::process::Command::new("mvn")

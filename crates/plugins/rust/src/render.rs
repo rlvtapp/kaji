@@ -582,6 +582,31 @@ fn render_operation(operation: &Operation, config: &RenderOptions) -> String {
         )),
     }
     output.push_str("        }\n    }\n\n");
+    if matches!(pagination, Some(RustPagination::Url { .. })) {
+        let original = output.clone();
+        let end = original.find(" -> Result<").unwrap();
+        let mut helper = original.clone();
+        helper.insert_str(end - 1, ", kaji_url: Option<&str>");
+        helper = helper.replacen(
+            &format!("pub async fn {method_name}("),
+            &format!("async fn {method_name}_kaji_url("),
+            1,
+        );
+        helper=helper.replace("let request_url = format!(\"{}{}\", self.base_url, path);",&format!("let request_url = if let Some(url)=kaji_url {{ kaji_same_origin_url(&self.base_url,url).map_err({error}::Pagination)? }} else {{ format!(\"{{}}{{}}\",self.base_url,path) }};"));
+        helper = helper.replace(
+            "if !query.is_empty() {",
+            "if kaji_url.is_none() && !query.is_empty() {",
+        );
+        let args = if operation_has_parameters(operation) {
+            "input, "
+        } else {
+            ""
+        };
+        output = format!(
+            "{} {{\n        self.{method_name}_kaji_url({args}None).await\n    }}\n\n{helper}",
+            &original[..original.find(" {\n").unwrap()]
+        );
+    }
     if let Some(pagination) = pagination {
         output.push_str(&render_rust_pagination_iterator(
             &method_name,
@@ -613,6 +638,9 @@ enum RequestMediaKind<'a> {
 /// path escaping, header serialization, auth, retries, and hooks stay intact.
 #[derive(Clone, Debug)]
 enum RustPagination {
+    Url {
+        next_url_path: String,
+    },
     Page {
         field: RustPaginationField,
         limit: Option<RustPaginationField>,
@@ -658,9 +686,23 @@ fn rust_pagination(operation: &Operation) -> Option<RustPagination> {
         .get("x-kaji-pagination")
         .or_else(|| operation.annotations.get("x-speakeasy-pagination"))?
         .as_object()?;
-    let inputs = extension.get("inputs")?.as_array()?;
+    let empty_inputs = Vec::new();
+    let inputs = extension
+        .get("inputs")
+        .and_then(Value::as_array)
+        .unwrap_or(&empty_inputs);
     let outputs = extension.get("outputs")?.as_object()?;
     match extension.get("type").and_then(Value::as_str) {
+        Some("url") => {
+            if operation.request_body.is_some() {
+                return None;
+            }
+            let path = outputs.get("nextUrl")?.as_str()?;
+            kaji_core::pagination::Selector::parse(path).ok()?;
+            Some(RustPagination::Url {
+                next_url_path: path.to_owned(),
+            })
+        }
         Some("cursor") => {
             let mut scalar_operation = operation.clone();
             // This catalog-independent projection validates scalar cursor inputs
@@ -815,6 +857,14 @@ fn rust_pagination_query_field(
 
 fn render_pagination_runtime() -> &'static str {
     r#"
+#[allow(dead_code)]
+fn kaji_same_origin_url(base:&str,next:&str)->Result<String,serde_json::Error> {
+    let base=reqwest::Url::parse(base).map_err(|_|kaji_pagination_error("invalid API origin"))?;
+    let next=reqwest::Url::parse(next).map_err(|_|kaji_pagination_error("invalid absolute continuation URL"))?;
+    if !matches!(next.scheme(),"http"|"https") || next.scheme()!=base.scheme() || next.host_str()!=base.host_str() || next.port_or_known_default()!=base.port_or_known_default() || !next.username().is_empty() || next.password().is_some() || next.fragment().is_some() {return Err(kaji_pagination_error("unsafe continuation URL"))}
+    Ok(next.to_string())
+}
+
 /// Read declared JSONPath fields/indices or RFC 6901 pointers without evaluating code.
 fn kaji_json_path<'a>(value: &'a serde_json::Value, path: &str) -> Option<&'a serde_json::Value> {
     if path.starts_with('/') {
@@ -859,6 +909,9 @@ fn render_rust_pagination_iterator(
     operation: &Operation,
     pagination: &RustPagination,
 ) -> String {
+    if let RustPagination::Url { next_url_path } = pagination {
+        return render_rust_url_iterator(method_name, operation, next_url_path);
+    }
     let request = operation_request_name(operation);
     let response = operation_response_type(operation);
     let error = operation_error_name(operation);
@@ -866,6 +919,7 @@ fn render_rust_pagination_iterator(
     let mut initial = String::new();
     let mut before = String::new();
     let (state, next) = match pagination {
+        RustPagination::Url { .. } => unreachable!(),
         RustPagination::Page {
             field,
             limit,
@@ -965,6 +1019,38 @@ fn render_rust_pagination_iterator(
     };
     format!(
         "    /// Lazily fetches every page using this operation's declared pagination contract.\n    pub fn {pages_method}(&self, input: {request}) -> impl futures_util::Stream<Item = Result<{response}, {error}>> {{\n        let client = self.clone();\n{initial}        futures_util::stream::try_unfold((client, input, {state}, 0usize), |(client, mut input, has_next, page_count)| async move {{\n            if !has_next {{ return Ok(None); }}\n            if page_count >= 10000 {{ return Err({error}::Pagination(kaji_pagination_error(\"pagination exceeded 10000 pages\"))); }}\n            {before}            let response = client.{method_name}(input.clone()).await?;\n{next}\n        }})\n    }}\n\n"
+    )
+}
+
+fn render_rust_url_iterator(method: &str, operation: &Operation, path: &str) -> String {
+    let request = operation_request_name(operation);
+    let response = operation_response_type(operation);
+    let error = operation_error_name(operation);
+    let (parameters, input, args) = if operation_has_parameters(operation) {
+        (format!(", input: {request}"), "input", "input.clone(), ")
+    } else {
+        (String::new(), "()", "")
+    };
+    format!(
+        r#"    /// Lazy absolute same-origin next-URL pages. Relative URLs are rejected.
+    pub fn {method}_pages(&self{parameters}) -> impl futures_util::Stream<Item=Result<{response},{error}>> {{
+        let client=self.clone();
+        futures_util::stream::try_unfold((client,{input},None::<String>,true,std::collections::HashSet::<String>::new(),0usize),|(client,input,url,has_next,mut seen,count)|async move {{
+            if !has_next {{return Ok(None)}}
+            if count>=10000 {{return Err({error}::Pagination(kaji_pagination_error("pagination exceeded 10000 pages")))}}
+            if let Some(url)=&url {{if !seen.insert(url.clone()) {{return Err({error}::Pagination(kaji_pagination_error("repeated continuation URL")))}}}}
+            let response=client.{method}_kaji_url({args}url.as_deref()).await?;
+            let value=serde_json::to_value(&response).map_err({error}::Pagination)?;
+            let next=match kaji_json_path(&value,{path:?}) {{
+                None|Some(serde_json::Value::Null)=>None,
+                Some(serde_json::Value::String(next)) if next.is_empty()=>None,
+                Some(serde_json::Value::String(next))=>Some(next.clone()),
+                _=>return Err({error}::Pagination(kaji_pagination_error("continuation URL must be a string"))),
+            }};
+            let has_next=next.is_some();Ok(Some((response,(client,input,next,has_next,seen,count+1))))
+        }})
+    }}
+"#
     )
 }
 
@@ -1151,7 +1237,7 @@ fn render_error_response(operation: &Operation, error: &str) -> String {
         let variant = error_variant_name(&response.status);
         let _ = writeln!(
             output,
-            "                {status} => match serde_json::from_slice::<{body_type}>(&body) {{ Ok(body) => {error}::{variant} {{ body, response: ApiResponse {{ status, headers, body: body.clone() }} }}, Err(_) => {error}::Unexpected(ApiResponse {{ status, headers, body }}) }},"
+            "                {status} => match serde_json::from_slice::<{body_type}>(&body) {{ Ok(decoded_body) => {error}::{variant} {{ body: decoded_body, response: ApiResponse {{ status, headers, body }} }}, Err(_) => {error}::Unexpected(ApiResponse {{ status, headers, body }}) }},"
         );
     }
     let default_body_type = declared_error_responses(operation)
@@ -1160,7 +1246,7 @@ fn render_error_response(operation: &Operation, error: &str) -> String {
     if let Some(body_type) = default_body_type {
         let _ = writeln!(
             output,
-            "                _ => match serde_json::from_slice::<{body_type}>(&body) {{ Ok(body) => {error}::Default {{ body, response: ApiResponse {{ status, headers, body: body.clone() }} }}, Err(_) => {error}::Unexpected(ApiResponse {{ status, headers, body }}) }},"
+            "                _ => match serde_json::from_slice::<{body_type}>(&body) {{ Ok(decoded_body) => {error}::Default {{ body: decoded_body, response: ApiResponse {{ status, headers, body }} }}, Err(_) => {error}::Unexpected(ApiResponse {{ status, headers, body }}) }},"
         );
     } else {
         output.push_str(&format!(
@@ -1324,6 +1410,16 @@ fn render_resource_pagination_operation(
     operation: &Operation,
     options: &RenderOptions,
 ) -> String {
+    if matches!(rust_pagination(operation), Some(RustPagination::Url { .. }))
+        && !operation_has_parameters(operation)
+    {
+        let direct = direct_method_name(operation, options);
+        let response = operation_response_type(operation);
+        let error = operation_error_name(operation);
+        return format!(
+            "    pub fn {method}_pages(&self) -> impl futures_util::Stream<Item=Result<{response},{error}>> {{ self.client.{direct}_pages() }}\n"
+        );
+    }
     let direct = direct_method_name(operation, options);
     let request = operation_request_name(operation);
     let response = operation_response_type(operation);
@@ -1697,6 +1793,69 @@ impl Transport for Mock {fn execute(&self,request:reqwest::Request)->TransportFu
         );
     }
 
+    #[test]
+    fn native_url_pages_preserve_origin_auth_and_raw_error_responses() {
+        use kaji_core::engine::Packages;
+        let mut operation = Operation {
+            id: "listLinks".into(),
+            method: HttpMethod::Get,
+            path: "/links".into(),
+            responses: vec![
+                OperationResponse::json("200", SchemaValue::new(SchemaKind::Any)),
+                OperationResponse::json("400", SchemaValue::new(SchemaKind::Any)),
+                OperationResponse::json("default", SchemaValue::new(SchemaKind::Any)),
+            ],
+            ..Default::default()
+        };
+        operation.security.push(kaji_core::SecurityRequirement {
+            schemes: Default::default(),
+        });
+        operation.annotations.insert(
+            "x-kaji-pagination".into(),
+            serde_json::json!({"type":"url","outputs":{"nextUrl":"/next"}}),
+        );
+        let api = Api {
+            name: "url".into(),
+            version: "1.0.0".into(),
+            operations: vec![operation],
+            ..Default::default()
+        };
+        let root = tempfile::tempdir().unwrap();
+        Packages::new()
+            .package(crate::package("sdk").with(crate::sdk()))
+            .generate(&api, None)
+            .unwrap()
+            .write_to(root.path())
+            .unwrap();
+        let sdk = root.path().join("sdk");
+        let manifest = sdk.join("Cargo.toml");
+        let mut cargo = fs::read_to_string(&manifest).unwrap();
+        cargo.push_str("\n[dev-dependencies]\nhttp=\"1\"\n");
+        fs::write(manifest, cargo).unwrap();
+        fs::create_dir(sdk.join("tests")).unwrap();
+        fs::write(
+            sdk.join("tests/url.rs"),
+            include_str!("url_pagination_test.rs.txt"),
+        )
+        .unwrap();
+        let output = std::process::Command::new("cargo")
+            .args(["test", "--offline", "--quiet"])
+            .env("RUSTFLAGS", "-Dwarnings")
+            .env(
+                "CARGO_TARGET_DIR",
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("../../../target/generated-rust-providers"),
+            )
+            .current_dir(sdk)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
     #[test]
     fn native_page_stream_defaults_and_preserves_required_controls() {
         use kaji_core::engine::Packages;

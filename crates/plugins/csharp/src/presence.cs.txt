@@ -1,0 +1,22 @@
+using System;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+namespace __NAMESPACE__;
+/// <summary>Default means omitted; Present(null) means explicit JSON null.</summary>
+[JsonConverter(typeof(PresenceJsonConverterFactory))]
+public readonly record struct Presence<T> {
+ public bool IsPresent { get; }
+ public T? Value { get; }
+ private Presence(T? value) { IsPresent=true; Value=value; }
+ public static Presence<T> Present(T? value) => new(value);
+}
+public sealed class PresenceJsonConverterFactory:JsonConverterFactory {
+ public override bool CanConvert(Type type)=>type.IsGenericType && type.GetGenericTypeDefinition()==typeof(Presence<>);
+ public override JsonConverter CreateConverter(Type type,JsonSerializerOptions options)=>(JsonConverter)Activator.CreateInstance(typeof(PresenceJsonConverter<>).MakeGenericType(type.GetGenericArguments()[0]))!;
+ private sealed class PresenceJsonConverter<T>:JsonConverter<Presence<T>> {
+  public PresenceJsonConverter() {}
+  public override bool HandleNull=>true;
+  public override Presence<T> Read(ref Utf8JsonReader reader,Type type,JsonSerializerOptions options)=>Presence<T>.Present(JsonSerializer.Deserialize<T>(ref reader,options));
+  public override void Write(Utf8JsonWriter writer,Presence<T> value,JsonSerializerOptions options){if(!value.IsPresent){writer.WriteNullValue();return;}JsonSerializer.Serialize(writer,value.Value,options);}
+ }
+}

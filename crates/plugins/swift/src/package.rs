@@ -70,16 +70,24 @@ impl PackageExt for Package<Swift> {
 pub struct Sdk {
     meta: Meta,
     client_style: Option<SdkClientStyle>,
+    open_enums: bool,
 }
 
 pub fn sdk() -> Sdk {
     Sdk {
         meta: Meta::new(),
         client_style: None,
+        open_enums: false,
     }
 }
 
 impl Sdk {
+    /// Preserve future string enum values; inline enums remain wire strings.
+    pub fn open_enums(mut self, enabled: bool) -> Self {
+        self.open_enums = enabled;
+        self
+    }
+
     pub fn flat(mut self) -> Self {
         self.client_style = Some(SdkClientStyle::Flat);
         self
@@ -101,13 +109,14 @@ impl Plugin<Swift> for Sdk {
     }
 
     fn generate(&self, cx: &mut PluginContext<'_, Swift>) -> Result<()> {
-        cx.files.append(crate::render_sdk(
+        cx.files.append(crate::open_enums::render(
             cx.api,
             ".",
             cx.settings.package_name.as_deref(),
             self.client_style
                 .or(cx.common.client_style)
                 .unwrap_or(SdkClientStyle::Namespaced),
+            self.open_enums,
         )?)
     }
 }

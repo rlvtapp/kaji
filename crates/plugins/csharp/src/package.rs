@@ -77,15 +77,21 @@ pub struct Sdk {
     meta: Meta,
     client_style: Option<SdkClientStyle>,
     open_enums: bool,
+    preserve_presence: bool,
 }
 pub fn sdk() -> Sdk {
     Sdk {
         meta: Meta::new(),
         client_style: None,
         open_enums: false,
+        preserve_presence: false,
     }
 }
 impl Sdk {
+    pub fn preserve_presence(mut self, enabled: bool) -> Self {
+        self.preserve_presence = enabled;
+        self
+    }
     /// Preserve unknown string enum wire values with extensible value records.
     pub fn open_enums(mut self, enabled: bool) -> Self {
         self.open_enums = enabled;
@@ -117,7 +123,7 @@ impl Plugin<CSharp> for Sdk {
         vec![Provision::of::<NativeSdk>()]
     }
     fn generate(&self, cx: &mut PluginContext<'_, CSharp>) -> Result<()> {
-        cx.files.append(crate::render_sdk_with_policy(
+        cx.files.append(crate::presence::render(
             cx.api,
             ".",
             cx.settings.package_name.as_deref(),
@@ -125,6 +131,7 @@ impl Plugin<CSharp> for Sdk {
                 .or(cx.common.client_style)
                 .unwrap_or(SdkClientStyle::Namespaced),
             self.open_enums,
+            self.preserve_presence,
         )?)?;
         cx.publish(NativeSdk {
             namespace: crate::dotnet_namespace(
@@ -147,7 +154,7 @@ impl Plugin<DotNet> for Sdk {
         vec![Provision::of::<NativeSdk>()]
     }
     fn generate(&self, cx: &mut PluginContext<'_, DotNet>) -> Result<()> {
-        cx.files.append(crate::render_sdk_with_policy(
+        cx.files.append(crate::presence::render(
             cx.api,
             ".",
             cx.settings.package_name.as_deref(),
@@ -155,6 +162,7 @@ impl Plugin<DotNet> for Sdk {
                 .or(cx.common.client_style)
                 .unwrap_or(SdkClientStyle::Namespaced),
             self.open_enums,
+            self.preserve_presence,
         )?)?;
         cx.publish(NativeSdk {
             namespace: crate::dotnet_namespace(
