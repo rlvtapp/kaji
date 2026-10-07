@@ -320,7 +320,7 @@ fn render_client(api: &Api, namespace: &str, client_style: SdkClientStyle) -> St
     debug_assert!(output.ends_with("}\n"));
     output.truncate(output.len() - 2);
     output.push_str(
-        "\n    // The template request is cloned for every attempt: HttpRequestMessage instances\n    // are single-use, and replaying an unsafe POST would be incorrect.\n    private async Task<T> SendWithRetryAsync<T>(HttpRequestMessage template, CancellationToken cancellationToken)\n    {\n        using (template)\n        {\n            var maxAttempts = IsRetryAllowed(template) ? Math.Max(1, _retry.MaxAttempts) : 1;\n            Exception? transportError = null;\n            for (var attempt = 0; attempt < maxAttempts; attempt++)\n            {\n                using var request = await CloneRequestAsync(template, cancellationToken).ConfigureAwait(false);\n                try\n                {\n                    _hooks?.BeforeRequest(request);\n                    using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);\n                    if (attempt + 1 < maxAttempts && IsRetryable(response.StatusCode))\n                    {\n                        await DelayForRetryAsync(attempt, response.Headers.RetryAfter, cancellationToken).ConfigureAwait(false);\n                        continue;\n                    }\n                    var contents = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);\n                    if (!response.IsSuccessStatusCode)\n                    {\n                        var error = new ApiException((int)response.StatusCode, contents);\n                        _hooks?.OnError(error);\n                        throw error;\n                    }\n                    _hooks?.AfterResponse(response);\n                    if (string.IsNullOrWhiteSpace(contents)) return default!;\n                    return JsonSerializer.Deserialize<T>(contents, JsonOptions)\n                        ?? throw new JsonException(\"Kaji received an empty JSON response.\");\n                }\n                catch (HttpRequestException error) when (attempt + 1 < maxAttempts)\n                {\n                    transportError = error;\n                    await DelayForRetryAsync(attempt, null, cancellationToken).ConfigureAwait(false);\n                }\n                catch (Exception error)\n                {\n                    _hooks?.OnError(error);\n                    throw;\n                }\n            }\n            _hooks?.OnError(transportError ?? new HttpRequestException(\"Kaji retry loop completed without a response.\"));\n            throw transportError ?? new HttpRequestException(\"Kaji retry loop completed without a response.\");\n        }\n    }\n\n    private async Task SendWithRetryAsync(HttpRequestMessage template, CancellationToken cancellationToken)\n    {\n        await SendWithRetryAsync<JsonElement>(template, cancellationToken).ConfigureAwait(false);\n    }\n\n    private static bool IsRetryAllowed(HttpRequestMessage request)\n    {\n        return request.Method == HttpMethod.Get || request.Method == HttpMethod.Put || request.Method == HttpMethod.Patch || request.Method == HttpMethod.Delete\n            || (request.Method == HttpMethod.Post && request.Headers.Contains(\"Idempotency-Key\"));\n    }\n\n    private static bool IsRetryable(HttpStatusCode status)\n    {\n        return status is HttpStatusCode.RequestTimeout or (HttpStatusCode)429 or HttpStatusCode.InternalServerError or HttpStatusCode.BadGateway or HttpStatusCode.ServiceUnavailable or HttpStatusCode.GatewayTimeout;\n    }\n\n    private async Task DelayForRetryAsync(int attempt, RetryConditionHeaderValue? retryAfter, CancellationToken cancellationToken)\n    {\n        var delay = retryAfter?.Delta ?? (retryAfter?.Date is { } date ? date - DateTimeOffset.UtcNow : TimeSpan.Zero);\n        if (delay <= TimeSpan.Zero)\n        {\n            var multiplier = Math.Pow(2, attempt);\n            delay = TimeSpan.FromMilliseconds(_retry.InitialDelay.TotalMilliseconds * multiplier);\n        }\n        delay = delay > _retry.MaxDelay ? _retry.MaxDelay : delay;\n        if (delay > TimeSpan.Zero) await Task.Delay(delay, cancellationToken).ConfigureAwait(false);\n    }\n\n    private static async Task<HttpRequestMessage> CloneRequestAsync(HttpRequestMessage source, CancellationToken cancellationToken)\n    {\n        var clone = new HttpRequestMessage(source.Method, source.RequestUri);\n        foreach (var header in source.Headers) clone.Headers.TryAddWithoutValidation(header.Key, header.Value);\n        if (source.Content is not null)\n        {\n            var bytes = await source.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);\n            clone.Content = new ByteArrayContent(bytes);\n            foreach (var header in source.Content.Headers) clone.Content.Headers.TryAddWithoutValidation(header.Key, header.Value);\n        }\n        return clone;\n    }\n",
+        "\n    // The template request is cloned for every attempt: HttpRequestMessage instances\n    // are single-use, and replaying an unsafe POST would be incorrect.\n    private async Task<T> SendWithRetryAsync<T>(HttpRequestMessage template, CancellationToken cancellationToken)\n    {\n        using (template)\n        {\n            var maxAttempts = IsRetryAllowed(template) ? Math.Max(1, _retry.MaxAttempts) : 1;\n            Exception? transportError = null;\n            for (var attempt = 0; attempt < maxAttempts; attempt++)\n            {\n                using var request = await CloneRequestAsync(template, cancellationToken).ConfigureAwait(false);\n                try\n                {\n                    _hooks?.BeforeRequest(request);\n                    using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);\n                    if (attempt + 1 < maxAttempts && IsRetryable(response.StatusCode))\n                    {\n                        await DelayForRetryAsync(attempt, response.Headers, cancellationToken).ConfigureAwait(false);\n                        continue;\n                    }\n                    var contents = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);\n                    if (!response.IsSuccessStatusCode)\n                    {\n                        var error = new ApiException((int)response.StatusCode, contents);\n                        _hooks?.OnError(error);\n                        throw error;\n                    }\n                    _hooks?.AfterResponse(response);\n                    if (string.IsNullOrWhiteSpace(contents)) return default!;\n                    return JsonSerializer.Deserialize<T>(contents, JsonOptions)\n                        ?? throw new JsonException(\"Kaji received an empty JSON response.\");\n                }\n                catch (HttpRequestException error) when (attempt + 1 < maxAttempts)\n                {\n                    transportError = error;\n                    await DelayForRetryAsync(attempt, null, cancellationToken).ConfigureAwait(false);\n                }\n                catch (Exception error)\n                {\n                    _hooks?.OnError(error);\n                    throw;\n                }\n            }\n            _hooks?.OnError(transportError ?? new HttpRequestException(\"Kaji retry loop completed without a response.\"));\n            throw transportError ?? new HttpRequestException(\"Kaji retry loop completed without a response.\");\n        }\n    }\n\n    private async Task SendWithRetryAsync(HttpRequestMessage template, CancellationToken cancellationToken)\n    {\n        await SendWithRetryAsync<JsonElement>(template, cancellationToken).ConfigureAwait(false);\n    }\n\n    private static bool IsRetryAllowed(HttpRequestMessage request)\n    {\n        return (request.Options.TryGetValue(new HttpRequestOptionsKey<string>(\"Kaji.IdempotencyHeader\"), out var header) && HasNonEmptyHeader(request, header)) || request.Method == HttpMethod.Get || request.Method == HttpMethod.Put || request.Method == HttpMethod.Delete\n            || ((request.Method == HttpMethod.Post || request.Method == HttpMethod.Patch) && HasNonEmptyHeader(request, \"Idempotency-Key\"));\n    }\n\n    private static bool HasNonEmptyHeader(HttpRequestMessage request, string name)\n    {\n        return request.Headers.TryGetValues(name, out var values) && values.Any(value => !string.IsNullOrWhiteSpace(value));\n    }\n\n    private static bool IsRetryable(HttpStatusCode status)\n    {\n        return status is HttpStatusCode.RequestTimeout or (HttpStatusCode)429 or HttpStatusCode.InternalServerError or HttpStatusCode.BadGateway or HttpStatusCode.ServiceUnavailable or HttpStatusCode.GatewayTimeout;\n    }\n\n    private static double? RetryAfterMilliseconds(HttpResponseHeaders? headers, DateTimeOffset now)\n    {\n        if (headers is null) return null;\n        if (headers.TryGetValues(\"retry-after-ms\", out var values))\n        {\n            var value = values.FirstOrDefault();\n            if (double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var milliseconds) && double.IsFinite(milliseconds) && milliseconds >= 0) return milliseconds;\n        }\n        var retryAfter = headers.RetryAfter;\n        if (retryAfter?.Delta is { } delta) return Math.Max(0, delta.TotalMilliseconds);\n        if (retryAfter?.Date is { } date) return Math.Max(0, (date - now).TotalMilliseconds);\n        return null;\n    }\n\n    private async Task DelayForRetryAsync(int attempt, HttpResponseHeaders? headers, CancellationToken cancellationToken)\n    {\n        // Task.Delay accepts at most uint.MaxValue - 1 milliseconds on .NET 8.\n        var cap = Math.Min(Math.Max(0, _retry.MaxDelay.TotalMilliseconds), uint.MaxValue - 1d);\n        var milliseconds = RetryAfterMilliseconds(headers, DateTimeOffset.UtcNow)\n            ?? Math.Max(0, _retry.InitialDelay.TotalMilliseconds) * Math.Pow(2, Math.Min(attempt, 30));\n        var delay = TimeSpan.FromMilliseconds(Math.Min(milliseconds, cap));\n        if (delay > TimeSpan.Zero) await Task.Delay(delay, cancellationToken).ConfigureAwait(false);\n    }\n\n    private static async Task<HttpRequestMessage> CloneRequestAsync(HttpRequestMessage source, CancellationToken cancellationToken)\n    {\n        var clone = new HttpRequestMessage(source.Method, source.RequestUri);\n        foreach (var header in source.Headers) clone.Headers.TryAddWithoutValidation(header.Key, header.Value);\n        if (source.Content is not null)\n        {\n            var bytes = await source.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);\n            clone.Content = new ByteArrayContent(bytes);\n            foreach (var header in source.Content.Headers) clone.Content.Headers.TryAddWithoutValidation(header.Key, header.Value);\n        }\n        return clone;\n    }\n",
     );
     output = output.replacen(
         "                        var error = new ApiException((int)response.StatusCode, contents);\n                        _hooks?.OnError(error);\n                        throw error;",
@@ -480,6 +480,21 @@ fn render_operation(output: &mut String, operation: &Operation) {
             output,
             "        if ({name} is not null) request.Headers.TryAddWithoutValidation({:?}, ParameterString({name}));",
             parameter.name,
+        );
+    }
+    if let Some(policy) = kaji_core::idempotency::resolved(operation) {
+        let name = camel_case(&policy.parameter_name);
+        if policy.auto_generate {
+            let _ = writeln!(
+                output,
+                "        if ({name} is null) request.Headers.TryAddWithoutValidation({:?}, Guid.NewGuid().ToString(\"D\"));",
+                policy.header
+            );
+        }
+        let _ = writeln!(
+            output,
+            "        request.Options.Set(new HttpRequestOptionsKey<string>(\"Kaji.IdempotencyHeader\"), {:?});",
+            policy.header
         );
     }
     if body.is_some() {
@@ -1653,13 +1668,144 @@ mod tests {
     }
 
     #[test]
+    fn retry_headers_preserve_zero_precedence_and_bounds() {
+        let client = render_client(&api(), "Example", SdkClientStyle::Flat);
+        assert!(
+            client.contains("DelayForRetryAsync(attempt, response.Headers, cancellationToken)")
+        );
+        assert!(client.contains("TryGetValues(\"retry-after-ms\""));
+        assert!(client.contains("double.IsFinite(milliseconds) && milliseconds >= 0"));
+        assert!(
+            client
+                .contains("RetryAfterMilliseconds(headers, DateTimeOffset.UtcNow)\n            ??")
+        );
+        assert!(client.contains("Math.Min(milliseconds, cap)"));
+        assert!(client.contains("values.Any(value => !string.IsNullOrWhiteSpace(value))"));
+        assert!(client.contains("HasNonEmptyHeader(request, header)"));
+        assert!(client.contains("uint.MaxValue - 1d"));
+        assert!(!client.contains("if (delay <= TimeSpan.Zero)"));
+    }
+
+    #[test]
+    #[ignore = "requires .NET 8; executes emitted retry parser without external dependencies"]
+    fn generated_retry_parser_executes_with_dotnet() {
+        use std::process::Command;
+        let client = render_client(&api(), "Example", SdkClientStyle::Flat);
+        let start = client
+            .find("    private static double? RetryAfterMilliseconds(")
+            .unwrap();
+        let end = client
+            .find("    private async Task DelayForRetryAsync(")
+            .unwrap();
+        let eligibility_start = client
+            .find("    private static bool IsRetryAllowed(")
+            .unwrap();
+        let parser = format!(
+            "{}\n{}",
+            &client[eligibility_start..start],
+            &client[start..end]
+        );
+        let probe = format!(
+            "using System;\nusing System.Globalization;\nusing System.Linq;\nusing System.Net;\nusing System.Net.Http;\nusing System.Net.Http.Headers;\nclass ParserProbe {{\n{parser}\n{}\n}}",
+            r#"
+    static void Check(bool value) { if (!value) throw new Exception("parser assertion"); }
+    static void Main() {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "https://example.invalid");
+        request.Headers.TryAddWithoutValidation("Idempotency-Key", "");
+        Check(!IsRetryAllowed(request));
+        request.Headers.Remove("Idempotency-Key");
+        request.Headers.TryAddWithoutValidation("Idempotency-Key", "provided");
+        Check(IsRetryAllowed(request));
+        request.Headers.Remove("Idempotency-Key");
+        request.Method = HttpMethod.Patch;
+        request.Options.Set(new HttpRequestOptionsKey<string>("Kaji.IdempotencyHeader"), "X-Key");
+        request.Headers.TryAddWithoutValidation("X-Key", "");
+        Check(!IsRetryAllowed(request));
+        request.Headers.Remove("X-Key");
+        request.Headers.TryAddWithoutValidation("X-Key", " ");
+        Check(!IsRetryAllowed(request));
+        request.Headers.Remove("X-Key");
+        request.Headers.TryAddWithoutValidation("X-Key", "provided");
+        Check(IsRetryAllowed(request));
+        var now = DateTimeOffset.UtcNow;
+        using var response = new HttpResponseMessage();
+        response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromSeconds(2));
+        response.Headers.TryAddWithoutValidation("retry-after-ms", "0");
+        Check(RetryAfterMilliseconds(response.Headers, now) == 0);
+        foreach (var value in new[] {"-1", "NaN", "Infinity", "invalid"}) {
+            response.Headers.Remove("retry-after-ms");
+            response.Headers.TryAddWithoutValidation("retry-after-ms", value);
+            Check(RetryAfterMilliseconds(response.Headers, now) == 2000);
+        }
+        response.Headers.Remove("retry-after-ms");
+        response.Headers.TryAddWithoutValidation("retry-after-ms", "125.5");
+        Check(RetryAfterMilliseconds(response.Headers, now) == 125.5);
+        response.Headers.Remove("retry-after-ms");
+        response.Headers.RetryAfter = new RetryConditionHeaderValue(now.AddSeconds(5));
+        var future = RetryAfterMilliseconds(response.Headers, now);
+        Check(future > 4000 && future <= 5000);
+        response.Headers.RetryAfter = new RetryConditionHeaderValue(now.AddSeconds(-5));
+        Check(RetryAfterMilliseconds(response.Headers, now) == 0);
+        response.Headers.Remove("Retry-After");
+        Check(RetryAfterMilliseconds(response.Headers, now) is null);
+    }
+"#
+        );
+        let output = tempfile::tempdir().unwrap();
+        std::fs::write(output.path().join("Program.cs"), probe).unwrap();
+        std::fs::write(output.path().join("Probe.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><OutputType>Exe</OutputType><Nullable>enable</Nullable></PropertyGroup></Project>").unwrap();
+        let result = Command::new("dotnet")
+            .args(["run", "--project", "Probe.csproj", "--verbosity", "quiet"])
+            .current_dir(output.path())
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}\n{}",
+            String::from_utf8_lossy(&result.stdout),
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
+
+    #[test]
     #[ignore = "requires the .NET 8 SDK; CI runs this generated-package smoke test"]
     fn generated_csharp_project_builds_with_dotnet() {
         use std::process::Command;
 
+        let mut source = api();
+        let mut page = source.operations[0].clone();
+        page.id = "listItemPages".into();
+        page.path = "/items".into();
+        let mut integer = SchemaValue::new(SchemaKind::Integer);
+        integer.format = Some("int32".into());
+        page.parameters = vec![OperationParameter {
+            name: "page".into(),
+            location: "query".into(),
+            required: false,
+            schema: Some(integer),
+            description: None,
+            annotations: BTreeMap::new(),
+        }];
+        page.responses = vec![OperationResponse::json(
+            "200",
+            SchemaValue::new(SchemaKind::Array {
+                items: Box::new(SchemaValue::new(SchemaKind::String)),
+            }),
+        )];
+        page.annotations.insert("x-kaji-pagination".into(),serde_json::json!({"type":"page","inputs":[{"name":"page","type":"page"}],"outputs":{"results":"$"}}));
+        source.operations.push(page);
+        let mut keyed = source.operations[0].clone();
+        keyed.id = "createKeyedItem".into();
+        keyed.method = HttpMethod::Post;
+        keyed.annotations.insert(
+            "x-kaji-idempotency".into(),
+            serde_json::json!({"header":"X-Request-Key","auto_generate":true}),
+        );
+        source.operations.push(keyed);
+        let source = kaji_core::idempotency::prepare_api(&source, &Default::default()).unwrap();
         let output = tempfile::tempdir().unwrap();
         let tree = render_sdk(
-            &api(),
+            &source,
             "csharp",
             Some("example-api-sdk"),
             SdkClientStyle::Namespaced,
@@ -1678,6 +1824,7 @@ mod tests {
             String::from_utf8_lossy(&result.stdout),
             String::from_utf8_lossy(&result.stderr),
         );
+        generated_retry_parser_executes_with_dotnet();
     }
 }
 

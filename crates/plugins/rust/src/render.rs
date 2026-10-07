@@ -109,7 +109,7 @@ impl RustPackage {
             .unwrap_or_else(|| format!("{}-sdk", kebab_case(&api.name)));
         Ok(vec![
             GeneratedFile::new("src/lib.rs", render_lib())?,
-            GeneratedFile::new("Cargo.toml", render_cargo_toml(&crate_name, &api.version))?,
+            GeneratedFile::new("Cargo.toml", render_cargo_toml_for_api(&crate_name, api))?,
             GeneratedFile::new("README.md", render_readme(api, &crate_name, options))?,
         ])
     }
@@ -280,6 +280,17 @@ pub(crate) fn render_client_runtime(api: &Api, include_resources: bool) -> Strin
         "\n/// Retry policy applied to safe generated requests. The default makes three attempts.\n#[derive(Clone, Debug)]\npub struct RetryConfig {\n    pub max_attempts: usize,\n    pub initial_delay: Duration,\n    pub max_delay: Duration,\n}\n\nimpl Default for RetryConfig {\n    fn default() -> Self {\n        Self { max_attempts: 3, initial_delay: Duration::from_millis(250), max_delay: Duration::from_secs(8) }\n    }\n}\n\n/// Metadata passed to lifecycle hooks. Request headers and bodies are omitted to avoid exposing credentials.\n#[derive(Clone, Debug)]\npub struct RequestInfo {\n    pub method: Method,\n    pub url: String,\n}\n\n/// The final HTTP response observed by lifecycle hooks.\n#[derive(Clone, Debug)]\npub struct ResponseInfo {\n    pub request: RequestInfo,\n    pub status: reqwest::StatusCode,\n    pub headers: reqwest::header::HeaderMap,\n}\n\n/// Optional package-level observability and policy callbacks. Hooks run once for the final outcome, not every retry attempt.\npub trait ClientHooks: Send + Sync {\n    fn before_request(&self, _request: &RequestInfo) {}\n    fn after_response(&self, _response: &ResponseInfo) {}\n    fn on_error(&self, _request: &RequestInfo, _error: &str) {}\n}\n\nfn kaji_query_value",
         1,
     );
+    output.push_str(r#"
+#[allow(dead_code)]
+fn kaji_retry_after(headers: &reqwest::header::HeaderMap) -> Option<Duration> {
+    if let Some(delay) = headers.get("retry-after-ms").and_then(|value| value.to_str().ok()).and_then(|value| value.trim().parse::<f64>().ok()).and_then(|ms| Duration::try_from_secs_f64(ms / 1000.0).ok()) {
+        return Some(delay);
+    }
+    let value = headers.get(reqwest::header::RETRY_AFTER)?.to_str().ok()?.trim();
+    if let Ok(seconds) = value.parse::<u64>() { return Some(Duration::from_secs(seconds)); }
+    httpdate::parse_http_date(value).ok().map(|time| time.duration_since(std::time::SystemTime::now()).unwrap_or(Duration::ZERO))
+}
+"#);
     if has_pagination {
         output.push_str(render_pagination_runtime());
     }
@@ -498,6 +509,15 @@ fn render_operation(operation: &Operation, config: &RenderOptions) -> String {
         operation.path,
         operation.path,
     );
+    if let Some(policy) =
+        kaji_core::idempotency::resolved(operation).filter(|policy| policy.auto_generate)
+    {
+        let field = rust_field_name(&policy.parameter_name);
+        let _ = writeln!(
+            output,
+            "        let mut input = input;\n        if input.{field}.is_none() {{ input.{field} = Some(uuid::Uuid::new_v4().to_string()); }}"
+        );
+    }
     for parameter in &operation.parameters {
         render_parameter_use(&mut output, parameter);
     }
@@ -529,7 +549,7 @@ fn render_operation(operation: &Operation, config: &RenderOptions) -> String {
         }
     }
     output.push_str(&format!(
-        "            let response = match self.transport.execute(request.build().map_err({error}::Transport)?).await {{\n                Ok(response) => response,\n                Err(source) => {{\n                    if retry_allowed && attempt < max_attempts {{\n                        tokio::time::sleep(self.kaji_retry_delay(attempt, None)).await;\n                        continue;\n                    }}\n                    self.kaji_on_error(&request_info, &source.to_string());\n                    return Err({error}::Transport(source));\n                }}\n            }};\n            let status = response.status();\n            let retry_after = response.headers().get(reqwest::header::RETRY_AFTER).and_then(|value| value.to_str().ok()).and_then(|value| value.parse::<u64>().ok()).map(Duration::from_secs);\n            if retry_allowed && attempt < max_attempts && matches!(status.as_u16(), 408 | 429 | 500 | 502 | 503 | 504) {{\n                tokio::time::sleep(self.kaji_retry_delay(attempt, retry_after)).await;\n                continue;\n            }}\n            self.kaji_after_response(&request_info, &response);\n            if !status.is_success() {{\n                let headers = response.headers().clone();\n                let body = response.bytes().await.map_err({error}::Transport)?.to_vec();\n                self.kaji_on_error(&request_info, &format!(\"HTTP {{}}\", status));\n                return Err({});\n            }}\n",
+        "            let response = match self.transport.execute(request.build().map_err({error}::Transport)?).await {{\n                Ok(response) => response,\n                Err(source) => {{\n                    if retry_allowed && attempt < max_attempts {{\n                        tokio::time::sleep(self.kaji_retry_delay(attempt, None)).await;\n                        continue;\n                    }}\n                    self.kaji_on_error(&request_info, &source.to_string());\n                    return Err({error}::Transport(source));\n                }}\n            }};\n            let status = response.status();\n            let retry_after = kaji_retry_after(response.headers());\n            if retry_allowed && attempt < max_attempts && matches!(status.as_u16(), 408 | 429 | 500 | 502 | 503 | 504) {{\n                tokio::time::sleep(self.kaji_retry_delay(attempt, retry_after)).await;\n                continue;\n            }}\n            self.kaji_after_response(&request_info, &response);\n            if !status.is_success() {{\n                let headers = response.headers().clone();\n                let body = response.bytes().await.map_err({error}::Transport)?.to_vec();\n                self.kaji_on_error(&request_info, &format!(\"HTTP {{}}\", status));\n                return Err({});\n            }}\n",
         render_error_response(operation, &error),
     ));
     match response_kind(operation) {
@@ -984,20 +1004,28 @@ fn rust_retry_allowed(operation: &Operation) -> String {
     match operation.method {
         kaji_core::ast::HttpMethod::Get
         | kaji_core::ast::HttpMethod::Put
-        | kaji_core::ast::HttpMethod::Patch
         | kaji_core::ast::HttpMethod::Delete => "true".into(),
-        kaji_core::ast::HttpMethod::Post => operation
+        kaji_core::ast::HttpMethod::Post | kaji_core::ast::HttpMethod::Patch => operation
             .parameters
             .iter()
             .find(|parameter| {
                 parameter.location == "header"
-                    && parameter.name.eq_ignore_ascii_case("idempotency-key")
+                    && (parameter.name.eq_ignore_ascii_case("idempotency-key")
+                        || kaji_core::idempotency::resolved(operation).is_some_and(|policy| {
+                            parameter.name.eq_ignore_ascii_case(&policy.header)
+                        }))
             })
             .map(|parameter| {
                 if parameter.required {
-                    "true".into()
+                    format!(
+                        "!input.{}.trim().is_empty()",
+                        rust_field_name(&parameter.name)
+                    )
                 } else {
-                    format!("input.{}.is_some()", rust_field_name(&parameter.name))
+                    format!(
+                        "input.{}.as_ref().is_some_and(|key| !kaji_query_value(key).trim().is_empty())",
+                        rust_field_name(&parameter.name)
+                    )
                 }
             })
             .unwrap_or_else(|| "false".into()),
@@ -1425,10 +1453,20 @@ Nest wrappers: outer layers see requests first and responses last. A layer may r
     output
 }
 
+pub(crate) fn render_cargo_toml_for_api(crate_name: &str, api: &Api) -> String {
+    let mut manifest = render_cargo_toml(crate_name, &api.version);
+    if api.operations.iter().any(|operation| {
+        kaji_core::idempotency::resolved(operation).is_some_and(|policy| policy.auto_generate)
+    }) {
+        manifest.push_str("uuid = { version = \"1\", features = [\"v4\"] }\n");
+    }
+    manifest
+}
+
 pub(crate) fn render_cargo_toml(crate_name: &str, version: &str) -> String {
     let version = cargo_package_version(version);
     format!(
-        "[package]\nname = {:?}\nversion = {:?}\nedition = \"2024\"\ndescription = \"Generated API client\"\n\n[dependencies]\nfutures-util = \"0.3\"\nreqwest = {{ version = \"0.12\", features = [\"json\"] }}\nserde = {{ version = \"1\", features = [\"derive\"] }}\nserde_json = \"1\"\ntokio = {{ version = \"1\", features = [\"time\"] }}\n",
+        "[package]\nname = {:?}\nversion = {:?}\nedition = \"2024\"\ndescription = \"Generated API client\"\n\n[dependencies]\nfutures-util = \"0.3\"\nhttpdate = \"1\"\nreqwest = {{ version = \"0.12\", features = [\"json\"] }}\nserde = {{ version = \"1\", features = [\"derive\"] }}\nserde_json = \"1\"\ntokio = {{ version = \"1\", features = [\"time\"] }}\n",
         crate_name, version
     )
 }
@@ -1530,6 +1568,94 @@ mod tests {
             .map(|file| file.contents.as_str())
             .collect::<Vec<_>>()
             .join("\n")
+    }
+
+    #[test]
+    fn native_idempotency_keys_are_stable_across_retries() {
+        use kaji_core::engine::Packages;
+        let operation = Operation {
+            id: "createItem".into(),
+            method: HttpMethod::Post,
+            path: "/items".into(),
+            responses: vec![OperationResponse::json(
+                "200",
+                SchemaValue::new(SchemaKind::Integer),
+            )],
+            annotations: BTreeMap::from([(
+                "x-kaji-idempotency".into(),
+                serde_json::json!({"header":"X-Once", "auto_generate":true}),
+            )]),
+            ..Default::default()
+        };
+        let api = Api {
+            name: "idempotency".into(),
+            version: "1.0.0".into(),
+            operations: vec![operation],
+            ..Default::default()
+        };
+        let tree = Packages::new()
+            .package(crate::package("sdk").with(crate::sdk()))
+            .generate(&api, None)
+            .unwrap();
+        let root = tempfile::tempdir().unwrap();
+        tree.write_to(root.path()).unwrap();
+        let sdk = root.path().join("sdk");
+        let manifest = sdk.join("Cargo.toml");
+        let mut cargo = fs::read_to_string(&manifest).unwrap();
+        cargo.push_str("\n[dev-dependencies]\nhttp = \"1\"\ntokio = { version = \"1\", features = [\"macros\", \"rt-multi-thread\"] }\n");
+        fs::write(manifest, cargo).unwrap();
+        let runtime = sdk.join("src/client/mod.rs");
+        let mut source = fs::read_to_string(&runtime).unwrap();
+        source.push_str(r#"
+#[cfg(test)] mod retry_header_tests {
+ #[test] fn server_delays() {
+  use std::time::Duration;
+  let mut headers=reqwest::header::HeaderMap::new();
+  headers.insert("retry-after","2".parse().unwrap());assert_eq!(super::kaji_retry_after(&headers),Some(Duration::from_secs(2)));
+  headers.insert("retry-after-ms","125.5".parse().unwrap());assert_eq!(super::kaji_retry_after(&headers),Some(Duration::from_micros(125500)));
+  for bad in ["-1","NaN","inf","broken"] {headers.insert("retry-after-ms",bad.parse().unwrap());assert_eq!(super::kaji_retry_after(&headers),Some(Duration::from_secs(2)));}
+  headers.insert("retry-after-ms","0".parse().unwrap());assert_eq!(super::kaji_retry_after(&headers),Some(Duration::ZERO));headers.remove("retry-after-ms");
+  headers.insert("retry-after","Sun, 06 Nov 1994 08:49:37 GMT".parse().unwrap());assert_eq!(super::kaji_retry_after(&headers),Some(Duration::ZERO));
+  headers.insert("retry-after","garbage".parse().unwrap());assert_eq!(super::kaji_retry_after(&headers),None);
+  let client=super::Client::new("https://unused.test");assert_eq!(client.kaji_retry_delay(1,Some(Duration::from_secs(1000))),client.retry.max_delay);
+ }
+}
+"#);
+        fs::write(runtime, source).unwrap();
+        fs::create_dir(sdk.join("tests")).unwrap();
+        fs::write(sdk.join("tests/idempotency.rs"),r#"
+use idempotency_sdk::{Client,client::{CreateItemRequest,RetryConfig},transport::{Transport,TransportFuture}};
+use std::sync::{Arc,Mutex};
+struct Mock(Arc<Mutex<Vec<String>>>);
+impl Transport for Mock {fn execute(&self,request:reqwest::Request)->TransportFuture<'_>{
+ let key=request.headers().get("X-Once").unwrap().to_str().unwrap().to_owned();let mut seen=self.0.lock().unwrap();seen.push(key);let status=if seen.len()%2==1 {503}else{200};
+ Box::pin(async move{Ok(http::Response::builder().status(status).body(reqwest::Body::from("1")).unwrap().into())})
+}}
+#[tokio::test] async fn stable_and_overridable(){
+ let seen=Arc::new(Mutex::new(Vec::new()));let client=Client::new("https://unused.test").with_transport(Arc::new(Mock(seen.clone()))).with_retry(RetryConfig {max_attempts:2,initial_delay:std::time::Duration::ZERO,max_delay:std::time::Duration::ZERO});
+ for _ in 0..2 {assert_eq!(client.create_item(CreateItemRequest{x_once:None}).await.unwrap(),1);}
+ assert_eq!(client.create_item(CreateItemRequest{x_once:Some("durable-key".into())}).await.unwrap(),1);
+ let keys=seen.lock().unwrap();assert_eq!(keys.len(),6);assert_eq!(keys[0],keys[1]);assert_eq!(keys[2],keys[3]);assert_ne!(keys[0],keys[2]);assert_eq!(uuid::Uuid::parse_str(&keys[0]).unwrap().get_version_num(),4);assert_eq!(keys[4],"durable-key");assert_eq!(keys[4],keys[5]);drop(keys);
+ for blank in ["", "   "] {seen.lock().unwrap().clear();assert!(client.create_item(CreateItemRequest{x_once:Some(blank.into())}).await.is_err());let keys=seen.lock().unwrap();assert_eq!(keys.len(),1);assert_eq!(keys[0],blank);}
+}
+"#).unwrap();
+        let output = Command::new("cargo")
+            .args(["test", "--offline", "--quiet"])
+            .env("RUSTFLAGS", "-Dwarnings")
+            .env(
+                "CARGO_TARGET_DIR",
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("../../../target/generated-rust-providers"),
+            )
+            .current_dir(sdk)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     #[test]
@@ -1912,7 +2038,7 @@ impl Transport for Mock {fn execute(&self, request:reqwest::Request)->TransportF
         assert!(source.contains("pub fn with_hooks"));
         assert!(source.contains("matches!(status.as_u16(), 408 | 429 | 500 | 502 | 503 | 504)"));
         assert!(source.contains("let retry_allowed = true;"));
-        assert!(source.contains("let retry_allowed = input.idempotency_key.is_some();"));
+        assert!(source.contains("let retry_allowed = input.idempotency_key.as_ref().is_some_and(|key| !kaji_query_value(key).trim().is_empty());"));
         assert!(source.contains("self.kaji_after_response(&request_info, &response);"));
     }
 

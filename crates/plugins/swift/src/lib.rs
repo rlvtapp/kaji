@@ -484,6 +484,16 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
             );
         }
     }
+    if let Some(policy) =
+        kaji_core::idempotency::resolved(operation).filter(|policy| policy.auto_generate)
+    {
+        let value = identifier(&policy.parameter_name);
+        let _ = writeln!(
+            output,
+            "{indent}    if {value} == nil {{ request.setValue(UUID().uuidString.lowercased(), forHTTPHeaderField: {:?}) }}",
+            policy.header
+        );
+    }
     if let Some(body) = &operation.request_body {
         let content_type = body
             .media_types
@@ -805,6 +815,89 @@ fn swift_path_literal(value: &str) -> String {
 mod tests {
     use super::*;
     use kaji_core::{HttpMethod, OperationParameter, OperationRequestBody, OperationResponse};
+
+    #[test]
+    #[ignore = "requires a Swift toolchain"]
+    fn generated_idempotency_keys_preserve_caller_values() {
+        let api = Api {
+            operations: vec![Operation {
+                id: "createItem".into(),
+                method: HttpMethod::Post,
+                path: "/items".into(),
+                responses: vec![OperationResponse::json(
+                    "200",
+                    SchemaValue::new(SchemaKind::Integer),
+                )],
+                annotations: BTreeMap::from([(
+                    "x-kaji-idempotency".into(),
+                    serde_json::json!({"header":"X-Once","auto_generate":true}),
+                )]),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let api = kaji_core::idempotency::prepare_api(&api, &Default::default()).unwrap();
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("Client.swift"), client_runtime()).unwrap();
+        std::fs::write(
+            root.path().join("Operations.swift"),
+            render_operations(&api),
+        )
+        .unwrap();
+        std::fs::write(root.path().join("Probe.swift"),r#"import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+actor Events {
+ var keys:[String]=[]
+ func add(_ key:String){ keys.append(key) }
+ func snapshot()->[String]{keys}
+}
+struct Mock:KajiTransport {
+ let events:Events
+ func execute(_ request:URLRequest) async throws -> (Data,URLResponse) {
+  await events.add(request.value(forHTTPHeaderField:"X-Once")!)
+  return(Data("1".utf8),HTTPURLResponse(url:request.url!,statusCode:200,httpVersion:nil,headerFields:[:])!)
+ }
+}
+@main struct Probe {
+ static func main() async throws {
+  let events=Events();let client=KajiClient(options:.init(baseURL:URL(string:"https://unused.test")!),transport:Mock(events:events))
+  _ = try await client.createItem();_ = try await client.createItem();_ = try await client.createItem(xOnce:"durable-key")
+  let keys=await events.snapshot();precondition(keys.count==3);precondition(keys[0] != keys[1]);precondition(UUID(uuidString:keys[0]) != nil);precondition(keys[2]=="durable-key")
+ }
+}
+"#).unwrap();
+        let output = std::process::Command::new("swiftc")
+            .args([
+                "-swift-version",
+                "6",
+                "-warnings-as-errors",
+                "-module-cache-path",
+                "cache",
+                "Client.swift",
+                "Operations.swift",
+                "Probe.swift",
+                "-o",
+                "probe",
+            ])
+            .current_dir(root.path())
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let output = std::process::Command::new(root.path().join("probe"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 
     #[test]
     #[ignore = "requires a Swift toolchain"]

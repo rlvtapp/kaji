@@ -276,7 +276,7 @@ fn style_guide(api: &Api, package: &str, style: SdkClientStyle) -> String {
 
 fn api_exception(package: &str) -> String {
     format!(
-        "package {package};\n\n{NOTICE}\n/** An unsuccessful HTTP response returned by the API. */\npublic class ApiException extends RuntimeException {{\n    private final int statusCode;\n    private final String responseBody;\n    private final String retryAfter;\n\n    public ApiException(int statusCode, String responseBody) {{ this(statusCode, responseBody, null); }}\n\n    public ApiException(int statusCode, String responseBody, String retryAfter) {{\n        super(\"Kaji API request failed with HTTP \" + statusCode);\n        this.statusCode = statusCode;\n        this.responseBody = responseBody;\n        this.retryAfter = retryAfter;\n    }}\n\n    public int statusCode() {{ return statusCode; }}\n    public String responseBody() {{ return responseBody; }}\n    /** Raw Retry-After value, if the API sent one. */\n    public String retryAfter() {{ return retryAfter; }}\n}}\n"
+        "package {package};\n\n{NOTICE}\n/** An unsuccessful HTTP response returned by the API. */\npublic class ApiException extends RuntimeException {{\n    private final int statusCode;\n    private final String responseBody;\n    private final String retryAfter;\n    private final String retryAfterMillis;\n\n    public ApiException(int statusCode, String responseBody) {{ this(statusCode, responseBody, null); }}\n\n    public ApiException(int statusCode, String responseBody, String retryAfter) {{ this(statusCode, responseBody, retryAfter, null); }}\n\n    public ApiException(int statusCode, String responseBody, String retryAfter, String retryAfterMillis) {{\n        super(\"Kaji API request failed with HTTP \" + statusCode);\n        this.statusCode = statusCode;\n        this.responseBody = responseBody;\n        this.retryAfter = retryAfter;\n        this.retryAfterMillis = retryAfterMillis;\n    }}\n\n    public int statusCode() {{ return statusCode; }}\n    public String responseBody() {{ return responseBody; }}\n    /** Raw Retry-After value, if the API sent one. */\n    public String retryAfter() {{ return retryAfter; }}\n    /** Raw retry-after-ms value, if present. */\n    public String retryAfterMillis() {{ return retryAfterMillis; }}\n}}\n"
     )
 }
 
@@ -490,7 +490,7 @@ fn render_client_base(api: &Api, package: &str) -> String {
     /** Follow a generated pagination link only on this client's API origin. */
     private String requestPaginationUrlWithRetry(String method, String continuation, Map<String, String> headers, java.lang.Object body) {
         var url = resolvePaginationUrl(continuation);
-        var maxAttempts = retryAllowed(method, headers) ? retry.maxAttempts() : 1;
+        var maxAttempts = retryAllowed(method, headers, null) ? retry.maxAttempts() : 1;
         RuntimeException lastError = null;
         for (var attempt = 0; attempt < maxAttempts; attempt++) {
             try {
@@ -502,18 +502,18 @@ fn render_client_base(api: &Api, package: &str) -> String {
                 else if (body instanceof byte[] bytes) { builder.header("Content-Type", "application/octet-stream"); builder.method(method, HttpRequest.BodyPublishers.ofByteArray(bytes)); }
                 else { builder.header("Content-Type", "application/json"); builder.method(method, HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body))); }
                 var response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
-                if (response.statusCode() < 200 || response.statusCode() >= 300) throw new ApiException(response.statusCode(), response.body(), response.headers().firstValue("Retry-After").orElse(null));
+                if (response.statusCode() < 200 || response.statusCode() >= 300) throw new ApiException(response.statusCode(), response.body(), response.headers().firstValue("Retry-After").orElse(null), response.headers().firstValue("retry-after-ms").orElse(null));
                 if (hooks != null) hooks.afterResponse(response.statusCode());
                 return response.body();
             } catch (JsonProcessingException error) { throw new IllegalArgumentException("Kaji could not serialize the request body", error);
             } catch (ApiException error) {
                 lastError = error;
                 if (attempt + 1 >= maxAttempts || !retryableStatus(error.statusCode())) { if (hooks != null) hooks.onError(error); throw error; }
-                retryDelay(attempt, error.retryAfter());
+                retryDelay(attempt, error.retryAfter(), error.retryAfterMillis());
             } catch (IOException error) {
                 lastError = new IllegalStateException("Kaji could not execute the request", error);
                 if (attempt + 1 >= maxAttempts) { if (hooks != null) hooks.onError(lastError); throw lastError; }
-                retryDelay(attempt, null);
+                retryDelay(attempt, null, null);
             } catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new IllegalStateException("Kaji request was interrupted", error); }
         }
         if (hooks != null) hooks.onError(lastError);
@@ -537,7 +537,7 @@ fn render_client_base(api: &Api, package: &str) -> String {
     );
     output = output.replacen(
         "throw new ApiException(response.statusCode(), response.body());",
-        "throw new ApiException(response.statusCode(), response.body(), response.headers().firstValue(\"Retry-After\").orElse(null));",
+        "throw new ApiException(response.statusCode(), response.body(), response.headers().firstValue(\"Retry-After\").orElse(null), response.headers().firstValue(\"retry-after-ms\").orElse(null));",
         1,
     );
     output = output.replacen(
@@ -599,10 +599,10 @@ fn render_client_base(api: &Api, package: &str) -> String {
         );
     }
     output.push_str(
-        "\n    /** Downloads a non-JSON representation as bytes. */\n    private byte[] requestBinary(String method, String path, List<QueryParameter> query, Map<String, String> headers, java.lang.Object body) {\n        var url = baseUrl + path + queryString(query);\n        var builder = HttpRequest.newBuilder(URI.create(url)).timeout(timeout).header(\"Accept\", \"*/*\");\n        defaultHeaders.forEach(builder::header); headers.forEach(builder::header);\n        if (apiKey != null && !apiKey.isBlank()) { var credential = apiKeyPrefix == null || apiKeyPrefix.isBlank() ? apiKey : apiKeyPrefix + \" \" + apiKey; builder.header(apiKeyHeader, credential); }\n        try {\n            if (body == null) builder.method(method, HttpRequest.BodyPublishers.noBody());\n            else if (body instanceof byte[] bytes) { builder.header(\"Content-Type\", \"application/octet-stream\"); builder.method(method, HttpRequest.BodyPublishers.ofByteArray(bytes)); }\n            else { builder.header(\"Content-Type\", \"application/json\"); builder.method(method, HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body))); }\n            var response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray());\n            if (response.statusCode() < 200 || response.statusCode() >= 300) throw new ApiException(response.statusCode(), new String(response.body(), StandardCharsets.UTF_8), response.headers().firstValue(\"Retry-After\").orElse(null));\n            if (hooks != null) hooks.afterResponse(response.statusCode());\n            return response.body();\n        } catch (JsonProcessingException error) { throw new IllegalArgumentException(\"Kaji could not serialize the request body\", error);\n        } catch (IOException error) { throw new IllegalStateException(\"Kaji could not execute the request\", error);\n        } catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new IllegalStateException(\"Kaji request was interrupted\", error); }\n    }\n\n    /** Returns data lines from a text/event-stream endpoint. Close the stream when finished. */\n    private java.util.stream.Stream<String> requestEventStream(String method, String path, List<QueryParameter> query, Map<String, String> headers, java.lang.Object body) {\n        var url = baseUrl + path + queryString(query);\n        var builder = HttpRequest.newBuilder(URI.create(url)).timeout(timeout).header(\"Accept\", \"text/event-stream\");\n        defaultHeaders.forEach(builder::header); headers.forEach(builder::header);\n        if (apiKey != null && !apiKey.isBlank()) { var credential = apiKeyPrefix == null || apiKeyPrefix.isBlank() ? apiKey : apiKeyPrefix + \" \" + apiKey; builder.header(apiKeyHeader, credential); }\n        try {\n            if (body == null) builder.method(method, HttpRequest.BodyPublishers.noBody());\n            else if (body instanceof byte[] bytes) { builder.header(\"Content-Type\", \"application/octet-stream\"); builder.method(method, HttpRequest.BodyPublishers.ofByteArray(bytes)); }\n            else { builder.header(\"Content-Type\", \"application/json\"); builder.method(method, HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body))); }\n            var response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofLines());\n            if (response.statusCode() < 200 || response.statusCode() >= 300) { try (var lines = response.body()) { throw new ApiException(response.statusCode(), lines.reduce(\"\", (a, b) -> a + \"\\n\" + b), response.headers().firstValue(\"Retry-After\").orElse(null)); } }\n            if (hooks != null) hooks.afterResponse(response.statusCode());\n            return response.body().filter(line -> !line.isEmpty() && !line.startsWith(\":\")).map(line -> line.startsWith(\"data:\") ? line.substring(5).stripLeading() : line);\n        } catch (JsonProcessingException error) { throw new IllegalArgumentException(\"Kaji could not serialize the request body\", error);\n        } catch (IOException error) { throw new IllegalStateException(\"Kaji could not execute the event stream\", error);\n        } catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new IllegalStateException(\"Kaji request was interrupted\", error); }\n    }\n"
+        "\n    /** Downloads a non-JSON representation as bytes. */\n    private byte[] requestBinary(String method, String path, List<QueryParameter> query, Map<String, String> headers, java.lang.Object body) {\n        var url = baseUrl + path + queryString(query);\n        var builder = HttpRequest.newBuilder(URI.create(url)).timeout(timeout).header(\"Accept\", \"*/*\");\n        defaultHeaders.forEach(builder::header); headers.forEach(builder::header);\n        if (apiKey != null && !apiKey.isBlank()) { var credential = apiKeyPrefix == null || apiKeyPrefix.isBlank() ? apiKey : apiKeyPrefix + \" \" + apiKey; builder.header(apiKeyHeader, credential); }\n        try {\n            if (body == null) builder.method(method, HttpRequest.BodyPublishers.noBody());\n            else if (body instanceof byte[] bytes) { builder.header(\"Content-Type\", \"application/octet-stream\"); builder.method(method, HttpRequest.BodyPublishers.ofByteArray(bytes)); }\n            else { builder.header(\"Content-Type\", \"application/json\"); builder.method(method, HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body))); }\n            var response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray());\n            if (response.statusCode() < 200 || response.statusCode() >= 300) throw new ApiException(response.statusCode(), new String(response.body(), StandardCharsets.UTF_8), response.headers().firstValue(\"Retry-After\").orElse(null), response.headers().firstValue(\"retry-after-ms\").orElse(null));\n            if (hooks != null) hooks.afterResponse(response.statusCode());\n            return response.body();\n        } catch (JsonProcessingException error) { throw new IllegalArgumentException(\"Kaji could not serialize the request body\", error);\n        } catch (IOException error) { throw new IllegalStateException(\"Kaji could not execute the request\", error);\n        } catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new IllegalStateException(\"Kaji request was interrupted\", error); }\n    }\n\n    /** Returns data lines from a text/event-stream endpoint. Close the stream when finished. */\n    private java.util.stream.Stream<String> requestEventStream(String method, String path, List<QueryParameter> query, Map<String, String> headers, java.lang.Object body) {\n        var url = baseUrl + path + queryString(query);\n        var builder = HttpRequest.newBuilder(URI.create(url)).timeout(timeout).header(\"Accept\", \"text/event-stream\");\n        defaultHeaders.forEach(builder::header); headers.forEach(builder::header);\n        if (apiKey != null && !apiKey.isBlank()) { var credential = apiKeyPrefix == null || apiKeyPrefix.isBlank() ? apiKey : apiKeyPrefix + \" \" + apiKey; builder.header(apiKeyHeader, credential); }\n        try {\n            if (body == null) builder.method(method, HttpRequest.BodyPublishers.noBody());\n            else if (body instanceof byte[] bytes) { builder.header(\"Content-Type\", \"application/octet-stream\"); builder.method(method, HttpRequest.BodyPublishers.ofByteArray(bytes)); }\n            else { builder.header(\"Content-Type\", \"application/json\"); builder.method(method, HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body))); }\n            var response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofLines());\n            if (response.statusCode() < 200 || response.statusCode() >= 300) { try (var lines = response.body()) { throw new ApiException(response.statusCode(), lines.reduce(\"\", (a, b) -> a + \"\\n\" + b), response.headers().firstValue(\"Retry-After\").orElse(null), response.headers().firstValue(\"retry-after-ms\").orElse(null)); } }\n            if (hooks != null) hooks.afterResponse(response.statusCode());\n            return response.body().filter(line -> !line.isEmpty() && !line.startsWith(\":\")).map(line -> line.startsWith(\"data:\") ? line.substring(5).stripLeading() : line);\n        } catch (JsonProcessingException error) { throw new IllegalArgumentException(\"Kaji could not serialize the request body\", error);\n        } catch (IOException error) { throw new IllegalStateException(\"Kaji could not execute the event stream\", error);\n        } catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new IllegalStateException(\"Kaji request was interrupted\", error); }\n    }\n"
     );
     output.push_str(
-        "\n    private String requestWithRetry(String method, String path, List<QueryParameter> query, Map<String, String> headers, java.lang.Object body) {\n        var maxAttempts = retryAllowed(method, headers) ? retry.maxAttempts() : 1;\n        RuntimeException lastError = null;\n        for (var attempt = 0; attempt < maxAttempts; attempt++) {\n            try {\n                if (hooks != null) hooks.beforeRequest(method, URI.create(baseUrl + path + queryString(query)));\n                var response = request(method, path, query, headers, body);\n                if (hooks != null) hooks.afterResponse(200);\n                return response;\n            } catch (ApiException error) {\n                lastError = error;\n                if (attempt + 1 >= maxAttempts || !retryableStatus(error.statusCode())) {\n                    if (hooks != null) hooks.onError(error);\n                    throw error;\n                }\n                retryDelay(attempt, error.retryAfter());\n            } catch (IllegalStateException error) {\n                lastError = error;\n                if (attempt + 1 >= maxAttempts || !(error.getCause() instanceof IOException)) {\n                    if (hooks != null) hooks.onError(error);\n                    throw error;\n                }\n                retryDelay(attempt, null);\n            }\n        }\n        if (hooks != null) hooks.onError(lastError);\n        throw lastError == null ? new IllegalStateException(\"Kaji retry loop completed without a response\") : lastError;\n    }\n\n    private boolean retryAllowed(String method, Map<String, String> headers) {\n        var normalized = method.toUpperCase(Locale.ROOT);\n        return normalized.equals(\"GET\") || normalized.equals(\"PUT\") || normalized.equals(\"PATCH\") || normalized.equals(\"DELETE\")\n            || (normalized.equals(\"POST\") && headers.keySet().stream().anyMatch(name -> name.equalsIgnoreCase(\"Idempotency-Key\")));\n    }\n\n    private static boolean retryableStatus(int status) {\n        return status == 408 || status == 429 || status == 500 || status == 502 || status == 503 || status == 504;\n    }\n\n    private void retryDelay(int attempt, String retryAfter) {\n        long delay = retryAfterDelay(retryAfter);\n        if (delay < 0) {\n            var exponential = retry.initialDelay().toMillis() * (1L << Math.min(attempt, 30));\n            delay = Math.min(exponential, retry.maxDelay().toMillis());\n        }\n        try {\n            if (delay > 0) Thread.sleep(delay);\n        } catch (InterruptedException error) {\n            Thread.currentThread().interrupt();\n            throw new IllegalStateException(\"Kaji retry was interrupted\", error);\n        }\n    }\n\n    private static long retryAfterDelay(String value) {\n        if (value == null || value.isBlank()) return -1;\n        try {\n            return Math.max(0, (long) (Double.parseDouble(value.trim()) * 1000));\n        } catch (NumberFormatException ignored) {\n            return -1;\n        }\n    }\n}\n",
+        "\n    private String requestWithRetry(String method, String path, List<QueryParameter> query, Map<String, String> headers, java.lang.Object body, String idempotencyHeader) {\n        var maxAttempts = retryAllowed(method, headers, idempotencyHeader) ? retry.maxAttempts() : 1;\n        RuntimeException lastError = null;\n        for (var attempt = 0; attempt < maxAttempts; attempt++) {\n            try {\n                if (hooks != null) hooks.beforeRequest(method, URI.create(baseUrl + path + queryString(query)));\n                var response = request(method, path, query, headers, body);\n                if (hooks != null) hooks.afterResponse(200);\n                return response;\n            } catch (ApiException error) {\n                lastError = error;\n                if (attempt + 1 >= maxAttempts || !retryableStatus(error.statusCode())) {\n                    if (hooks != null) hooks.onError(error);\n                    throw error;\n                }\n                retryDelay(attempt, error.retryAfter(), error.retryAfterMillis());\n            } catch (IllegalStateException error) {\n                lastError = error;\n                if (attempt + 1 >= maxAttempts || !(error.getCause() instanceof IOException)) {\n                    if (hooks != null) hooks.onError(error);\n                    throw error;\n                }\n                retryDelay(attempt, null, null);\n            }\n        }\n        if (hooks != null) hooks.onError(lastError);\n        throw lastError == null ? new IllegalStateException(\"Kaji retry loop completed without a response\") : lastError;\n    }\n\n    private static boolean retryAllowed(String method, Map<String, String> headers, String idempotencyHeader) {\n        var normalized = method.toUpperCase(Locale.ROOT);\n        return (idempotencyHeader != null && headers.entrySet().stream().anyMatch(entry -> entry.getKey().equalsIgnoreCase(idempotencyHeader) && entry.getValue() != null && !entry.getValue().isBlank())) || normalized.equals(\"GET\") || normalized.equals(\"PUT\") || normalized.equals(\"DELETE\")\n            || ((normalized.equals(\"POST\") || normalized.equals(\"PATCH\")) && headers.entrySet().stream().anyMatch(entry -> entry.getKey().equalsIgnoreCase(\"Idempotency-Key\") && entry.getValue() != null && !entry.getValue().isBlank()));\n    }\n\n    private static boolean retryableStatus(int status) {\n        return status == 408 || status == 429 || status == 500 || status == 502 || status == 503 || status == 504;\n    }\n\n    private void retryDelay(int attempt, String retryAfter, String retryAfterMillis) {\n        long delay = retryAfterMillisDelay(retryAfterMillis);\n        if (delay < 0) delay = retryAfterDelay(retryAfter);\n        var cap = boundedDurationMillis(retry.maxDelay());\n        if (delay < 0) {\n            var exponential = boundedDurationMillis(retry.initialDelay()) * Math.pow(2, Math.min(attempt, 30));\n            delay = (long) Math.min(exponential, cap);\n        }\n        delay = Math.min(delay, cap);\n        try {\n            if (delay > 0) Thread.sleep(delay);\n        } catch (InterruptedException error) {\n            Thread.currentThread().interrupt();\n            throw new IllegalStateException(\"Kaji retry was interrupted\", error);\n        }\n    }\n\n    private static long boundedDurationMillis(java.time.Duration duration) {\n        if (duration.isNegative()) return 0;\n        try { return duration.toMillis(); } catch (ArithmeticException overflow) { return Long.MAX_VALUE; }\n    }\n\n    private static long retryAfterMillisDelay(String value) {\n        if (value == null || value.isBlank()) return -1;\n        try {\n            var milliseconds = Double.parseDouble(value.trim());\n            if (!Double.isFinite(milliseconds) || milliseconds < 0) return -1;\n            return milliseconds >= Long.MAX_VALUE ? Long.MAX_VALUE : (long) milliseconds;\n        } catch (NumberFormatException ignored) { return -1; }\n    }\n\n    private static long retryAfterDelay(String value) {\n        if (value == null || value.isBlank()) return -1;\n        try {\n            var seconds = Double.parseDouble(value.trim());\n            if (!Double.isFinite(seconds) || seconds < 0) return -1;\n            return seconds >= Long.MAX_VALUE / 1000.0 ? Long.MAX_VALUE : (long) (seconds * 1000);\n        } catch (NumberFormatException ignored) {\n            try {\n                var date = java.time.ZonedDateTime.parse(value.trim(), java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME).toInstant();\n                var duration = java.time.Duration.between(java.time.Instant.now(), date);\n                if (duration.isNegative()) return 0;\n                try { return duration.toMillis(); } catch (ArithmeticException overflow) { return Long.MAX_VALUE; }\n            } catch (java.time.DateTimeException malformed) { return -1; }\n        }\n    }\n}\n",
     );
     output = output.replacen(
         "                var response = request(method, path, query, headers, body);\n                if (hooks != null) hooks.afterResponse(200);\n                return response;",
@@ -782,6 +782,18 @@ fn render_operation(output: &mut String, operation: &Operation) {
             _ => {}
         }
     }
+    let idempotency_header = kaji_core::idempotency::resolved(operation)
+        .map(|policy| {
+            if policy.auto_generate {
+                let _ = writeln!(
+                    output,
+                    "        headers.putIfAbsent({:?}, java.util.UUID.randomUUID().toString());",
+                    policy.header
+                );
+            }
+            format!("{:?}", policy.header)
+        })
+        .unwrap_or_else(|| "null".into());
     let body = if body_schema.is_some() && has_input {
         "input.body()"
     } else {
@@ -791,7 +803,7 @@ fn render_operation(output: &mut String, operation: &Operation) {
         ResponseSurface::Json(schema) => {
             let _ = writeln!(
                 output,
-                "        var response = requestWithRetry({:?}, path, query, headers, {body});",
+                "        var response = requestWithRetry({:?}, path, query, headers, {body}, {idempotency_header});",
                 operation.method.as_str()
             );
             let _ = writeln!(
@@ -803,7 +815,7 @@ fn render_operation(output: &mut String, operation: &Operation) {
         ResponseSurface::Empty => {
             let _ = writeln!(
                 output,
-                "        requestWithRetry({:?}, path, query, headers, {body});",
+                "        requestWithRetry({:?}, path, query, headers, {body}, {idempotency_header});",
                 operation.method.as_str()
             );
         }
@@ -1271,12 +1283,12 @@ fn render_declared_error_types(output: &mut String, api: &Api) {
                 let body = operation_response_type(schema);
                 let _ = writeln!(
                     output,
-                    "    public static final class {error} extends ApiException {{\n        private final {body} body;\n        private {error}(ApiException source, {body} body) {{ super(source.statusCode(), source.responseBody(), source.retryAfter()); this.body = body; }}\n        public {body} body() {{ return body; }}\n    }}\n"
+                    "    public static final class {error} extends ApiException {{\n        private final {body} body;\n        private {error}(ApiException source, {body} body) {{ super(source.statusCode(), source.responseBody(), source.retryAfter(), source.retryAfterMillis()); this.body = body; }}\n        public {body} body() {{ return body; }}\n    }}\n"
                 );
             } else {
                 let _ = writeln!(
                     output,
-                    "    public static final class {error} extends ApiException {{\n        private {error}(ApiException source) {{ super(source.statusCode(), source.responseBody(), source.retryAfter()); }}\n    }}\n"
+                    "    public static final class {error} extends ApiException {{\n        private {error}(ApiException source) {{ super(source.statusCode(), source.responseBody(), source.retryAfter(), source.retryAfterMillis()); }}\n    }}\n"
                 );
             }
         }
@@ -2043,13 +2055,131 @@ mod tests {
     }
 
     #[test]
+    fn retry_headers_preserve_zero_precedence_dates_and_bounds() {
+        let tree = render_test_sdk(&contact_api(), "java", Some("com.kaji.email")).unwrap();
+        let client = rendered_java(&tree);
+        assert!(client.contains("firstValue(\"retry-after-ms\")"));
+        assert!(client.contains("retryAfterMillisDelay(retryAfterMillis)"));
+        assert!(client.contains("retryAllowed(method, headers, null)"));
+        assert!(client.contains("entry.getValue() != null && !entry.getValue().isBlank()"));
+        assert!(!client.contains("retryAllowed(method, headers)"));
+        assert!(!client.contains("retryDelay(attempt, null)"));
+        assert!(!client.contains("retryDelay(attempt, error.retryAfter())"));
+        assert!(client.contains("if (delay < 0) delay = retryAfterDelay(retryAfter)"));
+        assert!(client.contains("delay = Math.min(delay, cap)"));
+        assert!(client.contains("DateTimeFormatter.RFC_1123_DATE_TIME"));
+        assert!(client.contains("!Double.isFinite(milliseconds) || milliseconds < 0"));
+        let error = super::api_exception("example");
+        assert!(error.contains("this(statusCode, responseBody, retryAfter, null)"));
+        assert!(error.contains("public String retryAfterMillis()"));
+    }
+
+    #[test]
+    #[ignore = "requires a JDK 17 toolchain; executes emitted retry parsers without dependencies"]
+    fn generated_retry_parsers_execute_with_jdk() {
+        use std::process::Command;
+        let client = super::render_client_base(&contact_api(), "example");
+        let start = client
+            .find("    private static long retryAfterMillisDelay(")
+            .unwrap();
+        let end = client.rfind("\n}").unwrap();
+        let eligibility_start = client
+            .find("    private static boolean retryAllowed(")
+            .unwrap();
+        let eligibility_end = client
+            .find("    private static boolean retryableStatus(")
+            .unwrap();
+        let parsers = format!(
+            "{}\n{}",
+            &client[eligibility_start..eligibility_end],
+            &client[start..end]
+        );
+        let probe = format!(
+            "import java.util.Map;\nimport java.util.Locale;\npublic class ParserProbe {{\n{parsers}\n{}\n}}",
+            r#"
+    static void check(boolean value) { if (!value) throw new AssertionError(); }
+    public static void main(String[] args) {
+        check(!retryAllowed("POST", Map.of("Idempotency-Key", ""), null));
+        check(!retryAllowed("PATCH", Map.of("X-Key", ""), "X-Key"));
+        check(!retryAllowed("POST", Map.of("Idempotency-Key", " "), null));
+        check(!retryAllowed("PATCH", Map.of("X-Key", "\t"), "X-Key"));
+        check(retryAllowed("POST", Map.of("idempotency-key", "provided"), null));
+        check(retryAllowed("PATCH", Map.of("x-key", "provided"), "X-Key"));
+        check(retryAfterMillisDelay("0") == 0);
+        check(retryAfterMillisDelay("125.5") == 125);
+        check(retryAfterMillisDelay("NaN") == -1);
+        check(retryAfterMillisDelay("Infinity") == -1);
+        check(retryAfterMillisDelay("-1") == -1);
+        check(retryAfterMillisDelay("invalid") == -1);
+        check(retryAfterMillisDelay("1e300") == Long.MAX_VALUE);
+        check(retryAfterDelay("0") == 0);
+        check(retryAfterDelay("2") == 2000);
+        check(retryAfterDelay("NaN") == -1);
+        check(retryAfterDelay("invalid") == -1);
+        check(retryAfterDelay("Thu, 01 Jan 1970 00:00:00 GMT") == 0);
+        var future = java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC).plusSeconds(5).format(java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME);
+        var delay = retryAfterDelay(future);
+        check(delay >= 3000 && delay <= 5000);
+    }
+"#
+        );
+        let output = tempfile::tempdir().unwrap();
+        std::fs::write(output.path().join("ParserProbe.java"), probe).unwrap();
+        for (tool, args) in [
+            ("javac", vec!["ParserProbe.java"]),
+            ("java", vec!["-cp", ".", "ParserProbe"]),
+        ] {
+            let result = Command::new(tool)
+                .args(args)
+                .current_dir(output.path())
+                .output()
+                .unwrap();
+            assert!(
+                result.status.success(),
+                "{}",
+                String::from_utf8_lossy(&result.stderr)
+            );
+        }
+    }
+
+    #[test]
     #[ignore = "requires Maven and a JDK 17 toolchain"]
     fn generated_package_compiles_with_maven() {
         use std::process::Command;
 
+        let mut source = contact_api();
+        let mut page = source.operations[0].clone();
+        page.id = "listItemPages".into();
+        page.path = "/items".into();
+        page.request_body = None;
+        page.parameters = vec![OperationParameter {
+            name: "page".into(),
+            location: "query".into(),
+            required: false,
+            schema: Some(integer()),
+            description: None,
+            annotations: BTreeMap::new(),
+        }];
+        page.responses = vec![kaji_core::OperationResponse::json(
+            "200",
+            SchemaValue::new(SchemaKind::Array {
+                items: Box::new(SchemaValue::new(SchemaKind::String)),
+            }),
+        )];
+        page.annotations.insert("x-kaji-pagination".into(), serde_json::json!({"type":"page","inputs":[{"name":"page","type":"page"}],"outputs":{"results":"$"}}));
+        source.operations.push(page);
+        let mut keyed = source.operations[0].clone();
+        keyed.id = "createKeyedItem".into();
+        keyed.method = kaji_core::HttpMethod::Post;
+        keyed.annotations.insert(
+            "x-kaji-idempotency".into(),
+            serde_json::json!({"header":"X-Request-Key","auto_generate":true}),
+        );
+        source.operations.push(keyed);
+        let source = kaji_core::idempotency::prepare_api(&source, &Default::default()).unwrap();
         let root = tempfile::tempdir().unwrap();
         render_sdk(
-            &contact_api(),
+            &source,
             "sdk",
             Some("com.kaji.email"),
             SdkClientStyle::Namespaced,
@@ -2074,6 +2204,7 @@ mod tests {
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr),
         );
+        generated_retry_parsers_execute_with_jdk();
     }
 
     #[test]

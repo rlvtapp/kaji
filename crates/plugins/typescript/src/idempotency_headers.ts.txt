@@ -1,0 +1,23 @@
+
+// Copy caller headers; a fresh secure key belongs to this logical invocation.
+function kajiIdempotencyHeaders(input: unknown, name: string, autoGenerate: boolean): Record<string, unknown> {
+  const headers: Record<string, unknown> = typeof Headers !== 'undefined' && input instanceof Headers
+    ? Object.fromEntries(input.entries())
+    : Array.isArray(input) ? Object.fromEntries(input as [string, unknown][]) : { ...(input as Record<string, unknown> | undefined) }
+  const existing = Object.keys(headers).find((key) => key.toLowerCase() === name.toLowerCase())
+  if (autoGenerate && (existing === undefined || headers[existing] === undefined || headers[existing] === null)) {
+    const crypto = globalThis.crypto
+    if (!crypto) throw new Error('kaji: secure randomness is unavailable for idempotency keys')
+    let key: string
+    if (typeof crypto.randomUUID === 'function') key = crypto.randomUUID()
+    else {
+      const bytes = crypto.getRandomValues(new Uint8Array(16))
+      bytes[6] = (bytes[6] & 15) | 64
+      bytes[8] = (bytes[8] & 63) | 128
+      const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, '0')).join('')
+      key = `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`
+    }
+    headers[existing ?? name] = key
+  }
+  return headers
+}

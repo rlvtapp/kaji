@@ -35,8 +35,11 @@ call typed operation methods with a `context.Context`.
 
 Generated clients retry transient transport failures and `408`, `429`, and
 `5xx` responses with exponential backoff. Retries are safe by default: `GET`,
-`PUT`, `PATCH`, and `DELETE` retry, while a `POST` retries only when its
-generated request includes an `Idempotency-Key` header. The default is three
+`PUT` and `DELETE` retry, while `POST` and `PATCH` retry only with a nonempty
+`Idempotency-Key` or the declared custom idempotency header on an opted-in operation.
+Auto-generated keys use secure UUID v4 randomness once per operation call and stay
+stable across retries; explicit caller keys are preserved. Server `Retry-After-Ms`
+and `Retry-After` delays respect the configured delay cap. The default is three
 attempts (250ms initial delay, 8s cap). Set `Retry: &RetryConfig{MaxAttempts:
 1}` to disable retries, or tune the delays without replacing the configured
 `HTTPClient`.

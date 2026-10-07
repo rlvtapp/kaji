@@ -435,13 +435,14 @@ fn render_client(api: &Api, namespace: &str, style: SdkClientStyle) -> String {
     }) {
         output.push_str(render_pagination_helper());
     }
-    output.push_str("    /** @return array<string, string> */\n    private function authHeaders(): array\n    {\n        if ($this->apiKey === null || $this->apiKey === '') {\n            return [];\n        }\n\n        $value = trim($this->apiKeyPrefix . ' ' . $this->apiKey);\n        return [$this->apiKeyHeader => $value];\n    }\n\n    /** @param array<string, string> $headers */\n    private function request(string $method, string $path, array $query, array $headers, mixed $body, string $bodyKind = 'json', bool $retryable = false): string\n    {\n        $url = $this->baseUrl . $path;\n        $query = array_filter($query, static fn (mixed $value): bool => $value !== null);\n        if ($query !== []) {\n            $url .= '?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986);\n        }\n        $requestHeaders = array_merge($this->defaultHeaders, $this->authHeaders(), $headers);\n        $context = ['method' => $method, 'url' => $url, 'query' => $query, 'headers' => $requestHeaders, 'body' => $body];\n        if ($this->beforeRequest !== null) {\n            ($this->beforeRequest)($context);\n        }\n        $canRetry = $retryable && $this->retryAllowed($method, $requestHeaders);\n        for ($attempt = 0; $attempt <= max(0, $this->maxRetries); $attempt++) {\n            $request = $this->requestFactory->createRequest($method, $url);\n            foreach ($requestHeaders as $name => $value) {\n                $request = $request->withHeader($name, $value);\n            }\n            if ($body !== null) {\n                if ($bodyKind === 'binary') {\n                    if (!is_string($body)) {\n                        throw new \\TypeError('binary request bodies must be strings');\n                    }\n                    $encoded = $body;\n                    $contentType = 'application/octet-stream';\n                } elseif ($bodyKind === 'form') {\n                    if (!is_array($body)) {\n                        throw new \\TypeError('form request bodies must be arrays');\n                    }\n                    $encoded = http_build_query($body, '', '&', PHP_QUERY_RFC3986);\n                    $contentType = 'application/x-www-form-urlencoded';\n                } else {\n                    $encoded = json_encode($body, JSON_THROW_ON_ERROR);\n                    $contentType = 'application/json';\n                }\n                $request = $request\n                    ->withHeader('Content-Type', $contentType)\n                    ->withBody($this->streamFactory->createStream($encoded));\n            }\n            try {\n                $response = $this->httpClient->sendRequest($request);\n            } catch (\\Throwable $error) {\n                if ($canRetry && $attempt < max(0, $this->maxRetries)) {\n                    $this->retryDelay($attempt);\n                    continue;\n                }\n                $this->notifyError($error, $context);\n                throw $error;\n            }\n            $status = $response->getStatusCode();\n            if ($canRetry && $this->retryableStatus($status) && $attempt < max(0, $this->maxRetries)) {\n                $this->retryDelay($attempt, $response->getHeaderLine('Retry-After'));\n                continue;\n            }\n            $contents = (string) $response->getBody();\n            if ($status < 200 || $status >= 300) {\n                $error = new ApiException(sprintf('API request failed with HTTP %d', $status), $status, $contents);\n                $this->notifyError($error, $context);\n                throw $error;\n            }\n            if ($this->afterResponse !== null) {\n                ($this->afterResponse)(['request' => $context, 'statusCode' => $status, 'headers' => $response->getHeaders(), 'body' => $contents]);\n            }\n            return $contents;\n        }\n        throw new \\LogicException('Kaji retry loop completed without a response');\n    }\n\n    /** @param array<string, string> $headers */\n    private function retryAllowed(string $method, array $headers): bool\n    {\n        if (in_array(strtoupper($method), ['GET', 'PUT', 'PATCH', 'DELETE'], true)) {\n            return true;\n        }\n        if (strtoupper($method) !== 'POST') {\n            return false;\n        }\n        foreach (array_keys($headers) as $name) {\n            if (strtolower($name) === 'idempotency-key') {\n                return true;\n            }\n        }\n        return false;\n    }\n\n    private function retryableStatus(int $status): bool\n    {\n        return in_array($status, [408, 429, 500, 502, 503, 504], true);\n    }\n\n    private function retryDelay(int $attempt, string $retryAfter = ''): void\n    {\n        $serverDelay = is_numeric($retryAfter) ? (float) $retryAfter * 1000 : null;\n        $exponential = max(0, $this->retryInitialDelayMs) * (2 ** $attempt);\n        $milliseconds = min($serverDelay ?? $exponential, max(0, $this->retryMaxDelayMs));\n        if ($milliseconds > 0) {\n            usleep((int) round($milliseconds * 1000));\n        }\n    }\n\n    /** @param array<string, mixed> $context */\n    private function notifyError(\\Throwable $error, array $context): void\n    {\n        if ($this->onError !== null) {\n            ($this->onError)($error, $context);\n        }\n    }\n}\n");
+    output.push_str("    /** @return array<string, string> */\n    private function authHeaders(): array\n    {\n        if ($this->apiKey === null || $this->apiKey === '') {\n            return [];\n        }\n\n        $value = trim($this->apiKeyPrefix . ' ' . $this->apiKey);\n        return [$this->apiKeyHeader => $value];\n    }\n\n    /** @param array<string, string> $headers */\n    private function request(string $method, string $path, array $query, array $headers, mixed $body, string $bodyKind = 'json', bool $retryable = false): string\n    {\n        $url = $this->baseUrl . $path;\n        $query = array_filter($query, static fn (mixed $value): bool => $value !== null);\n        if ($query !== []) {\n            $url .= '?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986);\n        }\n        $requestHeaders = array_filter(array_merge($this->defaultHeaders, $this->authHeaders(), $headers), static fn(mixed $value): bool => $value !== null);\n        $context = ['method' => $method, 'url' => $url, 'query' => $query, 'headers' => $requestHeaders, 'body' => $body];\n        if ($this->beforeRequest !== null) {\n            ($this->beforeRequest)($context);\n        }\n        $canRetry = $retryable && $this->retryAllowed($method, $requestHeaders, $idempotencyHeader);\n        for ($attempt = 0; $attempt <= max(0, $this->maxRetries); $attempt++) {\n            $request = $this->requestFactory->createRequest($method, $url);\n            foreach ($requestHeaders as $name => $value) {\n                $request = $request->withHeader($name, $value);\n            }\n            if ($body !== null) {\n                if ($bodyKind === 'binary') {\n                    if (!is_string($body)) {\n                        throw new \\TypeError('binary request bodies must be strings');\n                    }\n                    $encoded = $body;\n                    $contentType = 'application/octet-stream';\n                } elseif ($bodyKind === 'form') {\n                    if (!is_array($body)) {\n                        throw new \\TypeError('form request bodies must be arrays');\n                    }\n                    $encoded = http_build_query($body, '', '&', PHP_QUERY_RFC3986);\n                    $contentType = 'application/x-www-form-urlencoded';\n                } else {\n                    $encoded = json_encode($body, JSON_THROW_ON_ERROR);\n                    $contentType = 'application/json';\n                }\n                $request = $request\n                    ->withHeader('Content-Type', $contentType)\n                    ->withBody($this->streamFactory->createStream($encoded));\n            }\n            try {\n                $response = $this->httpClient->sendRequest($request);\n            } catch (\\Throwable $error) {\n                if ($canRetry && $attempt < max(0, $this->maxRetries)) {\n                    $this->retryDelay($attempt);\n                    continue;\n                }\n                $this->notifyError($error, $context);\n                throw $error;\n            }\n            $status = $response->getStatusCode();\n            if ($canRetry && $this->retryableStatus($status) && $attempt < max(0, $this->maxRetries)) {\n                $this->retryDelay($attempt, $response->getHeaderLine('Retry-After'), $response->getHeaderLine('retry-after-ms'));\n                continue;\n            }\n            $contents = (string) $response->getBody();\n            if ($status < 200 || $status >= 300) {\n                $error = new ApiException(sprintf('API request failed with HTTP %d', $status), $status, $contents);\n                $this->notifyError($error, $context);\n                throw $error;\n            }\n            if ($this->afterResponse !== null) {\n                ($this->afterResponse)(['request' => $context, 'statusCode' => $status, 'headers' => $response->getHeaders(), 'body' => $contents]);\n            }\n            return $contents;\n        }\n        throw new \\LogicException('Kaji retry loop completed without a response');\n    }\n\n    /** @param array<string, string> $headers */\n    private function retryAllowed(string $method, array $headers, ?string $idempotencyHeader = null): bool\n    {\n        if (in_array(strtoupper($method), ['GET', 'PUT', 'DELETE'], true)) {\n            return true;\n        }\n        if (!in_array(strtoupper($method), ['POST', 'PATCH'], true)) {\n            return false;\n        }\n        foreach ($headers as $name => $value) {\n            if ((strtolower($name) === 'idempotency-key' || ($idempotencyHeader !== null && strcasecmp($name, $idempotencyHeader) === 0)) && trim((string) $value) !== '') {\n                return true;\n            }\n        }\n        return false;\n    }\n\n    private function retryableStatus(int $status): bool\n    {\n        return in_array($status, [408, 429, 500, 502, 503, 504], true);\n    }\n\n    private function retryDelay(int $attempt, string $retryAfter = '', string $retryAfterMs = ''): void\n    {\n        $serverDelay = null;\n        foreach ([[$retryAfterMs, 1], [$retryAfter, 1000]] as [$value, $multiplier]) {\n            if (is_numeric($value) && is_finite((float) $value) && (float) $value >= 0) {\n                $serverDelay = (float) $value * $multiplier;\n                break;\n            }\n        }\n        $exponential = max(0, $this->retryInitialDelayMs) * (2 ** $attempt);\n        $milliseconds = min($serverDelay ?? $exponential, max(0, $this->retryMaxDelayMs));\n        if ($milliseconds > 0) {\n            usleep((int) round($milliseconds * 1000));\n        }\n    }\n\n    /** @param array<string, mixed> $context */\n    private function notifyError(\\Throwable $error, array $context): void\n    {\n        if ($this->onError !== null) {\n            ($this->onError)($error, $context);\n        }\n    }\n}\n");
+    output = output.replace("    private function authHeaders(): array", "    private static function kajiIdempotencyKey(): string\n    {\n        $bytes = random_bytes(16);\n        $bytes[6] = chr((ord($bytes[6]) & 15) | 64);\n        $bytes[8] = chr((ord($bytes[8]) & 63) | 128);\n        $hex = bin2hex($bytes);\n        return substr($hex, 0, 8) . '-' . substr($hex, 8, 4) . '-' . substr($hex, 12, 4) . '-' . substr($hex, 16, 4) . '-' . substr($hex, 20);\n    }\n\n    private function authHeaders(): array");
     // Keep the ordinary generated operation as the sole place that owns
     // auth, request serialization, retries, and hooks. A URL paginator only
     // replaces the URL at this private transport boundary.
     output = output.replacen(
         "private function request(string $method, string $path, array $query, array $headers, mixed $body, string $bodyKind = 'json', bool $retryable = false): string\n    {\n        $url = $this->baseUrl . $path;\n        $query = array_filter($query, static fn (mixed $value): bool => $value !== null);\n        if ($query !== []) {\n            $url .= '?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986);\n        }",
-        "private function request(string $method, string $path, array $query, array $headers, mixed $body, string $bodyKind = 'json', bool $retryable = false, ?string $paginationUrl = null): string\n    {\n        $url = $this->baseUrl . $path;\n        $query = array_filter($query, static fn (mixed $value): bool => $value !== null);\n        if ($query !== []) {\n            $url .= '?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986);\n        }\n        if ($paginationUrl !== null) {\n            $url = $this->resolvePaginationUrl($paginationUrl);\n        }",
+        "private function request(string $method, string $path, array $query, array $headers, mixed $body, string $bodyKind = 'json', bool $retryable = false, ?string $paginationUrl = null, ?string $idempotencyHeader = null): string\n    {\n        $url = $this->baseUrl . $path;\n        $query = array_filter($query, static fn (mixed $value): bool => $value !== null);\n        if ($query !== []) {\n            $url .= '?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986);\n        }\n        if ($paginationUrl !== null) {\n            $url = $this->resolvePaginationUrl($paginationUrl);\n        }",
         1,
     );
     output = output.replacen(
@@ -649,6 +650,20 @@ fn render_operation(operation: &Operation, namespace: &str, named_types: &NamedT
     }
     let args = args.join(", ");
     let mut output = format!("    public function {method_name}({args}): {return_type}\n    {{\n");
+    if let Some(policy) = operation.annotations.get("x-kaji-idempotency-resolved") {
+        if policy.get("auto_generate").and_then(Value::as_bool) == Some(true) {
+            if let Some(parameter_name) = policy.get("parameter_name").and_then(Value::as_str) {
+                if let Some((_, variable, _)) = arguments.iter().find(|(parameter, _, _)| {
+                    parameter.name == parameter_name && parameter.location == "header"
+                }) {
+                    let _ = writeln!(
+                        output,
+                        "        ${variable} ??= self::kajiIdempotencyKey();"
+                    );
+                }
+            }
+        }
+    }
     output.push_str(&format!(
         "        $path = {};\n",
         php_string(&operation.path)
@@ -698,10 +713,20 @@ fn render_operation(operation: &Operation, namespace: &str, named_types: &NamedT
     } else {
         ", null"
     };
-    let retryable = !matches!(operation.method, kaji_core::HttpMethod::Post)
+    let retryable = operation
+        .annotations
+        .contains_key("x-kaji-idempotency-resolved")
+        || !matches!(operation.method, kaji_core::HttpMethod::Post)
         || operation.parameters.iter().any(|parameter| {
             parameter.location == "header" && parameter.name.eq_ignore_ascii_case("idempotency-key")
         });
+    let idempotency_argument = operation
+        .annotations
+        .get("x-kaji-idempotency-resolved")
+        .and_then(|policy| policy.get("header"))
+        .and_then(Value::as_str)
+        .map(|header| format!(", {}", php_string(header)))
+        .unwrap_or_else(|| ", null".into());
     if is_sse {
         output.push_str(&format!(
             "        return $this->eventStream({}, $path, {query}, {headers}, {body}, {body_kind:?});\n",
@@ -709,7 +734,7 @@ fn render_operation(operation: &Operation, namespace: &str, named_types: &NamedT
         ));
     } else {
         output.push_str(&format!(
-            "        $contents = $this->request({}, $path, {query}, {headers}, {body}, {body_kind:?}, {retryable}{pagination_argument});\n",
+            "        $contents = $this->request({}, $path, {query}, {headers}, {body}, {body_kind:?}, {retryable}{pagination_argument}{idempotency_argument});\n",
             php_string(operation.method.as_str()),
         ));
     }
@@ -1888,7 +1913,7 @@ mod tests {
         assert!(client.contains("private readonly int $maxRetries = 2"));
         assert!(client.contains("private readonly mixed $beforeRequest = null"));
         assert!(client.contains("[408, 429, 500, 502, 503, 504]"));
-        assert!(client.contains("strtolower($name) === 'idempotency-key'"));
+        assert!(client.contains("strtolower($name) === 'idempotency-key' || ($idempotencyHeader !== null && strcasecmp($name, $idempotencyHeader) === 0)"));
         assert!(operations.contains("public function getPet(int $id, string $idempotencyKey, ?string $include = null): string"));
         assert!(operations.contains("return $contents;"));
     }
@@ -2104,7 +2129,7 @@ mod tests {
                 .contains("public function searchPets(?string $_kajiPaginationUrl = null): Pet")
         );
         assert!(operations.contains("$this->searchPets(_kajiPaginationUrl: $kajiUrl)"));
-        assert!(client.contains("bool $retryable = false, ?string $paginationUrl = null): string"));
+        assert!(client.contains("bool $retryable = false, ?string $paginationUrl = null, ?string $idempotencyHeader = null): string"));
         assert!(client.contains("private function resolvePaginationUrl(string $nextUrl): string"));
         assert!(client.contains("pagination URL must remain on the configured API origin"));
         assert!(resource.contains("public function searchPages(): \\Generator"));
@@ -2234,6 +2259,110 @@ check($original===['page'=>2,'limit'=>2,'filter'=>'keep'] && array_column(array_
             output.status.success(),
             "{}{}",
             String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    fn idempotency_fixture() -> Api {
+        let mut source = page_fixture();
+        let op = &mut source.operations[0];
+        op.annotations.clear();
+        op.id = "createItem".into();
+        op.method = kaji_core::HttpMethod::Post;
+        op.parameters = vec![OperationParameter {
+            name: "X-Request-Key".into(),
+            location: "header".into(),
+            required: false,
+            schema: Some(SchemaValue::new(SchemaKind::String)),
+            description: None,
+            annotations: Default::default(),
+        }];
+        op.responses = vec![OperationResponse::json(
+            "200",
+            SchemaValue::new(SchemaKind::String),
+        )];
+        op.annotations.insert("x-kaji-idempotency-resolved".into(),serde_json::json!({"header":"X-Request-Key","parameter_name":"X-Request-Key","auto_generate":true}));
+        source
+    }
+    #[test]
+    fn emits_operation_scoped_auto_idempotency_and_secure_uuid() {
+        let source = idempotency_fixture();
+        let tree = render_sdk(&source, "php", None, SdkClientStyle::Flat).unwrap();
+        let op = tree.get("php/src/ClientOperations000.php").unwrap();
+        assert!(op.contains("$xRequestKey ??= self::kajiIdempotencyKey()"));
+        assert!(op.contains("true, null, 'X-Request-Key'"));
+        let client = tree.get("php/src/Client.php").unwrap();
+        assert!(client.contains("random_bytes(16)"));
+        assert!(client.contains("getHeaderLine('retry-after-ms')"));
+        assert!(client.contains("[[$retryAfterMs, 1], [$retryAfter, 1000]]"));
+        assert!(client.contains("strcasecmp($name, $idempotencyHeader)"));
+        assert!(!client.contains("['GET', 'PUT', 'PATCH', 'DELETE']"));
+    }
+    #[test]
+    #[ignore = "requires PHP 8.2+; in-memory generated operation UUID probe"]
+    fn native_auto_idempotency_preserves_key_and_scopes_retry_header() {
+        let source = idempotency_fixture();
+        let tree = render_sdk(&source, "php", None, SdkClientStyle::Flat).unwrap();
+        let client = tree.get("php/src/Client.php").unwrap();
+        let start = client
+            .find("    private static function kajiIdempotencyKey()")
+            .unwrap();
+        let end = client[start..]
+            .find("    private function authHeaders()")
+            .unwrap()
+            + start;
+        let operations = tree.get("php/src/ClientOperations000.php").unwrap();
+        let trait_body =
+            &operations[operations.find("{\n").unwrap() + 2..operations.rfind('}').unwrap()];
+        let gate_start = client.find("    private function retryAllowed(").unwrap();
+        let gate_end = client[gate_start..]
+            .find("    private function retryableStatus(")
+            .unwrap()
+            + gate_start;
+        let gate = &client[gate_start..gate_end];
+        let script = format!(
+            "<?php\nclass Probe {{ public array $seen=[];\n{}\n{trait_body}\nprivate function request(string $method,string $path,array $query,array $headers,mixed $body,string $kind,bool $retryable,?string $url,?string $idempotencyHeader):string {{ $this->seen[]=[$headers,$idempotencyHeader,$retryable];return '\\\"ok\\\"'; }} }}\n",
+            &client[start..end]
+        );
+        let script=script.replace("public array $seen=[];",&format!("public array $seen=[];\n{gate}\npublic function canReplay(string $key,?string $header='X-Request-Key'):bool {{ return $this->retryAllowed('POST',['X-Request-Key'=>$key],$header); }}\n"));
+        let script = script.replace("'\\\"ok\\\"'", "'\"ok\"'")
+            + r#"$p=new Probe();$p->createItem();$p->createItem();$p->createItem('provided');$p->createItem('');if($p->canReplay('')||$p->canReplay(' ')||$p->canReplay('provided',null)||!$p->canReplay('provided')){throw new Exception('replay gate assertion');}$keys=array_map(fn($row)=>$row[0]['X-Request-Key'],$p->seen);if(!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/',$keys[0])||$keys[0]===$keys[1]||$keys[2]!=='provided'||$keys[3]!==''||$p->seen[0][1]!=='X-Request-Key'||!$p->seen[0][2]){throw new Exception('idempotency assertion');}"#;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("probe.php");
+        std::fs::write(&path, script).unwrap();
+        let output = std::process::Command::new("php")
+            .arg(path)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    #[test]
+    #[ignore = "requires PHP 8.2+; deterministic native delay precedence probe"]
+    fn native_retry_after_ms_has_precedence_and_configured_cap() {
+        let tree = render_sdk(&idempotency_fixture(), "php", None, SdkClientStyle::Flat).unwrap();
+        let client = tree.get("php/src/Client.php").unwrap();
+        let start = client.find("    private function retryDelay(").unwrap();
+        let end = client[start..]
+            .find("    /** @param array<string, mixed> $context */")
+            .unwrap()
+            + start;
+        let script = format!(
+            "<?php\nnamespace RetryProbe;function usleep(int $value):void {{ $GLOBALS['delays'][]=$value; }}\nclass Probe {{ private int $retryInitialDelayMs=250; private int $retryMaxDelayMs=400;\n{}\npublic function wait(string $seconds,string $ms):void {{ $this->retryDelay(0,$seconds,$ms); }} }}\n",
+            &client[start..end]
+        ) + r#"$GLOBALS['delays']=[];$p=new Probe();$p->wait('2','250');$p->wait('2','99999');$p->wait('.2','invalid');$p->wait('2','0');if($GLOBALS['delays']!==[250000,400000,200000]){throw new \Exception('retry delay assertion');}"#;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("probe.php");
+        std::fs::write(&path, script).unwrap();
+        let output = std::process::Command::new("php")
+            .arg(path)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
             String::from_utf8_lossy(&output.stderr)
         );
     }

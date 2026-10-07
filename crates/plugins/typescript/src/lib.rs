@@ -641,4 +641,6 @@ console.log(rawData, fullData, errorOrSuccess, incorrect);
 }
 
 #[cfg(test)]
+mod idempotency_tests;
+#[cfg(test)]
 mod middleware_tests;

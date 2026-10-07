@@ -188,7 +188,7 @@ fn insert(tree: &mut GeneratedTree, root: &str, path: &str, contents: String) ->
 
 fn render_mix_exs(api: &Api, app: &str, module: &str) -> String {
     format!(
-        "defmodule {module}.MixProject do\n  use Mix.Project\n\n  def project do\n    [\n      app: :{app},\n      version: \"{}\",\n      elixir: \"~> 1.15\",\n      start_permanent: Mix.env() == :prod,\n      deps: deps(),\n      description: \"Generated Elixir SDK for {}\"\n    ]\n  end\n\n  def application do\n    [extra_applications: [:logger, :inets], mod: {{{module}.Application, []}}]\n  end\n\n  defp deps do\n    [\n      {{:finch, \"~> 0.18\"}},\n      {{:jason, \"~> 1.4\"}}\n    ]\n  end\nend\n",
+        "defmodule {module}.MixProject do\n  use Mix.Project\n\n  def project do\n    [\n      app: :{app},\n      version: \"{}\",\n      elixir: \"~> 1.15\",\n      start_permanent: Mix.env() == :prod,\n      deps: deps(),\n      description: \"Generated Elixir SDK for {}\"\n    ]\n  end\n\n  def application do\n    [extra_applications: [:logger, :inets, :crypto], mod: {{{module}.Application, []}}]\n  end\n\n  defp deps do\n    [\n      {{:finch, \"~> 0.18\"}},\n      {{:jason, \"~> 1.4\"}}\n    ]\n  end\nend\n",
         package_version(&api.version),
         escape_elixir_string(&api.name),
     )
@@ -301,12 +301,21 @@ fn render_client(module: &str) -> String {
     end
   end
 
+  @doc false
+  def idempotency_key do
+    <<a::32, b::16, _version::4, c::12, _variant::2, d::14, e::48>> = :crypto.strong_rand_bytes(16)
+    # Replace the random version/variant bits with UUID v4's fixed bits.
+    bytes = <<a::32, b::16, 4::4, c::12, 2::2, d::14, e::48>>
+    hex = Base.encode16(bytes, case: :lower)
+    Enum.map_join([{0, 8}, {8, 4}, {12, 4}, {16, 4}, {20, 12}], "-", fn {start, length} -> binary_part(hex, start, length) end)
+  end
+
   @doc "Only idempotent methods, or POST requests with Idempotency-Key, retry automatically."
-  @spec request(t(), atom(), String.t(), list(), list(), term(), atom(), atom(), map()) :: {:ok, term()} | {:error, term()}
-  def request(client, method, path, query \\ [], headers \\ [], body \\ nil, body_kind \\ :json, response_kind \\ :json, error_types \\ %{}) do
+  @spec request(t(), atom(), String.t(), list(), list(), term(), atom(), atom(), map(), String.t() | nil) :: {:ok, term()} | {:error, term()}
+  def request(client, method, path, query \\ [], headers \\ [], body \\ nil, body_kind \\ :json, response_kind \\ :json, error_types \\ %{}, idempotency_header \\ nil) do
     url = client.base_url <> path <> encode_query(query)
     headers = default_headers(client, headers, body, body_kind, response_kind)
-    context = %{method: method, url: url, query: query, headers: headers, body: body}
+    context = %{method: method, url: url, query: query, headers: headers, body: body, idempotency_header: idempotency_header}
     notify(client.before_request, context)
     do_request(client, method, url, headers, body, body_kind, response_kind, error_types, context, 0)
   end
@@ -443,7 +452,7 @@ fn render_client(module: &str) -> String {
     request = Finch.build(method, url, headers, encode_body(body, body_kind))
     case execute_transport(client, request) do
       {:ok, %Finch.Response{status: status, headers: response_headers} = response} ->
-        if retryable?(method, headers) and transient_status?(status) and attempt < client.max_retries do
+        if retryable?(method, headers, context.idempotency_header) and transient_status?(status) and attempt < client.max_retries do
           retry_delay(client, attempt, response_headers)
           do_request(client, method, url, headers, body, body_kind, response_kind, error_types, context, attempt + 1)
         else
@@ -457,7 +466,7 @@ fn render_client(module: &str) -> String {
           end
         end
       {:error, reason} ->
-        if retryable?(method, headers) and attempt < client.max_retries do
+        if retryable?(method, headers, context.idempotency_header) and attempt < client.max_retries do
           retry_delay(client, attempt, [])
           do_request(client, method, url, headers, body, body_kind, response_kind, error_types, context, attempt + 1)
         else
@@ -477,15 +486,22 @@ fn render_client(module: &str) -> String {
   defp decode_response(response, :text), do: {:ok, response}
   defp decode_response(response, :json), do: JSON.decode(response)
 
-  defp retryable?(method, _headers) when method in [:get, :put, :patch, :delete], do: true
-  defp retryable?(:post, headers), do: Enum.any?(headers, fn {name, _} -> String.downcase(name) == "idempotency-key" end)
-  defp retryable?(_, _headers), do: false
+  defp retryable?(method, _headers, _idempotency_header) when method in [:get, :put, :delete], do: true
+  defp retryable?(method, headers, idempotency_header) when method in [:post, :patch], do: Enum.any?(headers, fn {name, value} -> (String.downcase(name) == "idempotency-key" or (is_binary(idempotency_header) and String.downcase(name) == String.downcase(idempotency_header))) and String.trim(to_string(value)) != "" end)
+  defp retryable?(_, _headers, _idempotency_header), do: false
   defp transient_status?(status), do: status in [408, 429, 500, 502, 503, 504]
   defp retry_delay(client, attempt, headers) do
-    server_delay = headers |> header("retry-after") |> parse_retry_after()
+    server_delay = parse_retry_after_ms(header(headers, "retry-after-ms")) || (headers |> header("retry-after") |> parse_retry_after())
     exponential = client.retry_initial_delay_ms * Integer.pow(2, attempt)
     milliseconds = min(server_delay || exponential, client.retry_max_delay_ms)
     if milliseconds > 0, do: Process.sleep(milliseconds)
+  end
+  defp parse_retry_after_ms(nil), do: nil
+  defp parse_retry_after_ms(value) do
+    case Float.parse(value) do
+      {milliseconds, ""} when milliseconds >= 0 -> round(milliseconds)
+      _ -> nil
+    end
   end
   defp parse_retry_after(nil), do: nil
   defp parse_retry_after(value) do
@@ -952,10 +968,24 @@ fn render_operation_body(
             } else {
                 format!("Keyword.get(options, :{variable})")
             };
-            format!(
-                "{{\"{}\", to_string({value})}}",
-                escape_elixir_string(&parameter.name)
-            )
+            let value = if operation
+                .annotations
+                .get("x-kaji-idempotency-resolved")
+                .is_some_and(|policy| {
+                    policy
+                        .get("auto_generate")
+                        .and_then(serde_json::Value::as_bool)
+                        == Some(true)
+                        && policy
+                            .get("parameter_name")
+                            .and_then(serde_json::Value::as_str)
+                            == Some(parameter.name.as_str())
+                }) {
+                format!("case {value} do nil -> Client.idempotency_key(); provided -> provided end")
+            } else {
+                value
+            };
+            format!("{{\"{}\", {value}}}", escape_elixir_string(&parameter.name))
         })
         .collect::<Vec<_>>();
     let _ = writeln!(output, "{pad}headers = [{}]", headers.join(", "));
@@ -976,6 +1006,13 @@ fn render_operation_body(
     let body_kind = operation_body_kind(operation);
     let response_kind = operation_response_kind(operation);
     let error_types = operation_error_types(module, operation);
+    let idempotency_argument = operation
+        .annotations
+        .get("x-kaji-idempotency-resolved")
+        .and_then(|policy| policy.get("header"))
+        .and_then(serde_json::Value::as_str)
+        .map(|header| format!(", \"{}\"", escape_elixir_string(header)))
+        .unwrap_or_else(|| ", nil".into());
     if operation_is_sse(operation) {
         let _ = writeln!(
             output,
@@ -986,7 +1023,7 @@ fn render_operation_body(
     }
     let _ = writeln!(
         output,
-        "{pad}case Client.request(client, :{}, path, query, headers, {body}, :{body_kind}, :{response_kind}, {error_types}) do",
+        "{pad}case Client.request(client, :{}, path, query, headers, {body}, :{body_kind}, :{response_kind}, {error_types}{idempotency_argument}) do",
         operation.method.as_str().to_ascii_lowercase(),
     );
     let _ = writeln!(output, "{pad}  {{:ok, response}} -> {{:ok, {response}}}");
@@ -1500,7 +1537,7 @@ mod tests {
         assert!(client.contains("Finch.request(request, client.finch"));
         assert!(client.contains("module.exception(status: status"));
         assert!(client.contains("max_retries: 2"));
-        assert!(client.contains("retryable?(:post, headers)"));
+        assert!(client.contains("retryable?(method, headers, idempotency_header)"));
         assert!(client.contains("transient_status?(status)"));
         assert!(client.contains("before_request"));
         let operations = first
@@ -1715,7 +1752,7 @@ mod tests {
         assert!(client.contains(":stream -> \"text/event-stream\""));
         assert!(client.contains("defp decode_sse_data"));
         assert!(client.contains("defp parse_retry_after_http_date"));
-        assert!(mix.contains("extra_applications: [:logger, :inets]"));
+        assert!(mix.contains("extra_applications: [:logger, :inets, :crypto]"));
     }
     #[test]
     fn emits_composable_customer_transport() {
@@ -1732,8 +1769,43 @@ mod tests {
     #[test]
     #[ignore = "requires an Elixir toolchain; dependency-free transport probe"]
     fn elixir_customer_middleware_executes() {
+        let mut source = api();
+        source.operations.truncate(1);
+        let op = &mut source.operations[0];
+        op.id = "createItem".into();
+        op.path = "/items".into();
+        op.method = kaji_core::HttpMethod::Patch;
+        op.parameters = vec![OperationParameter {
+            name: "X-Request-Key".into(),
+            location: "header".into(),
+            required: false,
+            schema: Some(SchemaValue::new(SchemaKind::String)),
+            description: None,
+            annotations: Default::default(),
+        }];
+        op.responses = vec![kaji_core::OperationResponse {
+            status: "200".into(),
+            description: None,
+            media_types: vec![kaji_core::OperationMediaType {
+                content_type: "text/plain".into(),
+                schema: Some(SchemaValue::new(SchemaKind::String)),
+            }],
+        }];
+        op.annotations.insert("x-kaji-idempotency-resolved".into(),serde_json::json!({"header":"X-Request-Key","parameter_name":"X-Request-Key","auto_generate":true}));
         let root = tempfile::tempdir().unwrap();
-        std::fs::write(root.path().join("client.ex"), render_client("Probe")).unwrap();
+        std::fs::write(
+            root.path().join("client.ex"),
+            render_client("Probe").replace(
+                "Process.sleep(milliseconds)",
+                "send(self(), {:delay, milliseconds})",
+            ),
+        )
+        .unwrap();
+        std::fs::write(
+            root.path().join("operations.ex"),
+            render_operation_chunk("Probe", &source, &source.operations, 0),
+        )
+        .unwrap();
         std::fs::write(root.path().join("probe.exs"), r#"
 defmodule Finch.Request do
   defstruct [:method, :url, :body, headers: []]
@@ -1755,6 +1827,7 @@ defmodule Probe.JSON do
   def to_wire(value), do: value
 end
 Code.compile_file("client.ex")
+Code.compile_file("operations.ex")
 ExUnit.start()
 defmodule TransportProbe do
   use ExUnit.Case
@@ -1791,6 +1864,35 @@ defmodule TransportProbe do
     assert {:error, :expected} = Probe.Client.request(client, :get, "/label")
     assert_receive({:observed, :expected})
   end
+  test "custom idempotency retry eligibility is operation scoped and UUID v4" do
+    key = Probe.Client.idempotency_key()
+    assert key =~ ~r/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    refute key == Probe.Client.idempotency_key()
+    transport = fn request, _ -> send(self(), {:key, request.headers}); {:ok, struct(Finch.Response, status: 503)} end
+    {:ok, client} = Probe.Client.new(base_url: "https://unused.example", transport: transport, max_retries: 1, retry_initial_delay_ms: 0, retry_max_delay_ms: 0)
+    Probe.Client.request(client, :patch, "/items", [], [{"X-Request-Key", key}], nil, :json, :text, %{}, "X-Request-Key")
+    assert_receive({:key, first});assert_receive({:key, second});assert first == second
+    Probe.API.Operations0000.create_item(client)
+    assert_receive({:key, auto_first});assert_receive({:key, auto_second});assert auto_first == auto_second
+    auto_key = auto_first |> Enum.find_value(fn {name, value} -> if name == "X-Request-Key", do: value end)
+    assert auto_key =~ ~r/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    Probe.API.Operations0000.create_item(client, x_request_key: "provided")
+    assert_receive({:key, provided_first});assert_receive({:key, provided_second});assert provided_first == provided_second
+    assert {"X-Request-Key", "provided"} in provided_first
+    Probe.API.Operations0000.create_item(client, x_request_key: "")
+    assert_receive({:key, empty});assert {"X-Request-Key", ""} in empty;refute_receive({:key, _})
+
+    Probe.Client.request(client, :patch, "/items", [], [{"X-Request-Key", key}], nil, :json, :text)
+    assert_receive({:key, _});refute_receive({:key, _})
+  end
+  test "millisecond retry delay precedes seconds and respects cap" do
+    for {ms, expected} <- [{"250", 250}, {"99999", 400}, {"invalid", 400}, {"0", 0}] do
+      transport = fn _, _ -> {:ok, struct(Finch.Response, status: 503, headers: [{"Retry-After", "2"}, {"retry-after-ms", ms}])} end
+      {:ok, client} = Probe.Client.new(base_url: "https://unused.example", transport: transport, max_retries: 1, retry_max_delay_ms: 400)
+      Probe.Client.request(client, :get, "/items", [], [], nil, :json, :text)
+      if expected > 0, do: assert_receive({:delay, ^expected}), else: refute_receive({:delay, _})
+    end
+  end
   test "stream transport can synthesize streaming responses" do
     stream = fn _, _, acc, callback ->
       acc = callback.({:status, 200}, acc)
@@ -1814,6 +1916,30 @@ end
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
+    }
+    #[test]
+    fn auto_idempotency_is_generated_before_operation_scoped_retries() {
+        let mut api = api();
+        let op = &mut api.operations[0];
+        op.parameters.clear();
+        op.path = "/contacts".into();
+        op.method = kaji_core::HttpMethod::Post;
+        op.parameters.push(OperationParameter {
+            name: "X-Request-Key".into(),
+            location: "header".into(),
+            required: false,
+            schema: Some(SchemaValue::new(SchemaKind::String)),
+            description: None,
+            annotations: Default::default(),
+        });
+        op.annotations.insert("x-kaji-idempotency-resolved".into(),serde_json::json!({"header":"X-Request-Key","parameter_name":"X-Request-Key","auto_generate":true}));
+        let rendered = render_operation("Probe", &api, &api.operations[0]);
+        assert!(rendered.contains("nil -> Client.idempotency_key(); provided -> provided"));
+        assert!(rendered.contains(", \"X-Request-Key\") do"));
+        let client = render_client("Probe");
+        assert!(client.contains(":crypto.strong_rand_bytes(16)"));
+        assert!(client.contains("context.idempotency_header"));
+        assert!(!client.contains("[:get, :put, :patch, :delete]"));
     }
 }
 

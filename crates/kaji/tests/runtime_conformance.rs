@@ -46,6 +46,16 @@ fn export_runtime_contract_fixture() {
     )];
     listing.annotations.insert("x-kaji-pagination".into(), serde_json::json!({"type":"page","inputs":[{"name":"page","in":"parameters","type":"page"},{"name":"limit","in":"parameters","type":"limit"}],"outputs":{"results":"/items"}}));
     api.operations.push(listing);
+    let mut creating = api.operations[0].clone();
+    creating.id = "createContact".into();
+    creating.method = kaji_core::HttpMethod::Post;
+    creating.path = "/contacts".into();
+    creating.parameters.clear();
+    creating.annotations.insert(
+        "x-kaji-idempotency".into(),
+        serde_json::json!({"header":"X-Once", "auto_generate":true}),
+    );
+    api.operations.push(creating);
     let catalog = SecuritySchemeCatalog {
         schemes: vec![SecurityScheme {
             name: "Bearer".into(),

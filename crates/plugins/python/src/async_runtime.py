@@ -51,17 +51,25 @@ class AsyncBaseClient(BaseClient):
     async def __aexit__(self, *args: Any) -> None:
         await self.aclose()
 
-    async def _retry_delay_async(self, attempt: int, retry_after: str | None = None) -> None:
-        try:
-            delay = float(retry_after) if retry_after is not None else self.retry_initial_delay * (2 ** attempt)
-        except ValueError:
+    async def _retry_delay_async(self, attempt: int, retry_after: str | None = None, retry_after_ms: str | None = None) -> None:
+        import math
+        delay = None
+        for value, divisor in ((retry_after_ms, 1000.0), (retry_after, 1.0)):
+            try:
+                candidate = float(value) / divisor if value is not None else None
+            except (ValueError, TypeError):
+                continue
+            if candidate is not None and math.isfinite(candidate) and candidate >= 0:
+                delay = candidate
+                break
+        if delay is None:
             delay = self.retry_initial_delay * (2 ** attempt)
-        await asyncio.sleep(min(max(0.0, delay), self.retry_max_delay))
+        await asyncio.sleep(min(max(0.0, delay), max(0.0, self.retry_max_delay)))
 
     async def _request(self, method: str, path: str, *, query: dict[str, Any] | None = None,
                        headers: dict[str, str] | None = None, body: Any = None,
                        body_kind: str = 'json', error_types: Any = None,
-                       retryable: bool = False, pagination_url: str | None = None, response_operation: str | None = None,
+                       retryable: bool = False, idempotency_header: str | None = None, pagination_url: str | None = None, response_operation: str | None = None,
                        _stream: bool = False) -> Any:
         url = f'{self.base_url}{path}'
         if pagination_url is not None:
@@ -92,7 +100,7 @@ class AsyncBaseClient(BaseClient):
             else:
                 options['json'] = to_wire(body)
         context = {'method': method, 'url': url, 'query': query or {}, 'headers': request_headers, 'body': body}
-        can_retry = retryable and (method.upper() in {'GET', 'PUT', 'PATCH', 'DELETE'} or (method.upper() == 'POST' and any(k.lower() == 'idempotency-key' for k in request_headers)))
+        can_retry = retryable and (method.upper() in {'GET', 'PUT', 'DELETE'} or (method.upper() in {'POST', 'PATCH'} and any((k.lower() == 'idempotency-key' or (idempotency_header is not None and k.lower() == idempotency_header.lower())) and value is not None and bool(str(value).strip()) for k, value in request_headers.items())))
         auth_refreshed = False
         for attempt in range(self.max_retries + (2 if managed_auth else 1)):
             if self.before_request is not None:
@@ -122,7 +130,7 @@ class AsyncBaseClient(BaseClient):
             if can_retry and response.status_code in {408, 429, 500, 502, 503, 504} and attempt < self.max_retries:
                 retry_after = response.headers.get('Retry-After')
                 await response.aclose()
-                await self._retry_delay_async(attempt, retry_after)
+                await self._retry_delay_async(attempt, retry_after, response.headers.get('retry-after-ms'))
                 continue
             if _stream and response.status_code < 400:
                 try:

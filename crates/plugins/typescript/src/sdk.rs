@@ -1176,7 +1176,7 @@ export type FormEncodings = Record<string, Record<string, FormEncoding>>
 export type FormPartHeaders = Record<string, Record<string, Record<string, unknown>>>
 export type MultipartPart = { name: string; value: string | Blob; contentType?: string; headers?: Record<string, string> }
 export interface MultipartEncoder { encode(parts: readonly MultipartPart[]): { body: BodyInit; contentType: string } }
-export type RequestConfig = { method: string; url: string; body?: unknown; path?: Record<string, unknown>; query?: Record<string, unknown>; headers?: HeadersInit | Record<string, unknown>; cookies?: Record<string, unknown>; throwOnError?: boolean; security?: SecurityDescriptor[][]; contentType?: { request?: string }; responseType?: 'stream'; styles?: ParameterStyles; formEncodings?: FormEncodings; formHeaders?: FormPartHeaders; validation?: ClientValidation; validateResponses?: boolean; paginationUrl?: string }
+export type RequestConfig = { method: string; url: string; body?: unknown; path?: Record<string, unknown>; query?: Record<string, unknown>; headers?: HeadersInit | Record<string, unknown>; cookies?: Record<string, unknown>; throwOnError?: boolean; security?: SecurityDescriptor[][]; contentType?: { request?: string }; responseType?: 'stream'; styles?: ParameterStyles; formEncodings?: FormEncodings; formHeaders?: FormPartHeaders; validation?: ClientValidation; validateResponses?: boolean; paginationUrl?: string; idempotencyHeader?: string }
 export type ClientInstance = (request: RequestConfig) => Promise<unknown>
 export type Options<T, ThrowOnError extends boolean> = T & { client?: ClientInstance; throwOnError?: ThrowOnError; formHeaders?: FormPartHeaders; validation?: ClientValidation }
 export type SuccessOf<T> = T[Extract<keyof T, `2${string}`>]
@@ -1305,14 +1305,25 @@ const applySecurity = (headers: Headers, query: Record<string, unknown>, securit
   }
 }
 const retryableStatus = (status: number) => status === 408 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504
-const retryAllowed = (method: string, headers: Headers) => ['GET', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase()) || (method.toUpperCase() === 'POST' && headers.has('idempotency-key'))
-const retryDelay = async (attempt: number, retry: RetryConfig, retryAfter?: string | null) => {
-  const retryAfterMs = retryAfter && /^\d+(?:\.\d+)?$/.test(retryAfter) ? Number(retryAfter) * 1000 : undefined
+const retryAllowed = (method: string, headers: Headers, idempotencyHeader?: string) => ['GET', 'PUT', 'DELETE'].includes(method.toUpperCase()) || (['POST', 'PATCH'].includes(method.toUpperCase()) && (!!headers.get('idempotency-key')?.trim() || (!!idempotencyHeader && !!headers.get(idempotencyHeader)?.trim())))
+const retryHeaderDelay = (value: string | null | undefined, milliseconds: boolean): number | undefined => {
+  if (!value) return undefined
+  const trimmed = value.trim()
+  if (/^\d+(?:\.\d+)?$/.test(trimmed)) {
+    const delay = Number(trimmed) * (milliseconds ? 1 : 1000)
+    return Number.isFinite(delay) ? delay : undefined
+  }
+  if (milliseconds || !/^[A-Za-z]/.test(trimmed)) return undefined
+  const timestamp = Date.parse(trimmed)
+  return Number.isFinite(timestamp) ? Math.max(0, timestamp - Date.now()) : undefined
+}
+const retryDelay = async (attempt: number, retry: RetryConfig, retryAfter?: string | null, retryAfterMilliseconds?: string | null) => {
+  const fromHeader = retryHeaderDelay(retryAfterMilliseconds, true) ?? retryHeaderDelay(retryAfter, false)
   const exponential = (retry.initialDelayMs ?? 250) * 2 ** attempt
-  const delay = Math.min(retryAfterMs ?? exponential, retry.maxDelayMs ?? 8_000)
+  const delay = Math.max(0, Math.min(fromHeader ?? exponential, retry.maxDelayMs ?? 8_000))
   await new Promise<void>((resolve) => setTimeout(resolve, delay))
 }
-const createTransport = (config: ClientConfig = {}): ClientInstance => async ({ method, url, body, path, query, headers, cookies, throwOnError: _throwOnError, security, contentType, responseType, styles, formEncodings, formHeaders, validation, paginationUrl }) => {
+const createTransport = (config: ClientConfig = {}): ClientInstance => async ({ method, url, body, path, query, headers, cookies, throwOnError: _throwOnError, security, contentType, responseType, styles, formEncodings, formHeaders, validation, paginationUrl, idempotencyHeader }) => {
   const mergedHeaders = new Headers(config.headers)
   if (config.apiKey) mergedHeaders.set(config.apiKeyHeader ?? 'authorization', `${config.apiKeyPrefix ?? 'Bearer '}${config.apiKey}`)
   new Headers(headers as HeadersInit).forEach((value, key) => mergedHeaders.set(key, value))
@@ -1325,13 +1336,13 @@ const createTransport = (config: ClientConfig = {}): ClientInstance => async ({ 
   await validate(validation?.request ?? config.validation?.request, body)
   await config.hooks?.beforeRequest?.(request)
   const retry = config.retry === false ? undefined : config.retry ?? {}
-  const maxAttempts = retry && retryAllowed(method, mergedHeaders) ? Math.max(1, retry.maxAttempts ?? 3) : 1
+  const maxAttempts = retry && retryAllowed(method, mergedHeaders, idempotencyHeader) ? Math.max(1, retry.maxAttempts ?? 3) : 1
   let response!: Response
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
       response = await (config.fetch ?? globalThis.fetch)(requestUrl, { method, body: requestBody(body, mergedHeaders, contentType?.request, config.codecs, formEncodings, formHeaders, config.multipartEncoder), headers: mergedHeaders })
       if (attempt + 1 < maxAttempts && retryableStatus(response.status)) {
-        await retryDelay(attempt, retry ?? {}, response.headers.get('retry-after'))
+        await retryDelay(attempt, retry ?? {}, response.headers.get('retry-after'), response.headers.get('retry-after-ms'))
         continue
       }
       break
@@ -1424,7 +1435,7 @@ export type FormEncodings = Record<string, Record<string, FormEncoding>>
 export type FormPartHeaders = Record<string, Record<string, Record<string, unknown>>>
 export type MultipartPart = { name: string; value: unknown; contentType?: string; headers?: Record<string, string> }
 export interface MultipartEncoder { encode(parts: readonly MultipartPart[]): { body: unknown; contentType: string } }
-export type RequestConfig = { method: string; url: string; body?: unknown; path?: Record<string, unknown>; query?: Record<string, unknown>; headers?: Record<string, unknown>; cookies?: Record<string, unknown>; throwOnError?: boolean; security?: SecurityDescriptor[][]; contentType?: { request?: string }; responseType?: 'stream'; styles?: ParameterStyles; formEncodings?: FormEncodings; formHeaders?: FormPartHeaders; validation?: ClientValidation; validateResponses?: boolean; paginationUrl?: string }
+export type RequestConfig = { method: string; url: string; body?: unknown; path?: Record<string, unknown>; query?: Record<string, unknown>; headers?: Record<string, unknown>; cookies?: Record<string, unknown>; throwOnError?: boolean; security?: SecurityDescriptor[][]; contentType?: { request?: string }; responseType?: 'stream'; styles?: ParameterStyles; formEncodings?: FormEncodings; formHeaders?: FormPartHeaders; validation?: ClientValidation; validateResponses?: boolean; paginationUrl?: string; idempotencyHeader?: string }
 export type ClientInstance = (request: RequestConfig) => Promise<unknown>
 export type Options<T, ThrowOnError extends boolean> = T & { client?: ClientInstance; throwOnError?: ThrowOnError; formHeaders?: FormPartHeaders; validation?: ClientValidation }
 export type SuccessOf<T> = T[Extract<keyof T, `2${string}`>]
@@ -1526,18 +1537,29 @@ const applySecurity = (headers: Record<string, string>, query: Record<string, un
   }
 }
 const retryableStatus = (status: number) => status === 408 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504
-const retryAllowed = (method: string, headers: Record<string, string>) => ['GET', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase()) || (method.toUpperCase() === 'POST' && Object.keys(headers).some((key) => key.toLowerCase() === 'idempotency-key'))
-const retryDelay = async (attempt: number, retry: RetryConfig, retryAfter?: string) => {
-  const retryAfterMs = retryAfter && /^\d+(?:\.\d+)?$/.test(retryAfter) ? Number(retryAfter) * 1000 : undefined
+const retryAllowed = (method: string, headers: Record<string, string>, idempotencyHeader?: string) => ['GET', 'PUT', 'DELETE'].includes(method.toUpperCase()) || (['POST', 'PATCH'].includes(method.toUpperCase()) && Object.entries(headers).some(([key, value]) => !!value.trim() && (key.toLowerCase() === 'idempotency-key' || (!!idempotencyHeader && key.toLowerCase() === idempotencyHeader.toLowerCase()))))
+const retryHeaderDelay = (value: string | null | undefined, milliseconds: boolean): number | undefined => {
+  if (!value) return undefined
+  const trimmed = value.trim()
+  if (/^\d+(?:\.\d+)?$/.test(trimmed)) {
+    const delay = Number(trimmed) * (milliseconds ? 1 : 1000)
+    return Number.isFinite(delay) ? delay : undefined
+  }
+  if (milliseconds || !/^[A-Za-z]/.test(trimmed)) return undefined
+  const timestamp = Date.parse(trimmed)
+  return Number.isFinite(timestamp) ? Math.max(0, timestamp - Date.now()) : undefined
+}
+const retryDelay = async (attempt: number, retry: RetryConfig, retryAfter?: string | null, retryAfterMilliseconds?: string | null) => {
+  const fromHeader = retryHeaderDelay(retryAfterMilliseconds, true) ?? retryHeaderDelay(retryAfter, false)
   const exponential = (retry.initialDelayMs ?? 250) * 2 ** attempt
-  const delay = Math.min(retryAfterMs ?? exponential, retry.maxDelayMs ?? 8_000)
+  const delay = Math.max(0, Math.min(fromHeader ?? exponential, retry.maxDelayMs ?? 8_000))
   await new Promise<void>((resolve) => setTimeout(resolve, delay))
 }
 const createTransport = (config: ClientConfig = {}): ClientInstance => {
   const headers = { ...config.headers }
   if (config.apiKey) headers[config.apiKeyHeader ?? 'authorization'] = `${config.apiKeyPrefix ?? 'Bearer '}${config.apiKey}`
   const instance = config.client ?? axios.create({ baseURL: config.baseUrl, headers })
-  return async ({ method, url, body, path, query, headers: requestHeaders, cookies, throwOnError: _throwOnError, security, contentType, responseType, styles, formEncodings, formHeaders, validation, paginationUrl }) => {
+  return async ({ method, url, body, path, query, headers: requestHeaders, cookies, throwOnError: _throwOnError, security, contentType, responseType, styles, formEncodings, formHeaders, validation, paginationUrl, idempotencyHeader }) => {
     const resolvedHeaders: Record<string, string> = { ...headers, ...Object.fromEntries(Object.entries(requestHeaders ?? {}).map(([key, value]) => [key, String(value)])) }
     const resolvedQuery = { ...(query ?? {}) }
     applySecurity(resolvedHeaders, resolvedQuery, security, config.auth)
@@ -1549,7 +1571,7 @@ const createTransport = (config: ClientConfig = {}): ClientInstance => {
     await validate(validation?.request ?? config.validation?.request, body)
     await config.hooks?.beforeRequest?.(request)
     const retry = config.retry === false ? undefined : config.retry ?? {}
-    const maxAttempts = retry && retryAllowed(method, resolvedHeaders) ? Math.max(1, retry.maxAttempts ?? 3) : 1
+    const maxAttempts = retry && retryAllowed(method, resolvedHeaders, idempotencyHeader) ? Math.max(1, retry.maxAttempts ?? 3) : 1
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       let response
       try {
@@ -1566,7 +1588,7 @@ const createTransport = (config: ClientConfig = {}): ClientInstance => {
         continue
       }
       if (attempt + 1 < maxAttempts && retryableStatus(response.status)) {
-        await retryDelay(attempt, retry ?? {}, response.headers['retry-after'])
+        await retryDelay(attempt, retry ?? {}, response.headers['retry-after'], response.headers['retry-after-ms'])
         continue
       }
       const mediaType = String(response.headers['content-type'] ?? '')
@@ -1634,8 +1656,8 @@ export const resolveResponse = <T extends { status: number; data: unknown }, Thr
             )
         }
     };
-    let runtime = runtime.replace("paginationUrl?: string }", "paginationUrl?: string; jsonPlan?: JsonPlan }")
-        .replace("validation, paginationUrl })", "validation, paginationUrl, jsonPlan })")
+    let runtime = runtime.replace("paginationUrl?: string; idempotencyHeader?: string }", "paginationUrl?: string; idempotencyHeader?: string; jsonPlan?: JsonPlan }")
+        .replace("validation, paginationUrl, idempotencyHeader })", "validation, paginationUrl, idempotencyHeader, jsonPlan })")
         .replace("formHeaders, config.multipartEncoder)", "formHeaders, config.multipartEncoder, jsonPlan)")
         .replace("multipartEncoder?: MultipartEncoder) =>", "multipartEncoder?: MultipartEncoder, jsonPlan?: JsonPlan) =>")
         .replace("return JSON.stringify(body)", "return jsonPlan?.lossless ? stringifyJson(body, requestJsonShape(jsonPlan, mediaType), jsonPlan.refs) : JSON.stringify(body)")

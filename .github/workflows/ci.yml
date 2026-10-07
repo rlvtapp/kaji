@@ -49,6 +49,7 @@ jobs:
           export KAJI_TSC_JS="$RUNNER_TEMP/kaji-ts-runtime/node_modules/typescript/lib/tsc.js"
           export KAJI_AXIOS_NODE_MODULES="$RUNNER_TEMP/kaji-ts-runtime/node_modules"
           cargo test -p kaji-plugin-typescript generated_middleware_fetch_and_axios_execute -- --ignored
+          cargo test -p kaji-plugin-typescript generated_idempotency_fetch_and_axios_execute -- --ignored
           cargo test -p kaji-plugin-typescript bundled_middleware_is_enabled_without_customer_registration -- --ignored
           cargo test -p kaji-plugin-typescript generated_lossless_fetch_axios_and_sse_round_trip -- --ignored
           cargo test -p kaji-plugin-typescript generated_page_pagination_executes_defaults_and_selectors -- --ignored
@@ -224,15 +225,28 @@ jobs:
             Swift) swift build --disable-sandbox ;;
           esac
       - uses: dtolnay/rust-toolchain@stable
-        if: matrix.language == 'Swift' || matrix.language == 'Elixir' || matrix.language == 'PHP'
+        if: matrix.language == 'Swift' || matrix.language == 'Elixir' || matrix.language == 'PHP' || matrix.language == 'Java' || matrix.language == 'C#'
+      - name: Verify generated Java retry parsers
+        if: matrix.language == 'Java'
+        run: cargo test -p kaji-plugin-java generated_retry_parsers_execute_with_jdk -- --ignored
+      - name: Verify generated C# retry parser
+        if: matrix.language == 'C#'
+        run: cargo test -p kaji-plugin-csharp generated_retry_parser_executes_with_dotnet -- --ignored
       - name: Verify native PHP pagination generation and iteration
         if: matrix.language == 'PHP'
-        run: cargo test -p kaji-plugin-php page_pagination_executes_native_query_body_and_selectors -- --ignored
+        run: |
+          cargo test -p kaji-plugin-php page_pagination_executes_native_query_body_and_selectors -- --ignored
+          cargo test -p kaji-plugin-php native_auto_idempotency_preserves_key_and_scopes_retry_header -- --ignored
+          cargo test -p kaji-plugin-php native_retry_after_ms_has_precedence_and_configured_cap -- --ignored
       - name: Verify native Elixir pagination generation and iteration
         if: matrix.language == 'Elixir'
-        run: cargo test -p kaji-plugin-elixir generated_page_stream_executes_lazily -- --ignored
+        run: |
+          cargo test -p kaji-plugin-elixir generated_page_stream_executes_lazily -- --ignored
+          cargo test -p kaji-plugin-elixir elixir_customer_middleware_executes -- --ignored
       - name: Verify native Swift pagination generation and iteration
         if: matrix.language == 'Swift'
-        run: cargo test -p kaji-plugin-swift pagination -- --ignored
+        run: |
+          cargo test -p kaji-plugin-swift pagination -- --ignored
+          cargo test -p kaji-plugin-swift generated_idempotency_keys_preserve_caller_values -- --ignored
       - name: Execute generated public operations against shared runtime scenarios
         run: node packages/runtime-contract/runner.mjs "${{ matrix.path }}" "$GITHUB_WORKSPACE/runtime-contract-fixture/sdk/${{ matrix.path }}"

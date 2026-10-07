@@ -586,6 +586,7 @@ class BaseClient:
         body_kind: str = "json",
         error_types: dict[int, tuple[type[ApiError], type[Any] | None]] | None = None,
         retryable: bool = False,
+        idempotency_header: str | None = None,
         pagination_url: str | None = None,
         response_operation: str | None = None,
     ) -> Any:
@@ -626,7 +627,7 @@ class BaseClient:
                 request_headers.setdefault("Content-Type", "application/json")
                 data = json.dumps(to_wire(body)).encode("utf-8")
         request_context = {{"method": method, "url": url, "query": query or {{}}, "headers": request_headers, "body": body}}
-        can_retry = retryable and (method.upper() in {{"GET", "PUT", "PATCH", "DELETE"}} or (method.upper() == "POST" and any(name.lower() == "idempotency-key" for name in request_headers)))
+        can_retry = retryable and (method.upper() in {{"GET", "PUT", "DELETE"}} or (method.upper() in {{"POST", "PATCH"}} and any((name.lower() == "idempotency-key" or (idempotency_header is not None and name.lower() == idempotency_header.lower())) and value is not None and bool(str(value).strip()) for name, value in request_headers.items())))
         auth_refreshed = False
         for attempt in range(self.max_retries + (2 if managed_auth else 1)):
             if self.before_request is not None:
@@ -637,7 +638,7 @@ class BaseClient:
                     status_code = response.status
                     response_headers = dict(response.headers.items())
                     if can_retry and status_code in {{408, 429, 500, 502, 503, 504}} and attempt < self.max_retries:
-                        self._retry_delay(attempt, response_headers.get("Retry-After"))
+                        self._retry_delay(attempt, response_headers.get("Retry-After"), next((value for name, value in response_headers.items() if name.lower() == "retry-after-ms"), None))
                         continue
                     raw = response.read(10 * 1024 * 1024 + 1) if self.validate_responses else response.read()
                     if self.after_response is not None:
@@ -663,7 +664,7 @@ class BaseClient:
                 if can_retry and error.code in {{408, 429, 500, 502, 503, 504}} and attempt < self.max_retries:
                     retry_after = error.headers.get("Retry-After")
                     error.close()
-                    self._retry_delay(attempt, retry_after)
+                    self._retry_delay(attempt, retry_after, error.headers.get("retry-after-ms"))
                     continue
                 try:
                     raw = error.read()
@@ -700,13 +701,19 @@ class BaseClient:
                 return middleware(request, following)
         return handler(request)
 
-    def _retry_delay(self, attempt: int, retry_after: str | None = None) -> None:
-        try:
-            server_delay = float(retry_after) if retry_after is not None else None
-        except ValueError:
-            server_delay = None
-        delay = server_delay if server_delay is not None and server_delay >= 0 else self.retry_initial_delay * (2 ** attempt)
-        time.sleep(min(delay, self.retry_max_delay))
+    def _retry_delay(self, attempt: int, retry_after: str | None = None, retry_after_ms: str | None = None) -> None:
+        import math
+        server_delay = None
+        for value, divisor in ((retry_after_ms, 1000.0), (retry_after, 1.0)):
+            try:
+                candidate = float(value) / divisor if value is not None else None
+            except (ValueError, TypeError):
+                continue
+            if candidate is not None and math.isfinite(candidate) and candidate >= 0:
+                server_delay = candidate
+                break
+        delay = server_delay if server_delay is not None else self.retry_initial_delay * (2 ** attempt)
+        time.sleep(min(max(0.0, delay), max(0.0, self.retry_max_delay)))
 
     def _event_stream(
         self,
@@ -719,6 +726,7 @@ class BaseClient:
         body_kind: str = "json",
         error_types: dict[int, tuple[type[ApiError], type[Any] | None]] | None = None,
         retryable: bool = False,
+        idempotency_header: str | None = None,
     ) -> Iterator[Any]:
         """Open an SSE response and yield decoded ``data:`` events.
 
@@ -757,7 +765,7 @@ class BaseClient:
                 request_headers.setdefault("Content-Type", "application/json")
                 data = json.dumps(to_wire(body)).encode("utf-8")
         context = {{"method": method, "url": url, "query": query or {{}}, "headers": request_headers, "body": body}}
-        can_retry = retryable and (method.upper() in {{"GET", "PUT", "PATCH", "DELETE"}} or (method.upper() == "POST" and any(name.lower() == "idempotency-key" for name in request_headers)))
+        can_retry = retryable and (method.upper() in {{"GET", "PUT", "DELETE"}} or (method.upper() in {{"POST", "PATCH"}} and any((name.lower() == "idempotency-key" or (idempotency_header is not None and name.lower() == idempotency_header.lower())) and value is not None and bool(str(value).strip()) for name, value in request_headers.items())))
         auth_refreshed = False
         for attempt in range(self.max_retries + (2 if managed_auth else 1)):
             if self.before_request is not None:
@@ -801,7 +809,7 @@ class BaseClient:
                 if can_retry and error.code in {{408, 429, 500, 502, 503, 504}} and attempt < self.max_retries:
                     retry_after = error.headers.get("Retry-After")
                     error.close()
-                    self._retry_delay(attempt, retry_after)
+                    self._retry_delay(attempt, retry_after, error.headers.get("retry-after-ms"))
                     continue
                 try:
                     raw = error.read()
@@ -835,7 +843,7 @@ class BaseClient:
 
 fn render_operation_chunk(api: &Api, operations: &[Operation], index: usize) -> String {
     let mut output = format!(
-        "{NOTICE}from __future__ import annotations\n\nfrom typing import Any, Iterator, cast\nfrom urllib.parse import quote\n\nfrom .runtime import ApiError, _kaji_json_path, _kaji_with_body_value\nfrom .models import *\n\n\nclass Operations{index:03}:\n"
+        "{NOTICE}from __future__ import annotations\n\nfrom typing import Any, Iterator, cast\nfrom uuid import uuid4\nfrom urllib.parse import quote\n\nfrom .runtime import ApiError, _kaji_json_path, _kaji_with_body_value\nfrom .models import *\n\n\nclass Operations{index:03}:\n"
     );
     for operation in operations {
         output.push_str(&render_operation(api, operation));
@@ -1285,6 +1293,24 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
         format!(", *, {}", args.join(", "))
     };
     let mut output = format!("    def {name}(self{signature}) -> {response}:\n");
+    if let Some(policy) = operation.annotations.get("x-kaji-idempotency-resolved") {
+        if policy
+            .get("auto_generate")
+            .and_then(serde_json::Value::as_bool)
+            == Some(true)
+        {
+            if let Some(parameter) = policy
+                .get("parameter_name")
+                .and_then(serde_json::Value::as_str)
+            {
+                let variable = python_identifier(parameter);
+                let _ = writeln!(
+                    output,
+                    "        if {variable} is None:\n            {variable} = str(uuid4())"
+                );
+            }
+        }
+    }
     let _ = writeln!(output, "        _kaji_path = {:?}", operation.path);
     for parameter in operation
         .parameters
@@ -1341,11 +1367,22 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
     };
     let body_kind = operation_body_kind(operation);
     let error_types = operation_error_types(api, operation);
-    let retryable = if matches!(analyze_operation(operation, None).retry, RetryClass::Unsafe) {
+    let retryable = if matches!(analyze_operation(operation, None).retry, RetryClass::Unsafe)
+        && !operation
+            .annotations
+            .contains_key("x-kaji-idempotency-resolved")
+    {
         "False"
     } else {
         "True"
     };
+    let idempotency_argument = operation
+        .annotations
+        .get("x-kaji-idempotency-resolved")
+        .and_then(|policy| policy.get("header"))
+        .and_then(serde_json::Value::as_str)
+        .map(|header| format!(", idempotency_header={header:?}"))
+        .unwrap_or_default();
     let pagination_argument = if has_url_pagination && !operation_is_sse_response(operation) {
         ", pagination_url=_kaji_pagination_url"
     } else {
@@ -1363,7 +1400,7 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
     };
     let _ = writeln!(
         output,
-        "        result = self.{transport}({:?}, _kaji_path, query=_kaji_query, headers=_kaji_headers, {body}, body_kind={body_kind:?}, error_types={error_types}, retryable={retryable}{pagination_argument}{response_argument})",
+        "        result = self.{transport}({:?}, _kaji_path, query=_kaji_query, headers=_kaji_headers, {body}, body_kind={body_kind:?}, error_types={error_types}, retryable={retryable}{pagination_argument}{response_argument}{idempotency_argument})",
         operation.method.as_str()
     );
     if let Some(model) = response_object_model(api, operation) {
@@ -3424,6 +3461,116 @@ asyncio.run(main())
                 )
                 .generate(&api(), None)
                 .is_err()
+        );
+    }
+    #[test]
+    fn native_auto_idempotency_reuses_secure_keys_and_preserves_explicit_values() {
+        let mut source = api();
+        source.operations.truncate(1);
+        let op = &mut source.operations[0];
+        op.id = "createContact".into();
+        op.path = "/contacts".into();
+        op.method = kaji_core::HttpMethod::Post;
+        op.parameters = vec![kaji_core::OperationParameter {
+            name: "requestKey".into(),
+            location: "header".into(),
+            required: false,
+            schema: Some(SchemaValue::new(SchemaKind::String)),
+            description: None,
+            annotations: Default::default(),
+        }];
+        op.annotations.insert("x-kaji-idempotency-resolved".into(),serde_json::json!({"header":"X-Request-Key","parameter_name":"requestKey","auto_generate":true}));
+        // Normalization preserves the wire header as the actual parameter name.
+        op.parameters[0].name = "X-Request-Key".into();
+        op.annotations
+            .get_mut("x-kaji-idempotency-resolved")
+            .unwrap()["parameter_name"] = serde_json::json!("X-Request-Key");
+        let root = tempfile::tempdir().unwrap();
+        render_sdk_with_async(
+            &source,
+            "python",
+            Some("idempotency-sdk"),
+            SdkClientStyle::Flat,
+            true,
+        )
+        .unwrap()
+        .write_to(root.path())
+        .unwrap();
+        let script = r#"import uuid, asyncio, io
+from email.message import Message
+from urllib.error import HTTPError
+from idempotency_sdk import Client
+from idempotency_sdk.async_client import AsyncClient
+import idempotency_sdk.runtime as runtime
+seen=[]
+class Response:
+    status=200
+    def __init__(self): self.headers=Message(); self.headers['Content-Type']='application/json'
+    def read(self):return b'{"id":"ok"}'
+    def __enter__(self):return self
+    def __exit__(self,*args):pass
+def send(request,**kwargs):
+    seen.append(request.get_header('X-request-key'))
+    if len(seen)%2==1:raise HTTPError(request.full_url,503,'retry',Message(),io.BytesIO(b'{}'))
+    return Response()
+runtime.urlopen=send
+client=Client('https://example.invalid',max_retries=1,retry_initial_delay=0,retry_max_delay=0)
+client.create_contact();assert seen[0]==seen[1] and uuid.UUID(seen[0]).version==4
+delays=[];runtime.time.sleep=delays.append
+client.retry_max_delay=.4
+client._retry_delay(0,'2','250');assert delays.pop()==.25
+client._retry_delay(0,'2','99999');assert delays.pop()==.4
+client._retry_delay(0,'.2','invalid');assert delays.pop()==.2
+client._retry_delay(0,'2','0');assert delays.pop()==0
+client.retry_max_delay=0
+first=seen[0];client.create_contact();assert seen[2]==seen[3] and seen[2]!=first
+client.create_contact(x_request_key='provided');assert seen[-2:]==['provided','provided']
+# The same header on an unconfigured operation cannot confer retry safety.
+seen.clear()
+try: client._request('POST','/contacts',headers={'X-Request-Key':'untrusted'},retryable=True)
+except Exception: pass
+assert len(seen)==1
+seen.clear()
+try: client.create_contact(x_request_key='')
+except Exception: pass
+assert seen==['']
+class AsyncResponse:
+    def __init__(self,status):self.status_code=status;self.headers={'content-type':'application/json'};self.content=b'{"id":"ok"}';self.text=self.content.decode()
+    async def aclose(self):pass
+    async def aread(self):return self.content
+class Driver:
+    def build_request(self,method,url,**kwargs):return kwargs['headers']
+    async def send(self,request,**kwargs):
+        seen.append(request['X-Request-Key']);return AsyncResponse(503 if len(seen)%2 else 200)
+async def run():
+    seen.clear();client=AsyncClient('https://example.invalid',http_client=Driver(),max_retries=1,retry_initial_delay=0,retry_max_delay=0)
+    await client.create_contact();assert seen[0]==seen[1] and uuid.UUID(seen[0]).version==4
+    await client.create_contact(x_request_key='provided');assert seen[-2:]==['provided','provided']
+    seen.clear()
+    try: await client.create_contact(x_request_key='')
+    except Exception: pass
+    assert seen==['']
+    delays=[]
+    async def record(delay):delays.append(delay)
+    asyncio.sleep=record;client.retry_max_delay=.4
+    await client._retry_delay_async(0,'2','250');assert delays.pop()==.25
+    await client._retry_delay_async(0,'2','99999');assert delays.pop()==.4
+    await client._retry_delay_async(0,'.2','nan');assert delays.pop()==.2
+    await client._retry_delay_async(0,'2','0');assert delays.pop()==0
+
+asyncio.run(run())
+"#;
+        let output = std::process::Command::new("python3")
+            .arg("-c")
+            .arg(script)
+            .env("PYTHONPATH", root.path().join("python/src"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
         );
     }
 }

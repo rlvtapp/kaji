@@ -151,6 +151,7 @@ pub(super) fn emit(
     let imports: Vec<_> = [
         ("bytes", "bytes"),
         ("context", "context"),
+        ("rand", "crypto/rand"),
         ("json", "encoding/json"),
         ("errors", "errors"),
         ("fmt", "fmt"),

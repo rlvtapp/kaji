@@ -347,6 +347,24 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
         "    def {name}({signature})\n      path = {}\n",
         ruby_string(&operation.path)
     );
+    if let Some(policy) = operation.annotations.get("x-kaji-idempotency-resolved") {
+        if policy
+            .get("auto_generate")
+            .and_then(serde_json::Value::as_bool)
+            == Some(true)
+        {
+            if let Some(parameter) = policy
+                .get("parameter_name")
+                .and_then(serde_json::Value::as_str)
+            {
+                let variable = ruby_identifier(parameter);
+                let _ = writeln!(
+                    out,
+                    "      require 'securerandom'\n      {variable} = SecureRandom.uuid if {variable}.nil?"
+                );
+            }
+        }
+    }
     for parameter in operation
         .parameters
         .iter()
@@ -966,6 +984,51 @@ begin;client.get_item;raise 'error accepted';rescue ProbeSdk::ApiError=>error;ra
         assert!(
             output.status.success(),
             "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    #[test]
+    fn native_auto_idempotency_generates_per_invocation_and_preserves_explicit_key() {
+        let mut api = Api {
+            name: "Probe".into(),
+            ..Default::default()
+        };
+        let mut op = Operation {
+            id: "createItem".into(),
+            method: kaji_core::HttpMethod::Post,
+            path: "/items".into(),
+            ..Default::default()
+        };
+        op.parameters.push(kaji_core::OperationParameter {
+            name: "X-Request-Key".into(),
+            location: "header".into(),
+            required: false,
+            schema: Some(SchemaValue::new(SchemaKind::String)),
+            description: None,
+            annotations: Default::default(),
+        });
+        op.annotations.insert("x-kaji-idempotency-resolved".into(),serde_json::json!({"header":"X-Request-Key","parameter_name":"X-Request-Key","auto_generate":true}));
+        api.operations.push(op);
+        let root = tempfile::tempdir().unwrap();
+        render_sdk(&api, "ruby", Some("probe-sdk"), SdkClientStyle::Flat)
+            .unwrap()
+            .write_to(root.path())
+            .unwrap();
+        let script = r#"require 'probe_sdk'
+Response=Struct.new(:code,:body);seen=[]
+client=ProbeSdk::Client.new(base_url:'https://example.invalid',transport:->(request){seen<<request['X-Request-Key'];Response.new('200','{}')})
+client.create_item;client.create_item;client.create_item(x_request_key:'provided')
+raise unless seen[0].match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/) && seen[0]!=seen[1] && seen[2]=='provided'
+"#;
+        let output = std::process::Command::new("ruby")
+            .args(["-Ilib", "-e", script])
+            .current_dir(root.path().join("ruby"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
     }

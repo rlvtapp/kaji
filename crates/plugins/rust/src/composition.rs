@@ -129,7 +129,7 @@ impl Workspace {
             .unwrap_or_else(|| format!("{}-sdk", render::kebab_case(&cx.api.name)));
         cx.files.emit(GeneratedFile::new(
             "Cargo.toml",
-            render::render_cargo_toml(&name, &cx.api.version),
+            render::render_cargo_toml_for_api(&name, cx.api),
         )?)
     }
 }
