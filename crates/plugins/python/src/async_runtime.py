@@ -7,6 +7,7 @@ from typing import Any, AsyncIterator
 import inspect
 from urllib.parse import urljoin, urlsplit
 from .runtime import BaseClient, ApiError, to_wire
+from .response_validation import ResponseDecodeError
 
 
 class AsyncBaseClient(BaseClient):
@@ -60,7 +61,7 @@ class AsyncBaseClient(BaseClient):
     async def _request(self, method: str, path: str, *, query: dict[str, Any] | None = None,
                        headers: dict[str, str] | None = None, body: Any = None,
                        body_kind: str = 'json', error_types: Any = None,
-                       retryable: bool = False, pagination_url: str | None = None,
+                       retryable: bool = False, pagination_url: str | None = None, response_operation: str | None = None,
                        _stream: bool = False) -> Any:
         url = f'{self.base_url}{path}'
         if pagination_url is not None:
@@ -134,7 +135,8 @@ class AsyncBaseClient(BaseClient):
             try:
                 raw = await response.aread()
                 content_type = response.headers.get('content-type', '').split(';')[0].strip().lower()
-                decoded = json.loads(raw) if raw and (content_type == 'application/json' or content_type.endswith('+json')) else raw or None
+                from .response_validation import decode_json
+                decoded = decode_json(raw, self.validate_responses) if raw and (content_type == 'application/json' or content_type.endswith('+json')) else raw or None
                 if response.status_code >= 400:
                     error_type, body_type = (error_types or {}).get(response.status_code, (ApiError, None))
                     if body_type is not None and isinstance(decoded, dict):
@@ -145,7 +147,14 @@ class AsyncBaseClient(BaseClient):
                     raise raised
                 if self.after_response is not None:
                     self.after_response({'request': context, 'status_code': response.status_code, 'headers': dict(response.headers), 'body': raw})
+                if self.validate_responses and response_operation is not None and method.upper() != 'HEAD':
+                    from .response_validation import PLANS, check_response
+                    check_response(decoded, PLANS['operations'].get(response_operation, {}), PLANS['refs'], response.status_code, content_type)
                 return decoded
+            except ResponseDecodeError as error:
+                if self.on_error is not None:
+                    self.on_error(error, context)
+                raise
             finally:
                 await response.aclose()
         raise RuntimeError('Kaji retry loop completed without a response')

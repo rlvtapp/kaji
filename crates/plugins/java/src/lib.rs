@@ -208,7 +208,7 @@ fn build_gradle(package: &str, artifact: &str, version: &str) -> String {
 
 fn pom_xml(package: &str, artifact: &str, version: &str) -> String {
     format!(
-        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<project xmlns=\"http://maven.apache.org/POM/4.0.0\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd\">\n  <modelVersion>4.0.0</modelVersion>\n  <groupId>{package}</groupId>\n  <artifactId>{artifact}</artifactId>\n  <version>{version}</version>\n  <properties>\n    <maven.compiler.release>17</maven.compiler.release>\n    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>\n  </properties>\n  <dependencies>\n    <dependency><groupId>com.fasterxml.jackson.core</groupId><artifactId>jackson-databind</artifactId><version>2.18.3</version></dependency>\n    <dependency><groupId>com.fasterxml.jackson.datatype</groupId><artifactId>jackson-datatype-jsr310</artifactId><version>2.18.3</version></dependency>\n  </dependencies>\n</project>\n"
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<project xmlns=\"http://maven.apache.org/POM/4.0.0\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd\">\n  <modelVersion>4.0.0</modelVersion>\n  <groupId>{package}</groupId>\n  <artifactId>{artifact}</artifactId>\n  <version>{version}</version>\n  <properties>\n    <maven.compiler.release>17</maven.compiler.release>\n    <maven.compiler.source>17</maven.compiler.source>\n    <maven.compiler.target>17</maven.compiler.target>\n    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>\n  </properties>\n  <dependencies>\n    <dependency><groupId>com.fasterxml.jackson.core</groupId><artifactId>jackson-databind</artifactId><version>2.18.3</version></dependency>\n    <dependency><groupId>com.fasterxml.jackson.datatype</groupId><artifactId>jackson-datatype-jsr310</artifactId><version>2.18.3</version></dependency>\n  </dependencies>\n</project>\n"
     )
 }
 
@@ -1904,6 +1904,9 @@ mod tests {
                 .unwrap()
                 .contains("JavaLanguageVersion.of(17)")
         );
+        let maven = tree.get("sdks/java/pom.xml").unwrap();
+        assert!(maven.contains("<maven.compiler.source>17</maven.compiler.source>"));
+        assert!(maven.contains("<maven.compiler.target>17</maven.compiler.target>"));
         assert!(
             tree.get("sdks/java/pom.xml")
                 .unwrap()

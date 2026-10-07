@@ -76,6 +76,12 @@ fn render_sdk(
         &format!("lib/{file_module}/client.rb"),
         render_client(api, &module, client_style),
     )?;
+    insert(
+        &mut tree,
+        root,
+        &format!("lib/{file_module}/response_validation.rb"),
+        response_validation::render(api, module.as_str()),
+    )?;
     Ok(tree)
 }
 
@@ -120,19 +126,19 @@ fn style_guide(api: &Api, module: &str, style: SdkClientStyle) -> String {
 fn render_models(api: &Api, module: &str) -> String {
     let mut out = format!("{NOTICE}require \"json\"\n\nmodule {module}\n  module Models\n");
     for schema in &api.schemas {
-        out.push_str(&render_model(schema));
+        out.push_str(&render_model(api, schema));
     }
     out.push_str("  end\nend\n");
     out
 }
 
-fn render_model(schema: &Schema) -> String {
+fn render_model(api: &Api, schema: &Schema) -> String {
     let name = pascal_case(&schema.name);
     let mut out = String::new();
     match &schema.value.kind {
         SchemaKind::Object {
             fields,
-            additional_properties,
+            additional_properties: _,
         } => {
             let mut extra_name = "additional_properties".to_owned();
             while fields
@@ -159,18 +165,14 @@ fn render_model(schema: &Schema) -> String {
                     .collect::<Vec<_>>()
                     .join(", ");
                 let _ = writeln!(out, "      attr_reader {attrs}");
-                if !matches!(additional_properties, AdditionalProperties::Forbidden) {
-                    let _ = writeln!(out, "      attr_reader :{extra_name}");
-                }
+                let _ = writeln!(out, "      attr_reader :{extra_name}");
             }
             let args = fields
                 .iter()
                 .map(|field| format!("{}: nil", ruby_identifier(&field.name)))
                 .collect::<Vec<_>>()
                 .join(", ");
-            let extra = if matches!(additional_properties, AdditionalProperties::Forbidden) {
-                ""
-            } else if args.is_empty() {
+            let extra = if args.is_empty() {
                 &format!("{extra_name}: {{}}")
             } else {
                 &format!(", {extra_name}: {{}}")
@@ -180,9 +182,7 @@ fn render_model(schema: &Schema) -> String {
                 let id = ruby_identifier(&field.name);
                 let _ = writeln!(out, "        @{id} = {id}");
             }
-            if !matches!(additional_properties, AdditionalProperties::Forbidden) {
-                let _ = writeln!(out, "        @{extra_name} = {extra_name} || {{}}");
-            }
+            let _ = writeln!(out, "        @{extra_name} = {extra_name} || {{}}");
             out.push_str("      end\n\n      def self.from_hash(value)\n        return value unless value.is_a?(Hash)\n");
             let values = fields
                 .iter()
@@ -195,9 +195,7 @@ fn render_model(schema: &Schema) -> String {
                 })
                 .collect::<Vec<_>>()
                 .join(", ");
-            if matches!(additional_properties, AdditionalProperties::Forbidden) {
-                let _ = writeln!(out, "        instance = new({values})");
-            } else {
+            {
                 let known = fields
                     .iter()
                     .map(|field| ruby_string(&field.name))
@@ -219,7 +217,7 @@ fn render_model(schema: &Schema) -> String {
                 "        instance.instance_variable_set(:@{present_name}, value.keys)\n        instance"
             );
             out.push_str("      end\n\n      def to_h\n        value = {}\n");
-            if !matches!(additional_properties, AdditionalProperties::Forbidden) {
+            {
                 let known = fields
                     .iter()
                     .map(|field| ruby_string(&field.name))
@@ -232,7 +230,9 @@ fn render_model(schema: &Schema) -> String {
             }
             for field in fields {
                 let id = ruby_identifier(&field.name);
-                let condition = if field.required {
+                let condition = if field.required
+                    && !response_validation::write_only(api, &field.value, &mut Default::default())
+                {
                     String::new()
                 } else {
                     format!(
@@ -260,7 +260,12 @@ fn render_client(api: &Api, module: &str, style: SdkClientStyle) -> String {
     let mut out = format!(
         "{NOTICE}require \"net/http\"\nrequire \"uri\"\nrequire \"json\"\nrequire \"cgi\"\n\nmodule {module}\n"
     );
-    out.push_str("  class ApiError < StandardError\n    attr_reader :status, :body\n    def initialize(status, body)\n      @status = status\n      @body = body\n      super(\"API request failed with status #{status}\")\n    end\n  end\n\n  class Client\n    def initialize(base_url:, api_key: nil, bearer_token: nil, headers: {}, timeout: 30, transport: nil, middleware: [])\n      @base_url = base_url.sub(%r{/$}, \"\")\n      @api_key = api_key\n      @bearer_token = bearer_token\n      @headers = headers.transform_keys(&:to_s)\n      @timeout = timeout\n      @transport = transport\n      @middleware = middleware.to_a.dup.freeze\n      raise ArgumentError, \"middleware must be callable\" unless @middleware.all? { |item| item.respond_to?(:call) }\n");
+    out = out.replacen(
+        &format!("module {module}\n"),
+        &format!("require_relative \"response_validation\"\n\nmodule {module}\n"),
+        1,
+    );
+    out.push_str("  class ApiError < StandardError\n    attr_reader :status, :body\n    def initialize(status, body)\n      @status = status\n      @body = body\n      super(\"API request failed with status #{status}\")\n    end\n  end\n\n  class Client\n    def initialize(base_url:, api_key: nil, bearer_token: nil, headers: {}, timeout: 30, transport: nil, middleware: [], validate_responses: false)\n      @base_url = base_url.sub(%r{/$}, \"\")\n      @api_key = api_key\n      @bearer_token = bearer_token\n      @headers = headers.transform_keys(&:to_s)\n      @timeout = timeout\n      @transport = transport\n      @validate_responses = validate_responses\n      @middleware = middleware.to_a.dup.freeze\n      raise ArgumentError, \"middleware must be callable\" unless @middleware.all? { |item| item.respond_to?(:call) }\n");
     if style == SdkClientStyle::Namespaced {
         for resource in resource_operations(api).keys() {
             let _ = writeln!(
@@ -361,8 +366,9 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
     };
     let _ = writeln!(
         out,
-        "      result = request({}, path, query: query, headers: headers, body: {body})",
-        ruby_string(operation.method.as_str())
+        "      result = request({}, path, query: query, headers: headers, body: {body}, response_schemas: ResponseShapes[\"operations\"][{}])",
+        ruby_string(operation.method.as_str()),
+        ruby_string(&operation.id)
     );
     match response.as_deref() {
         Some(model) => {
@@ -377,7 +383,7 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
 }
 
 fn render_runtime() -> String {
-    "    private\n\n    def request(method, path, query:, headers:, body:)\n      uri = URI.join(@base_url + \"/\", path.sub(%r{^/}, \"\"))\n      uri.query = URI.encode_www_form(query) unless query.empty?\n      request = Net::HTTP.const_get(method.capitalize).new(uri)\n      merged_headers = @headers.merge(headers)\n      merged_headers[\"Authorization\"] ||= \"Bearer #{@bearer_token}\" if @bearer_token\n      merged_headers[\"X-API-Key\"] ||= @api_key if @api_key\n      merged_headers.each { |key, value| request[key] = value }\n      unless body.nil?\n        request[\"Content-Type\"] ||= \"application/json\"\n        request.body = body.is_a?(String) ? body : JSON.generate(body.respond_to?(:to_h) ? body.to_h : body)\n      end\n      handler = @transport || lambda do |native_request|\n        target = native_request.uri || uri\n        Net::HTTP.start(target.hostname, target.port, use_ssl: target.scheme == \"https\", open_timeout: @timeout, read_timeout: @timeout) { |http| http.request(native_request) }\n      end\n      @middleware.reverse_each do |item|\n        following = handler\n        handler = ->(native_request) { item.call(native_request, following) }\n      end\n      response = handler.call(request)\n      parsed = response.body.nil? || response.body.empty? ? nil : JSON.parse(response.body) rescue response.body\n      raise ApiError.new(response.code.to_i, parsed) unless response.code.to_i.between?(200, 299)\n      parsed\n    end\n".into()
+    "    private\n\n    def request(method, path, query:, headers:, body:, response_schemas: nil)\n      uri = URI.join(@base_url + \"/\", path.sub(%r{^/}, \"\"))\n      uri.query = URI.encode_www_form(query) unless query.empty?\n      request = Net::HTTP.const_get(method.capitalize).new(uri)\n      merged_headers = @headers.merge(headers)\n      merged_headers[\"Authorization\"] ||= \"Bearer #{@bearer_token}\" if @bearer_token\n      merged_headers[\"X-API-Key\"] ||= @api_key if @api_key\n      merged_headers.each { |key, value| request[key] = value }\n      unless body.nil?\n        request[\"Content-Type\"] ||= \"application/json\"\n        request.body = body.is_a?(String) ? body : JSON.generate(body.respond_to?(:to_h) ? body.to_h : body)\n      end\n      handler = @transport || lambda do |native_request|\n        target = native_request.uri || uri\n        Net::HTTP.start(target.hostname, target.port, use_ssl: target.scheme == \"https\", open_timeout: @timeout, read_timeout: @timeout) { |http| http.request(native_request) }\n      end\n      @middleware.reverse_each do |item|\n        following = handler\n        handler = ->(native_request) { item.call(native_request, following) }\n      end\n      response = handler.call(request)\n      shape = nil\n      if @validate_responses && response_schemas && response.code.to_i.between?(200, 299)\n        content_type = response.respond_to?(:[]) ? response[\"Content-Type\"] : nil\n        shape = ResponseValidation.response_shape(response_schemas, response.code.to_i, content_type)\n      end\n      if shape\n        return ResponseValidation.decode(response.body, shape, ResponseShapes[\"refs\"])\n      end\n      parsed = response.body.nil? || response.body.empty? ? nil : JSON.parse(response.body) rescue response.body\n      raise ApiError.new(response.code.to_i, parsed) unless response.code.to_i.between?(200, 299)\n      parsed\n    end\n".into()
 }
 
 fn render_resource(resource: &str, operations: &[&Operation]) -> String {
@@ -563,6 +569,7 @@ fn pascal_case(value: &str) -> String {
 
 mod bundled_middleware;
 mod package;
+mod response_validation;
 pub use package::{
     PackageExt, Roundtrips, Ruby, RubyModels, Sdk, Settings, package, roundtrips, sdk,
 };
@@ -792,5 +799,141 @@ end
                 assert!(status.success(), "generated {path} must be valid Ruby");
             }
         }
+    }
+    #[test]
+    fn native_structural_checks_validate_cached_responses_before_model_conversion() {
+        let field = |name: &str, value: SchemaValue, required: bool| Field {
+            name: name.into(),
+            value,
+            required,
+            annotations: Default::default(),
+        };
+        let mut secret = SchemaValue::new(SchemaKind::String);
+        secret.write_only = true;
+        let mut nullable = SchemaValue::new(SchemaKind::String);
+        nullable.nullable = true;
+        let mut open_enum = SchemaValue::new(SchemaKind::String);
+        open_enum.enum_values = vec![serde_json::json!("known")];
+        let object = SchemaValue::new(SchemaKind::Object {
+            fields: vec![
+                field("id", open_enum, true),
+                field("count", SchemaValue::new(SchemaKind::Integer), true),
+                field("secret", secret, true),
+                field("label", nullable, false),
+                field(
+                    "items",
+                    SchemaValue::new(SchemaKind::Array {
+                        items: Box::new(SchemaValue::new(SchemaKind::Boolean)),
+                    }),
+                    false,
+                ),
+            ],
+            additional_properties: AdditionalProperties::Forbidden,
+        });
+        let mut api = Api {
+            name: "Probe".into(),
+            version: "1.0.0".into(),
+            schemas: vec![Schema::new("Item", object)],
+            operations: vec![Operation {
+                id: "getItem".into(),
+                method: HttpMethod::Get,
+                path: "/item".into(),
+                responses: vec![OperationResponse::json(
+                    "200",
+                    SchemaValue::reference("#/components/schemas/Item"),
+                )],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let union = SchemaValue::new(SchemaKind::OneOf {
+            variants: vec![
+                SchemaValue::new(SchemaKind::String),
+                SchemaValue::new(SchemaKind::Integer),
+            ],
+        });
+        api.operations.push(Operation {
+            id: "getVariant".into(),
+            method: HttpMethod::Get,
+            path: "/variant".into(),
+            responses: vec![OperationResponse::json("2XX", union)],
+            ..Default::default()
+        });
+        let branch = |name: &str| {
+            SchemaValue::new(SchemaKind::Object {
+                fields: vec![field(name, SchemaValue::new(SchemaKind::String), true)],
+                additional_properties: AdditionalProperties::Any,
+            })
+        };
+        api.operations.push(Operation {
+            id: "getIntersection".into(),
+            method: HttpMethod::Get,
+            path: "/intersection".into(),
+            responses: vec![OperationResponse::json(
+                "200",
+                SchemaValue::new(SchemaKind::AllOf {
+                    variants: vec![branch("a"), branch("b")],
+                }),
+            )],
+            ..Default::default()
+        });
+        let root = tempfile::tempdir().unwrap();
+        render_sdk(&api, "ruby", Some("probe-sdk"), SdkClientStyle::Flat)
+            .unwrap()
+            .write_to(root.path())
+            .unwrap();
+        let script = r#"require 'probe_sdk'
+class Response
+  attr_reader :body, :code
+  def initialize(body,code='200'); @body=body; @code=code; end
+  def [](key); 'application/json; charset=utf-8'; end
+end
+calls=0
+transport=->(request){calls+=1;raise 'must short circuit'}
+wire={'id'=>'new-open-enum','count'=>2,'label'=>nil,'items'=>[true,false],'future'=>{'v'=>1}}
+reply=Response.new(JSON.generate(wire))
+cache=->(request,next_call){reply}
+client=ProbeSdk::Client.new(base_url:'https://unused.example',transport:transport,middleware:[cache],validate_responses:true)
+result=client.get_item
+raise 'wire changed' unless result.to_h==wire
+raise 'transport executed' unless calls==0
+[{'id'=>'PAYLOAD_SECRET','count'=>true},{'id'=>'PAYLOAD_SECRET'},{'id'=>nil,'count'=>1},{'id'=>'x','count'=>1,'items'=>['PAYLOAD_SECRET']}].each do |invalid|
+  reply=Response.new(JSON.generate(invalid))
+  begin;client.get_item;raise 'accepted malformed shape';rescue ProbeSdk::ResponseDecodeError=>error
+    raise 'payload leaked' if error.message.include?('PAYLOAD_SECRET')
+    raise 'path missing' unless error.path.start_with?('$[')
+  end
+end
+[7,'future-string'].each do |value|
+  reply=Response.new(JSON.generate(value),'201');raise 'union valid rejected' unless client.get_variant==value
+end
+reply=Response.new('true','201')
+begin;client.get_variant;raise 'union invalid accepted';rescue ProbeSdk::ResponseDecodeError;end
+reply=Response.new('{"a":"x","b":"y"}')
+raise 'intersection valid rejected' unless client.get_intersection=={'a'=>'x','b'=>'y'}
+reply=Response.new('{"a":"x"}')
+begin;client.get_intersection;raise 'intersection invalid accepted';rescue ProbeSdk::ResponseDecodeError;end
+reply=Response.new('{not json PAYLOAD_SECRET')
+begin;client.get_item;raise 'invalid JSON accepted';rescue ProbeSdk::ResponseDecodeError=>error;raise 'payload leaked' if error.message.include?('PAYLOAD_SECRET');end
+reply=Response.new('"' + ('x'*(10*1024*1024)) + '"')
+begin;client.get_item;raise 'oversized accepted';rescue ProbeSdk::ResponseDecodeError;end
+reply=Response.new(('['*140)+'0'+(']'*140))
+begin;client.get_item;raise 'deep accepted';rescue ProbeSdk::ResponseDecodeError;end
+reply=Response.new('{"id":"x","count":true}')
+permissive=ProbeSdk::Client.new(base_url:'https://unused.example',middleware:[cache])
+raise 'default changed' unless permissive.get_item.count==true
+reply=Response.new('{"server":"PAYLOAD_SECRET"}','400')
+begin;client.get_item;raise 'error accepted';rescue ProbeSdk::ApiError=>error;raise 'wrong status' unless error.status==400;end
+"#;
+        let output = Command::new("ruby")
+            .args(["-Ilib", "-e", script])
+            .current_dir(root.path().join("ruby"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 }

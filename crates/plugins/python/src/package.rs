@@ -206,3 +206,7 @@ impl Plugin<Python> for Roundtrips {
         )?)
     }
 }
+
+#[path = "operation_tests.rs"]
+mod operation_tests;
+pub use operation_tests::{OperationTests, operation_tests};

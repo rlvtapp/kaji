@@ -111,3 +111,21 @@ Middleware can rewrite requests/responses, recover or replace errors, or return 
 ### Bundle author middleware during generation
 
 The package builder's `.middleware(BundledMiddleware { path, contents, symbol, async_symbol: None })` ships and registers an author-supplied native Go wrapper automatically. Use a `.go` file beside the generated client, declaring the same package, and a symbol with the `KajiMiddleware` function ABI. Consumers need no `ClientConfig.Middleware` registration. Bundled defaults run before optional customer wrappers in configuration order. Source filenames/build constraints must not restrict compilation to a platform. Colliding paths, foreign package declarations and transports lacking the native registration boundary fail generation.
+
+Optional native operation smoke tests can be distributed with the generated SDK:
+
+```rust
+kaji::go::package("go")
+    .with(kaji::go::sdk())
+    .with(kaji::go::operation_tests().max_operations(128))
+```
+
+The consumer resolves the typed Client/Operations contracts and emits executable
+`operation_generated_test.go`, a distributed `OPERATION_TESTS.md`, and
+`.kaji/operation-test-diagnostics.json`. Run `go test -v ./...` to see asserted
+wire cases and explicit skips. It uses bounded core samples and a fake native
+transport; supported public operations exercise path/query/header serialization,
+JSON request bodies, JSON response decoding, and void success statuses. It does
+not contact the service. Custom ABIs, other media kinds, unsupported schemas and
+operation bounds are reported rather than advertised as tested. Explicit
+`using_client`/`using_operations` handles are available for composed profiles.

@@ -29,6 +29,7 @@ pub(super) fn generate(
         let mut body = String::new();
         render_operation(&mut body, operation);
         render_cursor_pager(&mut body, api, operation);
+        page_pagination::render(&mut body, api, operation);
         if cursor_pagination(api, operation).is_none() {
             render_offset_pager(&mut body, api, operation);
         }
