@@ -46,7 +46,7 @@ impl EntityCatalog {
                     "name": resource.name,
                     "create": operation(&resource.create),
                     "read": operation(&resource.read),
-                    "update": resource.update.as_ref().map(&operation),
+                    "update": resource.update.as_ref().map(operation),
                     "delete": operation(&resource.delete),
                     "id_parameter": resource.id_parameter, "id_field": resource.id_field,
                     "attributes": resource.attributes, "requires_auth": resource.requires_auth
