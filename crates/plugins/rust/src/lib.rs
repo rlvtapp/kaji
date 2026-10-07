@@ -286,3 +286,45 @@ mod tests {
         assert!(source.contains("request = request.json(body)"));
     }
 }
+
+#[cfg(test)]
+fn native_cargo() -> std::process::Command {
+    let mut command = std::process::Command::new("cargo");
+    configure_native_cargo(
+        &mut command,
+        std::env::var("KAJI_RUNTIME_OFFLINE").as_deref() == Ok("1"),
+    );
+    command
+}
+
+#[cfg(test)]
+fn configure_native_cargo(command: &mut std::process::Command, offline: bool) {
+    if offline {
+        command.arg("--offline");
+    }
+    command.env(
+        "CARGO_TARGET_DIR",
+        std::env::var_os("KAJI_RUNTIME_RUST_TARGET").unwrap_or_else(|| {
+            std::env::temp_dir()
+                .join("kaji-runtime-contract-rust-target")
+                .into_os_string()
+        }),
+    );
+}
+
+#[cfg(test)]
+mod native_cargo_tests {
+    #[test]
+    fn dependency_downloads_are_allowed_unless_offline_is_requested() {
+        for offline in [false, true] {
+            let mut command = std::process::Command::new("cargo");
+            super::configure_native_cargo(&mut command, offline);
+            assert_eq!(command.get_args().any(|arg| arg == "--offline"), offline);
+            assert!(
+                command
+                    .get_envs()
+                    .any(|(key, value)| key == "CARGO_TARGET_DIR" && value.is_some())
+            );
+        }
+    }
+}

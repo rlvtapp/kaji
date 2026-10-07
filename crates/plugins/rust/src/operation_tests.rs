@@ -402,16 +402,9 @@ mod tests {
             .generate(&api(), None)
             .unwrap();
         tree.write_to(temp.path()).unwrap();
-        let mut command = std::process::Command::new("cargo");
+        let mut command = crate::native_cargo();
         command.args(["test", "--lib"]);
-        if std::env::var("KAJI_RUNTIME_OFFLINE").as_deref() == Ok("1") {
-            command.arg("--offline");
-        }
-        command.current_dir(temp.path().join("sdk")).env(
-            "CARGO_TARGET_DIR",
-            std::env::var("KAJI_RUNTIME_RUST_TARGET")
-                .unwrap_or_else(|_| temp.path().join("target").to_string_lossy().into_owned()),
-        );
+        command.current_dir(temp.path().join("sdk"));
         let output = command.output().unwrap();
         assert!(
             output.status.success(),

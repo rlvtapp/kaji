@@ -1689,7 +1689,7 @@ pub(crate) fn kebab_case(name: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::BTreeMap, fs, process::Command};
+    use std::{collections::BTreeMap, fs};
 
     use super::*;
     use kaji_core::ast::{AdditionalProperties, Field, HttpMethod, SchemaKind, SchemaValue};
@@ -1774,14 +1774,9 @@ impl Transport for Mock {fn execute(&self,request:reqwest::Request)->TransportFu
  for blank in ["", "   "] {seen.lock().unwrap().clear();assert!(client.create_item(CreateItemRequest{x_once:Some(blank.into())}).await.is_err());let keys=seen.lock().unwrap();assert_eq!(keys.len(),1);assert_eq!(keys[0],blank);}
 }
 "#).unwrap();
-        let output = Command::new("cargo")
-            .args(["test", "--offline", "--quiet"])
+        let output = crate::native_cargo()
+            .args(["test", "--quiet"])
             .env("RUSTFLAGS", "-Dwarnings")
-            .env(
-                "CARGO_TARGET_DIR",
-                std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .join("../../../target/generated-rust-providers"),
-            )
             .current_dir(sdk)
             .output()
             .unwrap();
@@ -1838,14 +1833,9 @@ impl Transport for Mock {fn execute(&self,request:reqwest::Request)->TransportFu
             include_str!("url_pagination_test.rs.txt"),
         )
         .unwrap();
-        let output = std::process::Command::new("cargo")
-            .args(["test", "--offline", "--quiet"])
+        let output = crate::native_cargo()
+            .args(["test", "--quiet"])
             .env("RUSTFLAGS", "-Dwarnings")
-            .env(
-                "CARGO_TARGET_DIR",
-                std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .join("../../../target/generated-rust-providers"),
-            )
             .current_dir(sdk)
             .output()
             .unwrap();
@@ -1957,14 +1947,9 @@ impl Transport for Mock {fn execute(&self, request:reqwest::Request)->TransportF
  seen.lock().unwrap().clear();let mut pages=Box::pin(client.list_items_pages(ListItemsRequest{page:Some(-1),limit:None}));assert!(ready(pages.next()).unwrap().is_err());assert!(seen.lock().unwrap().is_empty());
 }
 "#).unwrap();
-        let output = Command::new("cargo")
-            .args(["test", "--offline", "--quiet"])
+        let output = crate::native_cargo()
+            .args(["test", "--quiet"])
             .env("RUSTFLAGS", "-Dwarnings")
-            .env(
-                "CARGO_TARGET_DIR",
-                std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .join("../../../target/generated-rust-providers"),
-            )
             .current_dir(sdk)
             .output()
             .unwrap();
@@ -2496,20 +2481,15 @@ impl Transport for Mock {fn execute(&self, request:reqwest::Request)->TransportF
             ..Api::default()
         };
         let temp = tempfile::tempdir().unwrap();
-        let config = RenderOptions::default();
-        for file in RustModels
-            .generate(&api, &config)
+        kaji_core::engine::Packages::new()
+            .package(crate::package("sdk").with(crate::sdk()))
+            .generate(&api, None)
             .unwrap()
-            .into_iter()
-            .chain(RustReqwest.generate(&api, &config).unwrap())
-            .chain(RustPackage.generate(&api, &config).unwrap())
-        {
-            let destination = temp.path().join(file.path);
-            fs::create_dir_all(destination.parent().unwrap()).unwrap();
-            fs::write(destination, file.contents).unwrap();
-        }
+            .write_to(temp.path())
+            .unwrap();
+        let sdk = temp.path().join("sdk");
 
-        let manifest = temp.path().join("Cargo.toml");
+        let manifest = sdk.join("Cargo.toml");
         let cargo_toml = fs::read_to_string(&manifest).unwrap();
         fs::write(
             &manifest,
@@ -2518,7 +2498,7 @@ impl Transport for Mock {fn execute(&self, request:reqwest::Request)->TransportF
             ),
         )
         .unwrap();
-        let test_directory = temp.path().join("tests");
+        let test_directory = sdk.join("tests");
         fs::create_dir_all(&test_directory).unwrap();
         fs::write(
             test_directory.join("retry_runtime.rs"),
@@ -2579,9 +2559,9 @@ async fn retries_safe_requests_and_only_hooks_the_final_outcome() {
         )
         .unwrap();
 
-        let status = Command::new("cargo")
+        let status = crate::native_cargo()
             .args(["test", "--quiet"])
-            .current_dir(temp.path())
+            .current_dir(&sdk)
             .env("RUSTFLAGS", "-Dwarnings")
             .status()
             .expect("cargo should be available for generated SDK tests");

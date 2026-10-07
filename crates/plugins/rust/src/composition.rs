@@ -496,15 +496,10 @@ impl Transport for CustomHTTP {fn execute(&self,request:reqwest::Request)->Trans
 #[should_panic(expected="custom transport invoked")]
 fn custom_executor_runs(){use std::future::Future;let client=demo_sdk::Client::new("https://unused.example");let mut future=Box::pin(client.get_label());let _=future.as_mut().poll(&mut std::task::Context::from_waker(std::task::Waker::noop()));}
 "#).unwrap();
-        let output = std::process::Command::new("cargo")
-            .args(["test", "--offline", "--quiet"])
+        let output = crate::native_cargo()
+            .args(["test", "--quiet"])
             .env("RUSTFLAGS", "-Dwarnings")
             .current_dir(root.path().join("sdk"))
-            .env(
-                "CARGO_TARGET_DIR",
-                std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .join("../../../target/generated-rust-providers"),
-            )
             .output()
             .unwrap();
         assert!(
@@ -634,15 +629,10 @@ fn short_circuit_is_used_by_generated_operation() {
     assert_eq!(ready(client.get_label()).unwrap(), "cached"); assert_eq!(calls.load(Ordering::SeqCst), 0);
 }
 "#).unwrap();
-        let output = std::process::Command::new("cargo")
-            .args(["test", "--offline", "--quiet"])
+        let output = crate::native_cargo()
+            .args(["test", "--quiet"])
             .env("RUSTFLAGS", "-Dwarnings")
             .current_dir(sdk)
-            .env(
-                "CARGO_TARGET_DIR",
-                std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .join("../../../target/generated-rust-providers"),
-            )
             .output()
             .unwrap();
         assert!(

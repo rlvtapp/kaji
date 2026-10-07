@@ -69,19 +69,8 @@ mod tests {
 #[cfg(test)]mod vectors {use super::*;#[test]fn canonical_raw_rotation_and_failures(){let v:serde_json::Value=serde_json::from_str(include_str!("../vector.json")).unwrap();let raw=v["raw_body"].as_str().unwrap().as_bytes();let secret=v["secret"].as_str().unwrap();let headers=vec![("webhook-id",v["headers"]["webhook-id"].as_str().unwrap()),("webhook-timestamp",v["headers"]["webhook-timestamp"].as_str().unwrap()),("webhook-signature",v["headers"]["webhook-signature"].as_str().unwrap())];let opts=WebhookVerificationOptions{now:1700000000,tolerance:300};assert_eq!(verify_webhook(raw,&headers,&[secret],opts).unwrap(),v["payload"]);assert!(verify_webhook(raw,&headers,&["whsec_YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4",secret],opts).is_ok());let rotated=format!("v2,ignored v1,bad {}",headers[2].1);let mut rotations=headers.clone();rotations[2].1=&rotated;assert!(verify_webhook(raw,&rotations,&[secret],opts).is_ok());let unsupported=headers[2].1.replace("v1,","v1a,");let mut asymmetric=headers.clone();asymmetric[2].1=&unsupported;assert!(verify_webhook(raw,&asymmetric,&[secret],opts).is_err());let mut changed=raw.to_vec();changed.push(b' ');assert!(verify_webhook(&changed,&headers,&[secret],opts).is_err());for now in [1699999699,1700000301]{assert!(verify_webhook(raw,&headers,&[secret],WebhookVerificationOptions{now,..opts}).is_err());}for keys in [vec![],vec!["whsec_bad"]]{let error=verify_webhook(raw,&headers,&keys,opts).unwrap_err();assert_eq!(error.to_string(),"Webhook verification failed");}let mut duplicate=headers.clone();duplicate.push(("WEBHOOK-ID","duplicate"));assert!(verify_webhook(raw,&duplicate,&[secret],opts).is_err());assert!(verify_webhook(raw,&headers,&[secret],WebhookVerificationOptions{tolerance:0,..opts}).is_ok());}}
 "#);
         std::fs::write(path, source).unwrap();
-        let mut command = std::process::Command::new("cargo");
+        let mut command = crate::native_cargo();
         command.args(["test", "--quiet"]);
-        if std::env::var_os("KAJI_RUNTIME_OFFLINE").is_some() {
-            command.arg("--offline");
-        }
-        command.env(
-            "CARGO_TARGET_DIR",
-            std::env::var_os("KAJI_RUNTIME_RUST_TARGET").unwrap_or_else(|| {
-                std::env::temp_dir()
-                    .join("kaji-runtime-contract-rust-target")
-                    .into_os_string()
-            }),
-        );
         let output = command.current_dir(cwd).output().unwrap();
         assert!(
             output.status.success(),
