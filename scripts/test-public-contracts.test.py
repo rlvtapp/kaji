@@ -1,9 +1,13 @@
 """No-network checks for the pinned-contract runner's failure boundaries."""
 import os
+import hashlib
+import io
+import json
 from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+import zipfile
 
 SCRIPT = Path(__file__).with_name("test-public-contracts.sh")
 
@@ -30,6 +34,36 @@ class PublicContractRunnerTests(unittest.TestCase):
                 env={**os.environ, "KAJI_PUBLIC_CONTRACT_ROOT": temp}, capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("Unsupported language", result.stderr)
+
+    def test_archive_reference_tree_cannot_escape_output(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            cache = root / "cache"
+            cache.mkdir()
+            data = io.BytesIO()
+            with zipfile.ZipFile(data, "w") as archive:
+                archive.writestr("bundle/specification/api.yaml", "openapi: 3.1.0")
+                archive.writestr("bundle/../../outside", "must not escape")
+            payload = data.getvalue()
+            (cache / "nested.zip").write_bytes(payload)
+            manifest = root / "manifest.json"
+            manifest.write_text(json.dumps({"contracts": [{"name": "nested",
+                "url": "https://example.invalid/pinned.zip", "sha256": hashlib.sha256(payload).hexdigest(),
+                "archive_entry": "specification/api.yaml"}]}))
+            result = subprocess.run(["python3", str(SCRIPT.with_name("public-contracts.py")),
+                "fetch", str(manifest), str(root / "output"), str(cache)], capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Unsafe archive path", result.stderr)
+            self.assertFalse((root / "outside").exists())
+            self.assertFalse((root / "output/nested/specification/api.yaml").exists())
+
+    def test_unknown_contract_selection_fails_in_check_mode(self):
+        with tempfile.TemporaryDirectory() as temp:
+            result = subprocess.run(["bash", str(SCRIPT), "check", "go"],
+                env={**os.environ, "KAJI_PUBLIC_CONTRACT_ROOT": temp,
+                     "KAJI_PUBLIC_CONTRACTS": "not-in-manifest"}, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Unknown selected contract", result.stderr)
 
 if __name__ == "__main__":
     unittest.main()

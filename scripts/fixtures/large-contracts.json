@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "contracts": [
+    {
+      "name": "stripe",
+      "url": "https://raw.githubusercontent.com/stripe/openapi/b8e9329d82320ccf9b7a973a5b5ae1d7c39c0c94/openapi/spec3.json",
+      "sha256": "7cff4cc46d0654101a36a3302f7544640f5f73e4f3cad6f264f0e23c19fa1776",
+      "max_bytes": 67108864,
+      "bytes": 8317513
+    },
+    {
+      "name": "github",
+      "url": "https://raw.githubusercontent.com/github/rest-api-description/734bc9c1030b774eb3fc909cce477aceea21cf77/descriptions/api.github.com/api.github.com.json",
+      "sha256": "3c608117f6d5a69c2d34404328f8431baff8f3808c81b978c1422590b42aa53d",
+      "max_bytes": 67108864,
+      "bytes": 13014796
+    },
+    {
+      "name": "openai",
+      "url": "https://raw.githubusercontent.com/openai/openai-openapi/17f9a665031777071b26e63356d78280bf7c128c/openapi.yaml",
+      "sha256": "59e158b6029cdefff7d82dd1a4f5fe27bfe11de65ad5a997b772af8e1a7a8b8a",
+      "max_bytes": 67108864,
+      "bytes": 4010405
+    },
+    {
+      "name": "twilio",
+      "url": "https://raw.githubusercontent.com/twilio/twilio-oai/141f1201b55abcc16b3aa8089e71c4a927326975/spec/yaml/twilio_api_v2010.yaml",
+      "sha256": "052b294839a56c89a921c77639305d99ad15be6e248bdeaef8975aea6cfcb339",
+      "max_bytes": 67108864,
+      "bytes": 1504725
+    },
+    {
+      "name": "digital-ocean",
+      "url": "https://codeload.github.com/digitalocean/openapi/zip/97dca99f0c1e9c99970daeaef3957bf0c9d1c586",
+      "sha256": "b312e12a224f86871b29706998e19cc78b3ac5617c335d83f8b6d5cfc7bf8a03",
+      "max_bytes": 67108864,
+      "archive_entry": "specification/DigitalOcean-public.v2.yaml"
+    },
+    {
+      "name": "linode",
+      "url": "https://raw.githubusercontent.com/linode/linode-api-docs/c6c5408f90a696a8e83053d56872c01d6c832c64/openapi.json",
+      "sha256": "f8de5dfc648902e16216347178f19406b5041e8a37fca9a97c38d402639053a1",
+      "max_bytes": 67108864
+    }
+  ]
+}
