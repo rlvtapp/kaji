@@ -1,0 +1,296 @@
+{
+  "schema_version": 1,
+  "catalog": "https://apis.guru",
+  "catalog_revision": "f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49",
+  "selection": "32 distinct providers; documents at least 1 MB; Microsoft Graph covered separately",
+  "contracts": [
+    {
+      "name": "loket",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/loket.nl/V2/openapi.yaml",
+      "sha256": "8040ca048d5611a1c8f8015eb784432b454661d50f95b8602158614ddb0c18f4",
+      "max_bytes": 16777216,
+      "bytes": 11420215,
+      "catalog_path": "APIs/loket.nl/V2/openapi.yaml",
+      "provider": "loket.nl"
+    },
+    {
+      "name": "mailchimp",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/mailchimp.com/3.0.55/openapi.yaml",
+      "sha256": "73f5015350af370aa2b5a2d538d491654c275dbb43881b15e8911641729fa181",
+      "max_bytes": 16777216,
+      "bytes": 10264851,
+      "catalog_path": "APIs/mailchimp.com/3.0.55/openapi.yaml",
+      "provider": "mailchimp.com"
+    },
+    {
+      "name": "github",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/github.com/api.github.com/1.1.4/openapi.yaml",
+      "sha256": "aeb35e488d0ad4c3a43e96bad41f66f734760ccd5fb12f7cb3e2175a73344bcc",
+      "max_bytes": 16777216,
+      "bytes": 8802477,
+      "catalog_path": "APIs/github.com/api.github.com/1.1.4/openapi.yaml",
+      "provider": "github.com"
+    },
+    {
+      "name": "zuora",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/zuora.com/2021-08-20/openapi.yaml",
+      "sha256": "204073a9642562169ef896910a5f5b27a08d4ec5a672540e646a7cfeaed856c5",
+      "max_bytes": 16777216,
+      "bytes": 6774553,
+      "catalog_path": "APIs/zuora.com/2021-08-20/openapi.yaml",
+      "provider": "zuora.com"
+    },
+    {
+      "name": "aws-ec2",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/amazonaws.com/ec2/2016-11-15/openapi.yaml",
+      "sha256": "4b4da0ce2b0c6ab3d0fe912f4472532c09749481ce4cb2dc03e60660fcefee77",
+      "max_bytes": 16777216,
+      "bytes": 5649231,
+      "catalog_path": "APIs/amazonaws.com/ec2/2016-11-15/openapi.yaml",
+      "provider": "amazonaws.com"
+    },
+    {
+      "name": "chaingateway",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/chaingateway.io/1.0.0/openapi.yaml",
+      "sha256": "55fca685f7fe74115aaeb572e386cb5c77058847fbe7cd8361391456f3780ace",
+      "max_bytes": 16777216,
+      "bytes": 5377053,
+      "catalog_path": "APIs/chaingateway.io/1.0.0/openapi.yaml",
+      "provider": "chaingateway.io"
+    },
+    {
+      "name": "zoom",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/zoom.us/2.0.0/openapi.yaml",
+      "sha256": "dfb27518884bb1b5940763ded19c8f848e2e519ce5f29a37420ec4e5312390d2",
+      "max_bytes": 16777216,
+      "bytes": 5037451,
+      "catalog_path": "APIs/zoom.us/2.0.0/openapi.yaml",
+      "provider": "zoom.us"
+    },
+    {
+      "name": "unicourt",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/unicourt.com/1.0.0/openapi.yaml",
+      "sha256": "d8d536ea8daca766a98ec0db6599041cfdcc449b71f689df9046b88b9796a79d",
+      "max_bytes": 16777216,
+      "bytes": 4496508,
+      "catalog_path": "APIs/unicourt.com/1.0.0/openapi.yaml",
+      "provider": "unicourt.com"
+    },
+    {
+      "name": "google-compute",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/googleapis.com/compute/v1/openapi.yaml",
+      "sha256": "87af1f7f4b71051e953663c0e8db2a4bf5d9b40c4673eab7835b3e40ea57584b",
+      "max_bytes": 16777216,
+      "bytes": 3944871,
+      "catalog_path": "APIs/googleapis.com/compute/v1/openapi.yaml",
+      "provider": "googleapis.com"
+    },
+    {
+      "name": "stripe",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/stripe.com/2022-11-15/openapi.yaml",
+      "sha256": "fba83fd7ff9ce87eafa0fbbc15c382b176dac204ca21b72df1a8c361441d9ecf",
+      "max_bytes": 16777216,
+      "bytes": 3726556,
+      "catalog_path": "APIs/stripe.com/2022-11-15/openapi.yaml",
+      "provider": "stripe.com"
+    },
+    {
+      "name": "mist",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/mist.com/0.37.7/openapi.yaml",
+      "sha256": "ca5888bce5171481c95b5d40e16e594763dfaf676cc8aed7f5dc43dceaba971d",
+      "max_bytes": 16777216,
+      "bytes": 3589673,
+      "catalog_path": "APIs/mist.com/0.37.7/openapi.yaml",
+      "provider": "mist.com"
+    },
+    {
+      "name": "docusign",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/docusign.net/v2.1/openapi.yaml",
+      "sha256": "2a9e86d5bab61f0466fffcd228a580f9ff07c743d721d5714bfb635595fd356b",
+      "max_bytes": 16777216,
+      "bytes": 3295160,
+      "catalog_path": "APIs/docusign.net/v2.1/openapi.yaml",
+      "provider": "docusign.net"
+    },
+    {
+      "name": "here",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/here.com/tracking/2.1.192/openapi.yaml",
+      "sha256": "102be7732bf4ca5121f7b667bb5dfc69e908c000647eb4c35ed008f56f5a7a90",
+      "max_bytes": 16777216,
+      "bytes": 3202169,
+      "catalog_path": "APIs/here.com/tracking/2.1.192/openapi.yaml",
+      "provider": "here.com"
+    },
+    {
+      "name": "visma",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/visma.net/9.66.02.1023/openapi.yaml",
+      "sha256": "d9eabd1170373b7ffb4b3b4178863f19928aad5cc9869de162898924668cc9bc",
+      "max_bytes": 16777216,
+      "bytes": 2700094,
+      "catalog_path": "APIs/visma.net/9.66.02.1023/openapi.yaml",
+      "provider": "visma.net"
+    },
+    {
+      "name": "meraki",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/meraki.com/1.32.0/openapi.yaml",
+      "sha256": "c8885aec1bc26086f013522bf9ed938773dbc5c7fc334e755ff8ce44a8e2e8ca",
+      "max_bytes": 16777216,
+      "bytes": 2497774,
+      "catalog_path": "APIs/meraki.com/1.32.0/openapi.yaml",
+      "provider": "meraki.com"
+    },
+    {
+      "name": "dracoon",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/dracoon.team/4.42.3/openapi.yaml",
+      "sha256": "b5298ec0c42729965060708636666c2dddf878ca41f7d2c3293265353284bbb3",
+      "max_bytes": 16777216,
+      "bytes": 2488340,
+      "catalog_path": "APIs/dracoon.team/4.42.3/openapi.yaml",
+      "provider": "dracoon.team"
+    },
+    {
+      "name": "appcenter",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/appcenter.ms/v0.1/openapi.yaml",
+      "sha256": "08e59f376720d0541d5a91d7ed9c9ce7313a0f7b37d2f657de5e9d0b7406eb27",
+      "max_bytes": 16777216,
+      "bytes": 2310787,
+      "catalog_path": "APIs/appcenter.ms/v0.1/openapi.yaml",
+      "provider": "appcenter.ms"
+    },
+    {
+      "name": "codat",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/codat.io/accounting/2.1.0/openapi.yaml",
+      "sha256": "15751f97e6e3fbaf48e880fe0425686daa7adb299adf8f0897641a38b2008b80",
+      "max_bytes": 16777216,
+      "bytes": 2202856,
+      "catalog_path": "APIs/codat.io/accounting/2.1.0/openapi.yaml",
+      "provider": "codat.io"
+    },
+    {
+      "name": "jira",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/atlassian.com/jira/1001.0.0-SNAPSHOT/openapi.yaml",
+      "sha256": "af66914f0d43b7c45c46a69e7619d3a7e008eff4668fc4caa43145170f9b97a3",
+      "max_bytes": 16777216,
+      "bytes": 2124906,
+      "catalog_path": "APIs/atlassian.com/jira/1001.0.0-SNAPSHOT/openapi.yaml",
+      "provider": "atlassian.com"
+    },
+    {
+      "name": "alertersystem",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/alertersystem.com/1.7.0/openapi.yaml",
+      "sha256": "5cdecf0cf788a70a11078bece3b502a0e8be4252fa8e281b5decd016c808e3b8",
+      "max_bytes": 16777216,
+      "bytes": 2085394,
+      "catalog_path": "APIs/alertersystem.com/1.7.0/openapi.yaml",
+      "provider": "alertersystem.com"
+    },
+    {
+      "name": "netbox",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/netbox.dev/3.4/openapi.yaml",
+      "sha256": "730d1a4411490466a0faa83895bf81679318857f444108e10471905aaf38275d",
+      "max_bytes": 16777216,
+      "bytes": 1786923,
+      "catalog_path": "APIs/netbox.dev/3.4/openapi.yaml",
+      "provider": "netbox.dev"
+    },
+    {
+      "name": "digitalocean",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/digitalocean.com/2.0/openapi.yaml",
+      "sha256": "5bd3a4800c4396372cb80d99cc82b49463e4a3f136b63d1794c19f13da37cf63",
+      "max_bytes": 16777216,
+      "bytes": 1574377,
+      "catalog_path": "APIs/digitalocean.com/2.0/openapi.yaml",
+      "provider": "digitalocean.com"
+    },
+    {
+      "name": "rubrik",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/rubrikinc.github.io/v1/openapi.yaml",
+      "sha256": "1e6b586567de6e093930927cd08aadbd18571091ebf97c5be5c23b37130b6196",
+      "max_bytes": 16777216,
+      "bytes": 1569134,
+      "catalog_path": "APIs/rubrikinc.github.io/v1/openapi.yaml",
+      "provider": "rubrikinc.github.io"
+    },
+    {
+      "name": "plaid",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/plaid.com/2020-09-14_1.345.1/openapi.yaml",
+      "sha256": "79291d99cc1de9909805841b30b2795b8c9327563d76b94d37a2df3733176bda",
+      "max_bytes": 16777216,
+      "bytes": 1534450,
+      "catalog_path": "APIs/plaid.com/2020-09-14_1.345.1/openapi.yaml",
+      "provider": "plaid.com"
+    },
+    {
+      "name": "bunq",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/bunq.com/1.0/openapi.yaml",
+      "sha256": "d19e8698545140c66f260d2b361bc4a393bddf2cec3041cbc9e98263e666a3ac",
+      "max_bytes": 16777216,
+      "bytes": 1499830,
+      "catalog_path": "APIs/bunq.com/1.0/openapi.yaml",
+      "provider": "bunq.com"
+    },
+    {
+      "name": "squareup",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/squareup.com/2.0/openapi.yaml",
+      "sha256": "3e820f5ce38aae3ea91999433f5b4798512e0170128bc4bea85dfccab492db01",
+      "max_bytes": 16777216,
+      "bytes": 1362648,
+      "catalog_path": "APIs/squareup.com/2.0/openapi.yaml",
+      "provider": "squareup.com"
+    },
+    {
+      "name": "bungie",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/bungie.net/2.18.0/openapi.yaml",
+      "sha256": "d9464561cfff2ca93e6425607ed1a9f9316340c8334d8255530fbb949e8f8d20",
+      "max_bytes": 16777216,
+      "bytes": 1359148,
+      "catalog_path": "APIs/bungie.net/2.18.0/openapi.yaml",
+      "provider": "bungie.net"
+    },
+    {
+      "name": "increase",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/increase.com/0.0.1/openapi.yaml",
+      "sha256": "fb0f7c943a616959f87dd6cb4901b4416b045981c2ecb3d358fb72c0e7d0f7c3",
+      "max_bytes": 16777216,
+      "bytes": 1333496,
+      "catalog_path": "APIs/increase.com/0.0.1/openapi.yaml",
+      "provider": "increase.com"
+    },
+    {
+      "name": "gsmtasks",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/gsmtasks.com/2.4.13/openapi.yaml",
+      "sha256": "0dcf00c0aa2faec293394c1b8c237748593586a6c639ea3fc59620a79ce9a7ff",
+      "max_bytes": 16777216,
+      "bytes": 1317549,
+      "catalog_path": "APIs/gsmtasks.com/2.4.13/openapi.yaml",
+      "provider": "gsmtasks.com"
+    },
+    {
+      "name": "osf",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/osf.io/2.0/openapi.yaml",
+      "sha256": "cdcf786527cbc25296204b370846686f3e76083f12c7a50e419b19aa53b03e5b",
+      "max_bytes": 16777216,
+      "bytes": 1302722,
+      "catalog_path": "APIs/osf.io/2.0/openapi.yaml",
+      "provider": "osf.io"
+    },
+    {
+      "name": "jellyfin",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/jellyfin.local/v1/openapi.yaml",
+      "sha256": "5fc9ae253184f0ed56e56cff90b9c130b30bd4ddd1db7328779a5657ed01b2f2",
+      "max_bytes": 16777216,
+      "bytes": 1288659,
+      "catalog_path": "APIs/jellyfin.local/v1/openapi.yaml",
+      "provider": "jellyfin.local"
+    },
+    {
+      "name": "box",
+      "url": "https://raw.githubusercontent.com/APIs-guru/openapi-directory/f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49/APIs/box.com/2.0.0/openapi.yaml",
+      "sha256": "8fdc22ddf19d734dd3372a5545324ac43eae55e169651e22bb31b85f0623bc9e",
+      "max_bytes": 16777216,
+      "bytes": 1223079,
+      "catalog_path": "APIs/box.com/2.0.0/openapi.yaml",
+      "provider": "box.com"
+    }
+  ]
+}

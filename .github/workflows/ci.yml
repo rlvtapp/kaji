@@ -32,6 +32,7 @@ jobs:
         run: |
           node --test packages/github-action/test/*.test.cjs packages/gitlab-ci/test/*.test.cjs
           python3 scripts/test-public-contracts.test.py
+          python3 scripts/test-guru-corpus.py
       - name: Test editable SDK delivery and App broker sources
         run: node --test packages/sdk-check/test/*.mjs packages/sdk-publish/test/*.mjs packages/github-app-broker/*.test.mjs packages/spec-sync/test/*.test.mjs packages/sdk-delivery-test/test/*.test.mjs packages/runtime-contract/test.mjs packages/postman-sync/test/*.mjs
       - name: Test portable collection checker
@@ -55,6 +56,7 @@ jobs:
           cargo test -p kaji-cli combined_optional_recipe_validates_actual_json_schema -- --ignored
           cargo test -p kaji-cli eject::tests::rebuilt_ejected_renderer_consumes_custom_source -- --ignored
           cargo test -p kaji-cli --test local_references -- --ignored
+          cargo test -p kaji-cli --test migration -- --ignored
       - name: Verify generated TypeScript middleware and response decoding
         run: |
           npm install --prefix "$RUNNER_TEMP/kaji-ts-runtime" --no-audit --no-fund typescript@5.9.3 axios@1.20.0
