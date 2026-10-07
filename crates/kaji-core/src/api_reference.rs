@@ -139,6 +139,18 @@ pub fn render(api: &Api) -> String {
         if op.parameters.is_empty() {
             out.push_str("| — | — | — | None declared |\n")
         }
+        if let Some(policy) = crate::idempotency::resolved(op) {
+            let _ = writeln!(
+                out,
+                "\n### Idempotency\n\nKey header: `{}`. {} Caller-supplied keys take precedence and each automatic retry reuses the same key. To retry a logical operation across SDK calls or process restarts, supply and persist your own key. The API server must implement deduplication.\n",
+                escaped(&policy.header),
+                if policy.auto_generate {
+                    "An omitted key receives a fresh UUID per SDK call."
+                } else {
+                    "Keys are caller-supplied; automatic generation is disabled."
+                }
+            );
+        }
         if let Some(body) = &op.request_body {
             let _ = writeln!(
                 out,
@@ -255,6 +267,44 @@ mod tests {
         assert!(text.contains("External reference (URI omitted)"));
         assert!(text.contains("&#124;"));
     }
+    #[test]
+    fn reference_documents_resolved_package_policy() {
+        let api = Api {
+            operations: vec![crate::Operation {
+                id: "createOrder".into(),
+                method: crate::HttpMethod::Post,
+                path: "/orders".into(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let config = crate::idempotency::IdempotencyConfig {
+            operations: std::collections::BTreeMap::from([(
+                "createOrder".into(),
+                crate::idempotency::IdempotencyRule {
+                    header: "X-Once".into(),
+                    auto_generate: true,
+                    ..Default::default()
+                },
+            )]),
+            ..Default::default()
+        };
+        let tree = Packages::new()
+            .package(
+                crate::engine::Package::<Test>::new("docs")
+                    .idempotency(config)
+                    .with(api_reference()),
+            )
+            .generate(&api, None)
+            .unwrap();
+        let document = tree.get("docs/API_REFERENCE.md").unwrap();
+        assert!(document.contains("Key header: `X-Once`"));
+        assert!(document.contains("fresh UUID per SDK call"));
+        assert!(document.contains("process restarts"));
+        assert!(document.contains("server must implement deduplication"));
+        assert!(api.operations[0].parameters.is_empty());
+    }
+
     #[test]
     fn plugin_emits_owned_custom_output_and_rejects_escaping_paths() {
         let package = crate::engine::Package::<Test>::new("docs")

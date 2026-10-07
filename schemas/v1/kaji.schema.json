@@ -314,6 +314,10 @@
           "type": "boolean",
           "default": false,
           "description": "Emit an operation-derived API_REFERENCE.md through the typed API reference plugin."
+        },
+        "idempotency": {
+          "$ref": "#/$defs/idempotencyConfig",
+          "description": "Opt-in package-local idempotency. Absent policies are disabled. Defaults override operation x-kaji-idempotency extensions; operation rules override defaults. Automatic key generation is disabled unless requested."
         }
       }
     },
@@ -1058,6 +1062,41 @@
           "type": "boolean",
           "default": false,
           "description": "Generate typed single-entity Terraform data sources from validated resource read plans."
+        }
+      }
+    },
+    "idempotencyRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "header": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$",
+          "default": "Idempotency-Key"
+        },
+        "auto_generate": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "idempotencyConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "defaults": {
+          "$ref": "#/$defs/idempotencyRule"
+        },
+        "operations": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/idempotencyRule"
+          }
         }
       }
     }

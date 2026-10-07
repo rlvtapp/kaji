@@ -9,6 +9,7 @@ pub mod engine;
 pub mod files;
 pub mod filters;
 pub mod httpmock;
+pub mod idempotency;
 pub mod manifest;
 pub mod mocking;
 pub mod pagination;

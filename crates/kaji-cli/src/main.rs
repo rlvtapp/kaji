@@ -712,6 +712,8 @@ struct PackageConfig {
     #[serde(default)]
     api_reference: bool,
     #[serde(default)]
+    idempotency: kaji_core::idempotency::IdempotencyConfig,
+    #[serde(default)]
     plugins: Vec<PluginConfig>,
     #[serde(default)]
     customizations: Vec<CodeCustomizationConfig>,
@@ -2015,6 +2017,7 @@ fn with_configured_middleware<L: kaji_core::engine::Language>(
     builder: Package<L>,
     package: &PackageConfig,
 ) -> Package<L> {
+    let builder = builder.idempotency(package.idempotency.clone());
     let builder = if package.api_reference {
         builder.with(kaji_core::api_reference::<L>())
     } else {
@@ -4894,9 +4897,49 @@ mod tests {
         }
     }
 
+    #[test]
+    fn idempotency_recipe_is_package_local_and_disabled_by_default() {
+        let packages: Vec<PackageConfig> = serde_json::from_value(serde_json::json!([
+            {"language":"typescript","path":"enabled","plugins":[{"name":"sdk"}], "idempotency":{"operations":{"createItem":{"header":"X-Request-Key"}}}},
+            {"language":"typescript","path":"disabled","plugins":[{"name":"sdk"}]}
+        ])).unwrap();
+        assert!(packages[0].idempotency.operations["createItem"].enabled);
+        assert!(!packages[0].idempotency.operations["createItem"].auto_generate);
+        assert!(packages[1].idempotency.defaults.is_none());
+        let api = Api {
+            name: "Example".into(),
+            version: "1.0.0".into(),
+            operations: vec![kaji_core::Operation {
+                id: "createItem".into(),
+                method: kaji_core::HttpMethod::Post,
+                path: "/items".into(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let tree = kaji::generate(
+            &api,
+            config_profiles(SdkClientStyle::Flat, &packages).unwrap(),
+        )
+        .unwrap();
+        let mut enabled = String::new();
+        let mut disabled = String::new();
+        for (path, contents) in tree.iter() {
+            if path.starts_with("enabled") || path.starts_with("./enabled") {
+                enabled.push_str(contents);
+            } else if path.starts_with("disabled") || path.starts_with("./disabled") {
+                disabled.push_str(contents);
+            }
+        }
+        assert!(enabled.contains("X-Request-Key"));
+        assert!(!disabled.contains("X-Request-Key"));
+        assert!(api.operations[0].parameters.is_empty());
+        assert!(serde_json::from_value::<PackageConfig>(serde_json::json!({"language":"typescript","path":"sdk","plugins":[{"name":"sdk"}],"idempotency":{"defaults":{"auto_generate":"yes"}}})).is_err());
+    }
+
     fn combined_optional_packages() -> serde_json::Value {
         serde_json::json!([
-          {"language":"python","path":"python","api_reference":true,"plugins":[{"name":"sdk"},{"name":"operation-tests"}]},
+          {"language":"python","path":"python","api_reference":true,"plugins":[{"name":"sdk"},{"name":"operation-tests"}],"idempotency":{"defaults":{"enabled":false},"operations":{"createItem":{"header":"X-Key","auto_generate":true}}}},
           {"language":"terraform","path":"terraform","api_reference":true,"plugins":[{"name":"provider","data_sources":true,"infer":false,"resources":[{"name":"item","create":"createItem","read":"getItem","update":"updateItem","delete":"deleteItem","id_parameter":"id","id_field":"id"}]}]}
         ])
     }
@@ -4907,7 +4950,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("recipe.json");
         std::fs::write(&path, serde_json::to_string(&config).unwrap()).unwrap();
-        let script = "import json,sys,jsonschema; schema=json.load(open(sys.argv[1])); config=json.load(open(sys.argv[2])); validator=jsonschema.Draft202012Validator(schema); validator.check_schema(schema); assert validator.is_valid(config); config['packages'][0]['api_reference']='yes'; assert not validator.is_valid(config); config['packages'][0]['api_reference']=True; config['packages'][1]['plugins'][0]['data_sources']='yes'; assert not validator.is_valid(config); config['packages'][1]['plugins'][0]['data_sources']=True; config['packages'][0]['plugins'][1]['name']='unsupported-operation-tests'; assert not validator.is_valid(config)";
+        let script = "import json,sys,jsonschema; schema=json.load(open(sys.argv[1])); config=json.load(open(sys.argv[2])); validator=jsonschema.Draft202012Validator(schema); validator.check_schema(schema); assert validator.is_valid(config); config['packages'][0]['idempotency']['defaults']['enabled']='yes'; assert not validator.is_valid(config); config['packages'][0]['idempotency']['defaults']['enabled']=False; config['packages'][0]['idempotency']['operations']['createItem']['header']='bad header'; assert not validator.is_valid(config); config['packages'][0]['idempotency']['operations']['createItem']['header']='X-Key'; config['packages'][0]['api_reference']='yes'; assert not validator.is_valid(config); config['packages'][0]['api_reference']=True; config['packages'][1]['plugins'][0]['data_sources']='yes'; assert not validator.is_valid(config); config['packages'][1]['plugins'][0]['data_sources']=True; config['packages'][0]['plugins'][1]['name']='unsupported-operation-tests'; assert not validator.is_valid(config)";
         let output = std::process::Command::new(
             std::env::var("KAJI_TEST_PYTHON").unwrap_or_else(|_| "python3".into()),
         )

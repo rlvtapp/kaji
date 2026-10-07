@@ -355,6 +355,7 @@ pub struct Package<L: Language> {
     plugins: Vec<Box<dyn Plugin<L>>>,
     customizations: Vec<crate::customization::CodeCustomization>,
     middleware: Vec<crate::customization::BundledMiddleware>,
+    idempotency: crate::idempotency::IdempotencyConfig,
 }
 
 impl<L: Language> Package<L> {
@@ -366,6 +367,7 @@ impl<L: Language> Package<L> {
             plugins: vec![],
             customizations: vec![],
             middleware: vec![],
+            idempotency: Default::default(),
         }
     }
     pub fn with(mut self, plugin: impl Plugin<L>) -> Self {
@@ -380,6 +382,11 @@ impl<L: Language> Package<L> {
     /// Ship SDK-author runtime middleware enabled by default in this package.
     pub fn middleware(mut self, middleware: crate::customization::BundledMiddleware) -> Self {
         self.middleware.push(middleware);
+        self
+    }
+    /// Resolve explicit idempotency policy independently for this package.
+    pub fn idempotency(mut self, config: crate::idempotency::IdempotencyConfig) -> Self {
+        self.idempotency = config;
         self
     }
     pub fn common(mut self, common: Common) -> Self {
@@ -566,6 +573,8 @@ impl<L: Language> Package<L> {
             copy
         });
         let api = overridden.as_ref().unwrap_or(api);
+        let prepared = crate::idempotency::prepare_api(api, &self.idempotency)?;
+        let api = &prepared;
         let semantics = analyze_sdk_semantics(api, catalog);
         let mut workspace = L::Workspace::default();
         let mut tree = GeneratedTree::default();

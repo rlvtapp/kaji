@@ -58,10 +58,10 @@ pub struct DeclaredError {
 /// Retry safety derived from HTTP semantics and explicit idempotency headers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RetryClass {
-    /// GET, PUT, PATCH, and DELETE may use the selected runtime's normal retry
+    /// GET, PUT, and DELETE may use the selected runtime's normal retry
     /// policy. A client still decides which failures/statuses are retryable.
     Idempotent,
-    /// POST is only safe to retry when the API declares an idempotency key.
+    /// POST/PATCH require an explicitly declared idempotency key for retry.
     IdempotencyKey,
     /// Do not retry automatically.
     Unsafe,
@@ -195,16 +195,22 @@ fn is_error_status(status: &str) -> bool {
 }
 
 fn retry_class(operation: &Operation) -> RetryClass {
+    let resolved_header = operation
+        .annotations
+        .get(crate::idempotency::RESOLVED_ANNOTATION)
+        .and_then(|value| value.get("header"))
+        .and_then(serde_json::Value::as_str);
     if operation.parameters.iter().any(|parameter| {
-        parameter.location == "header" && parameter.name.eq_ignore_ascii_case("idempotency-key")
+        parameter.location == "header"
+            && (parameter.name.eq_ignore_ascii_case("idempotency-key")
+                || resolved_header
+                    .is_some_and(|header| parameter.name.eq_ignore_ascii_case(header)))
     }) {
         return RetryClass::IdempotencyKey;
     }
     match operation.method {
-        HttpMethod::Get | HttpMethod::Put | HttpMethod::Patch | HttpMethod::Delete => {
-            RetryClass::Idempotent
-        }
-        HttpMethod::Post => RetryClass::Unsafe,
+        HttpMethod::Get | HttpMethod::Put | HttpMethod::Delete => RetryClass::Idempotent,
+        HttpMethod::Post | HttpMethod::Patch => RetryClass::Unsafe,
     }
 }
 
@@ -258,6 +264,27 @@ mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn patch_requires_explicit_key_and_custom_resolved_header_is_recognized() {
+        let mut operation = Operation {
+            id: "patchItem".into(),
+            method: HttpMethod::Patch,
+            ..Default::default()
+        };
+        assert_eq!(retry_class(&operation), RetryClass::Unsafe);
+        let mut api = Api::default();
+        operation.annotations.insert(
+            "x-kaji-idempotency".into(),
+            serde_json::json!({"header":"X-Request-Key"}),
+        );
+        api.operations.push(operation);
+        let prepared = crate::idempotency::prepare_api(&api, &Default::default()).unwrap();
+        assert_eq!(
+            retry_class(&prepared.operations[0]),
+            RetryClass::IdempotencyKey
+        );
+    }
 
     #[test]
     fn resolves_auth_errors_retry_and_media_from_one_operation() {

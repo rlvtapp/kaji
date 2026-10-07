@@ -12,6 +12,7 @@ pub use kaji_core::customization::{
     BundledMiddleware, CodeCustomization, apply_code_customizations,
 };
 pub use kaji_core::engine::{Common, Enforce, Package, PluginPhase};
+pub use kaji_core::idempotency::{IdempotencyConfig, IdempotencyRule};
 pub use kaji_core::release;
 /// First-party C# SDK generator.
 ///
@@ -35,7 +36,10 @@ pub use kaji_plugin_typescript as ts;
 pub use kaji_plugin_typescript_cli as ts_cli;
 
 pub mod prelude {
-    pub use crate::{BundledMiddleware, CodeCustomization, Common, Package, ProfileSet};
+    pub use crate::{
+        BundledMiddleware, CodeCustomization, Common, IdempotencyConfig, IdempotencyRule, Package,
+        ProfileSet,
+    };
     pub use kaji_core::engine::{
         Contract, Enforce, Handle, Language, Meta, Plugin, PluginContext, PluginPhase, Provision,
         Requirement,
