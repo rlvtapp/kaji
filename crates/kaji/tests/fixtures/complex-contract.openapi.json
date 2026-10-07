@@ -1,0 +1,27 @@
+{
+  "openapi": "3.1.0",
+  "info": {"title": "Synthetic complex contract", "version": "1.0.0"},
+  "paths": {
+    "/nodes/{id}": {"get": {
+      "operationId": "getNode",
+      "parameters": [{"name":"id","in":"path","required":true,"schema":{"type":"string"}}],
+      "responses":{"200":{"description":"Node","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Node"}}}}}
+    }}
+  },
+  "components": {"schemas": {
+    "Node": {"type":"object","required":["id","nullable"],"properties": {
+      "id":{"type":"string"},
+      "child":{"$ref":"#/components/schemas/Node"},
+      "nullable":{"type":["string","null"]},
+      "optional":{"type":["string","null"]},
+      "display-name":{"type":"string"},
+      "雪":{"type":"string"},
+      "choice":{"$ref":"#/components/schemas/Choice"},
+      "mode":{"$ref":"#/components/schemas/Mode"}
+    },"additionalProperties":true},
+    "Choice":{"oneOf":[{"type":"string"},{"type":"integer"}]},
+    "LooseChoice":{"anyOf":[{"type":"string"},{"type":"boolean"}]},
+    "Mode":{"type":"string","enum":["known","other"]},
+    "Collision":{"type":"object","properties":{"display-name":{"type":"string"},"display_name":{"type":"string"}}}
+  }}
+}

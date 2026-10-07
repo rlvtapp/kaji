@@ -827,6 +827,7 @@ struct PluginConfig {
     data_sources: Option<bool>,
     module: Option<String>,
     provider_name: Option<String>,
+    registry_namespace: Option<String>,
     #[serde(default)]
     resources: Vec<terraform::ResourceBinding>,
 }
@@ -1795,6 +1796,8 @@ fn typescript_profile(
             "faker",
             "msw",
             "cypress",
+            "operation-tests",
+            "webhooks",
         ],
     )?;
     if package.plugins.is_empty() {
@@ -1944,7 +1947,38 @@ fn typescript_profile(
                 .to_string_lossy()
                 .into_owned()
         });
-        if matches!(
+        if plugin.name == "webhooks" {
+            ensure!(
+                plugin.uses.is_empty(),
+                "webhooks does not accept provider bindings"
+            );
+            output = output.with(ts::webhooks());
+        } else if plugin.name == "operation-tests" {
+            let mut consumer = ts::operation_tests();
+            for (role, id) in &plugin.uses {
+                consumer = match role.as_str() {
+                    "operations" => consumer.using_operations(
+                        *operations
+                            .get(id)
+                            .with_context(|| format!("no operation provider {id:?}"))?,
+                    ),
+                    "transport" => consumer.using_transport(
+                        *transports
+                            .get(id)
+                            .with_context(|| format!("no transport provider {id:?}"))?,
+                    ),
+                    "models" => consumer.using_models(
+                        *models
+                            .get(id)
+                            .with_context(|| format!("no model provider {id:?}"))?,
+                    ),
+                    _ => bail!(
+                        "operation-tests only accepts uses.models, uses.operations and uses.transport"
+                    ),
+                };
+            }
+            output = output.with(consumer);
+        } else if matches!(
             plugin.name.as_str(),
             "tanstack-react-query" | "tanstack-vue-query" | "swr"
         ) {
@@ -2147,7 +2181,7 @@ fn config_profiles(
                 ))
             }
             "rust" => {
-                has_only_known_plugins(package, &["sdk"])?;
+                has_only_known_plugins(package, &["sdk", "operation-tests", "webhooks"])?;
                 let package_builder =
                     rust::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
@@ -2155,13 +2189,17 @@ fn config_profiles(
                 } else {
                     package_builder
                 };
-                profiles.package(with_configured_middleware(
-                    package_builder.with(rust::sdk()),
-                    package,
-                ))
+                let mut package_builder = package_builder.with(rust::sdk());
+                if package.plugins.iter().any(|p| p.name == "operation-tests") {
+                    package_builder = package_builder.with(rust::operation_tests());
+                }
+                if package.plugins.iter().any(|p| p.name == "webhooks") {
+                    package_builder = package_builder.with(rust::webhooks());
+                }
+                profiles.package(with_configured_middleware(package_builder, package))
             }
             "go" => {
-                has_only_known_plugins(package, &["sdk"])?;
+                has_only_known_plugins(package, &["sdk", "operation-tests", "webhooks", "oauth"])?;
                 let plugin = sdk_plugin(package)?;
                 let mut sdk = go::sdk();
                 if let Some(jobs) = plugin.jobs {
@@ -2174,10 +2212,16 @@ fn config_profiles(
                 } else {
                     package_builder
                 };
-                profiles.package(with_configured_middleware(
-                    package_builder.with(sdk),
-                    package,
-                ))
+                let mut package_builder = package_builder.with(sdk);
+                for consumer in &package.plugins {
+                    package_builder = match consumer.name.as_str() {
+                        "operation-tests" => package_builder.with(go::operation_tests()),
+                        "webhooks" => package_builder.with(go::webhooks()),
+                        "oauth" => package_builder.with(go::oauth()),
+                        _ => package_builder,
+                    };
+                }
+                profiles.package(with_configured_middleware(package_builder, package))
             }
             "python" => {
                 has_only_known_plugins(
@@ -2209,7 +2253,7 @@ fn config_profiles(
                 profiles.package(with_configured_middleware(package_builder, package))
             }
             "php" => {
-                has_only_known_plugins(package, &["sdk"])?;
+                has_only_known_plugins(package, &["sdk", "webhooks"])?;
                 let package_builder =
                     php::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
@@ -2217,10 +2261,11 @@ fn config_profiles(
                 } else {
                     package_builder
                 };
-                profiles.package(with_configured_middleware(
-                    package_builder.with(php::sdk()),
-                    package,
-                ))
+                let mut package_builder = package_builder.with(php::sdk());
+                if package.plugins.iter().any(|p| p.name == "webhooks") {
+                    package_builder = package_builder.with(php::webhooks());
+                }
+                profiles.package(with_configured_middleware(package_builder, package))
             }
             "symfony" => {
                 has_only_known_plugins(package, &["sdk"])?;
@@ -2243,7 +2288,7 @@ fn config_profiles(
                 ))
             }
             "java" => {
-                has_only_known_plugins(package, &["sdk"])?;
+                has_only_known_plugins(package, &["sdk", "webhooks"])?;
                 let package_builder =
                     java::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
@@ -2252,14 +2297,15 @@ fn config_profiles(
                     package_builder
                 };
                 let plugin = sdk_plugin(package)?;
-                profiles.package(with_configured_middleware(
-                    package_builder
-                        .with(java::sdk().open_enums(plugin.open_enums.unwrap_or(false))),
-                    package,
-                ))
+                let mut package_builder = package_builder
+                    .with(java::sdk().open_enums(plugin.open_enums.unwrap_or(false)));
+                if package.plugins.iter().any(|p| p.name == "webhooks") {
+                    package_builder = package_builder.with(java::webhooks());
+                }
+                profiles.package(with_configured_middleware(package_builder, package))
             }
             "csharp" | "dotnet" => {
-                has_only_known_plugins(package, &["sdk"])?;
+                has_only_known_plugins(package, &["sdk", "webhooks"])?;
                 let package_builder =
                     csharp::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
@@ -2267,13 +2313,14 @@ fn config_profiles(
                 } else {
                     package_builder
                 };
-                profiles.package(with_configured_middleware(
-                    package_builder.with(csharp::sdk()),
-                    package,
-                ))
+                let mut package_builder = package_builder.with(csharp::sdk());
+                if package.plugins.iter().any(|p| p.name == "webhooks") {
+                    package_builder = package_builder.with(csharp::webhooks());
+                }
+                profiles.package(with_configured_middleware(package_builder, package))
             }
             "elixir" => {
-                has_only_known_plugins(package, &["sdk"])?;
+                has_only_known_plugins(package, &["sdk", "webhooks"])?;
                 let package_builder =
                     elixir::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
@@ -2281,13 +2328,14 @@ fn config_profiles(
                 } else {
                     package_builder
                 };
-                profiles.package(with_configured_middleware(
-                    package_builder.with(elixir::sdk()),
-                    package,
-                ))
+                let mut package_builder = package_builder.with(elixir::sdk());
+                if package.plugins.iter().any(|p| p.name == "webhooks") {
+                    package_builder = package_builder.with(elixir::webhooks());
+                }
+                profiles.package(with_configured_middleware(package_builder, package))
             }
             "ruby" => {
-                has_only_known_plugins(package, &["sdk"])?;
+                has_only_known_plugins(package, &["sdk", "webhooks"])?;
                 let package_builder =
                     ruby::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
@@ -2295,13 +2343,16 @@ fn config_profiles(
                 } else {
                     package_builder
                 };
-                profiles.package(with_configured_middleware(
-                    package_builder.with(ruby::sdk()),
-                    package,
-                ))
+                let mut package_builder = package_builder.with(ruby::sdk());
+                for consumer in &package.plugins {
+                    if consumer.name == "webhooks" {
+                        package_builder = package_builder.with(ruby::webhooks());
+                    }
+                }
+                profiles.package(with_configured_middleware(package_builder, package))
             }
             "swift" => {
-                has_only_known_plugins(package, &["sdk"])?;
+                has_only_known_plugins(package, &["sdk", "webhooks"])?;
                 let package_builder =
                     swift::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
@@ -2309,10 +2360,11 @@ fn config_profiles(
                 } else {
                     package_builder
                 };
-                profiles.package(with_configured_middleware(
-                    package_builder.with(swift::sdk()),
-                    package,
-                ))
+                let mut package_builder = package_builder.with(swift::sdk());
+                if package.plugins.iter().any(|p| p.name == "webhooks") {
+                    package_builder = package_builder.with(swift::webhooks());
+                }
+                profiles.package(with_configured_middleware(package_builder, package))
             }
             "postman" => {
                 has_only_known_plugins(package, &["collection", "environment"])?;
@@ -2366,7 +2418,7 @@ fn config_profiles(
                 profiles.package(with_configured_middleware(builder, package))
             }
             "terraform" => {
-                has_only_known_plugins(package, &["provider"])?;
+                has_only_known_plugins(package, &["provider", "release-scaffold"])?;
                 let plugins = package
                     .plugins
                     .iter()
@@ -2387,13 +2439,20 @@ fn config_profiles(
                 if let Some(name) = plugin.provider_name.as_ref().or(package.name.as_ref()) {
                     builder = builder.provider_name(name);
                 }
+                if let Some(namespace) = &plugin.registry_namespace {
+                    builder = builder.registry_namespace(namespace);
+                }
                 let mut provider = terraform::provider()
                     .infer(plugin.infer.unwrap_or(true))
                     .data_sources(plugin.data_sources.unwrap_or(false));
                 for resource in &plugin.resources {
                     provider = provider.resource(resource.clone());
                 }
-                profiles.package(with_configured_middleware(builder.with(provider), package))
+                builder = builder.with(provider);
+                if package.plugins.iter().any(|p| p.name == "release-scaffold") {
+                    builder = builder.with(terraform::release_scaffold());
+                }
+                profiles.package(with_configured_middleware(builder, package))
             }
             "mock" => {
                 has_only_known_plugins(package, &["server"])?;
@@ -4872,6 +4931,45 @@ mod tests {
         ] {
             assert!(tree.get(path).is_some(), "missing {path}");
         }
+        let mut release_recipe = configured.clone();
+        release_recipe[1]["plugins"][0]["provider_name"] = serde_json::json!("widgets");
+        release_recipe[1]["plugins"][0]["registry_namespace"] = serde_json::json!("acme");
+        release_recipe[1]["plugins"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({"name":"release-scaffold"}));
+        let packages: Vec<PackageConfig> = serde_json::from_value(release_recipe).unwrap();
+        let release_tree = kaji::generate(
+            &api,
+            config_profiles(SdkClientStyle::Namespaced, &packages).unwrap(),
+        )
+        .unwrap();
+        assert!(
+            release_tree
+                .get("./terraform/main.go")
+                .unwrap()
+                .contains("registry.terraform.io/acme/widgets")
+        );
+        assert!(
+            release_tree
+                .get("./terraform/main.go")
+                .unwrap()
+                .contains("provider.New(version)")
+        );
+        assert!(
+            release_tree
+                .get("./terraform/.goreleaser.yml")
+                .unwrap()
+                .contains("project_name: terraform-provider-widgets")
+        );
+        assert!(
+            release_tree.preserves_existing("./terraform/.kaji/templates/terraform-release.yml")
+        );
+        assert!(
+            release_tree
+                .get("./terraform/.github/workflows/terraform-release.yml")
+                .is_none()
+        );
         let mut defaults = configured;
         for package in defaults.as_array_mut().unwrap() {
             package.as_object_mut().unwrap().remove("api_reference");
@@ -4942,6 +5040,84 @@ mod tests {
           {"language":"python","path":"python","api_reference":true,"plugins":[{"name":"sdk"},{"name":"operation-tests"}],"idempotency":{"defaults":{"enabled":false},"operations":{"createItem":{"header":"X-Key","auto_generate":true}}}},
           {"language":"terraform","path":"terraform","api_reference":true,"plugins":[{"name":"provider","data_sources":true,"infer":false,"resources":[{"name":"item","create":"createItem","read":"getItem","update":"updateItem","delete":"deleteItem","id_parameter":"id","id_field":"id"}]}]}
         ])
+    }
+    #[test]
+    fn optional_security_and_operation_test_consumers_are_available_in_recipes() {
+        use kaji_core::{HttpMethod, OperationResponse, SchemaKind, SchemaValue};
+        let packages: Vec<PackageConfig> = serde_json::from_value(serde_json::json!([
+            {"language":"typescript","path":"ts","plugins":[{"name":"sdk","id":"native"},{"name":"operation-tests","uses":{"operations":"native","transport":"native"}}]},
+            {"language":"rust","path":"rust","plugins":[{"name":"sdk"},{"name":"operation-tests"}]},
+            {"language":"go","path":"go","plugins":[{"name":"sdk"},{"name":"operation-tests"},{"name":"oauth"},{"name":"webhooks"}]},
+            {"language":"ruby","path":"ruby","plugins":[{"name":"sdk"},{"name":"webhooks"}]}
+        ])).unwrap();
+        let api = Api {
+            name: "Consumer".into(),
+            operations: vec![Operation {
+                id: "getItem".into(),
+                method: HttpMethod::Get,
+                path: "/items".into(),
+                responses: vec![OperationResponse::json(
+                    "200",
+                    SchemaValue::new(SchemaKind::String),
+                )],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let tree = kaji::generate(
+            &api,
+            config_profiles(SdkClientStyle::Namespaced, &packages).unwrap(),
+        )
+        .unwrap();
+        for path in [
+            "./ts/tests/operation-tests.ts",
+            "./rust/src/operation_tests.rs",
+            "./go/oauth.go",
+            "./go/webhooks.go",
+            "./go/.kaji/operation-test-diagnostics.json",
+            "./ruby/lib/consumer_sdk/webhooks.rb",
+        ] {
+            assert!(tree.get(path).is_some(), "missing {path}");
+        }
+        let mut malformed = packages;
+        malformed[0].plugins[1]
+            .uses
+            .insert("client".into(), "native".into());
+        assert!(config_profiles(SdkClientStyle::Namespaced, &malformed).is_err());
+    }
+    #[test]
+    fn every_sdk_recipe_can_select_webhook_verification() {
+        let languages = [
+            "typescript",
+            "rust",
+            "go",
+            "python",
+            "php",
+            "java",
+            "csharp",
+            "dotnet",
+            "elixir",
+            "ruby",
+            "swift",
+        ];
+        let packages: Vec<PackageConfig> = serde_json::from_value(serde_json::Value::Array(languages.iter().map(|language|serde_json::json!({"language":language,"path":language,"plugins":[{"name":"sdk"},{"name":"webhooks"}]})).collect())).unwrap();
+        let api = Api {
+            name: "Webhook".into(),
+            ..Default::default()
+        };
+        let tree = kaji::generate(
+            &api,
+            config_profiles(SdkClientStyle::Namespaced, &packages).unwrap(),
+        )
+        .unwrap();
+        for language in languages {
+            assert!(
+                tree.iter().any(|(path, source)| (path.starts_with(language)
+                    || path.starts_with(format!("./{language}")))
+                    && source.contains("webhook-signature")),
+                "no verifier emitted for {language}"
+            );
+        }
     }
     #[test]
     #[ignore = "requires Python jsonschema; set KAJI_TEST_PYTHON and PYTHONPATH"]

@@ -355,6 +355,12 @@
         },
         {
           "$ref": "#/$defs/terraformPlugin"
+        },
+        {
+          "$ref": "#/$defs/nativeConsumerPlugin"
+        },
+        {
+          "$ref": "#/$defs/operationTestsPlugin"
         }
       ]
     },
@@ -1062,6 +1068,11 @@
           "type": "boolean",
           "default": false,
           "description": "Generate typed single-entity Terraform data sources from validated resource read plans."
+        },
+        "registry_namespace": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9-]+$"
         }
       }
     },
@@ -1096,6 +1107,56 @@
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/idempotencyRule"
+          }
+        }
+      }
+    },
+    "nativeConsumerPlugin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "enum": [
+            "webhooks",
+            "oauth",
+            "release-scaffold"
+          ]
+        }
+      }
+    },
+    "operationTestsPlugin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "const": "operation-tests"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "uses": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "operations": {
+              "type": "string",
+              "minLength": 1
+            },
+            "transport": {
+              "type": "string",
+              "minLength": 1
+            },
+            "models": {
+              "type": "string",
+              "minLength": 1
+            }
           }
         }
       }

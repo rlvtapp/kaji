@@ -1,6 +1,6 @@
 {
   "openapi": {
-    "input": "https://aka.ms/graph/v1.0/openapi.yaml",
+    "input": "./openapi.yaml",
     "name": "Microsoft Graph",
     "version": "1.0.0"
   },

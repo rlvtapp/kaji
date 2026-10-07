@@ -36,6 +36,9 @@ func runWithHash(specPath, outDir string, prevHash *uint64) (uint64, bool, int, 
 	if err != nil {
 		return 0, false, 0, fmt.Errorf("read spec: %w", err)
 	}
+	if err := validateDocumentVersion(data); err != nil {
+		return 0, false, 0, err
+	}
 
 	newHash := computeSpecHash(data)
 
