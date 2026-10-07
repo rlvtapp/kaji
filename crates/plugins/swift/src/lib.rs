@@ -635,11 +635,26 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
     } else {
         "let"
     };
+    let mut query_binding = "__kajiQuery".to_owned();
+    while operation
+        .parameters
+        .iter()
+        .any(|parameter| identifier(&parameter.name) == query_binding)
+    {
+        query_binding.push_str("Items");
+    }
+    let query_mutability = if operation
+        .parameters
+        .iter()
+        .any(|parameter| parameter.location == "query")
+    {
+        "var"
+    } else {
+        "let"
+    };
     let _ = writeln!(
         output,
-        "{indent}    {request_binding} request = try makeRequest(method: {:?}, path: \"{}\", query: ([",
-        operation.method.as_str(),
-        swift_path_literal(&path)
+        "{indent}    {query_mutability} {query_binding}: [URLQueryItem] = []"
     );
     for parameter in operation
         .parameters
@@ -691,11 +706,17 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
                 parameter.name
             )
         };
-        let _ = writeln!(output, "{indent}        {expression},");
+        let _ = writeln!(
+            output,
+            "{indent}    {query_binding}.append(contentsOf: {expression})"
+        );
     }
-    output.push_str(&format!(
-        "{indent}    ] as [[URLQueryItem]]).flatMap {{ $0 }})\n"
-    ));
+    let _ = writeln!(
+        output,
+        "{indent}    {request_binding} request = try makeRequest(method: {:?}, path: \"{}\", query: {query_binding})",
+        operation.method.as_str(),
+        swift_path_literal(&path)
+    );
     for parameter in operation
         .parameters
         .iter()
@@ -1124,6 +1145,109 @@ fn swift_path_literal(value: &str) -> String {
 mod tests {
     use super::*;
     use kaji_core::{HttpMethod, OperationParameter, OperationRequestBody, OperationResponse};
+
+    #[test]
+    #[ignore = "requires Swift; many-parameter typechecker and native query wire regression"]
+    fn native_large_query_operation_preserves_scalars_arrays_and_omission() {
+        let parameters = (0..60)
+            .map(|index| {
+                let kind = match index % 4 {
+                    0 => SchemaKind::Boolean,
+                    1 => SchemaKind::Integer,
+                    2 => SchemaKind::String,
+                    _ => SchemaKind::Array {
+                        items: Box::new(SchemaValue::new(SchemaKind::String)),
+                    },
+                };
+                OperationParameter {
+                    name: format!("q{index}"),
+                    location: "query".into(),
+                    required: false,
+                    schema: Some(SchemaValue::new(kind)),
+                    description: None,
+                    annotations: if index == 7 {
+                        BTreeMap::from([("explode".into(), serde_json::json!(false))])
+                    } else {
+                        BTreeMap::new()
+                    },
+                }
+            })
+            .collect();
+        let api = Api {
+            operations: vec![Operation {
+                id: "largeQuery".into(),
+                method: HttpMethod::Get,
+                path: "/query".into(),
+                parameters,
+                responses: vec![OperationResponse::json(
+                    "200",
+                    SchemaValue::new(SchemaKind::Integer),
+                )],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("Client.swift"), client_runtime()).unwrap();
+        std::fs::write(
+            root.path().join("Operations.swift"),
+            render_operations(&api),
+        )
+        .unwrap();
+        std::fs::write(root.path().join("Probe.swift"), r#"import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+struct Mock: KajiTransport {
+ func execute(_ request: URLRequest) async throws -> (Data, URLResponse) {
+  let query = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!.queryItems!
+  precondition(query.count == 6)
+  precondition(query.filter { $0.name == "q0" }.map { $0.value! } == ["false"])
+  precondition(query.filter { $0.name == "q1" }.map { $0.value! } == ["0"])
+  precondition(query.filter { $0.name == "q2" }.map { $0.value! } == ["héllo 雪"])
+  precondition(query.filter { $0.name == "q3" }.map { $0.value! } == ["a", "λ"])
+  precondition(query.filter { $0.name == "q7" }.map { $0.value! } == ["c,d"])
+  return (Data("1".utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: [:])!)
+ }
+}
+@main struct Probe {
+ static func main() async throws {
+  let client = KajiClient(options: .init(baseURL: URL(string: "https://unused.test")!), transport: Mock())
+  let result = try await client.largeQuery(q0: false, q1: 0, q2: "héllo 雪", q3: ["a", "λ"], q7: ["c", "d"])
+  precondition(result == 1)
+ }
+}
+"#).unwrap();
+        let output = std::process::Command::new("swiftc")
+            .args([
+                "-swift-version",
+                "6",
+                "-warnings-as-errors",
+                "-module-cache-path",
+                "cache",
+                "Client.swift",
+                "Operations.swift",
+                "Probe.swift",
+                "-o",
+                "probe",
+            ])
+            .current_dir(root.path())
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let output = std::process::Command::new(root.path().join("probe"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 
     #[test]
     #[ignore = "requires a Swift toolchain"]

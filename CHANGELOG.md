@@ -121,7 +121,7 @@
 
 - Postman workspace synchronization and publication are not included.
 - Typed Terraform supports a bounded typed schema subset; independent collection data
-  sources, asynchronous polling, general type migrations and registry
+  sources, arbitrary asynchronous job mappings, general type migrations and registry
   publishing remain future work. The legacy raw-JSON Terraform API remains.
 - Terraform lifecycle tests run against the native Go Plugin Framework; Terraform
   CLI lifecycle runs against a local mock. Some native SDK probes require external toolchains.
