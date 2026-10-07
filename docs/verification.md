@@ -124,9 +124,12 @@ The repository CI runs both checks and the combined API-artifacts example.
 The [runtime contract](../packages/runtime-contract/README.md) exports the same
 API into ten SDK targets and drives their public operations against a loopback
 server. Its manifest declares 17 scenarios and every supported/unsupported
-mapping. TypeScript, Python, Go, Rust, Swift and Ruby have been executed locally;
-Java, C#, PHP and Elixir harnesses are wired into CI but were not executed on the
-local implementation host. A configured CI job is not evidence of a passing run.
+mapping. TypeScript, Python, Go, Rust, Swift and Ruby passed locally. Java, PHP
+and Elixir also passed with disposable toolchains, with fifteen supported scenarios
+each; strict structural missing/wrong-shape checks remain unsupported in those three.
+C# passed all seventeen scenarios, including strict structural decoding and repeated
+array query keys. In total, 163 supported scenarios passed across ten targets.
+CI independently repeats these checks.
 
 Additional native checks execute Python sync/async and Ruby response validation,
 Python/TypeScript/Go/Rust/Ruby/Swift page pagination, and Python/Go generated operation smoke
@@ -145,8 +148,8 @@ The pagination fixture declares `listContacts` with optional integer page/limit
 controls and a typed results array. Generation asserts a helper in all ten
 SDKs, and the runtime CI matrix builds the resulting packages. Dedicated Swift,
 PHP and Elixir native pagination probes are selected in their toolchain jobs;
-Swift was executed locally, while PHP/Elixir probes await CI execution. Native
-Java/.NET pagination execution remains unverified. The [pagination guide](guides/pagination.md)
+Swift, PHP, Elixir and .NET native pagination probes passed locally using
+disposable toolchains where needed. The [pagination guide](guides/pagination.md)
 records current forms and unsupported bindings explicitly.
 
 The shared export also includes a POST operation with a custom automatic
@@ -155,8 +158,7 @@ Dedicated executed probes cover TypeScript Fetch/Axios, Go, Python sync/async,
 Rust, Ruby, and Swift UUID generation and caller preservation; targets with
 retries additionally verify stable keys across attempts and operation-scoped
 custom headers. Retry-capable targets reject empty/whitespace-only keys as replay
-protection. PHP/Elixir behavior and Java/C# retry parsing have native CI probes;
-they remain unexecuted locally. The [idempotency guide](guides/idempotency.md)
+protection. PHP/Elixir behavior and Java/C# retry parsing passed their native probes. The [idempotency guide](guides/idempotency.md)
 explains server requirements and recipe precedence.
 
 The expanded corpus executes mutation retry safety, caller/automatic key lifetime,
@@ -171,18 +173,18 @@ These checks use local fixtures and mocked delivery, not registry publication.
 
 Optional Standard Webhooks verifiers now exist for all ten SDK targets. Native
 canonical-vector probes passed in TypeScript, Rust, Go, Python, Ruby and Swift on
-Apple; Java/C#/PHP/Elixir probes await their CI toolchains, and Swift's Linux
+Apple, plus Java/C#/PHP/Elixir using disposable native toolchains. Swift's Linux
 Crypto backend remains unverified. Go's OAuth probe runs with the race detector
 and checks coordinated refresh, cancellation, expiry and bounded replay safety.
 See [OAuth/webhooks](guides/oauth-webhooks.md).
 
 Generated operation tests now exist in all ten SDK languages (and the dotnet
 recipe alias). Ruby and Swift emitted operation/retry probes passed locally alongside the prior
-TypeScript/Rust/Go/Python probes. Java/C#/PHP/Elixir emitted probes are wired into
-CI but remain unverified locally. The suites use production SDK compilation and
+TypeScript/Rust/Go/Python probes. Java/C#/PHP/Elixir emitted probes also passed
+with disposable native toolchains. The suites use production SDK compilation and
 fake native drivers. Unsupported operations are explicitly
 listed, not counted as covered. The complex OpenAPI corpus passes through the
-actual Go compiler and executes Swift models; Java/C# SSE probes require native CI.
+actual Go compiler and executes Swift models; Java/C# SSE probes passed natively.
 
 The checksum-pinned Graph regression compiles the full generated Go package,
 executes typed request and extension-data roundtrips, compares SDK outputs with
@@ -206,7 +208,7 @@ interruption remains the driver's responsibility.
 Java/C# named scalar and union wrappers now serialize as their underlying JSON
 values. C# `sdk().open_enums(true)` (JSON `open_enums`) preserves future enum strings;
 the default enum API is unchanged. Dedicated native model probes are selected in
-CI and unverified locally. Default optional-nullable fields still cannot reliably
+CI and passed locally. Default optional-nullable fields still cannot reliably
 distinguish omission from explicit null; these changes do not claim that gap is
 closed. Union wrappers preserve raw JSON and do not validate union matching.
 
@@ -225,7 +227,8 @@ cancellation, offset/URL pagination and unknown enum roundtrips. Rust's URL prob
 also checks typed errors preserve raw response bytes. Ruby OAuth probes cover
 concurrent refresh, cancellation, expiry and bounded 401 recovery.
 
-Java/C# presence and multipart probes are selected in CI; their local native
-execution requires unavailable toolchains. Two checksum-pinned official Open-Meteo
+Java/C# presence and multipart probes passed with disposable JDK17/Maven and .NET8
+toolchains. PHP and Elixir probes passed in disposable Linux containers. Two checksum-pinned official Open-Meteo
 contracts compile locally in Rust, TypeScript, Go, Python, Ruby and Swift. CI adds
-Java, C#, PHP and Elixir. These checks never call production API endpoints.
+Java, C#, PHP and Elixir; both contracts also passed locally in those four targets.
+These checks never call production API endpoints.

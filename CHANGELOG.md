@@ -6,6 +6,11 @@
 
 ### Added
 
+- Native-verified Java/C#/PHP/Elixir probes and pinned public contract checks.
+  Fixed Java/C# inline response imports, Java presence constructors, Elixir string
+  enum typespecs and generated Finch request assertions. Rust native tests now
+  allow dependency downloads on fresh runners, with explicit offline mode.
+
 - Typed Terraform nested objects/lists/maps, composite identities including configured
   parent IDs, and explicit versioned root-field state renames, with native Framework tests.
 - Swift incremental cancellable SSE and opt-in open enums; Rust/C#/Swift same-origin

@@ -546,11 +546,23 @@ fn render_operation(output: &mut String, operation: &Operation) {
         .filter(|parameter| parameter.location == "query")
     {
         let name = camel_case(&parameter.name);
-        let _ = writeln!(
-            output,
-            "        query.Add(new KeyValuePair<string, string?>({:?}, {name} is null ? null : ParameterString({name})));",
-            parameter.name,
-        );
+        if parameter
+            .schema
+            .as_ref()
+            .is_some_and(|schema| matches!(schema.kind, SchemaKind::Array { .. }))
+        {
+            let _ = writeln!(
+                output,
+                "        if ({name} is not null) foreach (var item in {name}) query.Add(new KeyValuePair<string, string?>({:?}, ParameterString(item)));",
+                parameter.name
+            );
+        } else {
+            let _ = writeln!(
+                output,
+                "        query.Add(new KeyValuePair<string, string?>({:?}, {name} is null ? null : ParameterString({name})));",
+                parameter.name,
+            );
+        }
     }
     let _ = writeln!(
         output,

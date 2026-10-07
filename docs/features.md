@@ -53,10 +53,10 @@ than imposing one runtime interface on every language.
 | Python | Python package; urllib sync, opt-in httpx async | Cursor, page, offset, next URL | Yes | Sync 17/17; separate async probes |
 | Go | Go module; native HTTP driver | Cursor, page, offset, next URL | Yes | 17/17 |
 | Rust | Cargo; native transport contract | Cursor, page, offset, next URL | Yes | 17/17 |
-| Java | Maven; HttpClient | Cursor, page, offset, next URL | Yes | Harness 15/17; native CI execution required |
-| C#/.NET | .NET; HttpClient/DelegatingHandler | Cursor, page, offset, next URL | Yes | Harness 17/17; native CI execution required |
-| PHP | Composer; PSR-18 | Cursor, page, offset, next URL | Yes | Harness 15/17; native CI execution required |
-| Elixir | Mix; Finch | Cursor, page, offset, absolute same-origin URL | Yes | Harness 15/17; native CI execution required |
+| Java | Maven; HttpClient | Cursor, page, offset, next URL | Yes | Native harness 15/17 |
+| C#/.NET | .NET; HttpClient/DelegatingHandler | Cursor, page, offset, next URL | Yes | Native harness 17/17 |
+| PHP | Composer; PSR-18 | Cursor, page, offset, next URL | Yes | Native harness 15/17 |
+| Elixir | Mix; Finch | Cursor, page, offset, absolute same-origin URL | Yes | Native harness 15/17 |
 | Ruby | Ruby package; native HTTP | Page | Opt-in | 16/17; retries opt-in |
 | Swift | Swift package; Foundation | Cursor, page, offset, next URL | Opt-in | 17/17; retries opt-in |
 
@@ -81,7 +81,7 @@ and selector restrictions are in the [pagination guide](guides/pagination.md).
 | Errors and raw results | Declared native errors and response envelopes where supported | Inspect each target's surface; raw response/stream ownership differs |
 | Streaming and file media | Target renderers support selected SSE/binary forms; Java/C# frame multiline SSE payloads | Swift supports incremental SSE; Java/C# support bounded scalar/binary multipart bodies; Swift multipart remains unsupported. Shared corpus is not exhaustive |
 | Forward-compatible models | Opt-in Java/C#/Swift open enums and Java/C# optional presence wrappers; transparent named scalar/union JSON; selected unknown-property and nullable handling; TypeScript int64 string/bigint options | Unknown enum/union roundtrip and omitted-vs-null behavior are not universal |
-| Webhook verification | Opt-in verifiers in all ten SDKs: raw-body HMAC verification, timestamp checks and secret rotation | Java/C#/PHP/Elixir probes require native CI; Swift Linux crypto unverified; HMAC v1, no durable replay store |
+| Webhook verification | Opt-in verifiers in all ten SDKs: raw-body HMAC verification, timestamp checks and secret rotation | Native probes passed across ten languages; Swift Linux crypto unverified; HMAC v1, no durable replay store |
 
 Start from [generated SDKs](generated-sdks.md), then follow
 [middleware](guides/runtime-middleware.md), [idempotency](guides/idempotency.md),
@@ -143,8 +143,8 @@ presence is not evidence that registry trust or live delivery works.
 
 ## Tests and confidence
 
-The current verification baseline includes 415 passing workspace tests, 101 native
-wire scenarios across six available runtimes, 37 runner/delivery/sync tests and an
+The current verification baseline includes 416 passing workspace tests, 163 native
+wire scenarios across all ten runtimes, 37 runner/delivery/sync tests and an
 installed TypeScript package consumer check. Ignored native probes need explicit
 toolchain execution; they are not passes. Counts describe the recorded baseline,
 not a permanent CI badge.
