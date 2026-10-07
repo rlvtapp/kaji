@@ -5025,6 +5025,32 @@ mod tests {
                 .get("./terraform/.github/workflows/terraform-release.yml")
                 .is_none()
         );
+        let mut polling_recipe = configured.clone();
+        polling_recipe[1]["plugins"][0]["resources"][0]["polling"] = serde_json::json!({
+            "create": {"success": [{"status":200}]},
+            "delete": {"interval_ms":1,"max_attempts":3,"timeout_ms":1000,"success":[{"status":404}]}
+        });
+        let polling_packages: Vec<PackageConfig> = serde_json::from_value(polling_recipe).unwrap();
+        assert!(
+            polling_packages[1].plugins[0].resources[0]
+                .polling
+                .is_some()
+        );
+        let polling_tree = kaji::generate(
+            &api,
+            config_profiles(SdkClientStyle::Namespaced, &polling_packages).unwrap(),
+        )
+        .unwrap();
+        let explanation: serde_json::Value = serde_json::from_str(
+            polling_tree
+                .get("./terraform/.kaji/terraform-plan.json")
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            explanation["resources"][0]["polling"]["delete"]["max_attempts"],
+            3
+        );
         let mut migration_recipe = configured.clone();
         migration_recipe[1]["plugins"][0]["resources"][0]["schema_version"] = serde_json::json!(1);
         migration_recipe[1]["plugins"][0]["resources"][0]["state_upgrades"] =
@@ -5366,6 +5392,17 @@ assert validator.is_valid(config)
 resource['identity'] = resource['identity'][:1]
 assert not validator.is_valid(config)
 resource.pop('identity')
+resource['polling'] = {'create': {'interval_ms':1,'max_attempts':3,'timeout_ms':1000,'success':[{'status':200},{'pointer':'/status','equals':'ready'}]},'delete':{'success':[{'status':404}]}}
+assert validator.is_valid(config)
+resource['polling']['create']['max_attempts'] = 0
+assert not validator.is_valid(config)
+resource['polling']['create']['max_attempts'] = 3
+resource['polling']['create']['success'][1]['equals'] = []
+assert not validator.is_valid(config)
+resource['polling']['create']['success'][1]['equals'] = 'ready'
+resource['polling']['create']['success'][1]['pointer'] = '/bad~2escape'
+assert not validator.is_valid(config)
+resource.pop('polling')
 python['plugins'][1]['name'] = 'unsupported-operation-tests'
 assert not validator.is_valid(config)
 "#;

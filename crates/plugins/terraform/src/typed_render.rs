@@ -31,6 +31,16 @@ pub(crate) fn render(
         "internal/provider/nested_values.go",
         include_str!("nested_runtime.go.txt"),
     )?)?;
+    if catalog
+        .resources
+        .iter()
+        .any(|resource| resource.polling.is_some())
+    {
+        tree.insert(GeneratedFile::new(
+            "internal/provider/polling.go",
+            include_str!("polling_runtime.go.txt"),
+        )?)?;
+    }
     for resource in &catalog.resources {
         tree.insert(GeneratedFile::new(
             format!("internal/provider/resource_{}.go", resource.name),
@@ -151,7 +161,7 @@ pub(crate) fn render(
             resource.name
         );
     }
-    readme.push_str("## Lifecycle behavior\n\nCreate sends known configurable values and saves the returned identity. Create/update preserve known planned configuration and report a diagnostic if the API returns different values. Unknown computed values are hydrated; diagnostic create failures retain known identity and resolve remaining unknown state for recovery. Update sends only fields allowed by the update operation, then reads the object to hydrate final computed values, including after HTTP 204. PATCH sends supported known fields, not a changed-fields diff. Read refreshes drift and removes state on HTTP 404; HTTP authentication/transport/decoding failures retain state. Delete succeeds for an already-missing object and removes state. Import initializes identity, then Read refreshes the object.\n\nSupported attributes include bounded fixed nested objects, typed lists and typed maps; nullable values, recursive schemas, unions, constraints and nested readOnly/writeOnly projections are rejected. Composite identities are opt-in JSON objects keyed by configured path parameters; configured parent path components are required replacement attributes and the child identity is server-generated. Read-only data sources are opt-in. Asynchronous polling and Terraform write-only arguments remain unsupported. Explicit state upgrades support lossless root attribute renames only, with each old version mapping directly to the current schema, not chaining intermediate migrations; all other state must retain compatible types and no data is discarded. Custom type transformations require an authored upgrade implementation. The emitted Go unit tests do not perform `terraform apply`; the Kaji repository provides an opt-in Terraform CLI lifecycle test against its local mock. Verify your API's lifecycle behavior before distributing the provider.\n");
+    readme.push_str("## Lifecycle behavior\n\nCreate sends known configurable values and saves the returned identity. Create/update preserve known planned configuration and report a diagnostic if the API returns different values. Unknown computed values are hydrated; diagnostic create failures retain known identity and resolve remaining unknown state for recovery. Update sends only fields allowed by the update operation, then reads the object to hydrate final computed values, including after HTTP 204. PATCH sends supported known fields, not a changed-fields diff. Read refreshes drift and removes state on HTTP 404; HTTP authentication/transport/decoding failures retain state. Delete succeeds for an already-missing object and removes state. Import initializes identity, then Read refreshes the object.\n\nSupported attributes include bounded fixed nested objects, typed lists and typed maps; nullable values, recursive schemas, unions, constraints and nested readOnly/writeOnly projections are rejected. Composite identities are opt-in JSON objects keyed by configured path parameters; configured parent path components are required replacement attributes and the child identity is server-generated. Read-only data sources are opt-in. Explicit lifecycle polling can wait through the bound read operation after create/update/delete. The deadline includes the initial mutation, requests are never replayed, status/body conditions are AND groups with failure taking precedence, and deletion completes only after HTTP 404. Creates retain recovered identity and configured parent values when waiting fails; updates/deletes retain prior state. Without an explicit waiter HTTP 202 remains rejected. Terraform write-only arguments remain unsupported. Explicit state upgrades support lossless root attribute renames only, with each old version mapping directly to the current schema, not chaining intermediate migrations; all other state must retain compatible types and no data is discarded. Custom type transformations require an authored upgrade implementation. The emitted Go unit tests do not perform `terraform apply`; the Kaji repository provides an opt-in Terraform CLI lifecycle test against its local mock. Verify your API's lifecycle behavior before distributing the provider.\n");
     tree.insert(GeneratedFile::new("README.md", readme)?)?;
     Ok(tree)
 }
@@ -241,7 +251,15 @@ fn provider_source(catalog: &EntityCatalog, name: &str) -> String {
             "if data.AuthToken.IsUnknown() || data.AuthToken.IsNull() || data.AuthToken.ValueString()==\"\" { resp.Diagnostics.AddError(\"Missing API credentials\", \"Set a known auth_token provider argument.\"); return }"
         }
     };
-    PROVIDER
+    let mut source = PROVIDER.to_owned();
+    if catalog
+        .resources
+        .iter()
+        .any(|resource| resource.polling.is_some())
+    {
+        source.push_str(crate::polling_render::TRANSPORT);
+    }
+    source
         .replace("__NAME__", &quoted(name))
         .replace("__RESOURCES__", &resources)
         .replace("__AUTH__", &auth)
@@ -586,6 +604,7 @@ type {model} struct{{
         output = output.replace(" \"bytes\"\n", "");
     }
     output = crate::composite_render::apply(output, plan, &ty, false);
+    output = crate::polling_render::apply(output, plan, &ty);
     if !plan.state_upgrades.is_empty() {
         output = output.replace(" \"context\"\n", " \"context\"\n \"github.com/hashicorp/terraform-plugin-go/tftypes\"\n \"github.com/hashicorp/terraform-plugin-go/tfprotov6\"\n");
         output.push_str(&crate::migration_render::source(plan, &ty));
@@ -602,6 +621,9 @@ mod native_lifecycle;
 #[cfg(test)]
 #[path = "nested_lifecycle.rs"]
 mod nested_lifecycle;
+#[cfg(test)]
+#[path = "polling_lifecycle.rs"]
+mod polling_lifecycle;
 
 const TRANSPORT_TEST: &str = r#"package provider
 import("context";"fmt";"io";"net/http";"net/url";"strings";"testing")

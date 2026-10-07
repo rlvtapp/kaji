@@ -48,6 +48,7 @@ pub(super) fn fixture() -> EntityCatalog {
             schema_version: 0,
             state_upgrades: vec![],
             identity: vec![],
+            polling: None,
             attributes: vec![
                 attr("name", ScalarType::String, true, false, false),
                 attr("enabled", ScalarType::Bool, true, false, false),

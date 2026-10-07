@@ -27,7 +27,56 @@ pub struct ResourceBinding {
     pub state_upgrades: Vec<StateUpgradeBinding>,
     #[serde(default)]
     pub identity: Vec<IdentityBinding>,
+    #[serde(default)]
+    pub polling: Option<LifecyclePollingBinding>,
 }
+/// Explicit bounded lifecycle waiters through the resource's read operation.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LifecyclePollingBinding {
+    #[serde(default)]
+    pub create: Option<PollingBinding>,
+    #[serde(default)]
+    pub update: Option<PollingBinding>,
+    #[serde(default)]
+    pub delete: Option<PollingBinding>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PollingBinding {
+    #[serde(default)]
+    pub delay_ms: u64,
+    #[serde(default = "default_interval_ms")]
+    pub interval_ms: u64,
+    #[serde(default = "default_max_attempts")]
+    pub max_attempts: u32,
+    #[serde(default = "default_timeout_ms")]
+    pub timeout_ms: u64,
+    pub success: Vec<PollCriterion>,
+    #[serde(default)]
+    pub failure: Vec<PollCriterion>,
+}
+fn default_interval_ms() -> u64 {
+    1000
+}
+fn default_max_attempts() -> u32 {
+    60
+}
+fn default_timeout_ms() -> u64 {
+    120000
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(untagged, deny_unknown_fields)]
+pub enum PollCriterion {
+    Status {
+        status: u16,
+    },
+    Body {
+        pointer: String,
+        equals: serde_json::Value,
+    },
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct IdentityBinding {
@@ -68,7 +117,7 @@ impl EntityCatalog {
                     "delete": operation(&resource.delete),
                     "id_parameter": resource.id_parameter, "id_field": resource.id_field,
                     "attributes": resource.attributes, "requires_auth": resource.requires_auth,
-                    "schema_version": resource.schema_version, "state_upgrades": resource.state_upgrades, "identity": resource.identity
+                    "schema_version": resource.schema_version, "state_upgrades": resource.state_upgrades, "identity": resource.identity, "polling": resource.polling
                 })
             })
             .collect();
@@ -98,6 +147,8 @@ pub struct ResourcePlan {
     pub state_upgrades: Vec<StateUpgradeBinding>,
     #[serde(default)]
     pub identity: Vec<IdentityBinding>,
+    #[serde(default)]
+    pub polling: Option<LifecyclePollingBinding>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AttributePlan {
@@ -377,6 +428,7 @@ fn infer_binding(api: &Api, create: &Operation) -> Result<ResourceBinding> {
         schema_version: 0,
         state_upgrades: vec![],
         identity: vec![],
+        polling: None,
     })
 }
 fn resolve(
@@ -391,18 +443,33 @@ fn resolve(
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("unknown operation {id}"))
     };
-    for id in [&binding.create, &binding.read, &binding.delete]
-        .into_iter()
-        .chain(binding.update.as_ref())
-    {
+    validate_polling(binding)?;
+    for (id, polling) in [
+        (
+            &binding.create,
+            binding.polling.as_ref().and_then(|p| p.create.as_ref()),
+        ),
+        (&binding.read, None),
+        (
+            &binding.delete,
+            binding.polling.as_ref().and_then(|p| p.delete.as_ref()),
+        ),
+    ]
+    .into_iter()
+    .chain(
+        binding
+            .update
+            .as_ref()
+            .map(|id| (id, binding.polling.as_ref().and_then(|p| p.update.as_ref()))),
+    ) {
         let operation = find(id)?;
         ensure!(
             !operation
                 .responses
                 .iter()
-                .any(|response| response.status == "202"
-                    || response.status.eq_ignore_ascii_case("2XX")),
-            "HTTP 202 or wildcard 2XX lifecycle success requires explicit polling/completion semantics, unsupported in Terraform v1"
+                .any(|response| response.status.eq_ignore_ascii_case("2XX")
+                    || (response.status == "202" && polling.is_none())),
+            "HTTP 202 requires explicit lifecycle polling; wildcard 2XX success remains unsupported by polling"
         );
         ensure!(
             operation.path.starts_with('/')
@@ -846,9 +913,107 @@ fn resolve(
         identity: binding.identity.clone(),
         schema_version: binding.schema_version,
         state_upgrades: binding.state_upgrades.clone(),
+        polling: binding.polling.clone(),
     };
     validate_migrations(&plan)?;
     Ok((plan, scheme, auth))
+}
+fn validate_polling(binding: &ResourceBinding) -> Result<()> {
+    let Some(polling) = &binding.polling else {
+        return Ok(());
+    };
+    ensure!(
+        polling.create.is_some() || polling.update.is_some() || polling.delete.is_some(),
+        "polling must configure at least one lifecycle"
+    );
+    ensure!(
+        polling.update.is_none() || binding.update.is_some(),
+        "update polling requires an update operation"
+    );
+    for waiter in [&polling.create, &polling.update].into_iter().flatten() {
+        ensure!(waiter.success.iter().all(|criterion| !matches!(criterion, PollCriterion::Status {status} if !(200..=299).contains(status) || *status == 202)), "create/update polling success status must be completed HTTP 2xx");
+    }
+    if let Some(waiter) = &polling.delete {
+        ensure!(
+            waiter
+                .success
+                .iter()
+                .any(|criterion| matches!(criterion, PollCriterion::Status { status: 404 })),
+            "delete polling success requires HTTP 404 absence"
+        );
+    }
+    for waiter in [&polling.create, &polling.update, &polling.delete]
+        .into_iter()
+        .flatten()
+    {
+        ensure!(
+            waiter.delay_ms <= 60000
+                && (1..=60000).contains(&waiter.interval_ms)
+                && (1..=1000).contains(&waiter.max_attempts)
+                && (1..=3600000).contains(&waiter.timeout_ms),
+            "polling delay/interval/attempts/timeout exceeds supported bounds"
+        );
+        ensure!(
+            !waiter.success.is_empty(),
+            "polling requires nonempty success criteria"
+        );
+        validate_criteria(&waiter.success)?;
+        validate_criteria(&waiter.failure)?;
+        if !waiter.failure.is_empty() {
+            let success: BTreeMap<_, _> = waiter.success.iter().map(criterion_key_value).collect();
+            let failure: BTreeMap<_, _> = waiter.failure.iter().map(criterion_key_value).collect();
+            ensure!(
+                success != failure,
+                "polling success and failure criteria cannot be identical"
+            );
+        }
+    }
+    Ok(())
+}
+fn criterion_key_value(criterion: &PollCriterion) -> (String, serde_json::Value) {
+    match criterion {
+        PollCriterion::Status { status } => ("status".into(), serde_json::json!(status)),
+        PollCriterion::Body { pointer, equals } => (format!("body:{pointer}"), equals.clone()),
+    }
+}
+fn validate_criteria(criteria: &[PollCriterion]) -> Result<()> {
+    ensure!(
+        criteria.len() <= 32,
+        "polling supports at most 32 criteria per group"
+    );
+    let mut values = BTreeMap::new();
+    for criterion in criteria {
+        match criterion {
+            PollCriterion::Status { status } => ensure!(
+                (100..=599).contains(status),
+                "polling status must be an HTTP status"
+            ),
+            PollCriterion::Body { pointer, equals } => {
+                ensure!(
+                    !equals.is_array() && !equals.is_object(),
+                    "polling body equality supports scalar values only"
+                );
+                ensure!(
+                    pointer.is_empty() || pointer.starts_with('/'),
+                    "polling pointer must be RFC6901"
+                );
+                let mut chars = pointer.chars();
+                while let Some(character) = chars.next() {
+                    if character == '~' {
+                        ensure!(
+                            matches!(chars.next(), Some('0' | '1')),
+                            "polling pointer has invalid RFC6901 escape"
+                        );
+                    }
+                }
+            }
+        }
+        let (key, value) = criterion_key_value(criterion);
+        if let Some(previous) = values.insert(key, value.clone()) {
+            ensure!(previous == value, "polling criteria are contradictory");
+        }
+    }
+    Ok(())
 }
 fn path_parameters(path: &str) -> Vec<String> {
     path.split('{')
@@ -1269,6 +1434,7 @@ fn annotated_bindings(api: &Api) -> Result<Vec<ResourceBinding>> {
                 schema_version: 0,
                 state_upgrades: vec![],
                 identity: vec![],
+                polling: None,
             })
         })
         .collect()
@@ -1375,6 +1541,7 @@ mod tests {
             schema_version: 0,
             state_upgrades: vec![],
             identity: vec![],
+            polling: None,
         }
     }
     #[test]
@@ -1657,6 +1824,121 @@ mod tests {
                 assert!(format!("{explicit:#}").contains("polling"));
             }
         }
+    }
+    fn waiter() -> PollingBinding {
+        serde_json::from_value(serde_json::json!({"success":[{"status":200},{"pointer":"/status","equals":"ready"}],"failure":[{"status":200},{"pointer":"/status","equals":"failed"}]})).unwrap()
+    }
+    #[test]
+    fn explicit_polling_admits_only_selected_async_lifecycles() {
+        let mut api = fixture();
+        api.operations[0].responses[0].status = "202".into();
+        let mut binding = binding();
+        binding.polling = Some(LifecyclePollingBinding {
+            create: Some(waiter()),
+            ..Default::default()
+        });
+        let catalog = analyze(&api, &[binding.clone()], false).unwrap();
+        assert!(
+            catalog.resources[0]
+                .polling
+                .as_ref()
+                .unwrap()
+                .create
+                .is_some()
+        );
+        assert_eq!(
+            catalog.explanation()["resources"][0]["polling"]["create"]["interval_ms"],
+            1000
+        );
+        api.operations[0].responses[0].status = "2XX".into();
+        assert!(analyze(&api, &[binding.clone()], false).is_err());
+        api.operations[0].responses[0].status = "201".into();
+        api.operations[1].responses[0].status = "202".into();
+        assert!(analyze(&api, &[binding], false).is_err());
+    }
+    #[test]
+    fn polling_rejects_invalid_bounds_criteria_and_missing_update() {
+        let mut binding = binding();
+        let good = waiter();
+        assert_eq!(
+            (
+                good.delay_ms,
+                good.interval_ms,
+                good.max_attempts,
+                good.timeout_ms
+            ),
+            (0, 1000, 60, 120000)
+        );
+        let mut invalid = Vec::new();
+        for field in ["delay_ms", "interval_ms", "max_attempts", "timeout_ms"] {
+            let mut json = serde_json::to_value(&good).unwrap();
+            json[field] = serde_json::json!(4000000);
+            invalid.push(serde_json::from_value::<PollingBinding>(json).unwrap());
+        }
+        for criteria in [
+            serde_json::json!([]),
+            serde_json::json!([{"status":99}]),
+            serde_json::json!([{"status":200},{"status":404}]),
+            serde_json::json!([{"pointer":"status","equals":true}]),
+            serde_json::json!([{"pointer":"/bad~2","equals":null}]),
+            serde_json::json!([{"pointer":"/status","equals":[]}]),
+            serde_json::json!([{"pointer":"/status","equals":"a"},{"pointer":"/status","equals":"b"}]),
+        ] {
+            let mut json = serde_json::to_value(&good).unwrap();
+            json["success"] = criteria;
+            invalid.push(serde_json::from_value(json).unwrap());
+        }
+        let mut excessive = good.clone();
+        excessive.success = vec![PollCriterion::Status { status: 200 }; 33];
+        invalid.push(excessive);
+        for status in [0, 202, 404] {
+            let mut pending = good.clone();
+            pending.success = vec![PollCriterion::Status { status }];
+            invalid.push(pending);
+        }
+        let mut identical = good.clone();
+        identical.failure = identical.success.clone();
+        invalid.push(identical);
+        for waiter in invalid {
+            binding.polling = Some(LifecyclePollingBinding {
+                create: Some(waiter),
+                ..Default::default()
+            });
+            assert!(validate_polling(&binding).is_err());
+        }
+        binding.polling = Some(LifecyclePollingBinding {
+            delete: Some(good.clone()),
+            ..Default::default()
+        });
+        assert!(validate_polling(&binding).is_err());
+        let deleted: PollingBinding =
+            serde_json::from_value(serde_json::json!({"success":[{"status":404}]})).unwrap();
+        binding.polling = Some(LifecyclePollingBinding {
+            delete: Some(deleted),
+            ..Default::default()
+        });
+        assert!(validate_polling(&binding).is_ok());
+        binding.update = None;
+        binding.polling = Some(LifecyclePollingBinding {
+            update: Some(good),
+            ..Default::default()
+        });
+        assert!(validate_polling(&binding).is_err());
+        binding.polling = Some(LifecyclePollingBinding::default());
+        assert!(validate_polling(&binding).is_err());
+        for value in [
+            serde_json::json!({"status":200,"extra":true}),
+            serde_json::json!({"pointer":"/x","equals":true,"status":200}),
+        ] {
+            assert!(serde_json::from_value::<PollCriterion>(value).is_err());
+        }
+        assert!(
+            validate_criteria(&[PollCriterion::Body {
+                pointer: "/a~1b/~0key/0".into(),
+                equals: serde_json::json!(false)
+            }])
+            .is_ok()
+        );
     }
     #[test]
     fn reserved_root_attributes_fail_with_mapping_diagnostic() {

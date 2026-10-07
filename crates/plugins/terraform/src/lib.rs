@@ -15,13 +15,14 @@ mod composite_render;
 mod migration_render;
 mod nested_render;
 pub mod plan;
+mod polling_render;
 mod provider;
 mod release;
 mod typed_render;
 pub use plan::{
-    AttributePlan, AuthenticationPlan, EntityCatalog, IdentityBinding, NestedFieldPlan,
-    PlanDiagnostic, ResourceBinding, ResourcePlan, ScalarType, ShapePlan, StateUpgradeBinding,
-    analyze, analyze_with_security,
+    AttributePlan, AuthenticationPlan, EntityCatalog, IdentityBinding, LifecyclePollingBinding,
+    NestedFieldPlan, PlanDiagnostic, PollCriterion, PollingBinding, ResourceBinding, ResourcePlan,
+    ScalarType, ShapePlan, StateUpgradeBinding, analyze, analyze_with_security,
 };
 pub use provider::{Entities, Provider, entities, provider};
 pub use release::{ReleaseScaffold, release_scaffold};

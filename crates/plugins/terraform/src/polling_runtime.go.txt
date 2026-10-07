@@ -1,0 +1,263 @@
+package provider
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"math/big"
+	"strconv"
+	"strings"
+	"time"
+	"unicode/utf8"
+)
+
+type pollingCriterion struct {
+	status            int
+	pointer, expected string
+	body              bool
+}
+type pollingConfig struct {
+	delayMS, intervalMS int64
+	maxAttempts         int
+	success, failure    []pollingCriterion
+}
+
+func pollingSleep(ctx context.Context, milliseconds int64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if milliseconds == 0 {
+		return nil
+	}
+	timer := time.NewTimer(time.Duration(milliseconds) * time.Millisecond)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+// Parse exactly one JSON value, preserving numeric precision and rejecting duplicate keys.
+func pollingJSON(data []byte) (any, error) {
+	if !utf8.Valid(data) {
+		return nil, fmt.Errorf("Invalid polling JSON response")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	value, err := pollingJSONValue(decoder, 0)
+	if err != nil {
+		return nil, fmt.Errorf("Invalid polling JSON response")
+	}
+	if _, err := decoder.Token(); err != io.EOF {
+		return nil, fmt.Errorf("Invalid polling JSON response")
+	}
+	return value, nil
+}
+func pollingJSONValue(decoder *json.Decoder, depth int) (any, error) {
+	if depth > 64 {
+		return nil, fmt.Errorf("JSON depth exceeds bound")
+	}
+	token, err := decoder.Token()
+	if err != nil {
+		return nil, err
+	}
+	switch token {
+	case json.Delim('{'):
+		values := map[string]any{}
+		for decoder.More() {
+			key, err := decoder.Token()
+			if err != nil {
+				return nil, err
+			}
+			name, ok := key.(string)
+			if !ok {
+				return nil, fmt.Errorf("Invalid JSON key")
+			}
+			if _, exists := values[name]; exists {
+				return nil, fmt.Errorf("Duplicate JSON key")
+			}
+			value, err := pollingJSONValue(decoder, depth+1)
+			if err != nil {
+				return nil, err
+			}
+			values[name] = value
+		}
+		close, err := decoder.Token()
+		if err != nil || close != json.Delim('}') {
+			return nil, fmt.Errorf("Invalid JSON object")
+		}
+		return values, nil
+	case json.Delim('['):
+		values := []any{}
+		for decoder.More() {
+			value, err := pollingJSONValue(decoder, depth+1)
+			if err != nil {
+				return nil, err
+			}
+			values = append(values, value)
+		}
+		close, err := decoder.Token()
+		if err != nil || close != json.Delim(']') {
+			return nil, fmt.Errorf("Invalid JSON array")
+		}
+		return values, nil
+	default:
+		if number, ok := token.(json.Number); ok {
+			raw := string(number)
+			if len(raw) > 512 {
+				return nil, fmt.Errorf("JSON number exceeds bound")
+			}
+			if index := strings.IndexAny(raw, "eE"); index >= 0 {
+				exponent, err := strconv.Atoi(raw[index+1:])
+				if err != nil || exponent < -4096 || exponent > 4096 {
+					return nil, fmt.Errorf("JSON number exponent exceeds bound")
+				}
+			}
+		}
+		if _, delimiter := token.(json.Delim); delimiter {
+			return nil, fmt.Errorf("Unexpected JSON delimiter")
+		}
+		return token, nil
+	}
+}
+func pollingEqual(left, right any) bool {
+	switch l := left.(type) {
+	case json.Number:
+		r, ok := right.(json.Number)
+		if !ok {
+			return false
+		}
+		a, okA := new(big.Rat).SetString(string(l))
+		b, okB := new(big.Rat).SetString(string(r))
+		return okA && okB && a.Cmp(b) == 0
+	case map[string]any:
+		r, ok := right.(map[string]any)
+		if !ok || len(l) != len(r) {
+			return false
+		}
+		for key, value := range l {
+			other, present := r[key]
+			if !present || !pollingEqual(value, other) {
+				return false
+			}
+		}
+		return true
+	case []any:
+		r, ok := right.([]any)
+		if !ok || len(l) != len(r) {
+			return false
+		}
+		for index, value := range l {
+			if !pollingEqual(value, r[index]) {
+				return false
+			}
+		}
+		return true
+	case string:
+		r, ok := right.(string)
+		return ok && l == r
+	case bool:
+		r, ok := right.(bool)
+		return ok && l == r
+	case nil:
+		return right == nil
+	}
+	return false
+}
+func pollingPointer(value any, pointer string) (any, bool) {
+	if pointer == "" {
+		return value, true
+	}
+	if !strings.HasPrefix(pointer, "/") {
+		return nil, false
+	}
+	for _, encoded := range strings.Split(pointer[1:], "/") {
+		key := strings.ReplaceAll(strings.ReplaceAll(encoded, "~1", "/"), "~0", "~")
+		switch current := value.(type) {
+		case map[string]any:
+			next, present := current[key]
+			if !present {
+				return nil, false
+			}
+			value = next
+		case []any:
+			index, err := strconv.Atoi(key)
+			if err != nil || index < 0 || index >= len(current) || strconv.Itoa(index) != key {
+				return nil, false
+			}
+			value = current[index]
+		default:
+			return nil, false
+		}
+	}
+	return value, true
+}
+func pollingMatch(criteria []pollingCriterion, status int, value any) bool {
+	if len(criteria) == 0 {
+		return false
+	}
+	for _, criterion := range criteria {
+		if !criterion.body {
+			if criterion.status != status {
+				return false
+			}
+			continue
+		}
+		actual, present := pollingPointer(value, criterion.pointer)
+		if !present {
+			return false
+		}
+		expected, err := pollingJSON([]byte(criterion.expected))
+		if err != nil || !pollingEqual(actual, expected) {
+			return false
+		}
+	}
+	return true
+}
+func (c *apiClient) waitPolling(ctx context.Context, route string, secure bool, config pollingConfig, creating, deleting bool) ([]byte, error) {
+	if err := pollingSleep(ctx, config.delayMS); err != nil {
+		return nil, err
+	}
+	for attempt := 0; attempt < config.maxAttempts; attempt++ {
+		if attempt > 0 {
+			if err := pollingSleep(ctx, config.intervalMS); err != nil {
+				return nil, err
+			}
+		}
+		body, status, err := c.pollingStatus(ctx, "GET", route, nil, secure)
+		if err != nil {
+			return nil, err
+		}
+		var value any
+		// A missing resource has no JSON contract: 404 may carry HTML or an empty body.
+		if status != 404 && len(bytes.TrimSpace(body)) > 0 {
+			value, err = pollingJSON(body)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if pollingMatch(config.failure, status, value) {
+			return nil, fmt.Errorf("Polling failure condition matched")
+		}
+		if status == 404 {
+			if deleting && pollingMatch(config.success, status, nil) {
+				return body, nil
+			}
+			if creating {
+				continue
+			}
+			return nil, &apiStatusError{status: status}
+		}
+		if status < 200 || status >= 300 {
+			return nil, &apiStatusError{status: status}
+		}
+		if !deleting && status != 202 && pollingMatch(config.success, status, value) {
+			return body, nil
+		}
+	}
+	return nil, fmt.Errorf("Polling attempt limit exceeded")
+}
