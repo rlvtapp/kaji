@@ -17,3 +17,7 @@ Use one package per transport and layout. Package configuration owns names and
 directories; plugin configuration owns rendering behavior. The full
 [plugin-authoring reference](../typed-plugins.md) explains contracts, handles,
 post phases, dependencies, and current composition boundaries.
+
+Language implementations can override `Language::finalize_files` to adapt the
+assembled output after middleware bundling and before explicit source overlays.
+Its default is a no-op, preserving existing custom language implementations.

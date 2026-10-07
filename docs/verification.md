@@ -123,7 +123,7 @@ The repository CI runs both checks and the combined API-artifacts example.
 
 The [runtime contract](../packages/runtime-contract/README.md) exports the same
 API into ten SDK targets and drives their public operations against a loopback
-server. Its manifest declares five scenarios and every supported/unsupported
+server. Its manifest declares 17 scenarios and every supported/unsupported
 mapping. TypeScript, Python, Go, Rust, Swift and Ruby have been executed locally;
 Java, C#, PHP and Elixir harnesses are wired into CI but were not executed on the
 local implementation host. A configured CI job is not evidence of a passing run.
@@ -158,3 +158,11 @@ custom headers. Retry-capable targets reject empty/whitespace-only keys as repla
 protection. PHP/Elixir behavior and Java/C# retry parsing have native CI probes;
 they remain unexecuted locally. The [idempotency guide](guides/idempotency.md)
 explains server requirements and recipe precedence.
+
+The expanded corpus executes mutation retry safety, caller/automatic key lifetime,
+page iteration, strict decoding and exact serialization bytes. Separate probes
+exercise cancellation and OAuth refresh recovery. An installed TypeScript package
+check builds, packs, installs, imports root/subpath exports and checks customer
+NodeNext types. Regeneration tests protect all packages from partial writes on
+late conflicts; delivery tests inject failure at every phase and verify cleanup.
+These checks use local fixtures and mocked delivery, not registry publication.

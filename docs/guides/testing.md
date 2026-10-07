@@ -71,3 +71,17 @@ before treating a passing job as full runtime parity.
 collections through Newman against a local server. Terraform's native suite also
 runs a real Terraform CLI lifecycle against a local service; see the
 [provider guide](../terraform-provider.md).
+
+For a reproducible native check, export the corpus and run a target:
+
+```sh
+KAJI_RUNTIME_EXPORT=/tmp/kaji-runtime-fixture cargo test -p kaji --test runtime_conformance
+node packages/runtime-contract/runner.mjs go /tmp/kaji-runtime-fixture/sdk/go
+node --test packages/runtime-contract/test.mjs packages/sdk-delivery-test/test/*.mjs
+```
+
+The corpus includes 17 scenarios covering mutation replay safety, idempotency key
+lifetime, page iteration, decoding failures and exact path/query/body serialization.
+Use its [installed package check](../../packages/runtime-contract/README.md#installed-typescript-package)
+to verify TypeScript ESM exports and customer types. Source snapshots and compilation
+alone cannot establish that an installed package imports successfully.

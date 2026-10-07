@@ -49,3 +49,8 @@ and each action/broker's Node tests, then exercise a generated SDK against its
 native toolchain. Ordinary CI checks have read-only repository permission; release
 checks precede publishing and each registry still needs its trusted-publisher
 registration. Register/host a GitHub App and broker explicitly to enable them.
+
+TypeScript generated and bundled modules receive ESM-compatible relative import
+extensions during package finalization. Explicit source overlays retain your exact
+bytes; use `.js` relative specifiers in authored ESM overlays so the installed
+package resolves them in Node.

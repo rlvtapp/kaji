@@ -87,6 +87,11 @@ jobs:
         env:
           KAJI_RUNTIME_EXPORT: ${{ runner.temp }}/runtime-contract-fixture
         run: cargo test -p kaji --test runtime_conformance --locked
+      - name: Verify installed TypeScript ESM package and consumer types
+        env:
+          KAJI_PACKAGE_FIXTURE: ${{ runner.temp }}/runtime-contract-fixture/sdk/typescript
+          KAJI_TSC_JS: ${{ runner.temp }}/kaji-ts-runtime/node_modules/typescript/lib/tsc.js
+        run: node --test packages/runtime-contract/package-consumer.test.mjs
       - uses: actions/upload-artifact@v7
         with:
           name: runtime-contract-fixture
@@ -238,15 +243,15 @@ jobs:
           cargo test -p kaji-plugin-php page_pagination_executes_native_query_body_and_selectors -- --ignored
           cargo test -p kaji-plugin-php native_auto_idempotency_preserves_key_and_scopes_retry_header -- --ignored
           cargo test -p kaji-plugin-php native_retry_after_ms_has_precedence_and_configured_cap -- --ignored
+          cargo test -p kaji-plugin-php native_required_null_and_scalar_query_serialization -- --ignored
       - name: Verify native Elixir pagination generation and iteration
         if: matrix.language == 'Elixir'
         run: |
           cargo test -p kaji-plugin-elixir generated_page_stream_executes_lazily -- --ignored
           cargo test -p kaji-plugin-elixir elixir_customer_middleware_executes -- --ignored
-      - name: Verify native Swift pagination generation and iteration
+          cargo test -p kaji-plugin-elixir native_required_null_and_optional_omission -- --ignored
+      - name: Verify native Swift middleware models pagination and cancellation
         if: matrix.language == 'Swift'
-        run: |
-          cargo test -p kaji-plugin-swift pagination -- --ignored
-          cargo test -p kaji-plugin-swift generated_idempotency_keys_preserve_caller_values -- --ignored
+        run: cargo test -p kaji-plugin-swift -- --ignored
       - name: Execute generated public operations against shared runtime scenarios
         run: node packages/runtime-contract/runner.mjs "${{ matrix.path }}" "$GITHUB_WORKSPACE/runtime-contract-fixture/sdk/${{ matrix.path }}"

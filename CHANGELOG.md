@@ -6,6 +6,10 @@
 
 ### Added
 
+- Expanded 17-scenario native wire corpus, installed TypeScript ESM package checks,
+  OAuth/cancellation and nested-model probes, atomic regeneration conflict tests,
+  and delivery phase failure/cleanup tests. Native CI runs the additional probes.
+
 - Opt-in `x-kaji-idempotency` and per-package recipe rules across ten SDK targets,
   secure automatic UUIDs, native caller overrides, retry-stable keys, and generated
   API reference documentation. Custom plugins receive the resolved policy.
@@ -53,6 +57,10 @@
   GitHub automation, per-language repositories, Postman, and Terraform.
 
 ### Changed
+
+- Generated TypeScript ESM imports resolve in installed Node packages. SDK runtime
+  fixes preserve nullable/omitted fields, repeated query arrays, encoded paths,
+  nested model decoding and cancellation behavior. Rust escapes reserved names.
 
 - TypeScript Fetch/Axios and Go clients expose opt-in structural response checks.
   Consumer middleware tests cover rewrites, short circuits, error propagation,
