@@ -2451,6 +2451,11 @@ if Probe.Models.WireInput.to_map(restored)!=expected, do: raise("roundtrip prese
         op.annotations.insert("x-kaji-idempotency-resolved".into(),serde_json::json!({"header":"X-Request-Key","parameter_name":"X-Request-Key","auto_generate":true}));
         let root = tempfile::tempdir().unwrap();
         std::fs::write(
+            root.path().join("multipart_body.ex"),
+            include_str!("multipart.ex.txt").replace("__KAJI_MODULE__", "Probe"),
+        )
+        .unwrap();
+        std::fs::write(
             root.path().join("client.ex"),
             render_client("Probe").replace(
                 "Process.sleep(milliseconds)",
@@ -2483,6 +2488,7 @@ defmodule Probe.JSON do
   def decode(value), do: {:ok, value}
   def to_wire(value), do: value
 end
+Code.compile_file("multipart_body.ex")
 Code.compile_file("client.ex")
 Code.compile_file("operations.ex")
 ExUnit.start()

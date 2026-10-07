@@ -196,6 +196,11 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
+      - name: Select Swift 6 toolchain for native probes
+        if: matrix.language == 'Swift'
+        run: |
+          echo "DEVELOPER_DIR=/Applications/Xcode_16.2.app/Contents/Developer" >> "$GITHUB_ENV"
+          DEVELOPER_DIR=/Applications/Xcode_16.2.app/Contents/Developer swift --version
       - uses: actions/setup-node@v7
         with:
           node-version: 22

@@ -313,6 +313,11 @@ mod expanded_tests {
     #[ignore = "Requires Elixir1.15+/OTP; dependency-free generated offset/URL security and laziness probe"]
     fn generated_offset_and_url_streams_preserve_laziness_and_auth_origin() {
         let root = tempfile::tempdir().unwrap();
+        std::fs::write(
+            root.path().join("multipart_body.ex"),
+            include_str!("multipart.ex.txt").replace("__KAJI_MODULE__", "Probe"),
+        )
+        .unwrap();
         std::fs::write(root.path().join("client.ex"), render_client("Probe")).unwrap();
         let offset = fixture("offsetLimit");
         let url = fixture("url");

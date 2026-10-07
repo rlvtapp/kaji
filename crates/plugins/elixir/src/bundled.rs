@@ -129,6 +129,11 @@ mod tests {
         let tree = generated();
         let root = tempfile::tempdir().unwrap();
         std::fs::write(
+            root.path().join("multipart_body.ex"),
+            tree.get("sdk/lib/probe/multipart_body.ex").unwrap(),
+        )
+        .unwrap();
+        std::fs::write(
             root.path().join("client.ex"),
             tree.get("sdk/lib/probe/client.ex").unwrap(),
         )
@@ -159,6 +164,7 @@ defmodule Probe.JSON do
   def to_wire(body), do: body
 end
 Code.compile_file("policy.ex")
+Code.compile_file("multipart_body.ex")
 Code.compile_file("client.ex")
 {:ok, client} = Probe.Client.new(base_url: "https://unused.example")
 {:ok, "author"} = Probe.Client.request(client, :get, "/label", [], [], nil, :json, :text)

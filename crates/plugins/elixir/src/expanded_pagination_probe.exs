@@ -17,6 +17,7 @@ defmodule Probe.JSON do
   def decode(value), do: {:ok,value}
   def to_wire(value), do: value
 end
+Code.compile_file("multipart_body.ex")
 Code.compile_file("client.ex")
 Code.compile_file("operations.ex")
 defmodule OffsetProbe do
