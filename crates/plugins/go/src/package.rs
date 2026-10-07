@@ -47,6 +47,10 @@ pub fn sdk() -> Sdk {
     }
 }
 impl Sdk {
+    pub fn client(&self) -> kaji_core::engine::Handle<crate::providers::Client> {
+        self.meta.handle()
+    }
+
     /// Maximum rendering workers. Zero uses bounded automatic parallelism.
     pub fn jobs(mut self, jobs: usize) -> Self {
         self.jobs = jobs;

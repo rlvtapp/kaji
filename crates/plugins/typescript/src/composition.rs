@@ -446,6 +446,9 @@ impl Plugin<TypeScript> for Provider {
                 if config.transport == sdk::SdkTransport::Axios {
                     cx.workspace.dependency("axios", "^1.7.0")?;
                 }
+                cx.workspace
+                    .native_transports
+                    .insert(output.clone(), config.transport);
                 cx.publish(Transport {
                     module: output,
                     lossless_json: true,

@@ -5,7 +5,10 @@
 //! works in server-side Swift as well as Apple application targets without
 //! making an SDK consumer adopt a dependency graph chosen by the generator.
 
+mod webhooks;
+pub use webhooks::{Webhooks, webhooks};
 mod bundled;
+mod cursor_pagination;
 mod package;
 mod pagination;
 pub use package::{PackageExt, Settings, Swift, package, sdk};
@@ -29,6 +32,56 @@ pub(crate) fn render_sdk(
     package_name: Option<&str>,
     style: SdkClientStyle,
 ) -> Result<GeneratedTree> {
+    for schema in &api.schemas {
+        if let SchemaKind::Object { fields, .. } = &schema.value.kind {
+            let mut names = std::collections::BTreeMap::new();
+            for field in fields {
+                let native = identifier(&field.name);
+                if let Some(previous) = names.insert(native.clone(), &field.name) {
+                    anyhow::bail!(
+                        "swift model '{}' properties '{}' and '{}' collide as native identifier '{}'",
+                        schema.name,
+                        previous,
+                        field.name,
+                        native
+                    );
+                }
+            }
+        }
+    }
+
+    for operation in &api.operations {
+        if operation.request_body.as_ref().is_some_and(|body| {
+            body.media_types.iter().any(|media| {
+                media
+                    .content_type
+                    .to_ascii_lowercase()
+                    .starts_with("multipart/")
+            })
+        }) {
+            bail!(
+                "Swift operation '{}' requires multipart encoding, which the native Swift SDK does not yet support",
+                operation.id
+            );
+        }
+        if operation
+            .responses
+            .iter()
+            .flat_map(|response| &response.media_types)
+            .any(|media| {
+                media
+                    .content_type
+                    .split(';')
+                    .next()
+                    .is_some_and(|value| value.trim().eq_ignore_ascii_case("text/event-stream"))
+            })
+        {
+            bail!(
+                "Swift operation '{}' requires SSE streaming, which the native Swift SDK does not yet support",
+                operation.id
+            );
+        }
+    }
     let root = normalized_root(output_dir)?;
     let package = package_name
         .filter(|value| !value.trim().is_empty())
@@ -51,7 +104,7 @@ pub(crate) fn render_sdk(
             + if pagination.is_empty() {
                 ""
             } else {
-                "\n## Page-number pagination\n\nDeclared page-number operations expose `<operation>Pages(...)`, an `AsyncSequence` of full decoded pages. Iterate with `for try await page in client.<operation>Pages(...)`. Requests run only when the iterator advances and retain the ordinary operation transport, middleware, headers, and body. Optional page defaults to 1; explicit 0 is preserved. Required page remains a required argument. A positive declared limit stops after a short page; an empty page always stops and is yielded once. Invalid controls, malformed results selectors, integer overflow, and 10,000 pages terminate with `KajiPaginationError`. Cancellation is checked before each request. Page/limit must be nonnullable scalar integer parameter controls; body-bound controls are rejected during generation.\n"
+                "\n## Pagination\n\nDeclared string-cursor operations also expose `<operation>Pages(...)`. Their lazy `KajiCursorSequence` preserves the initial caller cursor, yields full responses, stops on missing/null/empty or repeated continuation tokens, and checks cancellation before each request. String query/header/path controls are supported; body and integer cursors fail generation.\n\nDeclared page-number operations expose `<operation>Pages(...)`, an `AsyncSequence` of full decoded pages. Iterate with `for try await page in client.<operation>Pages(...)`. Requests run only when the iterator advances and retain the ordinary operation transport, middleware, headers, and body. Optional page defaults to 1; explicit 0 is preserved. Required page remains a required argument. A positive declared limit stops after a short page; an empty page always stops and is yielded once. Invalid controls, malformed results selectors, integer overflow, and 10,000 pages terminate with `KajiPaginationError`. Cancellation is checked before each request. Page/limit must be nonnullable scalar integer parameter controls; body-bound controls are rejected during generation.\n"
             },
     )?;
     insert(
@@ -77,7 +130,7 @@ pub(crate) fn render_sdk(
             &mut tree,
             &root,
             &format!("Sources/{module}/Models/{}.swift", type_name(&schema.name)),
-            render_model(schema),
+            render_model_for_api(api, schema),
         )?;
     }
     insert(
@@ -231,6 +284,50 @@ public final class KajiClient: @unchecked Sendable {"#)
     .replace("        try await transport.execute(request)\n    }\n}\npublic typealias", "        try await session.data(for: request)\n    }\n}\npublic typealias")
 }
 
+fn render_model_for_api(api: &Api, schema: &Schema) -> String {
+    fn recursive(
+        api: &Api,
+        value: &SchemaValue,
+        target: &str,
+        seen: &mut std::collections::BTreeSet<String>,
+    ) -> bool {
+        match &value.kind {
+            SchemaKind::Reference { reference } => {
+                let name = reference.rsplit('/').next().unwrap_or(reference);
+                if name == target {
+                    return true;
+                }
+                seen.insert(name.to_owned())
+                    && api
+                        .schemas
+                        .iter()
+                        .find(|schema| schema.name == name)
+                        .is_some_and(|schema| recursive(api, &schema.value, target, seen))
+            }
+            SchemaKind::Object { fields, .. } => fields
+                .iter()
+                .any(|field| recursive(api, &field.value, target, seen)),
+            // Arrays and dictionaries already provide value-type indirection in Swift.
+            _ => false,
+        }
+    }
+    if let SchemaKind::Object {
+        fields,
+        additional_properties,
+    } = &schema.value.kind
+    {
+        if recursive(api, &schema.value, &schema.name, &mut Default::default()) {
+            return render_object_kind(
+                &type_name(&schema.name),
+                fields,
+                additional_properties,
+                true,
+            );
+        }
+    }
+    render_model(schema)
+}
+
 fn render_model(schema: &Schema) -> String {
     let name = type_name(&schema.name);
     match &schema.value.kind {
@@ -249,6 +346,15 @@ fn render_model(schema: &Schema) -> String {
 }
 
 fn render_object(name: &str, fields: &[Field], additional: &AdditionalProperties) -> String {
+    render_object_kind(name, fields, additional, false)
+}
+
+fn render_object_kind(
+    name: &str,
+    fields: &[Field],
+    additional: &AdditionalProperties,
+    recursive: bool,
+) -> String {
     let open = !matches!(additional, AdditionalProperties::Forbidden);
     let mut extra = "additionalProperties".to_owned();
     while fields
@@ -269,19 +375,29 @@ fn render_object(name: &str, fields: &[Field], additional: &AdditionalProperties
         AdditionalProperties::Schema { value } => swift_type(value, false),
         _ => "JSONValue".into(),
     };
+    let kind = if recursive { "final class" } else { "struct" };
+    let property = if recursive { "let" } else { "var" };
+    let presence = if recursive {
+        format!("private let {present}: Set<String>")
+    } else {
+        format!("private var {present}: Set<String> = []")
+    };
     let mut output = format!(
-        "{NOTICE}\nimport Foundation\n\npublic struct {name}: Codable, Sendable {{\n    private var {present}: Set<String> = []\n"
+        "{NOTICE}\nimport Foundation\n\npublic {kind} {name}: Codable, Sendable {{\n    {presence}\n"
     );
     for field in fields {
         let _ = writeln!(
             output,
-            "    public var {}: {}",
+            "    public {property} {}: {}",
             identifier(&field.name),
             swift_type(&field.value, !field.required)
         );
     }
     if open {
-        let _ = writeln!(output, "    public var {extra}: [String: {extra_type}]");
+        let _ = writeln!(
+            output,
+            "    public {property} {extra}: [String: {extra_type}]"
+        );
     }
     let mut args = fields
         .iter()
@@ -298,6 +414,9 @@ fn render_object(name: &str, fields: &[Field], additional: &AdditionalProperties
         args.push(format!("{extra}: [String: {extra_type}] = [:]"));
     }
     let _ = writeln!(output, "\n    public init({}) {{", args.join(", "));
+    if recursive {
+        let _ = writeln!(output, "        self.{present} = []");
+    }
     for field in fields {
         let generated = identifier(&field.name);
         let _ = writeln!(output, "        self.{generated} = {generated}");
@@ -339,7 +458,7 @@ fn render_object(name: &str, fields: &[Field], additional: &AdditionalProperties
     if open {
         let _ = writeln!(
             output,
-            "        self.{extra} = [:]\n        let known: Set<String> = [{known}]\n        for key in container.allKeys where !known.contains(key.stringValue) {{\n            self.{extra}.updateValue(try container.decode({extra_type}.self, forKey: key), forKey: key.stringValue)\n        }}"
+            "        var kajiExtra: [String: {extra_type}] = [:]\n        let known: Set<String> = [{known}]\n        for key in container.allKeys where !known.contains(key.stringValue) {{\n            kajiExtra.updateValue(try container.decode({extra_type}.self, forKey: key), forKey: key.stringValue)\n        }}\n        self.{extra} = kajiExtra"
         );
     }
     output.push_str("    }\n\n    public func encode(to encoder: Encoder) throws {\n        var container = encoder.container(keyedBy: KajiCodingKey.self)\n");
@@ -619,7 +738,7 @@ fn operation_groups(api: &Api) -> BTreeMap<String, Vec<&Operation>> {
 fn render_resource(api: &Api, resource: &str, operations: &[&Operation]) -> String {
     let property = identifier(&lower_camel(resource));
     let mut output = format!(
-        "{NOTICE}\nimport Foundation\n\npublic extension KajiClient {{\n    var {property}: {resource}Resource {{ {resource}Resource(client: self) }}\n}}\n\npublic struct {resource}Resource {{\n    private let client: KajiClient\n    internal init(client: KajiClient) {{ self.client = client }}\n"
+        "{NOTICE}\nimport Foundation\n\npublic extension KajiClient {{\n    var {property}: {resource}Resource {{ {resource}Resource(client: self) }}\n}}\n\npublic struct {resource}Resource: Sendable {{\n    private let client: KajiClient\n    internal init(client: KajiClient) {{ self.client = client }}\n"
     );
     for operation in operations {
         let name = function_name(&operation.id);
@@ -1023,6 +1142,45 @@ precondition(value["optional"] == nil)
             output.status.success(),
             "{}",
             String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
+    fn unsupported_streaming_and_multipart_fail_before_emission() {
+        let mut api = Api::default();
+        let mut operation = Operation {
+            id: "events".into(),
+            ..Operation::default()
+        };
+        operation.responses.push(OperationResponse {
+            status: "200".into(),
+            description: None,
+            media_types: vec![kaji_core::OperationMediaType {
+                content_type: "text/event-stream; charset=utf-8".into(),
+                schema: None,
+            }],
+        });
+        api.operations.push(operation);
+        assert!(
+            render_sdk(&api, "swift", None, SdkClientStyle::Flat)
+                .unwrap_err()
+                .to_string()
+                .contains("requires SSE streaming")
+        );
+        api.operations[0].responses.clear();
+        api.operations[0].request_body = Some(kaji_core::OperationRequestBody {
+            required: true,
+            description: None,
+            media_types: vec![kaji_core::OperationMediaType {
+                content_type: "multipart/form-data".into(),
+                schema: Some(SchemaValue::new(SchemaKind::String)),
+            }],
+        });
+        assert!(
+            render_sdk(&api, "swift", None, SdkClientStyle::Flat)
+                .unwrap_err()
+                .to_string()
+                .contains("requires multipart encoding")
         );
     }
 

@@ -58,6 +58,7 @@ impl Contract for TsTypes {
 
 #[derive(Default)]
 pub struct Workspace {
+    pub(crate) native_transports: BTreeMap<PathBuf, crate::sdk::SdkTransport>,
     symbols: BTreeMap<(PathBuf, String), String>,
     package_files: BTreeMap<PathBuf, String>,
     dependencies: BTreeMap<String, String>,

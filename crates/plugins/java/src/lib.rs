@@ -5,8 +5,10 @@
 //! the JDK's `java.net.http.HttpClient`; Jackson is the only runtime dependency
 //! and handles generated records, JSON bodies, and typed responses.
 
+mod webhooks;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
+pub use webhooks::{Webhooks, webhooks};
 
 use anyhow::{Result, bail};
 use kaji_core::{
@@ -55,6 +57,40 @@ fn render_sdk_with_policy(
     style: SdkClientStyle,
     open_enums: bool,
 ) -> Result<GeneratedTree> {
+    for operation in &api.operations {
+        if operation.request_body.as_ref().is_some_and(|body| {
+            body.media_types.iter().any(|media| {
+                media
+                    .content_type
+                    .to_ascii_lowercase()
+                    .starts_with("multipart/")
+            })
+        }) {
+            anyhow::bail!(
+                "java operation '{}' requires multipart encoding, which the native SDK does not yet support",
+                operation.id
+            );
+        }
+    }
+
+    for schema in &api.schemas {
+        if let SchemaKind::Object { fields, .. } = &schema.value.kind {
+            let mut names = std::collections::BTreeMap::new();
+            for field in fields {
+                let native = field_name(&field.name);
+                if let Some(previous) = names.insert(native.clone(), &field.name) {
+                    anyhow::bail!(
+                        "java model '{}' properties '{}' and '{}' collide as native identifier '{}'",
+                        schema.name,
+                        previous,
+                        field.name,
+                        native
+                    );
+                }
+            }
+        }
+    }
+
     for operation in &api.operations {
         let extension = operation
             .annotations
@@ -269,7 +305,7 @@ fn style_guide(api: &Api, package: &str, style: SdkClientStyle) -> String {
         }
     };
     format!(
-        "# {} Java SDK style guide\n\nPackage: `{package}`.\n\n{surface}\n\n## Pagination\n\nA declared safe cursor or offset/limit contract adds `{{operation}}Pages(input)`, a lazy `Iterable` of the operation's normal response type. It reuses the ordinary operation for every page. Cursor inputs may be string query, header, or required path parameters; path cursors require an initial value under OpenAPI. Legacy offset/page inputs use optional direct integer query parameters; referenced integer control schemas do not receive helpers. declared `type: page` also accepts required integer query inputs and validates `outputs.results` against the response schema. Omitted pages default to 1 and offsets to 0; explicit zero is preserved. Results-based helpers stop on empty or short arrays, guard integer overflow, and reject negative inputs or nonpositive limits. Cursor and same-origin URL helpers stop on repeated continuations. Every helper stops after 10,000 pages. JSONPath field/array selectors and RFC 6901 pointers are supported. Body continuations stay explicit rather than being guessed.\n\n## Media and streaming\n\nNon-JSON success responses are returned as `byte[]`; non-JSON request bodies accept `byte[]`. A `text/event-stream` operation returns `Stream<String>` containing event data lines. Close that stream when finished.\n",
+        "# {} Java SDK style guide\n\nPackage: `{package}`.\n\n{surface}\n\n## Pagination\n\nA declared safe cursor or offset/limit contract adds `{{operation}}Pages(input)`, a lazy `Iterable` of the operation's normal response type. It reuses the ordinary operation for every page. Cursor inputs may be string query, header, or required path parameters; path cursors require an initial value under OpenAPI. Legacy offset/page inputs use optional direct integer query parameters; referenced integer control schemas do not receive helpers. declared `type: page` also accepts required integer query inputs and validates `outputs.results` against the response schema. Omitted pages default to 1 and offsets to 0; explicit zero is preserved. Results-based helpers stop on empty or short arrays, guard integer overflow, and reject negative inputs or nonpositive limits. Cursor and same-origin URL helpers stop on repeated continuations. Every helper stops after 10,000 pages. JSONPath field/array selectors and RFC 6901 pointers are supported. Body continuations stay explicit rather than being guessed.\n\n## Media and streaming\n\nNon-JSON success responses are returned as `byte[]`; non-JSON request bodies accept `byte[]`. A `text/event-stream` operation returns `Stream<String>` containing complete event data payloads (multiline data fields are joined with a newline; metadata and comments are ignored). Close that stream when finished.\n",
         api.name
     )
 }
@@ -604,7 +640,7 @@ fn render_client_base(api: &Api, package: &str) -> String {
         );
     }
     output.push_str(
-        "\n    /** Downloads a non-JSON representation as bytes. */\n    private byte[] requestBinary(String method, String path, List<QueryParameter> query, Map<String, String> headers, java.lang.Object body) {\n        var url = baseUrl + path + queryString(query);\n        var builder = HttpRequest.newBuilder(URI.create(url)).timeout(timeout).header(\"Accept\", \"*/*\");\n        defaultHeaders.forEach(builder::header); headers.forEach(builder::header);\n        if (apiKey != null && !apiKey.isBlank()) { var credential = apiKeyPrefix == null || apiKeyPrefix.isBlank() ? apiKey : apiKeyPrefix + \" \" + apiKey; builder.header(apiKeyHeader, credential); }\n        try {\n            if (body == null) builder.method(method, HttpRequest.BodyPublishers.noBody());\n            else if (body instanceof byte[] bytes) { builder.header(\"Content-Type\", \"application/octet-stream\"); builder.method(method, HttpRequest.BodyPublishers.ofByteArray(bytes)); }\n            else { builder.header(\"Content-Type\", \"application/json\"); builder.method(method, HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body))); }\n            var response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray());\n            if (response.statusCode() < 200 || response.statusCode() >= 300) throw new ApiException(response.statusCode(), new String(response.body(), StandardCharsets.UTF_8), response.headers().firstValue(\"Retry-After\").orElse(null), response.headers().firstValue(\"retry-after-ms\").orElse(null));\n            if (hooks != null) hooks.afterResponse(response.statusCode());\n            return response.body();\n        } catch (JsonProcessingException error) { throw new IllegalArgumentException(\"Kaji could not serialize the request body\", error);\n        } catch (IOException error) { throw new IllegalStateException(\"Kaji could not execute the request\", error);\n        } catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new IllegalStateException(\"Kaji request was interrupted\", error); }\n    }\n\n    /** Returns data lines from a text/event-stream endpoint. Close the stream when finished. */\n    private java.util.stream.Stream<String> requestEventStream(String method, String path, List<QueryParameter> query, Map<String, String> headers, java.lang.Object body) {\n        var url = baseUrl + path + queryString(query);\n        var builder = HttpRequest.newBuilder(URI.create(url)).timeout(timeout).header(\"Accept\", \"text/event-stream\");\n        defaultHeaders.forEach(builder::header); headers.forEach(builder::header);\n        if (apiKey != null && !apiKey.isBlank()) { var credential = apiKeyPrefix == null || apiKeyPrefix.isBlank() ? apiKey : apiKeyPrefix + \" \" + apiKey; builder.header(apiKeyHeader, credential); }\n        try {\n            if (body == null) builder.method(method, HttpRequest.BodyPublishers.noBody());\n            else if (body instanceof byte[] bytes) { builder.header(\"Content-Type\", \"application/octet-stream\"); builder.method(method, HttpRequest.BodyPublishers.ofByteArray(bytes)); }\n            else { builder.header(\"Content-Type\", \"application/json\"); builder.method(method, HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body))); }\n            var response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofLines());\n            if (response.statusCode() < 200 || response.statusCode() >= 300) { try (var lines = response.body()) { throw new ApiException(response.statusCode(), lines.reduce(\"\", (a, b) -> a + \"\\n\" + b), response.headers().firstValue(\"Retry-After\").orElse(null), response.headers().firstValue(\"retry-after-ms\").orElse(null)); } }\n            if (hooks != null) hooks.afterResponse(response.statusCode());\n            return response.body().filter(line -> !line.isEmpty() && !line.startsWith(\":\")).map(line -> line.startsWith(\"data:\") ? line.substring(5).stripLeading() : line);\n        } catch (JsonProcessingException error) { throw new IllegalArgumentException(\"Kaji could not serialize the request body\", error);\n        } catch (IOException error) { throw new IllegalStateException(\"Kaji could not execute the event stream\", error);\n        } catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new IllegalStateException(\"Kaji request was interrupted\", error); }\n    }\n"
+        "\n    /** Downloads a non-JSON representation as bytes. */\n    private byte[] requestBinary(String method, String path, List<QueryParameter> query, Map<String, String> headers, java.lang.Object body) {\n        var url = baseUrl + path + queryString(query);\n        var builder = HttpRequest.newBuilder(URI.create(url)).timeout(timeout).header(\"Accept\", \"*/*\");\n        defaultHeaders.forEach(builder::header); headers.forEach(builder::header);\n        if (apiKey != null && !apiKey.isBlank()) { var credential = apiKeyPrefix == null || apiKeyPrefix.isBlank() ? apiKey : apiKeyPrefix + \" \" + apiKey; builder.header(apiKeyHeader, credential); }\n        try {\n            if (body == null) builder.method(method, HttpRequest.BodyPublishers.noBody());\n            else if (body instanceof byte[] bytes) { builder.header(\"Content-Type\", \"application/octet-stream\"); builder.method(method, HttpRequest.BodyPublishers.ofByteArray(bytes)); }\n            else { builder.header(\"Content-Type\", \"application/json\"); builder.method(method, HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body))); }\n            var response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray());\n            if (response.statusCode() < 200 || response.statusCode() >= 300) throw new ApiException(response.statusCode(), new String(response.body(), StandardCharsets.UTF_8), response.headers().firstValue(\"Retry-After\").orElse(null), response.headers().firstValue(\"retry-after-ms\").orElse(null));\n            if (hooks != null) hooks.afterResponse(response.statusCode());\n            return response.body();\n        } catch (JsonProcessingException error) { throw new IllegalArgumentException(\"Kaji could not serialize the request body\", error);\n        } catch (IOException error) { throw new IllegalStateException(\"Kaji could not execute the request\", error);\n        } catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new IllegalStateException(\"Kaji request was interrupted\", error); }\n    }\n\n    /** Returns data lines from a text/event-stream endpoint. Close the stream when finished. */\n    private java.util.stream.Stream<String> requestEventStream(String method, String path, List<QueryParameter> query, Map<String, String> headers, java.lang.Object body) {\n        var url = baseUrl + path + queryString(query);\n        var builder = HttpRequest.newBuilder(URI.create(url)).timeout(timeout).header(\"Accept\", \"text/event-stream\");\n        defaultHeaders.forEach(builder::header); headers.forEach(builder::header);\n        if (apiKey != null && !apiKey.isBlank()) { var credential = apiKeyPrefix == null || apiKeyPrefix.isBlank() ? apiKey : apiKeyPrefix + \" \" + apiKey; builder.header(apiKeyHeader, credential); }\n        try {\n            if (body == null) builder.method(method, HttpRequest.BodyPublishers.noBody());\n            else if (body instanceof byte[] bytes) { builder.header(\"Content-Type\", \"application/octet-stream\"); builder.method(method, HttpRequest.BodyPublishers.ofByteArray(bytes)); }\n            else { builder.header(\"Content-Type\", \"application/json\"); builder.method(method, HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body))); }\n            var response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofLines());\n            if (response.statusCode() < 200 || response.statusCode() >= 300) { try (var lines = response.body()) { throw new ApiException(response.statusCode(), lines.reduce(\"\", (a, b) -> a + \"\\n\" + b), response.headers().firstValue(\"Retry-After\").orElse(null), response.headers().firstValue(\"retry-after-ms\").orElse(null)); } }\n            if (hooks != null) hooks.afterResponse(response.statusCode());\n            return ssePayloads(response.body());\n        } catch (JsonProcessingException error) { throw new IllegalArgumentException(\"Kaji could not serialize the request body\", error);\n        } catch (IOException error) { throw new IllegalStateException(\"Kaji could not execute the event stream\", error);\n        } catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new IllegalStateException(\"Kaji request was interrupted\", error); }\n    }\n"
     );
     output.push_str(
         "\n    private String requestWithRetry(String method, String path, List<QueryParameter> query, Map<String, String> headers, java.lang.Object body, String idempotencyHeader) {\n        var maxAttempts = retryAllowed(method, headers, idempotencyHeader) ? retry.maxAttempts() : 1;\n        RuntimeException lastError = null;\n        for (var attempt = 0; attempt < maxAttempts; attempt++) {\n            try {\n                if (hooks != null) hooks.beforeRequest(method, URI.create(baseUrl + path + queryString(query)));\n                var response = request(method, path, query, headers, body);\n                if (hooks != null) hooks.afterResponse(200);\n                return response;\n            } catch (ApiException error) {\n                lastError = error;\n                if (attempt + 1 >= maxAttempts || !retryableStatus(error.statusCode())) {\n                    if (hooks != null) hooks.onError(error);\n                    throw error;\n                }\n                retryDelay(attempt, error.retryAfter(), error.retryAfterMillis());\n            } catch (IllegalStateException error) {\n                lastError = error;\n                if (attempt + 1 >= maxAttempts || !(error.getCause() instanceof IOException)) {\n                    if (hooks != null) hooks.onError(error);\n                    throw error;\n                }\n                retryDelay(attempt, null, null);\n            }\n        }\n        if (hooks != null) hooks.onError(lastError);\n        throw lastError == null ? new IllegalStateException(\"Kaji retry loop completed without a response\") : lastError;\n    }\n\n    private static boolean retryAllowed(String method, Map<String, String> headers, String idempotencyHeader) {\n        var normalized = method.toUpperCase(Locale.ROOT);\n        return (idempotencyHeader != null && headers.entrySet().stream().anyMatch(entry -> entry.getKey().equalsIgnoreCase(idempotencyHeader) && entry.getValue() != null && !entry.getValue().isBlank())) || normalized.equals(\"GET\") || normalized.equals(\"PUT\") || normalized.equals(\"DELETE\")\n            || ((normalized.equals(\"POST\") || normalized.equals(\"PATCH\")) && headers.entrySet().stream().anyMatch(entry -> entry.getKey().equalsIgnoreCase(\"Idempotency-Key\") && entry.getValue() != null && !entry.getValue().isBlank()));\n    }\n\n    private static boolean retryableStatus(int status) {\n        return status == 408 || status == 429 || status == 500 || status == 502 || status == 503 || status == 504;\n    }\n\n    private void retryDelay(int attempt, String retryAfter, String retryAfterMillis) {\n        long delay = retryAfterMillisDelay(retryAfterMillis);\n        if (delay < 0) delay = retryAfterDelay(retryAfter);\n        var cap = boundedDurationMillis(retry.maxDelay());\n        if (delay < 0) {\n            var exponential = boundedDurationMillis(retry.initialDelay()) * Math.pow(2, Math.min(attempt, 30));\n            delay = (long) Math.min(exponential, cap);\n        }\n        delay = Math.min(delay, cap);\n        try {\n            if (delay > 0) Thread.sleep(delay);\n        } catch (InterruptedException error) {\n            Thread.currentThread().interrupt();\n            throw new IllegalStateException(\"Kaji retry was interrupted\", error);\n        }\n    }\n\n    private static long boundedDurationMillis(java.time.Duration duration) {\n        if (duration.isNegative()) return 0;\n        try { return duration.toMillis(); } catch (ArithmeticException overflow) { return Long.MAX_VALUE; }\n    }\n\n    private static long retryAfterMillisDelay(String value) {\n        if (value == null || value.isBlank()) return -1;\n        try {\n            var milliseconds = Double.parseDouble(value.trim());\n            if (!Double.isFinite(milliseconds) || milliseconds < 0) return -1;\n            return milliseconds >= Long.MAX_VALUE ? Long.MAX_VALUE : (long) milliseconds;\n        } catch (NumberFormatException ignored) { return -1; }\n    }\n\n    private static long retryAfterDelay(String value) {\n        if (value == null || value.isBlank()) return -1;\n        try {\n            var seconds = Double.parseDouble(value.trim());\n            if (!Double.isFinite(seconds) || seconds < 0) return -1;\n            return seconds >= Long.MAX_VALUE / 1000.0 ? Long.MAX_VALUE : (long) (seconds * 1000);\n        } catch (NumberFormatException ignored) {\n            try {\n                var date = java.time.ZonedDateTime.parse(value.trim(), java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME).toInstant();\n                var duration = java.time.Duration.between(java.time.Instant.now(), date);\n                if (duration.isNegative()) return 0;\n                try { return duration.toMillis(); } catch (ArithmeticException overflow) { return Long.MAX_VALUE; }\n            } catch (java.time.DateTimeException malformed) { return -1; }\n        }\n    }\n}\n",
@@ -616,10 +652,40 @@ fn render_client_base(api: &Api, package: &str) -> String {
     );
     // Operation chunk subclasses need the transport helpers and state, but
     // they stay package-internal to generated SDK consumers.
+    output.truncate(output.len() - 2);
+    output.push_str(sse_parser());
+    output.push_str("}\n");
     output.replace("    private ", "    protected ").replace(
         "protected record QueryParameter",
         "public record QueryParameter",
     )
+}
+
+fn sse_parser() -> &'static str {
+    r#"
+    /** Lazy SSE payload framing. Metadata/comment fields are not data. */
+    private static java.util.stream.Stream<String> ssePayloads(java.util.stream.Stream<String> lines) {
+        var iterator = lines.iterator();
+        var splitter = new java.util.Spliterators.AbstractSpliterator<String>(Long.MAX_VALUE, java.util.Spliterator.ORDERED | java.util.Spliterator.NONNULL) {
+            @Override public boolean tryAdvance(java.util.function.Consumer<? super String> action) {
+                var data = new java.util.ArrayList<String>();
+                while (iterator.hasNext()) {
+                    var line = iterator.next();
+                    if (line.isEmpty()) {
+                        if (!data.isEmpty()) { action.accept(String.join("\n", data)); return true; }
+                    } else if (line.equals("data")) { data.add(""); }
+                    else if (line.startsWith("data:")) {
+                        var value = line.substring(5);
+                        data.add(value.startsWith(" ") ? value.substring(1) : value);
+                    }
+                }
+                if (!data.isEmpty()) { action.accept(String.join("\n", data)); return true; }
+                return false;
+            }
+        };
+        return java.util.stream.StreamSupport.stream(splitter, false).onClose(lines::close);
+    }
+"#
 }
 
 fn render_operation_chunk(
@@ -2128,14 +2194,14 @@ mod tests {
         use std::process::Command;
         let client = super::render_client_base(&contact_api(), "example");
         let start = client
-            .find("    private static long retryAfterMillisDelay(")
+            .find("    protected static long retryAfterMillisDelay(")
             .unwrap();
         let end = client.rfind("\n}").unwrap();
         let eligibility_start = client
-            .find("    private static boolean retryAllowed(")
+            .find("    protected static boolean retryAllowed(")
             .unwrap();
         let eligibility_end = client
-            .find("    private static boolean retryableStatus(")
+            .find("    protected static boolean retryableStatus(")
             .unwrap();
         let parsers = format!(
             "{}\n{}",
@@ -2147,6 +2213,11 @@ mod tests {
             r#"
     static void check(boolean value) { if (!value) throw new AssertionError(); }
     public static void main(String[] args) {
+        var closed = new java.util.concurrent.atomic.AtomicBoolean();
+        try (var events = ssePayloads(java.util.stream.Stream.of(": keepalive", "event: update", "id: 1", "data: first", "data:  second", "", "retry: 100", "data:", "", "data:last").onClose(() -> closed.set(true)))) {
+            check(events.toList().equals(java.util.List.of("first\n second", "", "last")));
+        }
+        check(closed.get());
         check(!retryAllowed("POST", Map.of("Idempotency-Key", ""), null));
         check(!retryAllowed("PATCH", Map.of("X-Key", ""), "X-Key"));
         check(!retryAllowed("POST", Map.of("Idempotency-Key", " "), null));
@@ -2314,6 +2385,18 @@ mod tests {
         assert!(client.contains("requestBinary"));
         assert!(client.contains("public java.util.stream.Stream<String> watchContacts"));
         assert!(client.contains("requestEventStream"));
+        source.operations[0]
+            .request_body
+            .as_mut()
+            .unwrap()
+            .media_types[0]
+            .content_type = "multipart/form-data".into();
+        assert!(
+            render_test_sdk(&source, "java", None)
+                .unwrap_err()
+                .to_string()
+                .contains("requires multipart encoding")
+        );
     }
 
     #[test]

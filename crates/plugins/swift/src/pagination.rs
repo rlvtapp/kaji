@@ -2,7 +2,7 @@ use super::*;
 use kaji_core::pagination::{PaginationKind, SelectorSegment, normalize_pagination};
 
 pub(super) fn render(api: &Api) -> Result<String> {
-    let mut output = String::new();
+    let mut output = super::cursor_pagination::render(api)?;
     for operation in &api.operations {
         let extension = operation
             .annotations
@@ -119,7 +119,7 @@ pub(super) fn render(api: &Api) -> Result<String> {
     Ok(output)
 }
 
-fn swift_literal(value: &str) -> String {
+pub(super) fn swift_literal(value: &str) -> String {
     let mut result = String::from("\"");
     for ch in value.chars() {
         match ch {

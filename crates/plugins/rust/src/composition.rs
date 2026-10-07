@@ -75,6 +75,8 @@ impl Contract for Client {
 }
 #[derive(Default)]
 pub struct Workspace {
+    pub(crate) operation_tests: bool,
+    pub(crate) webhooks: bool,
     pub(crate) models: bool,
     pub(crate) tests: bool,
     pub(crate) operations: bool,
@@ -118,6 +120,12 @@ impl Workspace {
             cx.files
                 .emit(GeneratedFile::new("src/client/mod.rs", runtime)?)?;
         }
+        if cx.workspace.webhooks {
+            exports.push_str("pub mod webhooks;\npub use webhooks::*;\n");
+        }
+        if cx.workspace.operation_tests {
+            exports.push_str("#[cfg(test)] mod operation_tests;\n");
+        }
         if cx.workspace.tests {
             exports.push_str("#[cfg(test)] mod roundtrip_tests;\n");
         }
@@ -129,7 +137,7 @@ impl Workspace {
             .unwrap_or_else(|| format!("{}-sdk", render::kebab_case(&cx.api.name)));
         cx.files.emit(GeneratedFile::new(
             "Cargo.toml",
-            render::render_cargo_toml_for_api(&name, cx.api),
+            render::render_cargo_toml_for_api(&name, cx.api) + if cx.workspace.webhooks { "hmac = \"0.12\"\nsha2 = \"0.10\"\nbase64 = \"0.22\"\n" } else { "" } + if cx.workspace.operation_tests { "\n[dev-dependencies]\nhttp = \"1\"\ntokio = { version = \"1\", features = [\"macros\", \"rt-multi-thread\"] }\n" } else { "" },
         )?)
     }
 }

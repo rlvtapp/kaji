@@ -1,8 +1,12 @@
 //! Rust SDK generation through typed packages and a Reqwest-backed client.
+mod webhooks;
+pub use webhooks::{Webhooks, webhooks};
 mod bundled;
 pub mod composition;
+mod operation_tests;
 mod render;
 pub use composition::{client, models, operations, roundtrip_tests, transport};
+pub use operation_tests::{OperationTests, operation_tests};
 
 use anyhow::Result;
 use kaji_core::engine::{Language, Meta, Package, Plugin, PluginContext};

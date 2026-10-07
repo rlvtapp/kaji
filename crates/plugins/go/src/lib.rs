@@ -122,6 +122,16 @@ fn render_schema(output: &mut String, schema: &Schema) {
                 }
                 AdditionalProperties::Forbidden => None,
             };
+            // Preserve declared wire fields and allocate the synthetic extension bag separately.
+            let mut extra_name = "AdditionalProperties".to_owned();
+            let mut suffix = 2;
+            while fields
+                .iter()
+                .any(|field| go_type_name(&field.name) == extra_name)
+            {
+                extra_name = format!("AdditionalProperties{suffix}");
+                suffix += 1;
+            }
             let nullable = fields
                 .iter()
                 .filter(|field| !field.required && (field.value.nullable || field.value.nullish))
@@ -129,7 +139,7 @@ fn render_schema(output: &mut String, schema: &Schema) {
             if let Some(extra_type) = &extra_type {
                 let _ = writeln!(
                     output,
-                    "\tAdditionalProperties map[string]{extra_type} `json:\"-\"`"
+                    "\t{extra_name} map[string]{extra_type} `json:\"-\"`"
                 );
             }
             if !nullable.is_empty() {
@@ -152,17 +162,14 @@ fn render_schema(output: &mut String, schema: &Schema) {
                     }
                 }
                 if let Some(extra_type) = &extra_type {
-                    let _ = writeln!(
-                        output,
-                        "model.AdditionalProperties=map[string]{extra_type}{{}}"
-                    );
+                    let _ = writeln!(output, "model.{extra_name}=map[string]{extra_type}{{}}");
                     for field in fields {
                         let key = serde_json::to_string(&field.name).unwrap();
                         let _ = writeln!(output, "delete(fields,{key})");
                     }
                     let _ = writeln!(
                         output,
-                        "for key,raw:=range fields {{var value {extra_type};if err:=json.Unmarshal(raw,&value);err!=nil {{return err}};model.AdditionalProperties[key]=value}}"
+                        "for key,raw:=range fields {{var value {extra_type};if err:=json.Unmarshal(raw,&value);err!=nil {{return err}};model.{extra_name}[key]=value}}"
                     );
                 }
                 output.push_str("return nil\n}\n");
@@ -171,7 +178,10 @@ fn render_schema(output: &mut String, schema: &Schema) {
                     "func (model {name}) MarshalJSON() ([]byte,error) {{\n type plain {name};encoded,err:=json.Marshal(plain(model));if err!=nil {{return nil,err}};var fields map[string]json.RawMessage;if err:=json.Unmarshal(encoded,&fields);err!=nil {{return nil,err}}"
                 );
                 if extra_type.is_some() {
-                    output.push_str("for key,value:=range model.AdditionalProperties {if _,exists:=fields[key];exists {continue};raw,err:=json.Marshal(value);if err!=nil {return nil,err};fields[key]=raw}\n");
+                    let _ = writeln!(
+                        output,
+                        "for key,value:=range model.{extra_name} {{if _,exists:=fields[key];exists {{continue}};raw,err:=json.Marshal(value);if err!=nil {{return nil,err}};fields[key]=raw}}\n"
+                    );
                 }
                 for field in &nullable {
                     let key = serde_json::to_string(&field.name).unwrap();
@@ -292,6 +302,16 @@ fn render_runtime(api: &Api, package: &str, client_style: SdkClientStyle) -> Str
     }
     output.push_str(&response_validation::render(api));
     output.push_str(include_str!("go_middleware_runtime.txt"));
+    output = output.replace("ValidateResponses bool\n", "ValidateResponses bool\n\t// TokenProvider supplies managed bearer tokens; explicit Authorization wins.\n\tTokenProvider KajiTokenProvider\n");
+    output = output.replace(
+        "validateResponses bool\n",
+        "validateResponses bool\n\ttokenProvider KajiTokenProvider\n",
+    );
+    output = output.replace(
+        "validateResponses: config.ValidateResponses}",
+        "validateResponses: config.ValidateResponses, tokenProvider: config.TokenProvider}",
+    );
+    output.push_str("\n// KajiTokenProvider supplies a token, refreshing only a rejected cached token.\ntype KajiTokenProvider interface { Token(context.Context, string) (string, error) }\n");
     output.push_str("\n// KajiHTTPClient is the replaceable execution boundary; context cancellation remains on the request.\ntype KajiHTTPClient interface { Do(*http.Request) (*http.Response, error) }\n");
     output
 }
@@ -2488,6 +2508,55 @@ func TestMiddleware(t *testing.T) {
         );
     }
     #[test]
+    fn declared_additional_properties_does_not_collide_with_extension_bag() {
+        let fields = ["additionalProperties", "additionalProperties2"]
+            .into_iter()
+            .map(|name| Field {
+                name: name.into(),
+                value: SchemaValue::new(SchemaKind::String),
+                required: false,
+                annotations: Default::default(),
+            })
+            .collect();
+        let schema = Schema::new(
+            "Claim",
+            SchemaValue::new(SchemaKind::Object {
+                fields,
+                additional_properties: AdditionalProperties::Any,
+            }),
+        );
+        let mut source = "package probe\nimport \"encoding/json\"\n".to_owned();
+        render_schema(&mut source, &schema);
+        assert!(source.contains("AdditionalProperties3 map[string]json.RawMessage"));
+        let root = tempfile::tempdir().unwrap();
+        fs::write(root.path().join("go.mod"), "module probe\ngo 1.22\n").unwrap();
+        fs::write(root.path().join("model.go"), source).unwrap();
+        fs::write(root.path().join("model_test.go"), r#"package probe
+import ("encoding/json"; "testing")
+func TestCollisionRoundTrip(t *testing.T) {
+ var claim Claim
+ if err:=json.Unmarshal([]byte(`{"additionalProperties":"declared","additionalProperties2":"second","future":{"value":1}}`),&claim);err!=nil {t.Fatal(err)}
+ if claim.AdditionalProperties==nil || *claim.AdditionalProperties!="declared" || claim.AdditionalProperties2==nil || *claim.AdditionalProperties2!="second" || string(claim.AdditionalProperties3["future"])!=`{"value":1}` {t.Fatalf("lost fields: %+v",claim)}
+ claim.AdditionalProperties3["additionalProperties"]=json.RawMessage(`"shadow"`)
+ raw,err:=json.Marshal(claim);if err!=nil {t.Fatal(err)}
+ var wire map[string]json.RawMessage;if err=json.Unmarshal(raw,&wire);err!=nil {t.Fatal(err)}
+ if string(wire["additionalProperties"])!=`"declared"` || string(wire["future"])!=`{"value":1}` {t.Fatal(string(raw))}
+}
+"#).unwrap();
+        let output = Command::new("go")
+            .args(["test", "./..."])
+            .current_dir(root.path())
+            .env("GOCACHE", root.path().join("go-cache"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    #[test]
     fn response_validation_and_attempt_middleware_execute_natively() {
         let mut api = contact_api();
         let SchemaKind::Object {
@@ -2747,3 +2816,9 @@ func TestCancelBackoff(t *testing.T){
 mod bundled_middleware;
 mod package;
 pub use package::{Go, PackageExt, Sdk, Settings, package, sdk};
+
+mod webhooks;
+pub use webhooks::{Webhooks, webhooks};
+
+mod oauth;
+pub use oauth::{OAuth, oauth};

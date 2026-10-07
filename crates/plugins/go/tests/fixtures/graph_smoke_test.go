@@ -2,6 +2,7 @@ package microsoftgraph
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -37,11 +38,33 @@ func TestGraphSDKTypedUser(t *testing.T) {
 		t.Fatal(err)
 	}
 	selectFields := []string{"displayName"}
-	user, err := client.Users.Get(context.Background(), &UsersUserGetUserRequest{UserID: "user/123", Select: &selectFields})
+	user, err := client.UsersUser.GetUser(context.Background(), &UsersUserGetUserRequest{UserID: "user/123", Select: &selectFields})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !called || user.ID == nil || *user.ID != "user/123" || user.DisplayName == nil || *user.DisplayName != "Ada" {
 		t.Fatalf("typed inherited fields were lost: %+v", user)
+	}
+}
+
+// Graph exposes a declared additionalProperties field as well as extension data.
+func TestGraphOptionalClaimExtensionRoundTrip(t *testing.T) {
+	var claim MicrosoftGraphOptionalClaim
+	if err := json.Unmarshal([]byte(`{"@odata.type":"#microsoft.graph.optionalClaim","additionalProperties":["emit_as_roles"],"future":{"enabled":true}}`), &claim); err != nil {
+		t.Fatal(err)
+	}
+	if claim.AdditionalProperties == nil || len(*claim.AdditionalProperties) != 1 || (*claim.AdditionalProperties)[0] == nil || *(*claim.AdditionalProperties)[0] != "emit_as_roles" {
+		t.Fatalf("declared field lost: %+v", claim)
+	}
+	raw, err := json.Marshal(claim)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wire map[string]json.RawMessage
+	if err = json.Unmarshal(raw, &wire); err != nil {
+		t.Fatal(err)
+	}
+	if string(wire["additionalProperties"]) != `["emit_as_roles"]` || string(wire["future"]) != `{"enabled":true}` {
+		t.Fatal(string(raw))
 	}
 }

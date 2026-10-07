@@ -1188,3 +1188,6 @@ raise unless page.to_h==wire && JSON.parse(JSON.generate(page.to_h))==wire
         );
     }
 }
+
+mod webhooks;
+pub use webhooks::{Webhooks, webhooks};

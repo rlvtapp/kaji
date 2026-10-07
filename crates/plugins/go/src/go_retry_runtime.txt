@@ -177,6 +177,16 @@ func (client *Client) doWithRetry(request *http.Request, destination any) error 
 	retryAllowed := canRetry(request)
 	requestInfo := KajiRequestInfo{Method: request.Method, URL: request.URL.String()}
 	client.beforeRequest(requestInfo)
+    authRefreshed:=false
+    managedAuth:=client.tokenProvider!=nil && request.Header.Get("Authorization")==""
+    authToken:=""
+    if managedAuth {
+        var err error
+        authToken,err=client.tokenProvider.Token(request.Context(),"")
+        if err!=nil{client.onError(requestInfo,err);return err}
+        if strings.TrimSpace(authToken)==""{err=fmt.Errorf("kaji: token provider returned an empty token");client.onError(requestInfo,err);return err}
+        request.Header.Set("Authorization","Bearer "+authToken)
+    }
 	for attempt := 1; ; attempt++ {
 		if err := request.Context().Err(); err != nil { client.onError(requestInfo, err); return err }
 		response, err := client.httpClient.Do(request)
@@ -198,6 +208,19 @@ func (client *Client) doWithRetry(request *http.Request, destination any) error 
 			}
 			continue
 		}
+
+        if response.StatusCode==http.StatusUnauthorized && managedAuth && retryAllowed && !authRefreshed {
+            response.Body.Close()
+            request,err=replayRequest(request)
+            if err!=nil{client.onError(requestInfo,err);return err}
+            authRefreshed=true
+            authToken,err=client.tokenProvider.Token(request.Context(),authToken)
+            if err!=nil{client.onError(requestInfo,err);return err}
+            if strings.TrimSpace(authToken)==""{err=fmt.Errorf("kaji: token provider returned an empty token");client.onError(requestInfo,err);return err}
+            request.Header.Set("Authorization","Bearer "+authToken)
+            attempt-- // A single safe auth refresh has its own bounded replay budget.
+            continue
+        }
 
 		if response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices {
 			defer response.Body.Close()

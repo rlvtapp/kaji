@@ -14,6 +14,30 @@ impl Language for Swift {
     const NAME: &'static str = "swift";
     type Settings = Settings;
     type Workspace = ();
+    fn finalize_files(tree: &mut kaji_core::GeneratedTree) -> Result<()> {
+        if !tree
+            .iter()
+            .any(|(path, _)| path.ends_with("StandardWebhooks.swift"))
+        {
+            return Ok(());
+        }
+        let original = tree
+            .get("Package.swift")
+            .ok_or_else(|| {
+                anyhow::anyhow!("Swift webhooks requires a generated SDK Package.swift")
+            })?
+            .to_owned();
+        let marker = "    targets: [.target(name: ";
+        if !original.contains(marker) {
+            anyhow::bail!("Swift webhooks cannot modify this package manifest");
+        }
+        let updated = original.replace(marker, "    dependencies: [.package(url: \"https://github.com/apple/swift-crypto.git\", exact: \"3.12.3\")],\n    targets: [.target(name: ");
+        let updated = updated.replace(
+            ")]\n)",
+            ", dependencies: [.product(name: \"Crypto\", package: \"swift-crypto\")])]\n)",
+        );
+        tree.replace(kaji_core::GeneratedFile::new("Package.swift", updated)?)
+    }
     fn bundle_middleware(
         tree: &mut kaji_core::GeneratedTree,
         middleware: &[kaji_core::customization::BundledMiddleware],

@@ -49,3 +49,47 @@ internal func kajiPageCount<T: Encodable>(_ response: T, _ segments: [KajiSelect
     guard let results = value as? [Any] else { throw KajiPaginationError.invalidResults }
     return results.count
 }
+
+/// Lazy string cursor pagination; a repeated token terminates the sequence.
+public struct KajiCursorSequence<Element: Sendable>: AsyncSequence, Sendable {
+    public typealias AsyncIterator = Iterator
+    let cursor: String?
+    let fetch: @Sendable (String?) async throws -> (Element, String?)
+    public func makeAsyncIterator() -> Iterator { Iterator(cursor: cursor, fetch: fetch, seen: cursor.map { [$0] } ?? []) }
+    public struct Iterator: AsyncIteratorProtocol {
+        var cursor: String?
+        let fetch: @Sendable (String?) async throws -> (Element, String?)
+        var seen: Set<String>
+        var count = 0
+        var done = false
+        public mutating func next() async throws -> Element? {
+            try Task.checkCancellation()
+            if done { return nil }
+            if count >= 10000 { throw KajiPaginationError.pageLimit }
+            let (response, continuation) = try await fetch(cursor)
+            count += 1
+            if let continuation, !continuation.isEmpty, seen.insert(continuation).inserted { cursor = continuation }
+            else { done = true }
+            return response
+        }
+    }
+}
+internal func kajiNextCursor<T: Encodable>(_ response: T, _ segments: [KajiSelectorSegment]) throws -> String? {
+    var value: Any = try JSONSerialization.jsonObject(with: JSONEncoder().encode(response), options: [.fragmentsAllowed])
+    for segment in segments {
+        switch segment {
+        case .field(let key):
+            if let map = value as? [String: Any] { guard let next = map[key] else { return nil }; value = next }
+            else if let array = value as? [Any], let index = Int(key), index >= 0, String(index) == key, index < array.count { value = array[index] }
+            else { throw KajiPaginationError.invalidResults }
+        case .index(let index):
+            guard let array = value as? [Any] else { throw KajiPaginationError.invalidResults }
+            let actual = index < 0 ? array.count + index : index
+            guard actual >= 0, actual < array.count else { return nil }
+            value = array[actual]
+        }
+    }
+    if value is NSNull { return nil }
+    guard let cursor = value as? String else { throw KajiPaginationError.invalidResults }
+    return cursor.isEmpty ? nil : cursor
+}

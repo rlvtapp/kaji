@@ -1,8 +1,12 @@
 //! TypeScript renderers and package configuration live outside neutral core.
+mod webhooks;
+pub use webhooks::{Webhooks, webhooks};
 mod bundled_middleware;
 mod clients;
 pub mod composition;
 mod esm;
+mod operation_tests;
+pub use operation_tests::{OperationTests, operation_tests};
 mod json;
 mod models;
 mod render;
@@ -234,6 +238,9 @@ impl Plugin<TypeScript> for Sdk {
             operation_modules,
             options: options.model_options.clone(),
         })?;
+        cx.workspace
+            .native_transports
+            .insert(".kaji/client".into(), options.transport);
         cx.publish(composition::Transport {
             module: ".kaji/client".into(),
             lossless_json: true,
