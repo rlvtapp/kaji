@@ -3,8 +3,8 @@
 ## Generate your API's entire developer ecosystem from one contract.
 
 Kaji turns a Swagger 2.0 or OpenAPI 3.0/3.1 document into SDK source,
-API CLIs, mocks, validation, framework integrations, documentation, and MCP
-tools. Generate for TypeScript, Rust, Go, Python, PHP, Java, C#/.NET, Elixir,
+API CLIs, Postman collections, Terraform providers, mocks, validation,
+framework integrations, documentation, and MCP tools. Generate for TypeScript, Rust, Go, Python, PHP, Java, C#/.NET, Elixir,
 Ruby, and Swift from the same contract, with Symfony integration packages.
 
 ```text
@@ -13,6 +13,8 @@ OpenAPI
   ▼
 Kaji
   ├── SDKs          TypeScript · Go · Python · Rust · Java · C#/.NET · PHP · Elixir · Ruby · Swift
+  ├── Artifacts     Postman Collection 2.1 · Terraform Plugin Framework providers
+  ├── Delivery      GitHub checks · SDK sync PRs · Release Please · Trusted publishing
   ├── Integrations  Symfony (wraps the generated PHP SDK)
   ├── API CLIs      TypeScript (Node.js) · Rust (native)
   ├── Clients       Fetch · Axios
@@ -63,9 +65,8 @@ review SDK and release pull requests before publication.
 | Export Postman collections and typed Terraform providers | [API artifacts example](examples/api-artifacts/README.md) |
 | Publish checked release tags | [SDK publishing](docs/sdk-publishing.md) |
 
-The newer middleware and delivery APIs are available in this source tree. Use
-the [source build](docs/source-customization.md) until your chosen published
-launcher includes them. Workflow scaffolding does not provision a GitHub App or
+The 0.5.0 features are available on this branch. Until 0.5.0 is published, use
+the [source build](docs/source-customization.md) to try them. Workflow scaffolding does not provision a GitHub App or
 registry account; the delivery guides explain that setup and its verification.
 
 Python users can install the same native CLI through pip:
@@ -160,6 +161,10 @@ and [Rust API CLI](docs/rust-cli.md) guides.
   same recipe.
 - **Contract mocks:** add an optional `httpmock` Docker package usable by every
   generated SDK.
+- **Postman collections:** generate requests, examples, auth variants, and blank
+  environment templates from the contract.
+- **Terraform providers:** generate typed Go Plugin Framework resources from
+  validated CRUD bindings. The initial implementation supports flat scalar resources.
 - **Custom generators:** language-scoped Rust plugins and typed dependencies,
   without a JavaScript generation runtime.
 
@@ -179,16 +184,50 @@ For embedding Kaji or writing custom plugins, a typed Rust interface is also
 available. See the [Rust API guide](docs/getting-started.md) and
 [plugin authoring reference](docs/typed-plugins.md).
 
-## New in 0.4.0
+## New in 0.5.0
 
-- Existing npm manifests retain custom scripts, metadata, pinned dependencies,
-  and dependency categories while Kaji appends missing generated requirements.
-- Symfony bundles wrap the portable PHP SDK for container-managed clients.
-- Generated TypeScript and Rust API CLIs prompt in interactive terminals, mask
-  credentials, and stay non-interactive for pipes and `--json`.
-- Generated CLI packages include OpenAPI-derived command references.
+- Bundle HTTP middleware into an SDK so your policies run by default. Add,
+  replace, or patch source for one package while retaining typed plugin support.
+- Regenerate safely with ownership tracking, customer edit protection,
+  create-once files, stale-file cleanup, and drift checks.
+- Generate Postman Collection 2.1 exports and typed Terraform providers, with
+  editable validation actions and runnable examples.
+- Deliver SDKs through review PRs, preserve independent package versions, and
+  release checked tags through Release Please and supported registry OIDC flows.
+- Use one SDK repository per language, with destination-scoped generation jobs
+  and each repository's own editable build, test, release, and publishing actions.
+- Extend SDK runtimes and models with Python async/OAuth/webhook support,
+  TypeScript wide integer handling, Java open enums, and provider composition.
 
-See the [0.4.0 release notes](docs/releases/0.4.0.md) for details.
+See the [0.5.0 changelog](CHANGELOG.md#050--2026-10-07) for the complete changes
+and current limitations.
+
+## Generate, review, and publish
+
+After generating packages with delivery metadata, scaffold your GitHub workflows:
+
+```sh
+# One repository per language; also supports a shared SDK repository
+kaji sdk init --root generated --config kaji.json \
+  --repository-pattern 'acme/api-{lang}' --auth app --dry-run
+```
+
+Remove `--dry-run` to write the source workflow and stage each destination's
+editable action files under `.kaji/sdk-repository-setup/OWNER/REPO/`.
+Install a selected setup through a reviewable PR:
+
+```sh
+kaji sdk install \
+  --setup .kaji/sdk-repository-setup/acme/api-typescript \
+  --repository acme/api-typescript --dry-run
+```
+
+Remove `--dry-run` when ready to open the setup PR. Create the destination
+repositories first, grant the GitHub App access, and configure registry trust
+and release environments per repository. Setup installation requires credentials
+with permission to write workflow files. Routine generation uses scoped tokens.
+See [repository automation](docs/sdk-automation.md), [editable GitHub Actions](docs/github-actions.md),
+and [publishing](docs/sdk-publishing.md) for the complete setup.
 
 ## Documentation
 
@@ -220,6 +259,11 @@ Existing detailed references remain available: [complete CLI reference](docs/cli
 [SDK automation](docs/sdk-automation.md), including remaining verification gaps.
 
 ## Runnable examples
+
+- [Bundled middleware](examples/bundled-middleware/README.md): ship SDK author
+  policies without requiring customers to register them.
+- [Postman and Terraform](examples/api-artifacts/README.md): generate, validate,
+  and build API artifacts alongside your SDKs.
 
 - [Symfony SDK](examples/symfony-sdk/README.md): generate a PHP SDK and its
   Symfony integration bundle together.
