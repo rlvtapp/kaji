@@ -270,4 +270,4 @@ so missing properties round-trip separately from explicit null. Required propert
 types stay unchanged; the generated `PRESENCE.md` describes native construction
 and inspection. Leave the option unset to preserve the existing public model API.
 The option is rejected on other languages. `"open_enums": true` also works for
-C# alongside Java and retains unknown enum strings.
+Java, C# and Swift and retains unknown enum strings.

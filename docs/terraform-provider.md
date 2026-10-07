@@ -34,8 +34,9 @@ package declares the API's lifecycle explicitly:
 ```
 
 `update` is optional. Configurable fields without a supported update binding
-require replacement. A resource identity comes from a required string field in
-the create/read response and one final item path parameter. Each binding is
+require replacement. A single identity comes from a required string field in
+the create/read response and one final item path parameter. Explicit composite
+bindings support configured parent IDs and server-generated child IDs. Each binding is
 validated against the referenced operations and schemas before files are written.
 Invalid explicit bindings fail generation rather than producing a partial resource.
 

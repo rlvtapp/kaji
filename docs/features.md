@@ -70,7 +70,7 @@ and selector restrictions are in the [pagination guide](guides/pagination.md).
 | Feature | What you can do | Boundary |
 | --- | --- | --- |
 | Authentication | Configure declared bearer, Basic or API-key credentials through the native client | Scheme/binding details vary; use generated package docs |
-| OAuth client credentials | Python sync/async and opt-in Go/Ruby cached providers, coordinated refresh and bounded unauthorized recovery | Go refresh covers buffered operations; other targets require caller-supplied providers/tokens |
+| OAuth client credentials | Python sync/async and opt-in Go/Ruby cached providers, coordinated refresh and bounded unauthorized recovery | Go/Ruby refresh covers buffered operations; other targets require caller-supplied providers/tokens |
 | Consumer middleware | Rewrite requests/responses, short-circuit or recover through native supported hooks | Java/C#/PHP use native HTTP decorators; hook signatures differ |
 | Bundled author middleware | Ship policy modules and register them by default during generation | Customers need no middleware registration for bundled policies |
 | Retry and backoff | Replay safe operations with bounded attempts and server delay handling | Ruby/Swift default to one attempt; retry settings enable replay-safe retries |
