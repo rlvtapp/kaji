@@ -1,0 +1,101 @@
+package provider
+import (
+ "bytes"
+ "encoding/json"
+ "fmt"
+ "github.com/hashicorp/terraform-plugin-framework/attr"
+ "github.com/hashicorp/terraform-plugin-framework/types"
+)
+type wireField struct{Name string "json:\"name\"";WireName string "json:\"wire_name\"";Required bool "json:\"required\"";Shape wireShape "json:\"shape\""}
+type wireShape struct{Kind string "json:\"kind\"";Ty string "json:\"ty\"";Fields []wireField "json:\"fields\"";Element *wireShape "json:\"element\""}
+func parseWireShape(source string)wireShape{var shape wireShape;if err:=json.Unmarshal([]byte(source),&shape);err!=nil{panic("invalid generated wire schema")};return shape}
+func(s wireShape)attributeTypes()map[string]attr.Type{result:=map[string]attr.Type{};for _,field:=range s.Fields{result[field.Name]=field.Shape.tfType()};return result}
+func(s wireShape)tfType()attr.Type{switch s.Kind{
+case "object":return types.ObjectType{AttrTypes:s.attributeTypes()}
+case "list":return types.ListType{ElemType:s.Element.tfType()}
+case "map":return types.MapType{ElemType:s.Element.tfType()}
+default:switch s.Ty{case "bool":return types.BoolType;case "int64":return types.Int64Type;case "float64":return types.Float64Type;default:return types.StringType}
+}}
+func(s wireShape)nullValue()attr.Value{switch s.Kind{
+case "object":return types.ObjectNull(s.attributeTypes())
+case "list":return types.ListNull(s.Element.tfType())
+case "map":return types.MapNull(s.Element.tfType())
+default:switch s.Ty{case "bool":return types.BoolNull();case "int64":return types.Int64Null();case "float64":return types.Float64Null();default:return types.StringNull()}
+}}
+func(s wireShape)decode(raw []byte)(attr.Value,error){
+ if bytes.Equal(bytes.TrimSpace(raw),[]byte("null")){return nil,fmt.Errorf("API returned null for a nonnullable nested value")}
+ switch s.Kind{
+ case "object":
+  var object map[string]json.RawMessage;if err:=json.Unmarshal(raw,&object);err!=nil||object==nil{return nil,fmt.Errorf("API returned a non-object nested value")}
+  values:=map[string]attr.Value{}
+  for _,field:=range s.Fields{
+   item,present:=object[field.WireName]
+   if !present{if field.Required{return nil,fmt.Errorf("API omitted a required nested field")};values[field.Name]=field.Shape.nullValue();continue}
+   value,err:=field.Shape.decode(item);if err!=nil{return nil,err};values[field.Name]=value
+  }
+  value,diags:=types.ObjectValue(s.attributeTypes(),values);if diags.HasError(){return nil,fmt.Errorf("nested object conversion failed")};return value,nil
+ case "list":
+  var items []json.RawMessage;if err:=json.Unmarshal(raw,&items);err!=nil||items==nil{return nil,fmt.Errorf("API returned a non-list nested value")}
+  values:=make([]attr.Value,0,len(items));for _,item:=range items{value,err:=s.Element.decode(item);if err!=nil{return nil,err};values=append(values,value)}
+  value,diags:=types.ListValue(s.Element.tfType(),values);if diags.HasError(){return nil,fmt.Errorf("nested list conversion failed")};return value,nil
+ case "map":
+  var items map[string]json.RawMessage;if err:=json.Unmarshal(raw,&items);err!=nil||items==nil{return nil,fmt.Errorf("API returned a non-map nested value")}
+  values:=map[string]attr.Value{};for name,item:=range items{value,err:=s.Element.decode(item);if err!=nil{return nil,err};values[name]=value}
+  value,diags:=types.MapValue(s.Element.tfType(),values);if diags.HasError(){return nil,fmt.Errorf("nested map conversion failed")};return value,nil
+ default:
+  switch s.Ty{
+  case "bool":var value bool;if json.Unmarshal(raw,&value)!=nil{return nil,fmt.Errorf("invalid nested boolean")};return types.BoolValue(value),nil
+  case "int64":var value int64;if json.Unmarshal(raw,&value)!=nil{return nil,fmt.Errorf("invalid nested integer")};return types.Int64Value(value),nil
+  case "float64":var value float64;if json.Unmarshal(raw,&value)!=nil{return nil,fmt.Errorf("invalid nested number")};return types.Float64Value(value),nil
+  default:var value string;if json.Unmarshal(raw,&value)!=nil{return nil,fmt.Errorf("invalid nested string")};return types.StringValue(value),nil
+  }
+ }
+}
+func(s wireShape)encode(value attr.Value)(any,error){
+ if value.IsUnknown()||value.IsNull(){return nil,fmt.Errorf("nested payload value must be known and non-null")}
+ switch s.Kind{
+ case "object":
+  object,ok:=value.(types.Object);if !ok{return nil,fmt.Errorf("invalid planned nested object")}
+  result:=map[string]any{};values:=object.Attributes()
+  for _,field:=range s.Fields{
+   item:=values[field.Name];if item==nil{return nil,fmt.Errorf("planned nested field missing")}
+   if item.IsUnknown()||item.IsNull(){if field.Required{return nil,fmt.Errorf("required nested payload field must be known")};continue}
+   wire,err:=field.Shape.encode(item);if err!=nil{return nil,err};result[field.WireName]=wire
+  };return result,nil
+ case "list":
+  list,ok:=value.(types.List);if !ok{return nil,fmt.Errorf("invalid planned nested list")}
+  result:=make([]any,0,len(list.Elements()));for _,item:=range list.Elements(){wire,err:=s.Element.encode(item);if err!=nil{return nil,err};result=append(result,wire)};return result,nil
+ case "map":
+  object,ok:=value.(types.Map);if !ok{return nil,fmt.Errorf("invalid planned nested map")}
+  result:=map[string]any{};for name,item:=range object.Elements(){wire,err:=s.Element.encode(item);if err!=nil{return nil,err};result[name]=wire};return result,nil
+ default:
+  switch item:=value.(type){case types.String:return item.ValueString(),nil;case types.Bool:return item.ValueBool(),nil;case types.Int64:return item.ValueInt64(),nil;case types.Float64:return item.ValueFloat64(),nil}
+ };return nil,fmt.Errorf("invalid nested value type")
+}
+func mergeNested(shape wireShape,planned,incoming attr.Value,refresh bool)(attr.Value,error){
+ if refresh||planned.IsUnknown(){return incoming,nil}
+ if planned.IsNull()||incoming.IsNull(){if planned.Equal(incoming){return planned,nil};return nil,fmt.Errorf("API changed a known planned nested value")}
+ switch shape.Kind{
+ case "object":
+  original:=planned.(types.Object).Attributes();next:=incoming.(types.Object).Attributes();values:=map[string]attr.Value{}
+  for _,field:=range shape.Fields{value,err:=mergeNested(field.Shape,original[field.Name],next[field.Name],false);if err!=nil{return nil,err};values[field.Name]=value}
+  value,diags:=types.ObjectValue(shape.attributeTypes(),values);if diags.HasError(){return nil,fmt.Errorf("nested object merge failed")};return value,nil
+ case "list":
+  original:=planned.(types.List).Elements();next:=incoming.(types.List).Elements();if len(original)!=len(next){return nil,fmt.Errorf("API changed a known planned nested list length")}
+  values:=make([]attr.Value,len(original));for index,item:=range original{value,err:=mergeNested(*shape.Element,item,next[index],false);if err!=nil{return nil,err};values[index]=value}
+  value,diags:=types.ListValue(shape.Element.tfType(),values);if diags.HasError(){return nil,fmt.Errorf("nested list merge failed")};return value,nil
+ case "map":
+  original:=planned.(types.Map).Elements();next:=incoming.(types.Map).Elements();if len(original)!=len(next){return nil,fmt.Errorf("API changed known planned nested map keys")}
+  values:=map[string]attr.Value{};for name,item:=range original{nextItem,ok:=next[name];if !ok{return nil,fmt.Errorf("API changed known planned nested map keys")};value,err:=mergeNested(*shape.Element,item,nextItem,false);if err!=nil{return nil,err};values[name]=value}
+  value,diags:=types.MapValue(shape.Element.tfType(),values);if diags.HasError(){return nil,fmt.Errorf("nested map merge failed")};return value,nil
+ }
+ if !planned.Equal(incoming){return nil,fmt.Errorf("API changed a known planned nested value")};return planned,nil
+}
+func finalizeNested(shape wireShape,value attr.Value)attr.Value{
+ if value.IsUnknown(){return shape.nullValue()};if value.IsNull(){return value}
+ switch shape.Kind{
+ case "object":values:=value.(types.Object).Attributes();for _,field:=range shape.Fields{values[field.Name]=finalizeNested(field.Shape,values[field.Name])};result,_:=types.ObjectValue(shape.attributeTypes(),values);return result
+ case "list":values:=value.(types.List).Elements();for index,item:=range values{values[index]=finalizeNested(*shape.Element,item)};result,_:=types.ListValue(shape.Element.tfType(),values);return result
+ case "map":values:=value.(types.Map).Elements();for name,item:=range values{values[name]=finalizeNested(*shape.Element,item)};result,_:=types.MapValue(shape.Element.tfType(),values);return result
+ };return value
+}

@@ -3,7 +3,7 @@ use super::*;
 use kaji_core::{HttpMethod, Operation};
 use std::{fs, process::Command};
 
-fn fixture() -> EntityCatalog {
+pub(super) fn fixture() -> EntityCatalog {
     let operation = |id: &str, method, path: &str| Operation {
         id: id.into(),
         method,
@@ -18,6 +18,7 @@ fn fixture() -> EntityCatalog {
         },
         wire_name: name.into(),
         ty,
+        shape: None,
         required,
         optional,
         computed,
@@ -44,6 +45,9 @@ fn fixture() -> EntityCatalog {
             id_parameter: "thingId".into(),
             id_field: "id".into(),
             requires_auth: true,
+            schema_version: 0,
+            state_upgrades: vec![],
+            identity: vec![],
             attributes: vec![
                 attr("name", ScalarType::String, true, false, false),
                 attr("enabled", ScalarType::Bool, true, false, false),

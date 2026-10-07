@@ -27,6 +27,10 @@ pub(crate) fn render(
         "internal/provider/provider.go",
         provider_source(catalog, provider),
     )?)?;
+    tree.insert(GeneratedFile::new(
+        "internal/provider/nested_values.go",
+        include_str!("nested_runtime.go.txt"),
+    )?)?;
     for resource in &catalog.resources {
         tree.insert(GeneratedFile::new(
             format!("internal/provider/resource_{}.go", resource.name),
@@ -79,7 +83,13 @@ pub(crate) fn render(
                 readme,
                 "| `{}` | {} | {}{}{} |",
                 attr.name,
-                go_scalar(attr.ty),
+                attr.shape.as_ref().map_or_else(
+                    || go_scalar(attr.ty).to_owned(),
+                    |shape| format!(
+                        "{} (typed)",
+                        crate::nested_render::native(shape).to_ascii_lowercase()
+                    )
+                ),
                 presence,
                 if attr.replace_on_change {
                     "; changing replaces the resource"
@@ -96,22 +106,52 @@ pub(crate) fn render(
         );
         for attr in &resource.attributes {
             if attr.required && attr.name != "id" {
-                let value = match attr.ty {
+                let scalar_value = match attr.ty {
                     ScalarType::String => "\"example\"",
                     ScalarType::Bool => "true",
                     ScalarType::Int64 => "1",
                     ScalarType::Float64 => "1.0",
                 };
+                let value = attr
+                    .shape
+                    .as_ref()
+                    .map_or_else(|| scalar_value.to_owned(), crate::nested_render::example);
                 let _ = writeln!(readme, "  {} = {value}", attr.name);
             }
         }
+        let import_id = if resource.identity.is_empty() {
+            "remote-object-id".to_owned()
+        } else {
+            serde_json::to_string(
+                &resource
+                    .identity
+                    .iter()
+                    .map(|id| {
+                        (
+                            id.parameter.clone(),
+                            if resource
+                                .create
+                                .parameters
+                                .iter()
+                                .any(|p| p.name == id.parameter)
+                            {
+                                "example"
+                            } else {
+                                "remote-object-id"
+                            },
+                        )
+                    })
+                    .collect::<std::collections::BTreeMap<_, _>>(),
+            )
+            .unwrap()
+        };
         let _ = writeln!(
             readme,
-            "}}\n```\n\nImport an existing object with its single string API identity:\n\n```sh\nterraform import {provider}_{}.example 'remote-object-id'\n```\n",
+            "}}\n```\n\nImport an existing object with its API identity:\n\n```sh\nterraform import {provider}_{}.example '{import_id}'\n```\n",
             resource.name
         );
     }
-    readme.push_str("## Lifecycle behavior\n\nCreate sends known configurable values and saves the returned identity. Create/update preserve known planned configuration and report a diagnostic if the API returns different values. Unknown computed values are hydrated; diagnostic create failures retain known identity and resolve remaining unknown state for recovery. Update sends only fields allowed by the update operation, then reads the object to hydrate final computed values, including after HTTP 204. PATCH sends supported known fields, not a changed-fields diff. Read refreshes drift and removes state on HTTP 404; HTTP authentication/transport/decoding failures retain state. Delete succeeds for an already-missing object and removes state. Import initializes identity, then Read refreshes the object.\n\nThe initial renderer supports scalar CRUD resources with a single string identity. Compound identities, nested/collection schemas, data sources, asynchronous polling, Terraform write-only arguments and state upgrades require further implementation. The emitted Go unit tests do not perform `terraform apply`; the Kaji repository provides an opt-in Terraform CLI lifecycle test against its local mock. Verify your API's lifecycle behavior before distributing the provider.\n");
+    readme.push_str("## Lifecycle behavior\n\nCreate sends known configurable values and saves the returned identity. Create/update preserve known planned configuration and report a diagnostic if the API returns different values. Unknown computed values are hydrated; diagnostic create failures retain known identity and resolve remaining unknown state for recovery. Update sends only fields allowed by the update operation, then reads the object to hydrate final computed values, including after HTTP 204. PATCH sends supported known fields, not a changed-fields diff. Read refreshes drift and removes state on HTTP 404; HTTP authentication/transport/decoding failures retain state. Delete succeeds for an already-missing object and removes state. Import initializes identity, then Read refreshes the object.\n\nSupported attributes include bounded fixed nested objects, typed lists and typed maps; nullable values, recursive schemas, unions, constraints and nested readOnly/writeOnly projections are rejected. Composite identities are opt-in JSON objects keyed by configured path parameters; configured parent path components are required replacement attributes and the child identity is server-generated. Read-only data sources are opt-in. Asynchronous polling and Terraform write-only arguments remain unsupported. Explicit state upgrades support lossless root attribute renames only, with each old version mapping directly to the current schema, not chaining intermediate migrations; all other state must retain compatible types and no data is discarded. Custom type transformations require an authored upgrade implementation. The emitted Go unit tests do not perform `terraform apply`; the Kaji repository provides an opt-in Terraform CLI lifecycle test against its local mock. Verify your API's lifecycle behavior before distributing the provider.\n");
     tree.insert(GeneratedFile::new("README.md", readme)?)?;
     Ok(tree)
 }
@@ -133,7 +173,7 @@ fn quoted(value: &str) -> String {
     out.push('"');
     out
 }
-fn field(name: &str) -> String {
+pub(crate) fn field(name: &str) -> String {
     name.split('_')
         .filter(|part| !part.is_empty())
         .map(|part| {
@@ -286,11 +326,19 @@ import (
  "github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
  "github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
  "github.com/hashicorp/terraform-plugin-framework/resource/schema/float64planmodifier"
+ "github.com/hashicorp/terraform-plugin-framework/attr"
+ "github.com/hashicorp/terraform-plugin-framework/resource/schema/objectplanmodifier"
+ "github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
+ "github.com/hashicorp/terraform-plugin-framework/resource/schema/mapplanmodifier"
  "github.com/hashicorp/terraform-plugin-framework/types"
 )
 var _ resource.Resource = &{ty}{{}}
 var _ resource.ResourceWithImportState = &{ty}{{}}
 // Keep plan-modifier packages usable for scalar-only generated resources.
+var _ = attr.Type(types.StringType)
+var _ = objectplanmodifier.RequiresReplace
+var _ = listplanmodifier.RequiresReplace
+var _ = mapplanmodifier.RequiresReplace
 var _ = boolplanmodifier.RequiresReplace
 var _ = int64planmodifier.RequiresReplace
 var _ = float64planmodifier.RequiresReplace
@@ -305,7 +353,9 @@ type {model} struct{{
                 output,
                 " {} types.{} `tfsdk:{}`",
                 field(&attr.name),
-                native(attr.ty),
+                attr.shape
+                    .as_ref()
+                    .map_or(native(attr.ty), crate::nested_render::native),
                 quoted(&attr.name)
             );
         }
@@ -317,10 +367,27 @@ type {model} struct{{
     );
     let _ = writeln!(
         output,
-        "func(r *{ty})Schema(_ context.Context,_ resource.SchemaRequest,resp *resource.SchemaResponse){{resp.Schema=schema.Schema{{Attributes:map[string]schema.Attribute{{\n\"id\":schema.StringAttribute{{Computed:true,PlanModifiers:[]planmodifier.String{{stringplanmodifier.UseStateForUnknown()}}}},"
+        "func(r *{ty})Schema(_ context.Context,_ resource.SchemaRequest,resp *resource.SchemaResponse){{resp.Schema=schema.Schema{{Version:{},Attributes:map[string]schema.Attribute{{\n\"id\":schema.StringAttribute{{Computed:true,PlanModifiers:[]planmodifier.String{{stringplanmodifier.UseStateForUnknown()}}}},",
+        plan.schema_version
     );
     for attr in &plan.attributes {
         if attr.name == "id" {
+            continue;
+        }
+        if let Some(shape) = &attr.shape {
+            let _ = writeln!(
+                output,
+                "{}:{},",
+                quoted(&attr.name),
+                crate::nested_render::schema(
+                    shape,
+                    attr.required,
+                    attr.optional,
+                    attr.computed,
+                    attr.sensitive,
+                    attr.replace_on_change
+                )
+            );
             continue;
         }
         let native = native(attr.ty);
@@ -346,12 +413,32 @@ type {model} struct{{
         output,
         "}}}}}}\nfunc(r *{ty})Configure(_ context.Context,req resource.ConfigureRequest,resp *resource.ConfigureResponse){{if req.ProviderData==nil{{return}};client,ok:=req.ProviderData.(*apiClient);if !ok{{resp.Diagnostics.AddError(\"Unexpected provider data\",\"Native provider configuration did not produce its API client.\");return}};r.client=client}}\nfunc(r *{ty})ImportState(ctx context.Context,req resource.ImportStateRequest,resp *resource.ImportStateResponse){{if req.ID==\"\"{{resp.Diagnostics.AddError(\"Invalid import identity\",\"Import requires a nonempty string ID.\");return}};resource.ImportStatePassthroughID(ctx,path.Root(\"id\"),req,resp)}}"
     );
+    for attr in &plan.attributes {
+        if let Some(shape) = &attr.shape {
+            let _ = writeln!(
+                output,
+                "var {ty}{}Shape = parseWireShape({})",
+                field(&attr.name),
+                quoted(&serde_json::to_string(shape).expect("shape serialization"))
+            );
+        }
+    }
     let _ = writeln!(
         output,
         "func(data *{model})payload(update bool)([]byte,error){{body:=map[string]any{{}}"
     );
     for attr in &plan.attributes {
-        if attr.name == "id" || (!attr.required && !attr.optional) {
+        if attr.name == "id"
+            || (!attr.required && !attr.optional)
+            || plan.identity.iter().any(|id| {
+                id.field == attr.wire_name
+                    && plan
+                        .create
+                        .parameters
+                        .iter()
+                        .any(|p| p.name == id.parameter)
+            })
+        {
             continue;
         }
         let f = field(&attr.name);
@@ -363,6 +450,14 @@ type {model} struct{{
             attr.update_required,
             quoted(&format!("required attribute {} must be known", attr.name))
         );
+        if attr.shape.is_some() {
+            let _ = writeln!(
+                output,
+                "if !data.{f}.IsNull()&&!data.{f}.IsUnknown(){{wire,err:={ty}{f}Shape.encode(data.{f});if err!=nil{{return nil,err}};body[{}]=wire}}}}",
+                quoted(&attr.wire_name)
+            );
+            continue;
+        }
         let _ = writeln!(
             output,
             "if !data.{f}.IsNull()&&!data.{f}.IsUnknown(){{body[{}]=data.{f}.Value{}()}}\n}}",
@@ -394,6 +489,15 @@ type {model} struct{{
                 attr.wire_name
             ))
         );
+        if let Some(shape) = &attr.shape {
+            let n = crate::nested_render::native(shape);
+            let _ = writeln!(
+                output,
+                "{{value,ok:=values[{}];{missing};incoming:={ty}{f}Shape.nullValue();if ok{{decoded,err:={ty}{f}Shape.decode(value);if err!=nil{{return err}};incoming=decoded}};merged,err:=mergeNested({ty}{f}Shape,data.{f},incoming,refresh);if err!=nil{{return err}};data.{f}=merged.(types.{n})}}",
+                quoted(&attr.wire_name)
+            );
+            continue;
+        }
         let decode_error = quoted(&format!(
             "invalid response field {}: %w",
             attr.wire_name.replace('%', "%%")
@@ -417,6 +521,14 @@ type {model} struct{{
     for attr in &plan.attributes {
         if attr.name != "id" {
             let f = field(&attr.name);
+            if let Some(shape) = &attr.shape {
+                let n = crate::nested_render::native(shape);
+                let _ = writeln!(
+                    output,
+                    "data.{f}=finalizeNested({ty}{f}Shape,data.{f}).(types.{n})"
+                );
+                continue;
+            }
             let n = native(attr.ty);
             let _ = writeln!(
                 output,
@@ -473,12 +585,23 @@ type {model} struct{{
     {
         output = output.replace(" \"bytes\"\n", "");
     }
+    output = crate::composite_render::apply(output, plan, &ty, false);
+    if !plan.state_upgrades.is_empty() {
+        output = output.replace(" \"context\"\n", " \"context\"\n \"github.com/hashicorp/terraform-plugin-go/tftypes\"\n \"github.com/hashicorp/terraform-plugin-go/tfprotov6\"\n");
+        output.push_str(&crate::migration_render::source(plan, &ty));
+    }
     output
 }
 
 #[cfg(test)]
+#[path = "composite_lifecycle.rs"]
+mod composite_lifecycle;
+#[cfg(test)]
 #[path = "native_lifecycle.rs"]
 mod native_lifecycle;
+#[cfg(test)]
+#[path = "nested_lifecycle.rs"]
+mod nested_lifecycle;
 
 const TRANSPORT_TEST: &str = r#"package provider
 import("context";"fmt";"io";"net/http";"net/url";"strings";"testing")
@@ -564,7 +687,8 @@ fn data_source(plan: &ResourcePlan) -> String {
     let model = format!("{name}ResourceModel");
     let mut output = format!(
         r#"package provider
-import("context";"strings";"github.com/hashicorp/terraform-plugin-framework/datasource";"github.com/hashicorp/terraform-plugin-framework/datasource/schema")
+import("context";"strings";"github.com/hashicorp/terraform-plugin-framework/attr";"github.com/hashicorp/terraform-plugin-framework/types";"github.com/hashicorp/terraform-plugin-framework/datasource";"github.com/hashicorp/terraform-plugin-framework/datasource/schema")
+var _ = attr.Type(types.StringType)
 var _ datasource.DataSourceWithConfigure = &{ty}{{}}
 type {ty} struct{{client *apiClient}}
 func new{ty}() datasource.DataSource{{return &{ty}{{}}}}
@@ -575,6 +699,23 @@ func(d *{ty})Schema(_ context.Context,_ datasource.SchemaRequest,resp *datasourc
     );
     for attribute in &plan.attributes {
         if attribute.name != "id" {
+            if let Some(shape) = &attribute.shape {
+                let _ = writeln!(
+                    output,
+                    "{}:{},",
+                    quoted(&attribute.name),
+                    crate::nested_render::schema(
+                        shape,
+                        false,
+                        false,
+                        true,
+                        attribute.sensitive,
+                        false
+                    )
+                );
+                continue;
+            }
+
             let _ = writeln!(
                 output,
                 "{}:schema.{}Attribute{{Computed:true,Sensitive:{}}},",
@@ -594,5 +735,10 @@ func(d *{ty})Read(ctx context.Context,req datasource.ReadRequest,resp *datasourc
         placeholder = quoted(&format!("{{{}}}", plan.id_parameter)),
         secure = plan.requires_auth
     );
-    output
+    crate::composite_render::apply(
+        output,
+        plan,
+        &format!("{}Resource", field(&plan.name)),
+        true,
+    )
 }

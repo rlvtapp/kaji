@@ -21,6 +21,24 @@ pub struct ResourceBinding {
     pub id_parameter: Option<String>,
     #[serde(default)]
     pub id_field: Option<String>,
+    #[serde(default)]
+    pub schema_version: u32,
+    #[serde(default)]
+    pub state_upgrades: Vec<StateUpgradeBinding>,
+    #[serde(default)]
+    pub identity: Vec<IdentityBinding>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct IdentityBinding {
+    pub parameter: String,
+    pub field: String,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StateUpgradeBinding {
+    pub version: u32,
+    pub rename_fields: BTreeMap<String, String>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EntityCatalog {
@@ -49,7 +67,8 @@ impl EntityCatalog {
                     "update": resource.update.as_ref().map(operation),
                     "delete": operation(&resource.delete),
                     "id_parameter": resource.id_parameter, "id_field": resource.id_field,
-                    "attributes": resource.attributes, "requires_auth": resource.requires_auth
+                    "attributes": resource.attributes, "requires_auth": resource.requires_auth,
+                    "schema_version": resource.schema_version, "state_upgrades": resource.state_upgrades, "identity": resource.identity
                 })
             })
             .collect();
@@ -73,12 +92,20 @@ pub struct ResourcePlan {
     pub id_field: String,
     pub attributes: Vec<AttributePlan>,
     pub requires_auth: bool,
+    #[serde(default)]
+    pub schema_version: u32,
+    #[serde(default)]
+    pub state_upgrades: Vec<StateUpgradeBinding>,
+    #[serde(default)]
+    pub identity: Vec<IdentityBinding>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AttributePlan {
     pub name: String,
     pub wire_name: String,
     pub ty: ScalarType,
+    #[serde(default)]
+    pub shape: Option<ShapePlan>,
     pub required: bool,
     pub computed: bool,
     pub optional: bool,
@@ -87,6 +114,21 @@ pub struct AttributePlan {
     pub update_input: bool,
     pub update_required: bool,
     pub response_required: bool,
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ShapePlan {
+    Scalar { ty: ScalarType },
+    Object { fields: Vec<NestedFieldPlan> },
+    List { element: Box<ShapePlan> },
+    Map { element: Box<ShapePlan> },
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NestedFieldPlan {
+    pub name: String,
+    pub wire_name: String,
+    pub required: bool,
+    pub shape: ShapePlan,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -332,6 +374,9 @@ fn infer_binding(api: &Api, create: &Operation) -> Result<ResourceBinding> {
         delete: deletes[0].id.clone(),
         id_parameter: Some(parameter),
         id_field: Some("id".into()),
+        schema_version: 0,
+        state_upgrades: vec![],
+        identity: vec![],
     })
 }
 fn resolve(
@@ -384,19 +429,86 @@ fn resolve(
         "update must use PATCH or PUT"
     );
     ensure!(
-        !create.path.contains('{'),
-        "parent/create path parameters are unsupported in v1"
+        !create.path.contains('{') || !binding.identity.is_empty(),
+        "parent/create path parameters require explicit composite identity"
     );
     let id_parameter = binding
         .id_parameter
         .clone()
+        .or_else(|| {
+            binding
+                .identity
+                .iter()
+                .find(|id| !create.path.contains(&format!("{{{}}}", id.parameter)))
+                .map(|id| id.parameter.clone())
+        })
         .or_else(|| single_path_parameter(&read.path))
         .context("read requires one explicit identity path parameter")?;
-    let id_field = binding.id_field.clone().unwrap_or_else(|| "id".into());
+    let id_field = binding
+        .id_field
+        .clone()
+        .or_else(|| {
+            binding
+                .identity
+                .iter()
+                .find(|id| !create.path.contains(&format!("{{{}}}", id.parameter)))
+                .map(|id| id.field.clone())
+        })
+        .unwrap_or_else(|| "id".into());
+    let composite = !binding.identity.is_empty();
+    let identity_parameters: BTreeSet<_> = binding
+        .identity
+        .iter()
+        .map(|id| id.parameter.as_str())
+        .collect();
+    if composite {
+        ensure!(
+            binding.identity.len() >= 2
+                && binding.identity.len() <= 8
+                && identity_parameters.len() == binding.identity.len(),
+            "composite identity requires 2..8 unique parameter bindings"
+        );
+        ensure!(
+            binding.id_parameter.is_none() && binding.id_field.is_none(),
+            "composite identity cannot combine legacy id mappings"
+        );
+        let fields: BTreeSet<_> = binding
+            .identity
+            .iter()
+            .map(|id| id.field.as_str())
+            .collect();
+        ensure!(
+            fields.len() == binding.identity.len(),
+            "composite identity fields must be unique"
+        );
+        for id in &binding.identity {
+            ensure!(
+                attribute_name(&id.parameter).is_ok() && !id.field.is_empty(),
+                "invalid composite identity component"
+            );
+        }
+    }
+    ensure!(
+        !composite
+            || binding
+                .identity
+                .iter()
+                .any(|id| !create.path.contains(&format!("{{{}}}", id.parameter))),
+        "composite identity requires a server-chosen child component"
+    );
     let template = format!("{{{id_parameter}}}");
     for op in [&read, &delete].into_iter().chain(update.as_ref()) {
         ensure!(
-            single_path_parameter(&op.path).as_deref() == Some(&id_parameter),
+            if composite {
+                path_parameters(&op.path).len() == identity_parameters.len()
+                    && path_parameters(&op.path)
+                        .iter()
+                        .map(String::as_str)
+                        .collect::<BTreeSet<_>>()
+                        == identity_parameters
+            } else {
+                single_path_parameter(&op.path).as_deref() == Some(&id_parameter)
+            },
             "item operation {} must have only identity parameter {}",
             op.id,
             id_parameter
@@ -406,11 +518,27 @@ fn resolve(
             "all item lifecycle operations must share a path"
         );
         ensure!(
-            op.parameters
-                .iter()
-                .all(|p| p.location == "path" && p.name == id_parameter),
+            op.parameters.iter().all(|p| p.location == "path"
+                && if composite {
+                    identity_parameters.contains(p.name.as_str())
+                } else {
+                    p.name == id_parameter
+                }),
             "query/header/cookie operation parameters are unsupported in v1"
         );
+        if composite {
+            ensure!(
+                op.parameters.len() == identity_parameters.len()
+                    && op.parameters.iter().all(|p| p.required)
+                    && op
+                        .parameters
+                        .iter()
+                        .map(|p| p.name.as_str())
+                        .collect::<BTreeSet<_>>()
+                        == identity_parameters,
+                "composite item operations must declare every required string path parameter exactly once"
+            );
+        }
         for p in &op.parameters {
             ensure!(
                 p.schema
@@ -420,12 +548,28 @@ fn resolve(
             );
         }
         ensure!(
-            op.path.ends_with(&template),
+            composite || op.path.ends_with(&template),
             "identity parameter must be the final item path segment"
         );
     }
     ensure!(
-        create.parameters.is_empty(),
+        if composite {
+            create.parameters.iter().all(|p| {
+                p.location == "path"
+                    && p.required
+                    && identity_parameters.contains(p.name.as_str())
+                    && create.path.contains(&format!("{{{}}}", p.name))
+            }) && path_parameters(&create.path).len() == create.parameters.len()
+                && create
+                    .parameters
+                    .iter()
+                    .map(|p| p.name.as_str())
+                    .collect::<BTreeSet<_>>()
+                    .len()
+                    == create.parameters.len()
+        } else {
+            create.parameters.is_empty()
+        },
         "create operation parameters are unsupported in v1"
     );
     ensure!(
@@ -437,6 +581,33 @@ fn resolve(
     );
     let mut create_fields = object_fields(api, body_schema(&create)?)?;
     create_fields.retain(|field| !field.value.read_only);
+    for parameter in &create.parameters {
+        let component = binding
+            .identity
+            .iter()
+            .find(|id| id.parameter == parameter.name)
+            .context("create path identity mapping missing")?;
+        let value = parameter
+            .schema
+            .clone()
+            .context("create path parameter schema missing")?;
+        ensure!(
+            scalar(api, &value)? == ScalarType::String,
+            "parent identity must be a string"
+        );
+        ensure!(
+            !create_fields
+                .iter()
+                .any(|field| field.name == component.field),
+            "parent identity cannot also be a body attribute"
+        );
+        create_fields.push(Field {
+            name: component.field.clone(),
+            value,
+            required: true,
+            annotations: BTreeMap::new(),
+        });
+    }
     let read_fields = object_fields(api, response_schema(&read)?)?;
     let created = object_fields(api, response_schema(&create)?)?;
     let id = read_fields
@@ -455,6 +626,26 @@ fn resolve(
         created_id.required && scalar(api, &created_id.value)? == ScalarType::String,
         "create identity must be a required non-null string"
     );
+    for component in &binding.identity {
+        for fields in [&read_fields, &created] {
+            let field = fields
+                .iter()
+                .find(|f| f.name == component.field)
+                .context("composite response identity field missing")?;
+            ensure!(
+                field.required && scalar(api, &field.value)? == ScalarType::String,
+                "composite identities require nonnullable required string response fields"
+            );
+        }
+        ensure!(
+            !create_fields.iter().any(|f| f.name == component.field)
+                || create
+                    .parameters
+                    .iter()
+                    .any(|p| p.name == component.parameter),
+            "client-chosen composite body identity unsupported"
+        );
+    }
     ensure!(
         !create_fields.iter().any(|f| f.name == id_field),
         "client-chosen create identity is unsupported in v1"
@@ -483,17 +674,25 @@ fn resolve(
             !read_field.value.write_only,
             "write-only fields need explicit secret/import semantics, unsupported in v1"
         );
-        let ty = scalar(api, &read_field.value)?;
+        let shape = field_shape(api, &read_field.value)?;
+        let ty = match shape {
+            ShapePlan::Scalar { ty } => ty,
+            _ => ScalarType::String,
+        };
         let create_field = create_fields.iter().find(|f| f.name == read_field.name);
         let update_field = update_fields.iter().find(|f| f.name == read_field.name);
         if let Some(field) = create_field {
             ensure!(
-                !field.value.read_only && !field.value.write_only && !read_field.value.read_only,
+                !field.value.read_only
+                    && !field.value.write_only
+                    && (!read_field.value.read_only
+                        || binding.identity.iter().any(|id| id.field == field.name
+                            && create.parameters.iter().any(|p| p.name == id.parameter))),
                 "conflicting read-only/write-only configurable field {}",
                 field.name
             );
             ensure!(
-                scalar(api, &field.value)? == ty,
+                field_shape(api, &field.value)? == shape,
                 "create/read field {} types differ",
                 field.name
             );
@@ -502,14 +701,14 @@ fn resolve(
                 .find(|f| f.name == field.name)
                 .context("create response must include configurable fields for state validation")?;
             ensure!(
-                scalar(api, &response_field.value)? == ty,
+                field_shape(api, &response_field.value)? == shape,
                 "create response field {} type differs",
                 field.name
             );
         }
         if let Some(field) = update_field {
             ensure!(
-                scalar(api, &field.value)? == ty,
+                field_shape(api, &field.value)? == shape,
                 "update/read field {} types differ",
                 field.name
             );
@@ -588,17 +787,26 @@ fn resolve(
                 }
             }
         }
+        let parent_identity = binding.identity.iter().any(|id| {
+            id.field == read_field.name && create.parameters.iter().any(|p| p.name == id.parameter)
+        });
         attributes.push(AttributePlan {
             name,
             wire_name: read_field.name.clone(),
             ty,
+            shape: if matches!(shape, ShapePlan::Scalar { .. }) {
+                None
+            } else {
+                Some(shape)
+            },
             required: create_field.is_some_and(|f| f.required),
             optional: create_field.is_some_and(|f| !f.required),
             computed: create_field.is_none_or(|f| !f.required),
-            replace_on_change: create_field.is_some() && (update_field.is_none() || forced),
+            replace_on_change: parent_identity
+                || create_field.is_some() && (update_field.is_none() || forced),
             sensitive: sensitive.unwrap_or(false),
-            update_input: update_field.is_some(),
-            update_required: update_field.is_some_and(|field| field.required),
+            update_input: !parent_identity && update_field.is_some(),
+            update_required: !parent_identity && update_field.is_some_and(|field| field.required),
             response_required: read_field.required,
         });
     }
@@ -635,8 +843,57 @@ fn resolve(
         id_field,
         attributes,
         requires_auth: scheme.is_some(),
+        identity: binding.identity.clone(),
+        schema_version: binding.schema_version,
+        state_upgrades: binding.state_upgrades.clone(),
     };
+    validate_migrations(&plan)?;
     Ok((plan, scheme, auth))
+}
+fn path_parameters(path: &str) -> Vec<String> {
+    path.split('{')
+        .skip(1)
+        .filter_map(|part| part.split_once('}').map(|(name, _)| name.to_owned()))
+        .collect()
+}
+fn validate_migrations(plan: &ResourcePlan) -> Result<()> {
+    ensure!(
+        plan.schema_version <= 16,
+        "schema version exceeds supported migration bound (16)"
+    );
+    let names: BTreeSet<_> = plan
+        .attributes
+        .iter()
+        .map(|a| a.name.as_str())
+        .chain(["id"])
+        .collect();
+    let mut versions = BTreeSet::new();
+    for upgrade in &plan.state_upgrades {
+        ensure!(
+            upgrade.version < plan.schema_version && versions.insert(upgrade.version),
+            "migration versions must be unique and older than current schema"
+        );
+        ensure!(
+            !upgrade.rename_fields.is_empty(),
+            "migration requires explicit root field renames"
+        );
+        let mut targets = BTreeSet::new();
+        for (from, to) in &upgrade.rename_fields {
+            ensure!(
+                attribute_name(from)? == *from && from != "id" && !names.contains(from.as_str()),
+                "migration source must be a removed root attribute; identity renames unsupported"
+            );
+            ensure!(
+                names.contains(to.as_str()) && to != "id" && targets.insert(to),
+                "migration target must be a unique current root attribute"
+            );
+        }
+    }
+    ensure!(
+        versions.len() == plan.schema_version as usize,
+        "every prior schema version must have an explicit direct-to-current state upgrade"
+    );
+    Ok(())
 }
 fn security_name(op: &Operation) -> Result<Option<String>> {
     if op.security.is_empty() {
@@ -794,6 +1051,126 @@ fn object_fields(api: &Api, value: &SchemaValue) -> Result<Vec<Field>> {
     }
     Ok(fields.clone())
 }
+fn field_shape(api: &Api, value: &SchemaValue) -> Result<ShapePlan> {
+    fn walk(
+        api: &Api,
+        value: &SchemaValue,
+        depth: usize,
+        seen: &mut BTreeSet<String>,
+    ) -> Result<ShapePlan> {
+        ensure!(depth < 12, "nested Terraform schema exceeds depth bound");
+        unsupported_validation(value)?;
+        ensure!(
+            !value.nullable && !value.nullish && !value.optional,
+            "nullable/optional nested value wrappers require explicit policy"
+        );
+        ensure!(
+            !value.read_only && !value.write_only,
+            "nested readOnly/writeOnly fields require lifecycle projection"
+        );
+        if let SchemaKind::Reference { reference } = &value.kind {
+            ensure!(
+                reference.starts_with("#/components/schemas/") || !reference.contains('/'),
+                "external nested reference unsupported"
+            );
+            ensure!(
+                seen.insert(reference.clone()),
+                "recursive nested reference unsupported"
+            );
+            let name = value.kind.reference_name().unwrap();
+            let shape = walk(
+                api,
+                &api.schemas
+                    .iter()
+                    .find(|schema| schema.name == name)
+                    .context("missing nested schema reference")?
+                    .value,
+                depth + 1,
+                seen,
+            )?;
+            seen.remove(reference);
+            return Ok(shape);
+        }
+        Ok(match &value.kind {
+            SchemaKind::String => {
+                ensure!(
+                    value.format.is_none(),
+                    "nested string format requires validators"
+                );
+                ShapePlan::Scalar {
+                    ty: ScalarType::String,
+                }
+            }
+            SchemaKind::Boolean => ShapePlan::Scalar {
+                ty: ScalarType::Bool,
+            },
+            SchemaKind::Integer => {
+                ensure!(
+                    value
+                        .format
+                        .as_deref()
+                        .is_none_or(|format| format == "int64"),
+                    "nested integer format unsupported"
+                );
+                ShapePlan::Scalar {
+                    ty: ScalarType::Int64,
+                }
+            }
+            SchemaKind::Number => {
+                ensure!(value.format.is_none(), "nested number format unsupported");
+                ShapePlan::Scalar {
+                    ty: ScalarType::Float64,
+                }
+            }
+            SchemaKind::Array { items } => ShapePlan::List {
+                element: Box::new(walk(api, items, depth + 1, seen)?),
+            },
+            SchemaKind::Object {
+                fields,
+                additional_properties,
+            } => {
+                if fields.is_empty() {
+                    if let kaji_core::AdditionalProperties::Schema { value } = additional_properties
+                    {
+                        return Ok(ShapePlan::Map {
+                            element: Box::new(walk(api, value, depth + 1, seen)?),
+                        });
+                    }
+                }
+                ensure!(
+                    matches!(
+                        additional_properties,
+                        kaji_core::AdditionalProperties::Forbidden
+                    ),
+                    "nested objects require fixed properties or typed additionalProperties-only maps"
+                );
+                ensure!(fields.len() <= 128, "nested object exceeds property bound");
+                let mut names = BTreeSet::new();
+                let mut planned = vec![];
+                for field in fields {
+                    let name = attribute_name(&field.name)?;
+                    ensure!(
+                        names.insert(name.clone()),
+                        "nested Terraform attribute name collision"
+                    );
+                    planned.push(NestedFieldPlan {
+                        name,
+                        wire_name: field.name.clone(),
+                        required: field.required,
+                        shape: walk(api, &field.value, depth + 1, seen)?,
+                    });
+                }
+                ShapePlan::Object { fields: planned }
+            }
+            _ => bail!("nested unions/unknown schemas require explicit policy"),
+        })
+    }
+    // Preserve the established scalar policy, including read-only output fields.
+    if scalar(api, value).is_ok() {
+        return scalar(api, value).map(|ty| ShapePlan::Scalar { ty });
+    }
+    walk(api, value, 0, &mut BTreeSet::new())
+}
 fn scalar(api: &Api, value: &SchemaValue) -> Result<ScalarType> {
     unsupported_validation(value)?;
     ensure!(
@@ -889,6 +1266,9 @@ fn annotated_bindings(api: &Api) -> Result<Vec<ResourceBinding>> {
                 update: operations.remove("update"),
                 id_parameter: None,
                 id_field: None,
+                schema_version: 0,
+                state_upgrades: vec![],
+                identity: vec![],
             })
         })
         .collect()
@@ -992,6 +1372,9 @@ mod tests {
             delete: "deleteProject".into(),
             id_parameter: Some("projectId".into()),
             id_field: None,
+            schema_version: 0,
+            state_upgrades: vec![],
+            identity: vec![],
         }
     }
     #[test]
@@ -1297,5 +1680,118 @@ mod tests {
                 .iter()
                 .any(|diagnostic| diagnostic.reason.contains("reserved root attribute count"))
         );
+    }
+    #[test]
+    fn typed_nested_shapes_and_boundaries_are_explicit() {
+        let api = Api::default();
+        let nested = object(vec![
+            field("displayName", SchemaKind::String, true),
+            field("enabled", SchemaKind::Boolean, false),
+        ]);
+        assert!(matches!(
+            field_shape(&api, &nested).unwrap(),
+            ShapePlan::Object { .. }
+        ));
+        for value in [
+            SchemaValue::new(SchemaKind::Array {
+                items: Box::new(nested.clone()),
+            }),
+            SchemaValue::new(SchemaKind::Object {
+                fields: vec![],
+                additional_properties: AdditionalProperties::Schema {
+                    value: Box::new(nested.clone()),
+                },
+            }),
+        ] {
+            assert!(field_shape(&api, &value).is_ok());
+        }
+        let mut nullable = nested.clone();
+        nullable.nullable = true;
+        assert!(field_shape(&api, &nullable).is_err());
+        let mut constrained = nested.clone();
+        constrained
+            .constraints
+            .insert("minProperties".into(), serde_json::json!(1));
+        assert!(field_shape(&api, &constrained).is_err());
+        let collision = object(vec![
+            field("fooBar", SchemaKind::String, true),
+            field("foo_bar", SchemaKind::String, true),
+        ]);
+        assert!(field_shape(&api, &collision).is_err());
+        let recursive = Api {
+            schemas: vec![Schema::new(
+                "Node",
+                object(vec![Field {
+                    name: "next".into(),
+                    value: SchemaValue::reference("Node"),
+                    required: false,
+                    annotations: Default::default(),
+                }]),
+            )],
+            ..Default::default()
+        };
+        assert!(field_shape(&recursive, &SchemaValue::reference("Node")).is_err());
+    }
+    #[test]
+    fn composite_parent_path_is_explicit_and_migration_versions_are_complete() {
+        let mut api = fixture();
+        let parent = OperationParameter {
+            name: "org".into(),
+            location: "path".into(),
+            required: true,
+            schema: Some(SchemaValue::new(SchemaKind::String)),
+            description: None,
+            annotations: Default::default(),
+        };
+        for op in &mut api.operations {
+            op.path = format!("/organizations/{{org}}{}", op.path);
+            op.parameters.push(parent.clone());
+            for response in &mut op.responses {
+                for media in &mut response.media_types {
+                    if let Some(SchemaValue {
+                        kind: SchemaKind::Object { fields, .. },
+                        ..
+                    }) = &mut media.schema
+                    {
+                        fields.push(field("organizationId", SchemaKind::String, true));
+                    }
+                }
+            }
+        }
+        let mut binding = binding();
+        binding.id_parameter = None;
+        binding.identity = vec![
+            IdentityBinding {
+                parameter: "org".into(),
+                field: "organizationId".into(),
+            },
+            IdentityBinding {
+                parameter: "projectId".into(),
+                field: "id".into(),
+            },
+        ];
+        let catalog = analyze(&api, &[binding.clone()], false).unwrap();
+        assert_eq!(catalog.resources.len(), 1, "{:?}", catalog.diagnostics);
+        let parent = catalog.resources[0]
+            .attributes
+            .iter()
+            .find(|a| a.name == "organization_id")
+            .unwrap();
+        assert!(parent.required && parent.replace_on_change && !parent.update_input);
+        binding.schema_version = 1;
+        assert!(analyze(&api, &[binding.clone()], false).is_err());
+        binding.state_upgrades = vec![StateUpgradeBinding {
+            version: 0,
+            rename_fields: BTreeMap::from([("old_name".into(), "name".into())]),
+        }];
+        assert_eq!(
+            analyze(&api, &[binding.clone()], false)
+                .unwrap()
+                .resources
+                .len(),
+            1
+        );
+        binding.state_upgrades[0].rename_fields = BTreeMap::from([("id".into(), "name".into())]);
+        assert!(analyze(&api, &[binding], false).is_err());
     }
 }
