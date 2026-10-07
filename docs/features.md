@@ -28,8 +28,8 @@ supported. Version 0.5.0 is on the branch; use a source build until published.
 | Capability | Status and scope | Guide |
 | --- | --- | --- |
 | Swagger 2.0; OpenAPI 3.0/3.1 | Local JSON/YAML and downloaded contracts; normalization through the bundled Go compiler | [Compiler](openapi-compiler.md) |
-| OpenAPI 3.2/future versions | Explicit rejection before artifact writes, naming unimplemented compiler capabilities; no support claim | [Compiler](openapi-compiler.md) |
-| External references, recursive schemas | Compiler/model support with bounded traversal; native representation varies by target | [Shared fixtures](shared-sdk-fixtures.md) |
+| OpenAPI 3.2 | Ordinary contracts, QUERY, nullable bodies and webhook-only specs; unsupported 3.2 additions fail before writes | [Compiler](openapi-compiler.md) |
+| External references, recursive schemas | Local file references and recursive schemas; remote references require explicit bundling; native representation varies by target | [Shared fixtures](shared-sdk-fixtures.md) |
 | Operation parameters and body/response media | Path/query/header inputs, declared media, examples and security alternatives carried into the neutral model | [Architecture](architecture.md) |
 | Package-specific settings | Multiple packages/languages/providers; naming, client style, manifests, versions and plugins | [Configuration](configuration.md) |
 | Typed plugin graph | Named capabilities, explicit handles, ordering, ambiguity/cycle checks before emission | [Typed plugins](typed-plugins.md) |
@@ -37,9 +37,9 @@ supported. Version 0.5.0 is on the branch; use a source build until published.
 | Source customization | Add, explicit replace, guarded patch; package scope; customer create-once files | [Customization](sdk-customization.md) |
 | Safe regeneration | Preflight all packages, ownership manifest, unchanged stale-file removal, edited-file protection | [Regeneration](safe-regeneration.md) |
 | Read-only drift and inspection | `generate --check`, SDK doctor and inspectable compiler/package artifacts | [CLI](cli.md), [verification](verification.md) |
-| Large public contract regression | Pinned Microsoft Graph input, checksum verification, deterministic Go generation/native smoke and config generation; manual read-only CI | [Large specs](large-specs.md) |
+| Large public contract regression | Pinned Graph smoke plus six full official contracts, checksum verification and a manual ten-language native matrix | [Large specs](large-specs.md) |
 | Arbitrary custom languages | Rust library `Language`/`Plugin` implementations and optional delivery metadata. CLI needs explicit registry integration | [Library plugins](library/plugins.md) |
-| Ejectable templates | Not implemented. Maintained renderers are Rust; use plugins, source overlays or a source fork | [Own the sources](source-customization.md) |
+| Ejectable generator sources | `kaji eject` exports rebuildable renderers, runtime sources and plugin interfaces, with a SHA-256 manifest | [Own the sources](source-customization.md) |
 
 ## SDK targets
 
@@ -70,17 +70,18 @@ and selector restrictions are in the [pagination guide](guides/pagination.md).
 | Feature | What you can do | Boundary |
 | --- | --- | --- |
 | Authentication | Configure declared bearer, Basic or API-key credentials through the native client | Scheme/binding details vary; use generated package docs |
-| OAuth client credentials | Python sync/async and opt-in Go/Ruby cached providers, coordinated refresh and bounded unauthorized recovery | Go/Ruby refresh covers buffered operations; other targets require caller-supplied providers/tokens |
+| OAuth client credentials | Python sync/async and opt-in Go/Ruby/TypeScript/Rust/Java/C# providers, coordinated refresh and bounded unauthorized recovery | Replay scope and cancellation follow each native driver; Swift/PHP/Elixir require supplied credentials |
 | Consumer middleware | Rewrite requests/responses, short-circuit or recover through native supported hooks | Java/C#/PHP use native HTTP decorators; hook signatures differ |
 | Bundled author middleware | Ship policy modules and register them by default during generation | Customers need no middleware registration for bundled policies |
 | Retry and backoff | Replay safe operations with bounded attempts and server delay handling | Ruby/Swift default to one attempt; retry settings enable replay-safe retries |
 | Idempotency keys | `x-kaji-idempotency` or per-package rules; secure UUIDs, caller overrides, operation-scoped header | Requires server semantics; blank keys do not protect replay; PATCH requires a key |
 | Pagination | Lazy helpers reuse the actual operation, transport/auth and middleware | Helpers yield pages; forms/body controls differ by target |
-| Cancellation | Native context/signal/task cancellation; tests cover selected transports and pagers | Not a universal per-call timeout option |
+| Per-call headers and timeouts | TypeScript/Ruby request options; Go context options; Python/Rust/Java/C# scoped clients | [Native timeout scope differs](guides/request-controls.md); Swift/PHP/Elixir use driver/client settings |
+| Cancellation | Native context/signal/task cancellation; tests cover supported transports and pagers | Custom drivers retain native cancellation responsibilities |
 | Structural response checks | Opt-in TypeScript, Go, Python and Ruby checks; native model decoders also reject some invalid shapes | Java/PHP/Elixir shared cases remain permissive |
 | Errors and raw results | Declared native errors and response envelopes where supported | Inspect each target's surface; raw response/stream ownership differs |
-| Streaming and file media | Target renderers support selected SSE/binary forms; Java/C# frame multiline SSE payloads | Swift supports incremental SSE; Java/C# support bounded scalar/binary multipart bodies; Swift multipart remains unsupported. Shared corpus is not exhaustive |
-| Forward-compatible models | Opt-in Java/C#/Swift open enums and Java/C# optional presence wrappers; transparent named scalar/union JSON; selected unknown-property and nullable handling; TypeScript int64 string/bigint options | Unknown enum/union roundtrip and omitted-vs-null behavior are not universal |
+| Streaming and file media | Selected SSE/binary forms; multipart upload APIs in TypeScript/Go/Python/Rust/Java/C#/Swift | Buffered upload limits and shapes vary; Swift requires closed named roots. Ruby/PHP/Elixir need upload adapters. Shared corpus is not exhaustive |
+| Forward-compatible models | Opt-in Java/C#/Swift open enums and Java/C# optional presence wrappers; transparent named scalar/union JSON; Rust opt-in unmatched union fallback; selected unknown-property and nullable handling; TypeScript int64 string/bigint options | Unknown enum/union roundtrip and omitted-vs-null behavior are not universal |
 | Webhook verification | Opt-in verifiers in all ten SDKs: raw-body HMAC verification, timestamp checks and secret rotation | Native probes passed across ten languages; Swift Linux crypto unverified; HMAC v1, no durable replay store |
 
 Start from [generated SDKs](generated-sdks.md), then follow

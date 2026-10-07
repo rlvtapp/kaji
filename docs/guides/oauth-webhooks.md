@@ -33,6 +33,34 @@ This helper does not add authorization-code/device flows or streaming refresh.
 Python SDKs already emit sync/async `OAuthClientCredentials` helpers. See the
 generated `oauth.py` and package docs for the native constructor and integration.
 
+## TypeScript, Rust, Java and C# client credentials
+
+Select `{"name":"oauth"}` beside the maintained SDK plugin in each language
+recipe. TypeScript can bind it to a named SDK transport with
+`"uses":{"transport":"client"}`; otherwise composition requires one unambiguous
+maintained provider. Native Rust plugins expose `ts::oauth()`, `rust::oauth()`,
+`java::oauth()` and `csharp::oauth()`. This is generated source: SDK customers use
+the emitted helper without installing Kaji.
+
+| Target | Connect the generated provider |
+| --- | --- |
+| TypeScript | `new OAuthClientCredentials({tokenUrl, clientId, clientSecret, scopes})`, then `createOAuthClient(config, provider)`; pass the resulting client to operations |
+| Rust | `OAuthClientCredentials::new(token_url, client_id, client_secret)?`, then `client.with_token_provider(Arc::new(provider))`; custom providers implement `BearerTokenProvider` |
+| Java | `new OAuthClientCredentials(issuerHttpClient, tokenUrl, clientId, clientSecret)`, then wrap the API driver with `new OAuthHttpClient(apiHttpClient, provider, apiOrigin)` |
+| C# | `new OAuthClientCredentials(issuerHttpClient, tokenUrl, clientId, clientSecret)`, then use `OAuthClientCredentialsHandler(provider, apiOrigin)` with the native inner handler |
+
+Use a separate issuer driver and HTTPS endpoints in production. Providers cache
+until expiry and coordinate concurrent refresh. An explicit Authorization header
+wins. Unauthorized recovery is bounded to one safe replay; unsafe mutations and
+nonrepeatable/streaming bodies are not silently replayed. Java buffered-body
+replay requires its explicit constructor option, and Java/C# authorize only the
+configured API origin. Injected issuer drivers must refuse redirects.
+
+Native tests exercise sixteen concurrent callers, expiry, cancellation or
+interruption, issuer error redaction, explicit headers and unsafe-mutation
+protection. Rust also tests a dropped refresh leader; TypeScript tests response
+envelopes and cancellation. Swift, PHP and Elixir do not yet emit these providers.
+
 ## Verify signed webhook bodies
 
 All ten SDK targets accept an opt-in `webhooks` plugin. Python and Ruby recipes add `{"name":"webhooks"}` beside `sdk`; Go uses the same
@@ -70,7 +98,7 @@ pinned-family HMAC/SHA-256/base64 dependencies. Swift adds exact swift-crypto
 3.12.3 only when selected, using CryptoKit on Apple and Crypto on Linux. Apple
 execution is verified; Linux crypto execution remains unverified. Java uses
 JDK crypto, C# uses .NET crypto, PHP requires its hash extension, and Elixir
-requires OTP 25+ crypto. Java/C#/PHP/Elixir executable probes await native CI.
+requires OTP 25+ crypto. Java/C#/PHP/Elixir executable probes have passed with disposable native toolchains and are repeated in CI.
 
 Verifier return/decode semantics remain native: some return authenticated raw
 bytes and offer an explicit decoder; Python/TypeScript return decoded JSON after

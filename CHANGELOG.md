@@ -6,6 +6,21 @@
 
 ### Added
 
+- Rebuildable `kaji eject` source bundles with SHA-256 manifests, preserving the
+  plugin architecture; an integration test edits a renderer, rebuilds and generates.
+- Bounded OpenAPI 3.2 support including QUERY, local reference closure hashing and
+  recursive schemas, with explicit diagnostics for unsupported new constructs.
+- Optional TypeScript, Rust, Java and C# OAuth client-credentials providers with
+  coordinated refresh, cancellation and bounded safe unauthorized replay.
+- Bounded multipart upload APIs in Go/Python/Rust/Swift, and richer Java/C# JSON,
+  repeated-array and mixed-media multipart bodies, with native MIME/retry/cancellation probes.
+- Native per-call headers and timeout controls in TypeScript, Ruby, Go, Python,
+  Rust, Java and C#, preserving client defaults and native cancellation.
+- Opt-in Rust unmatched union values retain raw JSON; strict decoding remains the default.
+- Six checksum-pinned full official contracts and a manual ten-language native
+  verification workflow; Go request/model naming now handles full OpenAI and GitHub.
+
+
 - Explicit Terraform lifecycle polling through validated read GET operations,
   bounded scalar criteria, attempts/deadlines, cancellation and recoverable state.
 

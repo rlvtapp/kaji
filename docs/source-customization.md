@@ -1,56 +1,56 @@
-# Own the generation and delivery sources
+# Customize and rebuild the generator
 
-For package-scoped source overrides and customer runtime middleware, see
-[SDK customization](sdk-customization.md). These extensions do not require a fork.
-
-Kaji's Rust generator/plugin workspace, Go OpenAPI compiler, GitHub App broker,
-GitHub Actions and publishing helpers are source projects in this repository.
-They can be forked, modified and run independently. Review the repository's
-LICENSE and individual dependency licenses when redistributing your fork.
+Kaji supports both registered Rust plugins and edits to its maintained renderers. SDK authors can eject the sources from their installed CLI to customize what future SDKs contain. Customers continue to use the generated SDK; they do not install your generator workspace.
 
 ```sh
-cargo build -p kaji-cli
-(cd openapi && go build -o ../target/debug/kaji-openapi .)
-./target/debug/kaji generate --config kaji.json
-./target/debug/kaji sdk init --root generated --actions local --dry-run
+kaji eject --language ruby --out ./my-kaji
+cd my-kaji
 ```
 
-Default `--actions local` exports readable action YAML and Node helpers into the
-SDK repository. `--actions remote --action-ref YOUR_OWNER/kaji@YOUR_REVISION`
-instead references actions in a fork. Pin `--kaji-version` to a published launcher
-containing these commands. For unpublished/forked source builds, replace the
-workflow's launcher command with your own built/distributed binary; local builds
-do not automatically publish a launcher.
+The destination must be new. Eject does not overwrite files or run generation, downloads, registry publication or GitHub installation. It writes a source workspace, `EJECTED.md` with target-specific entrypoints, and `EJECTED-SOURCES.json` with the original file SHA-256 hashes and generator version.
 
-Native custom plugins implement `Language`, `Plugin`, and typed contracts.
-Consumers bind provider handles, and package finalization supplies manifests.
-Optional `release::metadata::<YourLanguage>(PackageMetadata)` connects a community
-plugin to checks/releases without adding a core registry or language enum. A
-custom `publisher.registry` uses explicit argument-vector commands. Standard
-`npm`, `pypi`, `crates.io`, and `go` publishing is opt-in by omitting commands;
-nonempty commands always select the plugin's custom publication path.
+## What gets ejected
 
-The CLI recipe registry currently exposes bundled plugins; installing an arbitrary
-Rust plugin does not register it in JSON automatically. Embed your plugin with
-Kaji's library API or extend the CLI registry in a fork. See
-[plugin authoring](typed-plugins.md) and [native provider contracts](native-sdk-providers.md).
+The bundle contains the native Rust CLI, normalized API/core interfaces, maintained language plugins, their runtime source templates, Cargo manifests and lockfile, the Go OpenAPI compiler sources, supporting action/check sources, schemas, documentation and the MIT license. It excludes dependency caches, built output and visual assets.
 
-Useful source entry points:
+`--language` identifies the plugin to customize. The other plugins remain available because the CLI's profiles register them and depend on the common workspace. A rebuilt generator can still generate the other targets and compose plugin chains. `dotnet` selects the C# renderer.
 
-- `crates/kaji-core/src/engine.rs`: capability graph and plugin execution.
-- `crates/kaji-core/src/release.rs`: optional package delivery contract.
-- `crates/kaji-cli/src/sdk_automation.rs`: editable workflow and sync generation.
-- `packages/sdk-check`: per-language setup/check action.
-- `packages/sdk-publish`: standard registry action and retry verification.
-- `packages/github-app-broker`: policy-enforced OIDC broker and token client.
+This is source ejection: many renderers construct code directly in Rust, and others consume adjacent runtime template files. There is no separate template engine or flag that makes the installed binary read edited source files. Build and run your customized CLI to consume the edits.
 
-A reproducible fork should run Rust workspace tests/Clippy, the Go compiler suite,
-and each action/broker's Node tests, then exercise a generated SDK against its
-native toolchain. Ordinary CI checks have read-only repository permission; release
-checks precede publishing and each registry still needs its trusted-publisher
-registration. Register/host a GitHub App and broker explicitly to enable them.
+## Build and generate
 
-TypeScript generated and bundled modules receive ESM-compatible relative import
-extensions during package finalization. Explicit source overlays retain your exact
-bytes; use `.js` relative specifiers in authored ESM overlays so the installed
-package resolves them in Node.
+Install Rust and Go, then run from the ejected directory:
+
+```sh
+cargo build --locked -p kaji-cli
+(cd openapi && go build -o ../target/debug/kaji-openapi .)
+./target/debug/kaji generate /absolute/path/to/openapi.yaml \
+  --language ruby --output /absolute/path/to/sdk
+```
+
+The first build can download Cargo and Go dependencies. The Go executable goes beside the rebuilt CLI. Alternatively, supply an existing compiler with `--openapi-compiler` or `KAJI_OPENAPI_BIN`.
+
+For a release build, run `cargo build --locked --release -p kaji-cli` and place the compiler beside `target/release/kaji`. Existing generation configuration works with the rebuilt binary:
+
+```sh
+./target/debug/kaji generate --config /absolute/path/to/kaji.json
+```
+
+## Change generated behavior
+
+For Ruby, edit `crates/plugins/ruby/src/`; the selected target's directory appears in `EJECTED.md`. For example, changing the Ruby renderer's `NOTICE` constant changes headers in the emitted Ruby source. Rebuild the CLI and regenerate to see that change. Editing a runtime file consumed by a renderer similarly changes the runtime bundled into future SDKs.
+
+For reusable extensions, use the [typed plugin interfaces](typed-plugins.md). Add a Rust plugin crate, register its workspace/dependency entries, then integrate it with the profile and CLI configuration. Existing plugin `src/lib.rs` files provide maintained registration examples. Plugins can emit additional modules, integrate bundled author middleware and compose generation steps; source ejection preserves that architecture.
+
+Keep your generator changes in version control. When updating Kaji, eject the new version into a fresh directory and compare source manifests before applying your changes. Retain `LICENSE` when distributing sources.
+
+## Verification
+
+Run the relevant plugin tests after customization and compile the resulting SDK with its native toolchain. Kaji includes an opt-in integration probe that ejects the workspace, edits a real Ruby renderer, rebuilds the CLI and Go compiler, then verifies generation consumed the edit:
+
+```sh
+cargo test -p kaji-cli eject::tests::rebuilt_ejected_renderer_consumes_custom_source \
+  -- --ignored --nocapture
+```
+
+This probe needs cached Cargo dependencies because its nested build uses `--offline`. The regular bundle test validates file hashes, required build inputs and overwrite protection.

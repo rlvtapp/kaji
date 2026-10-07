@@ -43,10 +43,14 @@ npx @relevate/kaji check <openapi-file> [--format human|json]
 npx @relevate/kaji show <openapi-file> [--include-path <pattern>] [--exclude-path <pattern>]
 npx @relevate/kaji update [--output <directory>] [--force]
 npx @relevate/kaji auth <login|logout|status> ...
+npx @relevate/kaji eject --language ruby --out ./my-kaji
 npx @relevate/kaji languages
 npx @relevate/kaji --version
 npx @relevate/kaji --help
 ```
+
+`eject` exports a rebuildable generator workspace into a new directory. Edit the
+renderers or add plugins, then rebuild your CLI; see [source customization](source-customization.md).
 
 | Option | Meaning | Default |
 | --- | --- | --- |

@@ -5,6 +5,22 @@ that your package compiles, that a request reaches the right endpoint, or that
 custom middleware preserves response decoding. SDK authors should check those
 properties separately and make their release workflow run the same checks.
 
+## Latest 0.5.0 integration evidence
+
+The integrated workspace passes 434 tests, formatting checks and Clippy with
+warnings denied. Freshly generated SDKs pass 163 shared HTTP scenarios across
+all ten runtimes. Additional native probes cover rebuilding an ejected renderer,
+local-reference provenance, OpenAPI 3.2 QUERY requests, scoped HTTP controls,
+OAuth refresh and buffered multipart uploads. All 17 Swift native probes pass.
+
+The complete pinned OpenAI contract generates and compiles or imports in
+TypeScript, Rust, Python, Go, Java, C# and Ruby. All six pinned public contracts
+compile in Go. The manual public-contract matrix records results for ten language
+targets; this does not establish that every contract works in every target.
+
+These checks use local fixtures and mock HTTP servers. Live GitHub synchronization
+and registry publication remain prepared workflows, without a live delivery trial.
+
 ## Verify your own package
 
 1. Generate from the committed recipe and contract.

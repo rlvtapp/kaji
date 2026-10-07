@@ -100,3 +100,34 @@ The read-only `Pinned large contract regression` workflow runs this same pinned
 check on explicit dispatch. It does not call Microsoft Graph or publish packages.
 This verifies full Go compilation/behavior and multi-language generation; it
 does not yet compile every target against multiple public specifications.
+
+## Full official contracts
+
+`scripts/fixtures/large-contracts.json` pins revisions and SHA-256 digests for
+Stripe, GitHub, OpenAI, Twilio, DigitalOcean and Linode. DigitalOcean is an archive
+because its root document depends on local files. The fetcher verifies the archive
+before extraction and rejects traversal, symlinks and oversized inputs.
+
+```sh
+KAJI_PUBLIC_CONTRACT_MANIFEST="$PWD/scripts/fixtures/large-contracts.json" \
+KAJI_PUBLIC_CONTRACTS=openai \
+KAJI_PUBLIC_LANGUAGES=go \
+KAJI_PUBLIC_CONTRACT_ROOT=/tmp/kaji-public-check \
+bash scripts/test-public-contracts.sh generate
+
+KAJI_PUBLIC_CONTRACT_MANIFEST="$PWD/scripts/fixtures/large-contracts.json" \
+KAJI_PUBLIC_CONTRACTS=openai \
+KAJI_PUBLIC_CONTRACT_ROOT=/tmp/kaji-public-check \
+bash scripts/test-public-contracts.sh check go
+```
+
+The manual `public-contracts.yml` workflow selects a contract and generates and
+compiles it separately in all ten language lanes. It only reads upstream sources
+and uses local compilation; it does not call production APIs or publish packages.
+Each lane uploads compiler diagnostics even when generation fails. A workflow
+matrix is coverage infrastructure, not evidence that every contract compiles in
+every language. Local native Go compilation passed for full OpenAI, GitHub, Stripe,
+Twilio, Linode and DigitalOcean. Full OpenAI native compilation also passed for
+TypeScript, Python, Ruby, Rust, Java and C#. This does not prove every wire behavior
+in those APIs. Other lanes are being hardened against these same contracts;
+unsupported constructs fail explicitly rather than silently dropping operations.

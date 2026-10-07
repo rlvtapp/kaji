@@ -39,6 +39,7 @@ Native Rust plugins are composed through the library API. Installing an arbitrar
 | Topic | Guide |
 | --- | --- |
 | Full capabilities and target differences | [Feature catalog](features.md) |
+| Per-call headers, timeouts and cancellation | [Request controls](guides/request-controls.md) |
 | OAuth providers and signed webhooks | [OAuth/webhooks](guides/oauth-webhooks.md) |
 | All CLI commands or typed settings | [CLI reference](cli.md), [configuration reference](configuration.md) |
 | Large contracts and compiler artifacts | [Large specifications](large-specs.md), [OpenAPI compiler](openapi-compiler.md) |

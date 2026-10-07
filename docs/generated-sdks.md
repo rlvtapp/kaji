@@ -79,7 +79,7 @@ console.log(note.body)
 
 For a generated full client, `client.transport` exposes that configured transport to framework helpers or raw functions. Raw-only generation omits the product client class; generate it with `ts::sdk().fetch().raw()` or the CLI's `--typescript-surface raw`.
 
-Configure `apiKey`, `apiKeyHeader`, `apiKeyPrefix`, `headers` or the runtime's structured `auth` credentials as appropriate to the contract. Fetch accepts a custom `fetch` implementation; Axios accepts its native instance through `client`. Fetch timeout/cancellation belongs to the injected Fetch implementation rather than an invented `ClientConfig.timeout` field. For example:
+Configure `apiKey`, `apiKeyHeader`, `apiKeyPrefix`, `headers` or the runtime's structured `auth` credentials as appropriate to the contract. Fetch accepts a custom `fetch` implementation; Axios accepts its native instance through `client`. Fetch and Axios accept per-call `requestOptions: { headers, timeoutMs, signal }` and a client default `timeoutMs`. See [request controls](guides/request-controls.md) for logical deadlines and native cancellation. Injected drivers can also add their own timeout policy. For example:
 
 ```ts
 import { Notes } from '@kaji/notes-fetch'
@@ -260,3 +260,18 @@ for the exact boundaries.
 ## Keep improvements when regenerating
 
 Put generator-author customization in the source-controlled recipe or plugin, including bundled middleware sources and explicit code overlays. Regeneration can then reproduce the distributed behavior. Ordinary SDK consumers keep application wrappers outside the installed package. Read [SDK customization](sdk-customization.md) for author-owned source registration, and [SDK publishing](sdk-publishing.md) for packaging, exact-tag verification and release automation.
+
+## Rust future union values
+
+Opt in during generation when a server may add union variants:
+
+```json
+{"language":"rust","path":"rust","plugins":[{"name":"sdk","open_unions":true}]}
+```
+
+The Rust package API exposes `.open_unions(true)` for both the SDK and independent
+model provider. Named `oneOf`/`anyOf` enums gain a final
+`Unknown(serde_json::Value)` arm. Values that match a known branch still decode
+normally; unmatched values retain their complete JSON for serialization. The
+default remains strict and rejects values that match no branch. This option does
+not change discriminator selection or make every model extensible.
