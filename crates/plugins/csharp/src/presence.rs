@@ -28,7 +28,17 @@ pub(crate) fn render(
             let mut source = render_model_with_policy(schema, &namespace, open_enums);
             for field in fields.iter().filter(|f| !f.required) {
                 let ty = csharp_type(&field.value, true);
-                source=source.replace(&format!("    public {ty} {} {{ get; init; }}",pascal_case(&field.name)),&format!("    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]\n    public Presence<{ty}> {} {{ get; init; }}",pascal_case(&field.name)));
+                let mut property = pascal_case(&field.name);
+                if property == pascal_case(&schema.name) {
+                    property.push_str("Value");
+                }
+                while fields
+                    .iter()
+                    .any(|other| other.name != field.name && pascal_case(&other.name) == property)
+                {
+                    property.push('_');
+                }
+                source = source.replace(&format!("    public {ty} {property} {{ get; init; }}"), &format!("    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]\n    public Presence<{ty}> {property} {{ get; init; }}"));
             }
             tree.replace(GeneratedFile::new(
                 output_path(
@@ -105,6 +115,24 @@ mod tests {
         )
         .unwrap();
         assert!(default.get("./Presence.cs").is_none());
+    }
+    #[test]
+    fn presence_policy_uses_collision_safe_property_names() {
+        let mut api = api();
+        api.schemas[0].name = "Note".into();
+        let tree = render(
+            &api,
+            ".",
+            Some("Kaji.Presence"),
+            SdkClientStyle::Flat,
+            true,
+            true,
+        )
+        .unwrap();
+        let source = tree
+            .get(format!("./Models/{}", bounded_filename("Note", 0, "cs")))
+            .unwrap();
+        assert!(source.contains("Presence<string?> NoteValue"));
     }
     #[test]
     #[ignore = "requires .NET8"]

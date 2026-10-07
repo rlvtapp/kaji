@@ -123,7 +123,66 @@ mod tests {
     #[ignore = "requires Swift6; executes unknown enum Codable and named query serialization"]
     fn native_unknown_enum_roundtrip_and_query_preserve_wire_strings() {
         let root = tempfile::tempdir().unwrap();
-        render(&api(), "sdk", Some("Enums"), SdkClientStyle::Flat, true)
+        let mut api = api();
+        let mut state = SchemaValue::reference("#/components/schemas/State");
+        state.nullable = true;
+        api.schemas.push(Schema::new(
+            "Envelope",
+            SchemaValue::new(SchemaKind::Object {
+                fields: vec![Field {
+                    name: "state".into(),
+                    value: state,
+                    required: false,
+                    annotations: Default::default(),
+                }],
+                additional_properties: AdditionalProperties::Any,
+            }),
+        ));
+        let mut operation = api.operations[0].clone();
+        operation.id = "sequence".into();
+        operation.method = kaji_core::HttpMethod::Post;
+        operation.path = "/sequence".into();
+        operation.parameters[0].name = "whole_query".into();
+        operation.parameters[0].location = "querystring".into();
+        let array = SchemaValue::new(SchemaKind::Array {
+            items: Box::new(SchemaValue::new(SchemaKind::Any)),
+        });
+        operation.request_body = Some(kaji_core::OperationRequestBody {
+            required: true,
+            description: None,
+            media_types: vec![kaji_core::OperationMediaType {
+                content_type: "application/x-ndjson".into(),
+                schema: Some(array.clone()),
+            }],
+        });
+        operation.responses[0].media_types[0].content_type = "application/x-ndjson".into();
+        operation.responses[0].media_types[0].schema = Some(array);
+        api.operations.push(operation);
+        let mut params = Operation {
+            id: "jsonParameters".into(),
+            method: kaji_core::HttpMethod::Get,
+            path: "/params/{path}".into(),
+            ..Default::default()
+        };
+        for (name, location) in [
+            ("path", "path"),
+            ("filter", "query"),
+            ("x-json", "header"),
+            ("cookie", "cookie"),
+        ] {
+            let mut parameter = kaji_core::OperationParameter {
+                name: name.into(),
+                location: location.into(),
+                required: true,
+                schema: Some(SchemaValue::new(SchemaKind::String)),
+                description: None,
+                annotations: Default::default(),
+            };
+            parameter.annotations.insert("kaji.parameter_content".into(),serde_json::json!([{"content_type":"application/json","schema_definition":{"type":"string"}}]));
+            params.parameters.push(parameter);
+        }
+        api.operations.push(params);
+        render(&api, "sdk", Some("Enums"), SdkClientStyle::Flat, true)
             .unwrap()
             .write_to(root.path())
             .unwrap();
@@ -135,6 +194,8 @@ import FoundationNetworking
 #endif
 struct Driver: KajiTransport {
  func execute(_ request:URLRequest) async throws -> (Data,URLResponse) {
+  if request.url!.path.hasPrefix("/params/"){let components=URLComponents(url:request.url!,resolvingAgainstBaseURL:false)!;precondition(components.percentEncodedPath=="/params/%22hello%20world%22");precondition(components.percentEncodedQuery=="filter=%22query%22");precondition(request.value(forHTTPHeaderField:"x-json")=="\"header\"");precondition(request.value(forHTTPHeaderField:"Cookie")=="cookie=%22cookie%22");return(Data(),HTTPURLResponse(url:request.url!,statusCode:204,httpVersion:nil,headerFields:nil)!)}
+  if request.url!.path=="/sequence" {precondition(URLComponents(url:request.url!,resolvingAgainstBaseURL:false)!.percentEncodedQuery=="zero=0&false=false&name=%E9%9B%AA");precondition(request.value(forHTTPHeaderField:"Content-Type")=="application/x-ndjson");precondition(String(data:request.httpBody!,encoding:.utf8)!.hasPrefix("false\n0\nnull\n"));return (request.httpBody!,HTTPURLResponse(url:request.url!,statusCode:200,httpVersion:nil,headerFields:["Content-Type":"application/x-ndjson"])!)}
   precondition(URLComponents(url:request.url!,resolvingAgainstBaseURL:false)!.queryItems!.first!.value=="future 雪")
   return (Data("\"future 雪\"".utf8),HTTPURLResponse(url:request.url!,statusCode:200,httpVersion:nil,headerFields:nil)!)
  }
@@ -144,9 +205,23 @@ struct Driver: KajiTransport {
  precondition(State.inProgress.rawValue=="in-progress")
  let unknown=try decoder.decode(State.self,from:Data("\"future 雪\"".utf8))
  precondition(unknown.rawValue=="future 雪")
+ for wire in ["{}", "{\"state\":null}", "{\"state\":\"future 雪\",\"extra\":{\"unknown\":[false,0,null]}}"] {
+  let data=Data(wire.utf8);let envelope=try decoder.decode(Envelope.self,from:data)
+  let before=try JSONSerialization.jsonObject(with:data) as! NSDictionary
+  let after=try JSONSerialization.jsonObject(with:encoder.encode(envelope)) as! NSDictionary
+  precondition(before==after)
+ }
  let roundtrip=try decoder.decode(State.self,from:encoder.encode(unknown));precondition(roundtrip==unknown)
  let client=KajiClient(options:.init(baseURL:URL(string:"https://example.test")!),transport:Driver())
  let result=try await client.getState(state:unknown);precondition(result==unknown)
+ let records: [JSONValue]=[.bool(false),.integer(0),.null,.object(["future":.string("雪")])]
+ try await client.jsonParameters(path:"hello world",filter:"query",xJson:"header",cookie:"cookie")
+ let sequenceResult=try await client.sequence(wholeQuery:"zero=0&false=false&name=%E9%9B%AA",body:records);precondition(sequenceResult==records)
+ for media in ["application/x-ndjson","application/json-seq"] {let encoded=try client.encodeSequentialJSON(records,media:media);let normalized=try client.normalizeSequentialJSON(encoded,contentType:media);let decoded=try decoder.decode([JSONValue].self,from:normalized);precondition(decoded==records)}
+ for invalid in ["missing separator","\u{1e}\u{1e}0","\u{1e}0 trailing"] {do{_ = try client.normalizeSequentialJSON(Data(invalid.utf8),contentType:"application/json-seq");fatalError("invalid sequence accepted")}catch{}}
+ var request=URLRequest(url:URL(string:"https://example.test/query")!);try client.applyWholeQuery(&request,raw:"zero=0&false=false&name=%E9%9B%AA");precondition(request.url!.absoluteString=="https://example.test/query?zero=0&false=false&name=%E9%9B%AA")
+ for invalid in ["?a=1","a=#fragment","a=%ZZ","a=%","a=\n"] {do{try client.applyWholeQuery(&request,raw:invalid);fatalError("invalid query accepted")}catch{}}
+
  do {_ = try decoder.decode(State.self,from:Data("123".utf8));fatalError("accepted number")}catch {}
 }}
 "#).unwrap();

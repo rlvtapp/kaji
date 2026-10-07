@@ -240,7 +240,9 @@ func (client *Client) doWithRetry(request *http.Request, destination any) error 
 				*textDestination = string(body)
 				return nil
 			}
-			if err := client.decodeResponse(response.Body, destination); err != nil {
+			decode := client.decodeResponse
+			if kajiSequentialMedia(response.Header.Get("Content-Type")) {decode=func(body io.Reader,destination any) error {return client.decodeSequentialResponse(body,response.Header.Get("Content-Type"),destination)}}
+			if err := decode(response.Body, destination); err != nil {
 				result := fmt.Errorf("kaji: decode response: %w", err)
 				client.onError(requestInfo, result)
 				return result

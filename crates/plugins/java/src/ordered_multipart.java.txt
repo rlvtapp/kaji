@@ -1,0 +1,37 @@
+package __PACKAGE__;
+import java.util.*;
+import java.nio.charset.StandardCharsets;
+import java.io.ByteArrayOutputStream;
+import com.fasterxml.jackson.databind.*;
+/** Explicit ordered MIME parts for positional and recursively nested multipart contracts. */
+public final class OrderedMultipart {
+ public record Part(String name,byte[] bytes,String contentType,String filename,Map<String,String> headers,List<Part> nested) {
+  public Part {name=MultipartBody.headerParameter(name);bytes=bytes==null?new byte[0]:bytes.clone();headers=headers==null?Map.of():Map.copyOf(headers);nested=nested==null?null:List.copyOf(nested);if(filename!=null)MultipartBody.headerParameter(filename);if(contentType!=null)MultipartBody.mediaType(contentType);}
+  @Override public byte[] bytes(){return bytes.clone();}
+  public static Part bytes(String name,byte[] bytes,String type){return new Part(name,bytes,type,null,Map.of(),null);}
+  public static Part json(String name,Object value){return bytes(name,MultipartBody.json(value).getBytes(StandardCharsets.UTF_8),"application/json");}
+  public static Part nested(String name,List<Part> parts){return new Part(name,null,"multipart/mixed",null,Map.of(),parts);}
+ }
+ public static MultipartBody.Encoded encode(List<Part> parts,String definition){try{return encode(parts,new ObjectMapper().readTree(definition),0);}catch(java.io.IOException error){throw new IllegalArgumentException("Invalid generated multipart plan",error);}}
+ private static MultipartBody.Encoded encode(List<Part> parts,JsonNode plan,int depth){
+  if(depth>16||parts.size()>10000)throw new IllegalArgumentException("Multipart depth/part limit exceeded");
+  var media=plan.path("content_type").asText(plan.path("contentType").asText("multipart/form-data"));MultipartBody.mediaType(media);if(!media.startsWith("multipart/"))throw new IllegalArgumentException("Multipart media required");
+  var boundary="kaji-"+UUID.randomUUID();var output=new ByteArrayOutputStream();
+  for(int i=0;i<parts.size();i++){
+   var part=parts.get(i);var prefix=plan.has("prefix_encoding")?plan.path("prefix_encoding"):plan.path("prefixEncoding");
+   JsonNode encoding=prefix.has(i)?prefix.get(i):(plan.has("item_encoding")?plan.get("item_encoding"):plan.has("itemEncoding")?plan.get("itemEncoding"):plan.path("encoding").path(part.name()));
+   var type=encoding.path("contentType").asText(part.contentType()==null?"application/octet-stream":part.contentType());byte[] bytes=part.bytes();
+   if(part.nested()!=null){var nested=encoding.isObject()?encoding.deepCopy():new ObjectMapper().createObjectNode();((com.fasterxml.jackson.databind.node.ObjectNode)nested).put("contentType",type);var encoded=encode(part.nested(),nested,depth+1);type=encoded.contentType();bytes=encoded.bytes();}
+   var headers=new LinkedHashMap<>(part.headers());var fields=encoding.path("headers").fields();
+   while(fields.hasNext()){var header=fields.next();var name=header.getKey();var value=header.getValue();if(name.equalsIgnoreCase("Content-Type"))continue;
+    if(headers.keySet().stream().noneMatch(key->key.equalsIgnoreCase(name))){if(value.has("example_json")){try{var sample=new ObjectMapper().readTree(value.get("example_json").asText());headers.put(name,sample.isTextual()?sample.asText():sample.toString());}catch(Exception error){throw new IllegalArgumentException("Invalid header sample",error);}}else if(value.path("required").asBoolean())throw new IllegalArgumentException("Missing required part header: "+name);}}
+   var head="--"+boundary+"\r\nContent-Disposition: "+(media.equals("multipart/form-data")?"form-data":"attachment")+"; name=\""+MultipartBody.quote(part.name())+"\"";
+   if(part.filename()!=null)head+="; filename=\""+MultipartBody.quote(part.filename())+"\"";
+   if(type.chars().anyMatch(c->c<32||c==127))throw new IllegalArgumentException("Invalid part media");head+="\r\nContent-Type: "+type+"\r\n";
+   if(headers.size()>64)throw new IllegalArgumentException("Part header limit exceeded");for(var header:headers.entrySet()){if(!header.getKey().matches("[A-Za-z0-9!#$%&'*+.^_`|~-]+")||header.getValue().length()>8192||header.getValue().chars().anyMatch(c->c<32||c==127)||header.getKey().equalsIgnoreCase("Content-Type")||header.getKey().equalsIgnoreCase("Content-Disposition"))throw new IllegalArgumentException("Invalid part header");head+=header.getKey()+": "+header.getValue()+"\r\n";}
+   if((long)output.size()+head.getBytes(StandardCharsets.UTF_8).length+bytes.length+boundary.length()+16>64L*1024*1024)throw new IllegalArgumentException("Multipart exceeds 64MiB");
+   output.writeBytes((head+"\r\n").getBytes(StandardCharsets.UTF_8));output.writeBytes(bytes);output.writeBytes(new byte[]{13,10});
+  }
+  output.writeBytes(("--"+boundary+"--\r\n").getBytes(StandardCharsets.US_ASCII));return new MultipartBody.Encoded(media+"; boundary="+boundary,output.toByteArray());
+ }
+}

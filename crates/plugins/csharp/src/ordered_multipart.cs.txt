@@ -1,0 +1,39 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
+namespace __NAMESPACE__;
+/// <summary>Explicit ordered buffered MIME parts with recursive nested bodies.</summary>
+public sealed record OrderedMultipartPart {
+ public required string Name {get;init;}
+ public byte[] Bytes {get;init;}=[];
+ public string ContentType {get;init;}="application/octet-stream";
+ public string? FileName {get;init;}
+ public IReadOnlyDictionary<string,string>? Headers {get;init;}
+ public IReadOnlyList<OrderedMultipartPart>? Nested {get;init;}
+ public static OrderedMultipartPart Json(string name,object? value)=>new(){Name=name,Bytes=JsonSerializer.SerializeToUtf8Bytes(value),ContentType="application/json"};
+}
+public static class OrderedMultipart {
+ public static HttpContent Encode(IReadOnlyList<OrderedMultipartPart> parts,string definition){using var doc=JsonDocument.Parse(definition);return Encode(parts,doc.RootElement,0);}
+ private static string Text(JsonElement value,string key,string fallback)=>value.ValueKind==JsonValueKind.Object&&value.TryGetProperty(key,out var item)&&item.ValueKind==JsonValueKind.String?item.GetString()!:fallback;
+ private static JsonElement Property(JsonElement value,string key)=>value.ValueKind==JsonValueKind.Object&&value.TryGetProperty(key,out var item)?item:default;
+ private static HttpContent Encode(IReadOnlyList<OrderedMultipartPart> parts,JsonElement plan,int depth){
+  if(depth>16||parts.Count>10000)throw new ArgumentException("Multipart depth/part limit exceeded");
+  var media=Text(plan,"content_type",Text(plan,"contentType","multipart/form-data"));if(!media.StartsWith("multipart/",StringComparison.Ordinal)||!System.Text.RegularExpressions.Regex.IsMatch(media,"^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+$"))throw new ArgumentException("Invalid multipart media");
+  var content=new MultipartContent(media[10..],"kaji-"+Guid.NewGuid().ToString("N"));long size=0;
+  for(var i=0;i<parts.Count;i++){
+   var part=parts[i];if(string.IsNullOrEmpty(part.Name)||part.Name.Any(c=>c<32||c==127||c=='"'||c=='\\'))throw new ArgumentException("Invalid part name");
+   var prefix=Property(plan,"prefix_encoding");if(prefix.ValueKind!=JsonValueKind.Array)prefix=Property(plan,"prefixEncoding");var encoding=prefix.ValueKind==JsonValueKind.Array&&i<prefix.GetArrayLength()?prefix[i]:Property(plan,"item_encoding");if(encoding.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)encoding=Property(plan,"itemEncoding");if(encoding.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)encoding=Property(Property(plan,"encoding"),part.Name);
+   var type=Text(encoding,"contentType",part.ContentType);HttpContent value;
+   if(part.Nested is not null){var node=encoding.ValueKind==JsonValueKind.Object?System.Text.Json.Nodes.JsonNode.Parse(encoding.GetRawText())!:new System.Text.Json.Nodes.JsonObject();node["contentType"]=type;using var nested=JsonDocument.Parse(node.ToJsonString());value=Encode(part.Nested,nested.RootElement,depth+1);}else{value=new ByteArrayContent((byte[])part.Bytes.Clone());value.Headers.ContentType=MediaTypeHeaderValue.Parse(type);}
+   var disposition=new ContentDispositionHeaderValue(media=="multipart/form-data"?"form-data":"attachment"){Name="\""+part.Name+"\""};if(part.FileName is not null){if(part.FileName.Any(c=>c<32||c==127||c=='"'||c=='\\'))throw new ArgumentException("Invalid filename");disposition.FileName="\""+part.FileName+"\"";}value.Headers.ContentDisposition=disposition;
+   var headers=part.Headers is null?new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase):new Dictionary<string,string>(part.Headers,StringComparer.OrdinalIgnoreCase);var declared=Property(encoding,"headers");if(declared.ValueKind==JsonValueKind.Object)foreach(var header in declared.EnumerateObject()){if(header.Name.Equals("Content-Type",StringComparison.OrdinalIgnoreCase))continue;if(!headers.ContainsKey(header.Name)){var example=Text(header.Value,"example_json","");if(example.Length>0){using var sample=JsonDocument.Parse(example);headers[header.Name]=sample.RootElement.ValueKind==JsonValueKind.String?sample.RootElement.GetString()!:sample.RootElement.GetRawText();}else if(Property(header.Value,"required").ValueKind==JsonValueKind.True)throw new ArgumentException("Missing required part header");}}
+   if(headers.Count>64)throw new ArgumentException("Part header limit exceeded");foreach(var header in headers){if(!System.Text.RegularExpressions.Regex.IsMatch(header.Key,"^[A-Za-z0-9!#$%&'*+.^_`|~-]+$")||header.Value.Length>8192||header.Value.Any(c=>c<32||c==127)||header.Key.Equals("Content-Type",StringComparison.OrdinalIgnoreCase)||header.Key.Equals("Content-Disposition",StringComparison.OrdinalIgnoreCase))throw new ArgumentException("Invalid part header");value.Headers.TryAddWithoutValidation(header.Key,header.Value);}
+   size+=value.ReadAsByteArrayAsync().GetAwaiter().GetResult().Length+value.Headers.ToString().Length+128;if(size>64L*1024*1024)throw new ArgumentException("Multipart exceeds 64MiB");content.Add(value);
+  }
+  var bytes=content.ReadAsByteArrayAsync().GetAwaiter().GetResult();if(bytes.Length>64L*1024*1024)throw new ArgumentException("Multipart exceeds 64MiB");var result=new ByteArrayContent(bytes);result.Headers.ContentType=content.Headers.ContentType;content.Dispose();return result;
+ }
+}

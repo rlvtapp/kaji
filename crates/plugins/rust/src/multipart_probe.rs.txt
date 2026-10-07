@@ -11,3 +11,26 @@
  let unsafe_driver=std::sync::Arc::new(Driver(std::sync::Mutex::new(Vec::new())));assert!(client.with_transport(unsafe_driver.clone()).post_upload(&body).await.is_err());assert_eq!(unsafe_driver.0.lock().unwrap().len(),1);
  }
 }
+
+#[cfg(test)] mod oas_wire_probe {
+ use super::*;use crate::transport::{Transport,TransportFuture};
+ struct SequenceDriver;
+ impl Transport for SequenceDriver {fn execute(&self,request:reqwest::Request)->TransportFuture<'_>{
+  assert_eq!(request.url().query(),Some("zero=0&false=false&name=%E9%9B%AA"));assert_eq!(request.headers()["content-type"],"application/x-ndjson");
+  let bytes=request.body().unwrap().as_bytes().unwrap().to_vec();let value:serde_json::Value=kaji_decode_json(&bytes,"application/x-ndjson").unwrap();assert_eq!(value,serde_json::json!([false,0,null,{"future":"雪"}]));
+  Box::pin(async move{Ok(http::Response::builder().status(200).header("content-type","application/x-ndjson").body(reqwest::Body::from(bytes)).unwrap().into())})
+ }}
+ #[tokio::test]async fn sequence_operation_wire(){let records=serde_json::json!([false,0,null,{"future":"雪"}]).as_array().unwrap().clone();let client=Client::new("https://api.test").with_transport(std::sync::Arc::new(SequenceDriver));let result=client.sequence(crate::client::operations::SequenceRequest{whole_query:"zero=0&false=false&name=%E9%9B%AA".into()},&records).await.unwrap();assert_eq!(result,records);}
+ #[test]fn nested_positional_plan(){
+  let mut inner=MultipartBody::new();inner.add_text("child","false").unwrap();let mut outer=MultipartBody::new();outer.add_json("metadata",&serde_json::json!({"future":"雪"})).unwrap().add_nested("nested",inner).unwrap().add_file("file","blob.bin","application/octet-stream",[0,255]).unwrap();
+  let plan=serde_json::json!({"content_type":"multipart/mixed","prefix_encoding":[{"contentType":"application/json","headers":{"X-Part":{"required":true,"example_json":"\"v1\""}}},{"contentType":"multipart/mixed","prefixEncoding":[{"contentType":"text/plain","headers":{"X-Child":{"required":true,"example_json":"\"child\""}}}]}],"item_encoding":{"contentType":"application/octet-stream"}});
+  let(media,bytes)=outer.encoded_with_plan(&plan).unwrap();assert!(media.starts_with("multipart/mixed"));let text=String::from_utf8_lossy(&bytes);assert!(text.contains("X-Part: v1"));assert!(text.contains("X-Child: child"));assert!(text.contains("Content-Disposition: attachment"));assert!(bytes.windows(2).any(|part|part==[0,255]));assert_eq!(outer.encoded_with_plan(&plan).unwrap(),(media,bytes));
+ }
+}
+
+#[cfg(test)]mod content_parameter_probe {
+ use super::*;use crate::transport::{Transport,TransportFuture};
+ struct Driver;
+ impl Transport for Driver {fn execute(&self,request:reqwest::Request)->TransportFuture<'_>{assert_eq!(request.url().path(),"/params/%22hello%20world%22");assert_eq!(request.url().query(),Some("filter=%22query%22"));assert_eq!(request.headers()["x-json"],"\"header\"");assert_eq!(request.headers()["cookie"],"cookie=%22cookie%22");Box::pin(async{Ok(http::Response::builder().status(204).body(reqwest::Body::from("")).unwrap().into())})}}
+ #[tokio::test]async fn typed_json_parameters(){let client=Client::new("https://api.test").with_transport(std::sync::Arc::new(Driver));client.json_parameters(crate::client::operations::JsonParametersRequest{path:"hello world".into(),filter:"query".into(),x_json:"header".into(),cookie:"cookie".into()}).await.unwrap();}
+}

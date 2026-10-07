@@ -95,7 +95,14 @@ class AsyncBaseClient(BaseClient):
                 body_kind = 'multipart'
             elif body_kind.endswith('_or_multipart'):
                 body_kind = body_kind.removesuffix('_or_multipart')
-            if body_kind == 'binary':
+            if body_kind in ('json-seq', 'ndjson', 'application/json-seq', 'application/x-ndjson', 'application/ndjson', 'application/jsonl'):
+                import json
+                value = to_wire(body)
+                if not isinstance(value, list):
+                    raise TypeError('Sequential JSON request bodies must serialize to a list')
+                request_headers.setdefault('Content-Type', body_kind if body_kind.startswith('application/') else 'application/json-seq' if body_kind == 'json-seq' else 'application/x-ndjson')
+                options['content'] = ''.join(('\x1e' if body_kind in ('json-seq', 'application/json-seq') else '') + json.dumps(item, allow_nan=False) + '\n' for item in value).encode('utf-8')
+            elif body_kind == 'binary':
                 if not isinstance(body, (bytes, bytearray, memoryview)):
                     raise TypeError('binary request bodies must be bytes-like')
                 options['content'] = bytes(body)
@@ -157,8 +164,8 @@ class AsyncBaseClient(BaseClient):
             try:
                 raw = await response.aread()
                 content_type = response.headers.get('content-type', '').split(';')[0].strip().lower()
-                from .response_validation import decode_json
-                decoded = decode_json(raw, self.validate_responses) if raw and (content_type == 'application/json' or content_type.endswith('+json')) else raw or None
+                from .response_validation import decode_json, decode_sequence
+                decoded = decode_sequence(raw, content_type, self.validate_responses) if raw and content_type in ('application/json-seq', 'application/x-ndjson', 'application/ndjson', 'application/jsonl') else decode_json(raw, self.validate_responses) if raw and (content_type == 'application/json' or content_type.endswith('+json')) else raw or None
                 if response.status_code >= 400:
                     error_type, body_type = (error_types or {}).get(response.status_code, (ApiError, None))
                     if body_type is not None and isinstance(decoded, dict):

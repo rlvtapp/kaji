@@ -1,29 +1,60 @@
-/// Buffered multipart input. Add repeated names for arrays; JSON parts use application/json.
+/// Ordered buffered multipart input. Nested bodies and explicit headers retain wire order.
 #[derive(Clone, Debug)]
-pub struct MultipartBody { boundary: String, bytes: Vec<u8> }
+pub struct MultipartBody { boundary: String, parts: Vec<MultipartPart> }
+#[derive(Clone, Debug)]
+struct MultipartPart {name:String,filename:Option<String>,content_type:String,headers:std::collections::BTreeMap<String,String>,body:MultipartPartBody}
+#[derive(Clone, Debug)]
+enum MultipartPartBody { Bytes(Vec<u8>), Nested(MultipartBody) }
 #[derive(Clone, Copy, Debug)]
 pub struct MultipartBodyError;
-impl std::fmt::Display for MultipartBodyError { fn fmt(&self,f:&mut std::fmt::Formatter<'_>)->std::fmt::Result { f.write_str("invalid multipart part or body exceeds 64 MiB") } }
+impl std::fmt::Display for MultipartBodyError {fn fmt(&self,f:&mut std::fmt::Formatter<'_>)->std::fmt::Result{f.write_str("invalid multipart plan, part, or body exceeds 64MiB")}}
 impl std::error::Error for MultipartBodyError {}
-impl Default for MultipartBody { fn default()->Self { Self::new() } }
+impl Default for MultipartBody {fn default()->Self{Self::new()}}
 impl MultipartBody {
-    pub fn new()->Self {
-        static SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let stamp=std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos();
-        Self { boundary:format!("kaji-{stamp:x}-{:x}",SEQUENCE.fetch_add(1,std::sync::atomic::Ordering::Relaxed)),bytes:Vec::new() }
-    }
-    pub fn add_text(&mut self,name:&str,value:impl AsRef<str>)->Result<&mut Self,MultipartBodyError> { self.add_part(name,None,"text/plain; charset=utf-8",value.as_ref().as_bytes()) }
-    pub fn add_file(&mut self,name:&str,filename:&str,content_type:&str,value:impl AsRef<[u8]>)->Result<&mut Self,MultipartBodyError> { self.add_part(name,Some(filename),content_type,value.as_ref()) }
-    pub fn add_json<T:serde::Serialize>(&mut self,name:&str,value:&T)->Result<&mut Self,MultipartBodyError> { let data=serde_json::to_vec(value).map_err(|_|MultipartBodyError)?; self.add_part(name,None,"application/json",&data) }
-    pub fn add_part(&mut self,name:&str,filename:Option<&str>,content_type:&str,value:&[u8])->Result<&mut Self,MultipartBodyError> {
-        let valid=|v:&str| !v.is_empty() && !v.chars().any(|c|c.is_control()||c=='"'||c=='\\');
-        if !valid(name)||filename.is_some_and(|f|!valid(f))||!valid(content_type)||!content_type.is_ascii() { return Err(MultipartBodyError) }
-        let mut head=format!("--{}\r\nContent-Disposition: form-data; name=\"{}\"",self.boundary,name);
-        if let Some(filename)=filename { head.push_str(&format!("; filename=\"{filename}\"")); }
-        head.push_str(&format!("\r\nContent-Type: {content_type}\r\n\r\n"));
-        if self.bytes.len().saturating_add(head.len()).saturating_add(value.len()).saturating_add(self.boundary.len()+10)>64*1024*1024 { return Err(MultipartBodyError) }
-        self.bytes.extend_from_slice(head.as_bytes());self.bytes.extend_from_slice(value);self.bytes.extend_from_slice(b"\r\n");Ok(self)
-    }
-    #[allow(dead_code)]
-    fn encoded(&self)->(String,Vec<u8>) { let mut bytes=self.bytes.clone();bytes.extend_from_slice(format!("--{}--\r\n",self.boundary).as_bytes());(format!("multipart/form-data; boundary={}",self.boundary),bytes) }
+ pub fn new()->Self {static SEQUENCE:std::sync::atomic::AtomicU64=std::sync::atomic::AtomicU64::new(0);let stamp=std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos();Self{boundary:format!("kaji-{stamp:x}-{:x}",SEQUENCE.fetch_add(1,std::sync::atomic::Ordering::Relaxed)),parts:Vec::new()}}
+ pub fn add_text(&mut self,name:&str,value:impl AsRef<str>)->Result<&mut Self,MultipartBodyError>{self.add_part(name,None,"text/plain; charset=utf-8",value.as_ref().as_bytes())}
+ pub fn add_file(&mut self,name:&str,filename:&str,content_type:&str,value:impl AsRef<[u8]>)->Result<&mut Self,MultipartBodyError>{self.add_part(name,Some(filename),content_type,value.as_ref())}
+ pub fn add_json<T:serde::Serialize>(&mut self,name:&str,value:&T)->Result<&mut Self,MultipartBodyError>{let data=serde_json::to_vec(value).map_err(|_|MultipartBodyError)?;self.add_part(name,None,"application/json",&data)}
+ pub fn add_part(&mut self,name:&str,filename:Option<&str>,content_type:&str,value:&[u8])->Result<&mut Self,MultipartBodyError>{self.add_part_with_headers(name,filename,content_type,value,std::collections::BTreeMap::new())}
+ pub fn add_part_with_headers(&mut self,name:&str,filename:Option<&str>,content_type:&str,value:&[u8],headers:std::collections::BTreeMap<String,String>)->Result<&mut Self,MultipartBodyError>{
+  let part=MultipartPart{name:name.into(),filename:filename.map(str::to_owned),content_type:content_type.into(),headers,body:MultipartPartBody::Bytes(value.to_vec())};self.push(part)
+ }
+ pub fn add_nested(&mut self,name:&str,value:MultipartBody)->Result<&mut Self,MultipartBodyError>{self.push(MultipartPart{name:name.into(),filename:None,content_type:"multipart/mixed".into(),headers:Default::default(),body:MultipartPartBody::Nested(value)})}
+ fn push(&mut self,part:MultipartPart)->Result<&mut Self,MultipartBodyError>{
+  if self.parts.len()>=10000||!kaji_part_token(&part.name)||part.filename.as_deref().is_some_and(|f|!kaji_part_token(f))||!kaji_part_token(&part.content_type)||!part.content_type.is_ascii()||part.headers.len()>64{return Err(MultipartBodyError)}
+  for (key,value) in &part.headers {if key.is_empty()||!key.bytes().all(|b|b.is_ascii_alphanumeric()||b"!#$%&'*+-.^_`|~".contains(&b))||matches!(key.to_ascii_lowercase().as_str(),"content-type"|"content-disposition")||value.chars().any(|c|c.is_control())||value.len()>8192{return Err(MultipartBodyError)}}
+  self.parts.push(part);if self.encode_plan(&serde_json::Value::Null,0).is_err(){self.parts.pop();return Err(MultipartBodyError)}Ok(self)
+ }
+ #[allow(dead_code)] fn encoded(&self)->(String,Vec<u8>){self.encode_plan(&serde_json::Value::Null,0).expect("validated multipart input")}
+ #[allow(dead_code)] fn encoded_with_plan(&self,plan:&serde_json::Value)->Result<(String,Vec<u8>),MultipartBodyError>{self.encode_plan(plan,0)}
+ fn encode_plan(&self,plan:&serde_json::Value,depth:usize)->Result<(String,Vec<u8>),MultipartBodyError>{
+  if depth>16{return Err(MultipartBodyError)}
+  let media=plan.get("content_type").or_else(||plan.get("contentType")).and_then(|v|v.as_str()).unwrap_or("multipart/form-data");
+  if !media.starts_with("multipart/")||!kaji_part_token(media)||!media.is_ascii(){return Err(MultipartBodyError)}
+  let mut bytes=Vec::new();
+  for(index,part)in self.parts.iter().enumerate(){
+   let encoding=plan.get("prefix_encoding").or_else(||plan.get("prefixEncoding")).and_then(|v|v.get(index)).or_else(||plan.get("item_encoding")).or_else(||plan.get("itemEncoding")).or_else(||plan.get("encoding").and_then(|v|v.get(&part.name))).unwrap_or(&serde_json::Value::Null);
+   let declared=encoding.get("contentType").and_then(|v|v.as_str());
+   let (content_type,data)=match &part.body {
+    MultipartPartBody::Bytes(bytes)=>(declared.unwrap_or(&part.content_type).to_owned(),bytes.clone()),
+    MultipartPartBody::Nested(nested)=>{let mut nested_plan=encoding.clone();if !nested_plan.is_object(){nested_plan=serde_json::json!({})}nested_plan["contentType"]=serde_json::json!(declared.unwrap_or("multipart/mixed"));nested.encode_plan(&nested_plan,depth+1)?}
+   };
+   if !kaji_part_token(&content_type)||!content_type.is_ascii(){return Err(MultipartBodyError)}
+   let mut headers=part.headers.clone();
+   if let Some(declarations)=encoding.get("headers").and_then(|v|v.as_object()){for(name,definition)in declarations {
+    if name.eq_ignore_ascii_case("Content-Type"){continue}
+    if !headers.keys().any(|key|key.eq_ignore_ascii_case(name)){if let Some(example)=definition.get("example_json").and_then(|v|v.as_str()){let value:serde_json::Value=serde_json::from_str(example).map_err(|_|MultipartBodyError)?;headers.insert(name.clone(),value.as_str().map(str::to_owned).unwrap_or_else(||value.to_string()));}else if definition.get("required").and_then(|v|v.as_bool())==Some(true){return Err(MultipartBodyError)}}
+   }}
+   let mut head=format!("--{}\r\nContent-Disposition: {}; name=\"{}\"",self.boundary,if media=="multipart/form-data"{"form-data"}else{"attachment"},part.name);
+   if let Some(filename)=&part.filename{head.push_str(&format!("; filename=\"{filename}\""))}
+   head.push_str(&format!("\r\nContent-Type: {content_type}\r\n"));
+   if headers.len()>64{return Err(MultipartBodyError)}
+   for(name,value)in headers{if value.len()>8192||name.len()>256||name.is_empty()||!name.bytes().all(|b|b.is_ascii_alphanumeric()||b"!#$%&'*+-.^_`|~".contains(&b))||value.chars().any(|c|c.is_control())||matches!(name.to_ascii_lowercase().as_str(),"content-type"|"content-disposition"){return Err(MultipartBodyError)}head.push_str(&format!("{name}: {value}\r\n"))}
+   head.push_str("\r\n");
+   if bytes.len().saturating_add(head.len()).saturating_add(data.len()).saturating_add(self.boundary.len()+10)>64*1024*1024{return Err(MultipartBodyError)}
+   bytes.extend_from_slice(head.as_bytes());bytes.extend_from_slice(&data);bytes.extend_from_slice(b"\r\n");
+  }
+  bytes.extend_from_slice(format!("--{}--\r\n",self.boundary).as_bytes());Ok((format!("{media}; boundary={}",self.boundary),bytes))
+ }
 }
+fn kaji_part_token(value:&str)->bool{!value.is_empty()&&value.len()<=8192&&!value.chars().any(|c|c.is_control()||c=='"'||c=='\\')}

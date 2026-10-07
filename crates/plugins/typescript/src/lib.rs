@@ -658,3 +658,6 @@ console.log(rawData, fullData, errorOrSuccess, incorrect);
 mod idempotency_tests;
 #[cfg(test)]
 mod middleware_tests;
+
+#[cfg(test)]
+mod openapi32;

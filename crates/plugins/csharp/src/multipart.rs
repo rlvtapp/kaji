@@ -9,6 +9,45 @@ pub(crate) fn selected(operation: &Operation) -> bool {
         })
     })
 }
+fn ordered_plan(operation: &Operation) -> Option<serde_json::Value> {
+    let content = kaji_core::openapi32::request_content(operation)
+        .ok()
+        .and_then(|definitions| {
+            definitions
+                .into_iter()
+                .find(|item| item.content_type.starts_with("multipart/"))
+        });
+    let media = operation
+        .request_body
+        .as_ref()?
+        .media_types
+        .iter()
+        .find(|media| media.content_type.starts_with("multipart/"))?;
+    fn advanced(encoding: &kaji_core::openapi32::Encoding) -> bool {
+        !encoding.headers.is_empty()
+            || !encoding.encoding.is_empty()
+            || !encoding.prefix_encoding.is_empty()
+            || encoding.item_encoding.is_some()
+    }
+    let needed = media.content_type != "multipart/form-data"
+        || media
+            .schema
+            .as_ref()
+            .is_some_and(|schema| matches!(schema.kind, SchemaKind::Array { .. }))
+        || content.as_ref().is_some_and(|item| {
+            !item.prefix_encoding.is_empty()
+                || item.item_encoding.is_some()
+                || item.encoding.values().any(advanced)
+        });
+    if !needed {
+        return None;
+    }
+    Some(
+        content
+            .and_then(|item| serde_json::to_value(item).ok())
+            .unwrap_or_else(|| serde_json::json!({"content_type":media.content_type})),
+    )
+}
 pub(crate) fn body_name(operation: &Operation) -> String {
     let name = format!("{}MultipartBody", pascal_case(&operation.id));
     let collision=operation.request_body.as_ref().is_some_and(|body|body.media_types.iter().filter_map(|media|media.schema.as_ref()).any(|value|matches!(&value.kind,SchemaKind::Reference{reference} if pascal_case(reference.rsplit('/').next().unwrap_or(reference))==name)));
@@ -148,7 +187,9 @@ fn fields(api: &Api, operation: &Operation) -> Result<Vec<kaji_core::Field>> {
 }
 pub(crate) fn validate(api: &Api) -> Result<()> {
     for op in api.operations.iter().filter(|op| selected(op)) {
-        fields(api, op)?;
+        if ordered_plan(op).is_none() {
+            fields(api, op)?;
+        }
     }
     Ok(())
 }
@@ -257,8 +298,17 @@ pub(crate) fn emit(api: &Api, root: &str, namespace: &str, tree: &mut GeneratedT
         output_path(root, "MultipartFile.cs"),
         include_str!("multipart.cs.txt").replace("__NAMESPACE__", namespace),
     )?)?;
+    tree.insert(GeneratedFile::new(
+        output_path(root, "OrderedMultipart.cs"),
+        include_str!("ordered_multipart.cs.txt").replace("__NAMESPACE__", namespace),
+    )?)?;
     for op in api.operations.iter().filter(|op| selected(op)) {
         let name = body_name(op);
+        if let Some(plan) = ordered_plan(op) {
+            let definition = serde_json::to_string(&plan)?;
+            tree.insert(GeneratedFile::new(output_path(root,&format!("{name}.cs")),format!("namespace {namespace};\npublic sealed record {name} {{public required System.Collections.Generic.IReadOnlyList<OrderedMultipartPart> Parts {{get;init;}} public System.Net.Http.HttpContent ToContent()=>OrderedMultipart.Encode(Parts,{definition:?});}}\n"))?)?;
+            continue;
+        }
         anyhow::ensure!(
             !api.schemas.iter().any(|s| pascal_case(&s.name) == name),
             "multipart body name collides with a schema"

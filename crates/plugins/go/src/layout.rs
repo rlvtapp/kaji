@@ -157,6 +157,7 @@ pub(super) fn emit(
         ("fmt", "fmt"),
         ("io", "io"),
         ("mime", "mime"),
+        ("sort", "sort"),
         ("multipart", "mime/multipart"),
         ("textproto", "net/textproto"),
         ("http", "net/http"),

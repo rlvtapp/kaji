@@ -265,7 +265,8 @@ fn has_multipart(operation: &Operation) -> bool {
                 .next()
                 .unwrap_or("")
                 .trim()
-                .eq_ignore_ascii_case("multipart/form-data")
+                .to_ascii_lowercase()
+                .starts_with("multipart/")
         })
     })
 }
@@ -317,6 +318,8 @@ fn render_runtime(api: &Api, package: &str, client_style: SdkClientStyle) -> Str
         output.push_str(PAGINATION_RUNTIME);
     }
     let mut output = add_retry_runtime(output);
+    output = output.replace("\t\"reflect\"\n", "\t\"reflect\"\n\t\"sort\"\n");
+    output.push_str(include_str!("openapi32_runtime.txt"));
     output = output
         .replace("HTTPClient   *http.Client", "HTTPClient   KajiHTTPClient")
         .replace("httpClient   *http.Client", "httpClient   KajiHTTPClient");
@@ -347,24 +350,32 @@ fn render_runtime(api: &Api, package: &str, client_style: SdkClientStyle) -> Str
         "\tapplyCallHeaders(request)\n\treturn request, nil\n}",
     );
     output.push_str(include_str!("go_call_options.txt"));
+    output = output.replace(
+        "\tvar reader io.Reader\n",
+        "\tvar reader io.Reader\n\tcontentType := \"application/json\"\n",
+    );
+    output = output.replace(
+        "encoded, err := json.Marshal(body)",
+        "encoded, selectedType, err := encodeKajiWireBody(body)",
+    );
+    output = output.replace(
+        "reader = bytes.NewReader(encoded)",
+        "reader = bytes.NewReader(encoded)\n\t\tcontentType = selectedType",
+    );
+    output = output.replace(
+        "request.Header.Set(\"Content-Type\", \"application/json\")",
+        "request.Header.Set(\"Content-Type\", contentType)",
+    );
     if api.operations.iter().any(has_multipart) {
-        output = output.replace(
-            "\tvar reader io.Reader\n",
-            "\tvar reader io.Reader\n\tcontentType := \"application/json\"\n",
-        );
-        output = output.replace(
-            "encoded, err := json.Marshal(body)",
-            "encoded, selectedType, err := encodeKajiBody(body)",
-        );
-        output = output.replace(
-            "reader = bytes.NewReader(encoded)",
-            "reader = bytes.NewReader(encoded)\n\t\tcontentType = selectedType",
-        );
-        output = output.replace(
-            "request.Header.Set(\"Content-Type\", \"application/json\")",
-            "request.Header.Set(\"Content-Type\", contentType)",
-        );
         output.push_str(include_str!("go_multipart_runtime.txt"));
+    }
+    output.push_str("\nfunc encodeKajiWireBody(body any) ([]byte,string,error) { if sequential,ok:=body.(kajiSequentialBody);ok {return encodeKajiSequential(sequential)}\n");
+    if api.operations.iter().any(has_multipart) {
+        output.push_str("return encodeKajiBody(body)\n}\n");
+    } else {
+        output.push_str(
+            "encoded,err:=json.Marshal(body);return encoded,\"application/json\",err\n}\n",
+        );
     }
     output = output.replace("ValidateResponses bool\n", "ValidateResponses bool\n\t// TokenProvider supplies managed bearer tokens; explicit Authorization wins.\n\tTokenProvider KajiTokenProvider\n");
     output = output.replace(
@@ -596,6 +607,22 @@ fn url_pagination(api: &Api, operation: &Operation) -> Option<GoUrlPagination> {
     })
 }
 
+fn sequential_media(content_type: &str) -> bool {
+    let media = content_type
+        .split(';')
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+    matches!(
+        media.as_str(),
+        "application/x-ndjson"
+            | "application/ndjson"
+            | "application/jsonl"
+            | "application/json-seq"
+    ) || media.ends_with("+json-seq")
+}
+
 fn operation_response_kind(operation: &Operation) -> GoResponseKind {
     let media = operation
         .responses
@@ -614,6 +641,9 @@ fn operation_response_kind(operation: &Operation) -> GoResponseKind {
             .unwrap_or(GoResponseKind::None);
     };
     let content_type = media.content_type.to_ascii_lowercase();
+    if content_type.starts_with("multipart/") {
+        return GoResponseKind::Binary;
+    }
     if content_type.starts_with("text/event-stream") {
         return GoResponseKind::EventStream;
     }
@@ -885,6 +915,13 @@ fn render_operation(output: &mut String, api: &Api, operation: &Operation) {
     }
     let _ = writeln!(output, "\tpath := {:?}", operation.path);
     output.push_str("\tquery := url.Values{}\n\theaders := http.Header{}\n");
+    if operation
+        .parameters
+        .iter()
+        .any(|p| p.location == "querystring")
+    {
+        output.push_str("\tvar wholeQuery string\n");
+    }
     for parameter in &operation.parameters {
         render_parameter_use(
             output,
@@ -920,10 +957,61 @@ fn render_operation(output: &mut String, api: &Api, operation: &Operation) {
         if has_multipart(operation) && !body_config.required {
             output.push_str("\tvar body any\n\tif input.Body != nil { body = input.Body }\n");
         } else {
-            output.push_str("\tbody := input.Body\n");
+            if body_config
+                .media_types
+                .first()
+                .is_some_and(|media| sequential_media(&media.content_type))
+            {
+                output.push_str("\tvar body any = input.Body\n");
+            } else {
+                output.push_str("\tbody := input.Body\n");
+            }
         }
     } else {
         output.push_str("\tvar body any\n");
+    }
+    if has_multipart(operation) {
+        let media = operation
+            .request_body
+            .as_ref()
+            .unwrap()
+            .media_types
+            .iter()
+            .find(|m| {
+                m.content_type
+                    .to_ascii_lowercase()
+                    .starts_with("multipart/")
+            })
+            .unwrap();
+        let metadata = kaji_core::openapi32::request_content(operation)
+            .expect("validated content metadata")
+            .into_iter()
+            .find(|m| m.content_type == media.content_type)
+            .unwrap_or_else(|| kaji_core::openapi32::ContentDefinition {
+                content_type: media.content_type.clone(),
+                ..Default::default()
+            });
+        let encoded = serde_json::to_string(&metadata).expect("typed multipart metadata");
+        let _ = writeln!(
+            output,
+            "\tif multipartBody, ok := any(body).(*KajiMultipartBody); ok && multipartBody != nil {{\n\t\tpreparedMultipart, preparationError := kajiDeclaredMultipart(multipartBody, {:?})\n\t\tif preparationError != nil {{",
+            encoded
+        );
+        render_error_return(output, &response_kind, "preparationError");
+        output.push_str("\t\t}\n\t\tbody = preparedMultipart\n\t}\n");
+    }
+    if let Some(media) = operation
+        .request_body
+        .as_ref()
+        .and_then(|b| b.media_types.first())
+    {
+        if sequential_media(&media.content_type) {
+            let _ = writeln!(
+                output,
+                "\tif body != nil {{ body = kajiSequentialBody{{ContentType:{:?},Value:body}} }}",
+                media.content_type
+            );
+        }
     }
     let _ = writeln!(
         output,
@@ -937,6 +1025,13 @@ fn render_operation(output: &mut String, api: &Api, operation: &Operation) {
         &operation_error_expression(operation, "err"),
     );
     output.push_str("\t}\n");
+    if operation
+        .parameters
+        .iter()
+        .any(|p| p.location == "querystring")
+    {
+        output.push_str("\trequest.URL.RawQuery = wholeQuery\n");
+    }
     if let Some(header) = idempotency
         .and_then(|rule| rule.get("header"))
         .and_then(serde_json::Value::as_str)
@@ -1334,6 +1429,49 @@ fn render_parameter_use(
     response_kind: &GoResponseKind,
 ) {
     let field = format!("input.{name}");
+    if parameter.location != "querystring" {
+        if let Some(content) = kaji_core::openapi32::parameter_content(parameter)
+            .expect("validated parameter content")
+            .first()
+        {
+            let value = format!("kajiContent{name}");
+            let present = format!("kajiPresent{name}");
+            let error = format!("kajiError{name}");
+            let _ = writeln!(
+                output,
+                "\t{value}, {present}, {error} := kajiParameterContent({field}, {:?})\n\tif {error} != nil {{",
+                content.content_type
+            );
+            render_error_return(output, response_kind, &error);
+            output.push_str("\t}\n");
+            let _ = writeln!(output, "\tif {present} {{");
+            match parameter.location.as_str() {
+                "query" => {
+                    let _ = writeln!(output, "\t\tquery.Add({:?}, {value})", parameter.name);
+                }
+                "path" => {
+                    let _ = writeln!(
+                        output,
+                        "\t\tpath = strings.ReplaceAll(path, {:?}, url.PathEscape({value}))",
+                        format!("{{{}}}", parameter.name)
+                    );
+                }
+                "header" => {
+                    let _ = writeln!(output, "\t\theaders.Set({:?}, {value})", parameter.name);
+                }
+                "cookie" => {
+                    let _ = writeln!(
+                        output,
+                        "\t\theaders.Add(\"Cookie\", {:?} + \"=\" + strings.ReplaceAll(url.QueryEscape({value}), \"+\", \"%20\"))",
+                        parameter.name
+                    );
+                }
+                _ => {}
+            }
+            output.push_str("\t}\n");
+            return;
+        }
+    }
     match parameter.location.as_str() {
         "path" => {
             let _ = writeln!(
@@ -1341,6 +1479,24 @@ fn render_parameter_use(
                 "\tpath = strings.ReplaceAll(path, {:?}, url.PathEscape(fmt.Sprint({field})))",
                 format!("{{{}}}", parameter.name)
             );
+        }
+        "querystring" => {
+            let content = kaji_core::openapi32::parameter_content(parameter)
+                .expect("validated content metadata")
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| kaji_core::openapi32::ContentDefinition {
+                    content_type: "text/plain".into(),
+                    ..Default::default()
+                });
+            let content_type = content.content_type.clone();
+            let metadata = serde_json::to_string(&content).expect("typed content metadata");
+            let _ = writeln!(
+                output,
+                "\tencodedQuery, queryError := kajiWholeQuery({field}, {content_type:?}, {metadata:?})\n\tif queryError != nil {{"
+            );
+            render_error_return(output, response_kind, "queryError");
+            output.push_str("\t}\n\twholeQuery = encodedQuery\n");
         }
         "query" => {
             let _ = writeln!(
@@ -2900,6 +3056,74 @@ func TestCollisionRoundTrip(t *testing.T) {
         );
     }
     #[test]
+    fn native_future_models_preserve_enum_union_null_absence_and_unknown_fields() {
+        let mut state = string_schema();
+        state.enum_values = vec![serde_json::json!("known")];
+        let mut note = SchemaValue::reference("#/components/schemas/State");
+        note.nullable = true;
+        let api = Api {
+            name: "Compatibility".into(),
+            schemas: vec![
+                Schema::new("State", state),
+                Schema::new(
+                    "Choice",
+                    SchemaValue::new(SchemaKind::OneOf {
+                        variants: vec![string_schema(), SchemaValue::new(SchemaKind::Integer)],
+                    }),
+                ),
+                Schema::new(
+                    "Envelope",
+                    SchemaValue::new(SchemaKind::Object {
+                        fields: vec![
+                            Field {
+                                name: "state".into(),
+                                value: note,
+                                required: false,
+                                annotations: Default::default(),
+                            },
+                            Field {
+                                name: "choice".into(),
+                                value: SchemaValue::reference("#/components/schemas/Choice"),
+                                required: false,
+                                annotations: Default::default(),
+                            },
+                        ],
+                        additional_properties: AdditionalProperties::Any,
+                    }),
+                ),
+            ],
+            ..Default::default()
+        };
+        let root = tempfile::tempdir().unwrap();
+        render_test_sdk(&api, "sdk", Some("compatibility"))
+            .unwrap()
+            .write_to(root.path())
+            .unwrap();
+        fs::write(root.path().join("sdk/compatibility_test.go"), r#"package compatibility
+import("encoding/json";"reflect";"testing")
+func TestFutureModels(t *testing.T) {
+ for _,wire:=range []string{`{}`,`{"state":null}`,`{"state":"future","choice":{"future":[false,0,null]},"extra":{"nested":"future"}}`} {
+  var model Envelope;if err:=json.Unmarshal([]byte(wire),&model);err!=nil{t.Fatal(err)}
+  raw,err:=json.Marshal(model);if err!=nil{t.Fatal(err)}
+  var before,after any;json.Unmarshal([]byte(wire),&before);json.Unmarshal(raw,&after)
+  if !reflect.DeepEqual(before,after){t.Fatalf("roundtrip %s -> %s",wire,raw)}
+ }
+ var empty Envelope; raw,_:=json.Marshal(empty); if string(raw)!=`{}`{t.Fatal(string(raw))}
+}
+"#).unwrap();
+        let output = Command::new("go")
+            .args(["test", "-race", "./..."])
+            .current_dir(root.path().join("sdk"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    #[test]
     fn response_validation_and_attempt_middleware_execute_natively() {
         let mut api = contact_api();
         let SchemaKind::Object {
@@ -3153,6 +3377,242 @@ func TestCancelBackoff(t *testing.T){
                 std::env::var_os("GOCACHE")
                     .unwrap_or_else(|| std::env::temp_dir().join("kaji-go-cache").into_os_string()),
             )
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    #[test]
+    fn native_whole_query_and_sequential_json() {
+        let operation = Operation {
+            id: "events".into(),
+            method: HttpMethod::Get,
+            path: "/events".into(),
+            parameters: vec![OperationParameter {
+                name: "filter".into(),
+                location: "querystring".into(),
+                required: true,
+                schema: Some(SchemaValue::new(SchemaKind::Object {
+                    fields: vec![],
+                    additional_properties: AdditionalProperties::Any,
+                })),
+                description: None,
+                annotations: BTreeMap::from([(
+                    "kaji.parameter_content".into(),
+                    serde_json::json!([{"content_type":"application/x-www-form-urlencoded","schema_definition":{"type":"object"}}]),
+                )]),
+            }],
+            responses: vec![OperationResponse {
+                status: "200".into(),
+                description: None,
+                media_types: vec![OperationMediaType {
+                    content_type: "application/x-ndjson".into(),
+                    schema: Some(SchemaValue::new(SchemaKind::Array {
+                        items: Box::new(SchemaValue::new(SchemaKind::Integer)),
+                    })),
+                }],
+            }],
+            ..Default::default()
+        };
+        let upload = Operation {
+            id: "sendEvents".into(),
+            method: HttpMethod::Post,
+            path: "/events".into(),
+            request_body: Some(OperationRequestBody {
+                required: true,
+                description: None,
+                media_types: vec![OperationMediaType {
+                    content_type: "application/json-seq".into(),
+                    schema: Some(SchemaValue::new(SchemaKind::Array {
+                        items: Box::new(SchemaValue::new(SchemaKind::Integer)),
+                    })),
+                }],
+            }),
+            ..Default::default()
+        };
+        let api = Api {
+            name: "Wire".into(),
+            version: "1".into(),
+            operations: vec![operation, upload],
+            ..Default::default()
+        };
+        let root = tempfile::tempdir().unwrap();
+        render_test_sdk(&api, "sdk", Some("wire"))
+            .unwrap()
+            .write_to(root.path())
+            .unwrap();
+        fs::write(root.path().join("sdk/wire_test.go"),r#"package wire
+import("context";"io";"net/http";"net/url";"strings";"testing")
+type wireTransport struct{}
+func(wireTransport)Do(request *http.Request)(*http.Response,error){
+ if request.Method=="POST" {body,_:=io.ReadAll(request.Body);if request.Header.Get("Content-Type")!="application/json-seq"||string(body)!="\x1e0\n\x1e2\n"{panic(string(body))};return &http.Response{StatusCode:204,Header:http.Header{},Body:io.NopCloser(strings.NewReader("")),Request:request},nil}
+ if request.URL.Query().Get("term")!="space & plus+"||request.URL.Query().Get("zero")!="0"||request.URL.Query().Get("flag")!="false"||request.URL.Query().Has("filter"){panic(request.URL.RawQuery)}
+ return &http.Response{StatusCode:200,Header:http.Header{"Content-Type":[]string{"application/x-ndjson"}},Body:io.NopCloser(strings.NewReader("0\n1\n2\n")),Request:request},nil
+}
+func TestWholeQueryAndSequence(t *testing.T){
+ client,err:=NewClient(ClientConfig{BaseURL:"https://example.test",HTTPClient:wireTransport{}});if err!=nil{t.Fatal(err)}
+ values,err:=client.Events(context.Background(),&EventsRequest{Filter:map[string]any{"term":"space & plus+","zero":0,"flag":false}});if err!=nil||len(*values)!=3||(*values)[2]!=2{t.Fatal(values,err)}
+ if err=client.SendEvents(context.Background(),&SendEventsRequest{Body:[]int64{0,2}});err!=nil{t.Fatal(err)}
+ encoded,err:=kajiWholeQuery(map[string]any{"csv":[]int{1,2},"json":map[string]any{"flag":false}},"application/x-www-form-urlencoded",`{"encoding":{"csv":{"explode":false},"json":{"contentType":"application/json"}}}`);if err!=nil{t.Fatal(err)};parsed,_:=url.ParseQuery(encoded);if parsed.Get("csv")!="1,2"||parsed.Get("json")!=`{"flag":false}`{t.Fatal(encoded)}
+ var sequence []int64;if err=client.decodeSequentialResponse(strings.NewReader("\x1e0\n\x1e2\n"),"application/json-seq",&sequence);err!=nil||len(sequence)!=2{t.Fatal(sequence,err)}
+ for _,bad:=range []string{"1 2\n","{bad}\n"}{if err=client.decodeSequentialResponse(strings.NewReader(bad),"application/x-ndjson",&sequence);err==nil{t.Fatal("accepted malformed record")}}
+ if err=client.decodeSequentialResponse(strings.NewReader("0\n"),"application/json-seq",&sequence);err==nil{t.Fatal("accepted missing separator")}
+}
+"#).unwrap();
+        let output = Command::new("go")
+            .args(["test", "-race", "./..."])
+            .current_dir(root.path().join("sdk"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    #[test]
+    fn native_positional_nested_multipart_uses_declared_encoding() {
+        let operation = Operation {
+            id: "upload".into(),
+            method: HttpMethod::Put,
+            path: "/upload".into(),
+            request_body: Some(OperationRequestBody {
+                required: true,
+                description: None,
+                media_types: vec![OperationMediaType {
+                    content_type: "multipart/mixed".into(),
+                    schema: Some(SchemaValue::new(SchemaKind::Array {
+                        items: Box::new(SchemaValue::new(SchemaKind::Any)),
+                    })),
+                }],
+            }),
+            annotations: BTreeMap::from([(
+                "kaji.request_content".into(),
+                serde_json::json!([{"content_type":"multipart/mixed","prefix_encoding":[{"contentType":"text/plain","headers":{"Content-ID":{"required":true}}},{"contentType":"multipart/mixed","prefixEncoding":[{"contentType":"application/json"}],"itemEncoding":{"contentType":"image/png"}}],"item_encoding":{"contentType":"application/octet-stream"}}]),
+            )]),
+            ..Default::default()
+        };
+        let api = Api {
+            name: "MIME".into(),
+            version: "1".into(),
+            operations: vec![operation],
+            ..Default::default()
+        };
+        let root = tempfile::tempdir().unwrap();
+        render_test_sdk(&api, "sdk", Some("wire"))
+            .unwrap()
+            .write_to(root.path())
+            .unwrap();
+        fs::write(root.path().join("sdk/positional_test.go"),r#"package wire
+import("context";"io";"mime";"mime/multipart";"net/http";"strings";"testing")
+type mimeTransport struct{t *testing.T}
+func(transport mimeTransport)Do(request *http.Request)(*http.Response,error){
+ media,parameters,err:=mime.ParseMediaType(request.Header.Get("Content-Type"));if err!=nil||media!="multipart/mixed"{transport.t.Fatal(media,err)}
+ reader:=multipart.NewReader(request.Body,parameters["boundary"]);first,err:=reader.NextPart();if err!=nil||first.Header.Get("Content-Type")!="text/plain"||first.Header.Get("Content-ID")!="first"{transport.t.Fatal(first,err)};data,_:=io.ReadAll(first);if string(data)!="hello"{transport.t.Fatal(string(data))}
+ second,_:=reader.NextPart();nestedType,nestedParameters,_:=mime.ParseMediaType(second.Header.Get("Content-Type"));if nestedType!="multipart/mixed"{transport.t.Fatal(nestedType)};nested:=multipart.NewReader(second,nestedParameters["boundary"]);jsonPart,_:=nested.NextPart();if jsonPart.Header.Get("Content-Type")!="application/json"{transport.t.Fatal(jsonPart.Header)};io.ReadAll(jsonPart);png,_:=nested.NextPart();if png.Header.Get("Content-Type")!="image/png"{transport.t.Fatal(png.Header)};data,_=io.ReadAll(png);if len(data)!=2||data[0]!=0xff{transport.t.Fatal(data)}
+ last,_:=reader.NextPart();if last.Header.Get("Content-Type")!="application/octet-stream"{transport.t.Fatal(last.Header)};io.ReadAll(last);if _,err=reader.NextPart();err!=io.EOF{transport.t.Fatal(err)}
+ return &http.Response{StatusCode:204,Header:http.Header{},Body:io.NopCloser(strings.NewReader("")),Request:request},nil
+}
+func TestPositional(t *testing.T){
+ client,_:=NewClient(ClientConfig{BaseURL:"https://example.test",HTTPClient:mimeTransport{t}})
+ nested:=&KajiMultipartBody{Parts:[]KajiMultipartPart{{Data:[]byte(`{"zero":0}`)},{Data:[]byte{0xff,0}}}}
+ body:=&KajiMultipartBody{Parts:[]KajiMultipartPart{{Data:[]byte("hello"),Headers:http.Header{"Content-Id":[]string{"first"}}},{Nested:nested},{Data:[]byte{0}}}}
+ if err:=client.Upload(context.Background(),&UploadRequest{Body:body});err!=nil{t.Fatal(err)}
+ if body.ContentType!=""||body.Parts[0].ContentType!=""||nested.Parts[0].ContentType!=""{t.Fatal("mutated caller builder")}
+ body.Parts[0].Headers=nil;if err:=client.Upload(context.Background(),&UploadRequest{Body:body});err==nil{t.Fatal("required header ignored")}
+}
+"#).unwrap();
+        let output = Command::new("go")
+            .args(["test", "-race", "./..."])
+            .current_dir(root.path().join("sdk"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    #[test]
+    fn native_named_parameter_content_preserves_json_values() {
+        let parameters = [
+            ("selector", "path", SchemaValue::new(SchemaKind::String)),
+            (
+                "values",
+                "query",
+                SchemaValue::new(SchemaKind::Array {
+                    items: Box::new(SchemaValue::new(SchemaKind::Any)),
+                }),
+            ),
+            (
+                "X-Metadata",
+                "header",
+                SchemaValue::new(SchemaKind::Object {
+                    fields: vec![],
+                    additional_properties: AdditionalProperties::Any,
+                }),
+            ),
+            ("flag", "cookie", SchemaValue::new(SchemaKind::Boolean)),
+        ]
+        .into_iter()
+        .map(|(name, location, schema)| OperationParameter {
+            name: name.into(),
+            location: location.into(),
+            required: true,
+            schema: Some(schema),
+            description: None,
+            annotations: BTreeMap::from([(
+                "kaji.parameter_content".into(),
+                serde_json::json!([{"content_type":"application/json"}]),
+            )]),
+        })
+        .collect();
+        let operation = Operation {
+            id: "content".into(),
+            method: HttpMethod::Get,
+            path: "/content/{selector}".into(),
+            parameters,
+            responses: vec![OperationResponse {
+                status: "200".into(),
+                description: None,
+                media_types: vec![OperationMediaType {
+                    content_type: "multipart/mixed".into(),
+                    schema: Some(SchemaValue::new(SchemaKind::Array {
+                        items: Box::new(SchemaValue::new(SchemaKind::Any)),
+                    })),
+                }],
+            }],
+            ..Default::default()
+        };
+        let api = Api {
+            name: "Content".into(),
+            version: "1".into(),
+            operations: vec![operation],
+            ..Default::default()
+        };
+        let root = tempfile::tempdir().unwrap();
+        render_test_sdk(&api, "sdk", Some("content"))
+            .unwrap()
+            .write_to(root.path())
+            .unwrap();
+        fs::write(root.path().join("sdk/content_test.go"),r#"package content
+import("context";"io";"net/http";"strings";"testing")
+type contentTransport struct{t *testing.T}
+func(transport contentTransport)Do(request *http.Request)(*http.Response,error){
+ if request.URL.Path!=`/content/"a/b"`||request.URL.Query().Get("values")!=`[0,false,null]`||len(request.URL.Query()["values"])!=1||request.Header.Get("X-Metadata")!=`{"flag":false,"zero":0}`||request.Header.Get("Cookie")!="flag=false"{transport.t.Fatal(request.URL.String(),request.Header)}
+ return &http.Response{StatusCode:200,Body:io.NopCloser(strings.NewReader(string([]byte{0xff,0,13,10}))),Header:http.Header{"Content-Type":[]string{"multipart/mixed; boundary=test"}},Request:request},nil
+}
+func TestNamedContent(t *testing.T){client,_:=NewClient(ClientConfig{BaseURL:"https://example.test",HTTPClient:contentTransport{t}});raw,err:=client.Content(context.Background(),&ContentRequest{Selector:"a/b",Values:[]any{0,false,nil},XMetadata:map[string]any{"flag":false,"zero":0},Flag:false});if err!=nil||len(raw)!=4||raw[0]!=0xff{t.Fatal(raw,err)}}
+"#).unwrap();
+        let output = Command::new("go")
+            .args(["test", "-race", "./..."])
+            .current_dir(root.path().join("sdk"))
             .output()
             .unwrap();
         assert!(

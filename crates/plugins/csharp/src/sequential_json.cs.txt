@@ -1,0 +1,29 @@
+    private static string NormalizeSequentialJson(string body,string? contentType) {
+        var media=contentType?.Split(';',2)[0].Trim();
+        var sequence=media=="application/json-seq";
+        if(!sequence&&media is not ("application/x-ndjson" or "application/ndjson" or "application/jsonl"))return body;
+        if(Encoding.UTF8.GetByteCount(body)>64*1024*1024)throw new JsonException("Sequential JSON exceeds 64MiB");
+        if(sequence&&!string.IsNullOrWhiteSpace(body)&&!body.StartsWith('\u001e'))throw new JsonException("JSON sequence must begin with a record separator");
+        var records=body.Split(sequence?'\u001e':'\n');
+        var values=new List<JsonElement>();
+        for(var index=sequence?1:0;index<records.Length;index++) {
+            var record=records[index];
+            if(string.IsNullOrWhiteSpace(record)){if(sequence)throw new JsonException("Empty JSON sequence record");continue;}
+            if(values.Count>=100000)throw new JsonException("Sequential JSON exceeds 100000 records");
+            using var document=JsonDocument.Parse(record);values.Add(document.RootElement.Clone());
+        }
+        return JsonSerializer.Serialize(values);
+    }
+
+    private static void ValidateWholeQuery(string raw) {
+        if(raw.StartsWith('?'))throw new ArgumentException("Whole query excludes leading ?");
+        for(var i=0;i<raw.Length;i++){var c=raw[i];if(c<32||c==127||c=='#')throw new ArgumentException("Invalid whole query");if(c=='%'){if(i+2>=raw.Length||!Uri.IsHexDigit(raw[i+1])||!Uri.IsHexDigit(raw[i+2]))throw new ArgumentException("Invalid percent escape");i+=2;}}
+    }
+    private static HttpContent EncodeSequentialJson<T>(T body,string media) {
+        var value=JsonSerializer.SerializeToElement(body,JsonOptions);
+        if(value.ValueKind!=JsonValueKind.Array||value.GetArrayLength()>100000)throw new JsonException("Sequential JSON request requires an array of at most 100000 records");
+        var wire=new StringBuilder();
+        foreach(var item in value.EnumerateArray()){if(media=="application/json-seq")wire.Append('\u001e');wire.Append(item.GetRawText()).Append('\n');if(wire.Length>64*1024*1024)throw new JsonException("Sequential JSON exceeds 64MiB");}
+        var bytes=Encoding.UTF8.GetBytes(wire.ToString());if(bytes.Length>64*1024*1024)throw new JsonException("Sequential JSON exceeds 64MiB");
+        return new StringContent(wire.ToString(),Encoding.UTF8,media);
+    }

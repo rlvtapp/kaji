@@ -9,6 +9,45 @@ pub(crate) fn selected(operation: &Operation) -> bool {
         })
     })
 }
+fn ordered_plan(operation: &Operation) -> Option<serde_json::Value> {
+    let content = kaji_core::openapi32::request_content(operation)
+        .ok()
+        .and_then(|definitions| {
+            definitions
+                .into_iter()
+                .find(|item| item.content_type.starts_with("multipart/"))
+        });
+    let media = operation
+        .request_body
+        .as_ref()?
+        .media_types
+        .iter()
+        .find(|media| media.content_type.starts_with("multipart/"))?;
+    fn advanced(encoding: &kaji_core::openapi32::Encoding) -> bool {
+        !encoding.headers.is_empty()
+            || !encoding.encoding.is_empty()
+            || !encoding.prefix_encoding.is_empty()
+            || encoding.item_encoding.is_some()
+    }
+    let needed = media.content_type != "multipart/form-data"
+        || media
+            .schema
+            .as_ref()
+            .is_some_and(|schema| matches!(schema.kind, SchemaKind::Array { .. }))
+        || content.as_ref().is_some_and(|item| {
+            !item.prefix_encoding.is_empty()
+                || item.item_encoding.is_some()
+                || item.encoding.values().any(advanced)
+        });
+    if !needed {
+        return None;
+    }
+    Some(
+        content
+            .and_then(|item| serde_json::to_value(item).ok())
+            .unwrap_or_else(|| serde_json::json!({"content_type":media.content_type})),
+    )
+}
 pub(crate) fn body_name(operation: &Operation) -> String {
     let name = format!("{}MultipartBody", type_name(&operation.id));
     let collision=operation.request_body.as_ref().is_some_and(|body|body.media_types.iter().filter_map(|media|media.schema.as_ref()).any(|value|matches!(&value.kind,SchemaKind::Reference{reference} if type_name(reference.rsplit('/').next().unwrap_or(reference))==name)));
@@ -148,7 +187,9 @@ fn fields(api: &Api, operation: &Operation) -> Result<Vec<kaji_core::Field>> {
 }
 pub(crate) fn validate(api: &Api) -> Result<()> {
     for op in api.operations.iter().filter(|op| selected(op)) {
-        fields(api, op)?;
+        if ordered_plan(op).is_none() {
+            fields(api, op)?;
+        }
     }
     Ok(())
 }
@@ -257,8 +298,17 @@ pub(crate) fn emit(api: &Api, root: &str, package: &str, tree: &mut GeneratedTre
         format!("{prefix}src/main/java/{path}/MultipartBody.java"),
         include_str!("multipart.java.txt").replace("__PACKAGE__", package),
     )?)?;
+    tree.insert(GeneratedFile::new(
+        format!("{prefix}src/main/java/{path}/OrderedMultipart.java"),
+        include_str!("ordered_multipart.java.txt").replace("__PACKAGE__", package),
+    )?)?;
     for op in api.operations.iter().filter(|op| selected(op)) {
         let name = body_name(op);
+        if let Some(plan) = ordered_plan(op) {
+            let definition = serde_json::to_string(&plan)?;
+            tree.insert(GeneratedFile::new(format!("{prefix}src/main/java/{path}/{name}.java"),format!("package {package};\npublic record {name}(java.util.List<OrderedMultipart.Part> parts) implements MultipartBody {{ public {name} {{ parts=java.util.List.copyOf(parts); }} public MultipartBody.Encoded encode() {{return OrderedMultipart.encode(parts,{definition:?});}} }}\n"))?)?;
+            continue;
+        }
         anyhow::ensure!(
             !api.schemas.iter().any(|s| type_name(&s.name) == name),
             "multipart body name collides with a schema"
@@ -383,7 +433,7 @@ pub(crate) fn emit(api: &Api, root: &str, package: &str, tree: &mut GeneratedTre
     Ok(())
 }
 pub(crate) fn runtime(source: String) -> String {
-    source.replace("} else {\n                builder.header(\"Content-Type\", \"application/json\");", "} else if (body instanceof MultipartBody multipart) {\n                var encoded=multipart.encode(); builder.setHeader(\"Content-Type\",encoded.contentType()); builder.method(method,HttpRequest.BodyPublishers.ofByteArray(encoded.bytes()));\n            } else {\n                builder.header(\"Content-Type\", \"application/json\");")
+    source.replace("} else {\n                var requestMedia=", "} else if (body instanceof MultipartBody multipart) {\n                var encoded=multipart.encode(); builder.setHeader(\"Content-Type\",encoded.contentType()); builder.method(method,HttpRequest.BodyPublishers.ofByteArray(encoded.bytes()));\n            } else {\n                var requestMedia=").replace("} else {\n                builder.header(\"Content-Type\", \"application/json\");", "} else if (body instanceof MultipartBody multipart) {\n                var encoded=multipart.encode(); builder.setHeader(\"Content-Type\",encoded.contentType()); builder.method(method,HttpRequest.BodyPublishers.ofByteArray(encoded.bytes()));\n            } else {\n                builder.header(\"Content-Type\", \"application/json\");")
  .replace("else if (body instanceof byte[] bytes)", "else if (body instanceof MultipartBody multipart) { var encoded=multipart.encode();builder.setHeader(\"Content-Type\",encoded.contentType());builder.method(method,HttpRequest.BodyPublishers.ofByteArray(encoded.bytes())); }\n                else if (body instanceof byte[] bytes)")
 }
 

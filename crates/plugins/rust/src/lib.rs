@@ -1,4 +1,5 @@
 //! Rust SDK generation through typed packages and a Reqwest-backed client.
+mod model_compatibility;
 mod oauth;
 mod open_union;
 pub use oauth::{OAuth, oauth};
@@ -20,6 +21,7 @@ pub struct Rust;
 pub struct Settings {
     pub package_name: Option<String>,
     pub open_unions: bool,
+    pub open_enums: bool,
 }
 impl Language for Rust {
     const NAME: &'static str = "rust";
@@ -42,8 +44,14 @@ pub trait PackageExt {
     fn name(self, name: impl Into<String>) -> Self;
     /// Retain unknown named union variants as JSON; default decoding stays strict.
     fn open_unions(self, enabled: bool) -> Self;
+    /// Generate extensible typed string enums with known-value helpers.
+    fn open_enums(self, enabled: bool) -> Self;
 }
 impl PackageExt for Package<Rust> {
+    fn open_enums(mut self, enabled: bool) -> Self {
+        self.settings_mut().open_enums = enabled;
+        self
+    }
     fn open_unions(mut self, enabled: bool) -> Self {
         self.settings_mut().open_unions = enabled;
         self
@@ -107,6 +115,7 @@ impl Plugin<Rust> for Sdk {
             client_style: style,
             operation_prefix: self.operation_prefix.clone(),
             open_unions: cx.settings.open_unions,
+            open_enums: cx.settings.open_enums,
         };
         for (file, _) in render::generate_sdk(cx.api, &options)?.into_files() {
             if !matches!(

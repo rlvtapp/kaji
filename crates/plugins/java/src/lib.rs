@@ -361,7 +361,7 @@ fn render_model(schema: &Schema, package: &str, open_enums: bool) -> String {
             fields,
             additional_properties,
         } => render_object_model(&name, fields, additional_properties, package),
-        _ if !schema.value.enum_values.is_empty() => {
+        SchemaKind::String if !schema.value.enum_values.is_empty() => {
             if open_enums {
                 render_open_enum(&name, &schema.value, package)
             } else {
@@ -543,7 +543,7 @@ fn render_client_base(api: &Api, package: &str) -> String {
     output.push_str("\n    protected ClientBase(ClientConfig config) {\n        Objects.requireNonNull(config, \"config\");\n        this.baseUrl = stripTrailingSlash(config.baseUrl());\n        this.apiKey = config.apiKey();\n        this.apiKeyHeader = config.apiKeyHeader();\n        this.apiKeyPrefix = config.apiKeyPrefix();\n        this.defaultHeaders = config.defaultHeaders();\n        this.timeout = config.timeout();\n        this.retry = config.retry();\n        this.hooks = config.hooks();\n        this.httpClient = config.httpClient() != null ? config.httpClient() : HttpClient.newBuilder().connectTimeout(timeout).build();\n        this.mapper = new ObjectMapper().registerModule(new JavaTimeModule());\n");
     output.push_str("    }\n\n");
     output.push_str(
-        "    private String request(String method, String path, List<QueryParameter> query, Map<String, String> headers, java.lang.Object body) {\n        var url = baseUrl + path + queryString(query);\n        var builder = HttpRequest.newBuilder(URI.create(url)).timeout(timeout).header(\"Accept\", \"application/json\");\n        defaultHeaders.forEach(builder::header);\n        headers.forEach(builder::header);\n        if (apiKey != null && !apiKey.isBlank() && defaultHeaders.keySet().stream().noneMatch(name -> name.equalsIgnoreCase(apiKeyHeader)) && headers.keySet().stream().noneMatch(name -> name.equalsIgnoreCase(apiKeyHeader))) {\n            var credential = apiKeyPrefix == null || apiKeyPrefix.isBlank() ? apiKey : apiKeyPrefix + \" \" + apiKey;\n            builder.header(apiKeyHeader, credential);\n        }\n        try {\n            if (body == null) {\n                builder.method(method, HttpRequest.BodyPublishers.noBody());\n            } else {\n                builder.header(\"Content-Type\", \"application/json\");\n                builder.method(method, HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body)));\n            }\n            var response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());\n            if (response.statusCode() < 200 || response.statusCode() >= 300) {\n                throw new ApiException(response.statusCode(), response.body());\n            }\n            return response.body();\n        } catch (JsonProcessingException error) {\n            throw new IllegalArgumentException(\"Kaji could not serialize the request body\", error);\n        } catch (IOException error) {\n            throw new IllegalStateException(\"Kaji could not execute the request\", error);\n        } catch (InterruptedException error) {\n            Thread.currentThread().interrupt();\n            throw new IllegalStateException(\"Kaji request was interrupted\", error);\n        }\n    }\n\n    private <T> T decode(String response, Class<T> type) {\n        try {\n            return mapper.readValue(response, type);\n        } catch (JsonProcessingException error) {\n            throw new IllegalStateException(\"Kaji could not decode the API response\", error);\n        }\n    }\n\n    private static String stripTrailingSlash(String value) {\n        return value.endsWith(\"/\") ? value.substring(0, value.length() - 1) : value;\n    }\n\n    private static String pathValue(java.lang.Object value) {\n        return URLEncoder.encode(String.valueOf(value), StandardCharsets.UTF_8).replace(\"+\", \"%20\");\n    }\n\n    private static String queryString(List<QueryParameter> query) {\n        var parts = new ArrayList<String>();\n        for (var parameter : query) {\n            if (parameter.value() == null) continue;\n            if (parameter.value() instanceof Iterable<?> values) {\n                for (var value : values) if (value != null) parts.add(encodeQuery(parameter.name(), value));\n            } else {\n                parts.add(encodeQuery(parameter.name(), parameter.value()));\n            }\n        }\n        return parts.isEmpty() ? \"\" : \"?\" + String.join(\"&\", parts);\n    }\n\n    private static String encodeQuery(String name, java.lang.Object value) {\n        return URLEncoder.encode(name, StandardCharsets.UTF_8) + \"=\" + URLEncoder.encode(String.valueOf(value), StandardCharsets.UTF_8);\n    }\n\n    private record QueryParameter(String name, java.lang.Object value) {}\n}\n",
+        "    private String request(String method, String path, List<QueryParameter> query, Map<String, String> headers, java.lang.Object body) {\n        var url = baseUrl + path + queryString(query);\n        var builder = HttpRequest.newBuilder(URI.create(url)).timeout(timeout).header(\"Accept\", \"application/json\");\n        defaultHeaders.forEach(builder::header);\n        headers.forEach(builder::header);\n        if (apiKey != null && !apiKey.isBlank() && defaultHeaders.keySet().stream().noneMatch(name -> name.equalsIgnoreCase(apiKeyHeader)) && headers.keySet().stream().noneMatch(name -> name.equalsIgnoreCase(apiKeyHeader))) {\n            var credential = apiKeyPrefix == null || apiKeyPrefix.isBlank() ? apiKey : apiKeyPrefix + \" \" + apiKey;\n            builder.header(apiKeyHeader, credential);\n        }\n        try {\n            if (body == null) {\n                builder.method(method, HttpRequest.BodyPublishers.noBody());\n            } else {\n                var requestMedia=headers.getOrDefault(\"Content-Type\",\"application/json\");\n                builder.setHeader(\"Content-Type\",requestMedia);\n                var serialized=java.util.Set.of(\"application/x-ndjson\",\"application/ndjson\",\"application/jsonl\",\"application/json-seq\").contains(requestMedia)?encodeSequentialJson(body,requestMedia):mapper.writeValueAsString(body);\n                builder.method(method,HttpRequest.BodyPublishers.ofString(serialized));\n            }\n            var response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());\n            if (response.statusCode() < 200 || response.statusCode() >= 300) {\n                throw new ApiException(response.statusCode(), response.body());\n            }\n            return normalizeSequentialJson(response.body(), response.headers().firstValue(\"Content-Type\").orElse(\"\"));\n        } catch (JsonProcessingException error) {\n            throw new IllegalArgumentException(\"Kaji could not serialize the request body\", error);\n        } catch (IOException error) {\n            throw new IllegalStateException(\"Kaji could not execute the request\", error);\n        } catch (InterruptedException error) {\n            Thread.currentThread().interrupt();\n            throw new IllegalStateException(\"Kaji request was interrupted\", error);\n        }\n    }\n\n    private <T> T decode(String response, Class<T> type) {\n        try {\n            return mapper.readValue(response, type);\n        } catch (JsonProcessingException error) {\n            throw new IllegalStateException(\"Kaji could not decode the API response\", error);\n        }\n    }\n\n    private static String stripTrailingSlash(String value) {\n        return value.endsWith(\"/\") ? value.substring(0, value.length() - 1) : value;\n    }\n\n    private static String pathValue(java.lang.Object value) {\n        return URLEncoder.encode(String.valueOf(value), StandardCharsets.UTF_8).replace(\"+\", \"%20\");\n    }\n\n    private static String queryString(List<QueryParameter> query) {\n        var parts = new ArrayList<String>();\n        for (var parameter : query) {\n            if (parameter.value() == null) continue;\n            if (parameter.value() instanceof Iterable<?> values) {\n                for (var value : values) if (value != null) parts.add(encodeQuery(parameter.name(), value));\n            } else {\n                parts.add(encodeQuery(parameter.name(), parameter.value()));\n            }\n        }\n        return parts.isEmpty() ? \"\" : \"?\" + String.join(\"&\", parts);\n    }\n\n    private static String encodeQuery(String name, java.lang.Object value) {\n        return URLEncoder.encode(name, StandardCharsets.UTF_8) + \"=\" + URLEncoder.encode(String.valueOf(value), StandardCharsets.UTF_8);\n    }\n\n    private record QueryParameter(String name, java.lang.Object value) {}\n}\n",
     );
     output.truncate(output.len() - 2);
     output.push_str(
@@ -674,6 +674,7 @@ fn render_client_base(api: &Api, package: &str) -> String {
     // they stay package-internal to generated SDK consumers.
     output.truncate(output.len() - 2);
     output.push_str(sse_parser());
+    output.push_str(include_str!("sequential_json.java.txt"));
     output.push_str(include_str!("call_options_methods.java.txt"));
     output.push_str("}\n");
     let output = output.replace("    private ", "    protected ").replace(
@@ -864,12 +865,54 @@ fn render_operation(output: &mut String, operation: &Operation) {
         } else {
             String::new()
         };
+        if parameter_json_content(parameter)
+            && matches!(
+                parameter.location.as_str(),
+                "path" | "query" | "header" | "cookie"
+            )
+        {
+            let serialized = format!("jsonParameter({accessor})");
+            let statement = match parameter.location.as_str() {
+                "path" => format!(
+                    "path=path.replace({:?},pathValue({serialized}));",
+                    format!("{{{}}}", parameter.name)
+                ),
+                "query" => format!(
+                    "query.add(new QueryParameter({:?},{serialized}));",
+                    parameter.name
+                ),
+                "cookie" => format!(
+                    "headers.merge(\"Cookie\",{:?}+\"=\"+pathValue({serialized}),(left,right)->left+\"; \"+right);",
+                    parameter.name
+                ),
+                _ => format!("headers.put({:?},{serialized});", parameter.name),
+            };
+            if parameter.required {
+                let _ = writeln!(output, "        {statement}");
+            } else {
+                let _ = writeln!(output, "        if ({accessor}!=null) {{{statement}}}");
+            }
+            continue;
+        }
         match parameter.location.as_str() {
             "path" => {
                 let _ = writeln!(
                     output,
                     "        if ({accessor} != null) path = path.replace(\"{{{}}}\", pathValue({accessor}));",
                     parameter.name
+                );
+            }
+            "cookie" => {
+                let _ = writeln!(
+                    output,
+                    "        if ({accessor} !=null) headers.merge(\"Cookie\",{:?}+\"=\"+pathValue({accessor}),(left,right)->left+\"; \"+right);",
+                    parameter.name
+                );
+            }
+            "querystring" => {
+                let _ = writeln!(
+                    output,
+                    "        if ({accessor} != null && !{accessor}.isEmpty()) {{ validateWholeQuery({accessor}); path += \"?\" + {accessor}; }}"
                 );
             }
             "header" => {
@@ -901,6 +944,17 @@ fn render_operation(output: &mut String, operation: &Operation) {
             format!("{:?}", policy.header)
         })
         .unwrap_or_else(|| "null".into());
+    if let Some(media) = request_content_type(operation).filter(|media| {
+        matches!(
+            *media,
+            "application/x-ndjson"
+                | "application/ndjson"
+                | "application/jsonl"
+                | "application/json-seq"
+        )
+    }) {
+        let _ = writeln!(output, "        headers.put(\"Content-Type\",{media:?});");
+    }
     let body = if body_schema.is_some() && has_input {
         "input.body()"
     } else {
@@ -1573,7 +1627,12 @@ fn operation_parameters(operation: &Operation) -> Vec<&OperationParameter> {
     operation
         .parameters
         .iter()
-        .filter(|parameter| matches!(parameter.location.as_str(), "path" | "query" | "header"))
+        .filter(|parameter| {
+            matches!(
+                parameter.location.as_str(),
+                "path" | "query" | "header" | "cookie" | "querystring"
+            )
+        })
         .collect()
 }
 
@@ -1661,7 +1720,18 @@ fn response_surface(operation: &Operation) -> ResponseSurface<'_> {
     }
 }
 
+fn parameter_json_content(parameter: &OperationParameter) -> bool {
+    kaji_core::openapi32::parameter_content(parameter)
+        .ok()
+        .and_then(|items| items.into_iter().next())
+        .is_some_and(|content| {
+            content.content_type == "application/json" || content.content_type.ends_with("+json")
+        })
+}
 fn parameter_type(parameter: &OperationParameter) -> String {
+    if parameter.location == "querystring" {
+        return "String".into();
+    }
     parameter
         .schema
         .as_ref()
@@ -2228,7 +2298,9 @@ mod tests {
     #[ignore = "requires a JDK 17 toolchain; executes emitted retry parsers without dependencies"]
     fn generated_retry_parsers_execute_with_jdk() {
         use std::process::Command;
-        let client = super::render_client_base(&contact_api(), "example");
+        let client = super::render_client_base(&contact_api(), "example")
+            .replace(include_str!("call_options_methods.java.txt"), "")
+            .replace(include_str!("sequential_json.java.txt"), "");
         let start = client
             .find("    protected static long retryAfterMillisDelay(")
             .unwrap();

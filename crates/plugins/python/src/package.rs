@@ -9,6 +9,7 @@ pub struct Python;
 #[derive(Default)]
 pub struct Settings {
     pub package_name: Option<String>,
+    pub open_enums: bool,
 }
 impl Language for Python {
     const NAME: &'static str = "python";
@@ -26,8 +27,13 @@ pub fn package(dir: impl Into<String>) -> Package<Python> {
 }
 pub trait PackageExt {
     fn name(self, name: impl Into<String>) -> Self;
+    fn open_enums(self, enabled: bool) -> Self;
 }
 impl PackageExt for Package<Python> {
+    fn open_enums(mut self, enabled: bool) -> Self {
+        self.settings_mut().open_enums = enabled;
+        self
+    }
     fn name(mut self, name: impl Into<String>) -> Self {
         self.settings_mut().package_name = Some(name.into());
         self
@@ -74,8 +80,17 @@ impl Plugin<Python> for Sdk {
         vec![Provision::of::<PythonModels>()]
     }
     fn generate(&self, cx: &mut PluginContext<'_, Python>) -> Result<()> {
+        let mut api = cx.api.clone();
+        if cx.settings.open_enums {
+            for schema in &mut api.schemas {
+                schema
+                    .value
+                    .extensions
+                    .insert("x-kaji-open-enum".into(), serde_json::json!(true));
+            }
+        }
         cx.files.append(crate::render_sdk_with_async(
-            cx.api,
+            &api,
             ".",
             cx.settings.package_name.as_deref(),
             self.client_style

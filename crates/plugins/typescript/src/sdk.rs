@@ -1235,17 +1235,17 @@ export interface StandardSchema { readonly ['~standard']?: { readonly validate: 
 export type Validator = StandardSchema | ((value: unknown) => void | Promise<void>)
 export interface ClientValidation { request?: Validator; response?: Validator }
 export interface ClientConfig { timeoutMs?: number; baseUrl?: string; apiKey?: string; apiKeyHeader?: string; apiKeyPrefix?: string; auth?: SecurityCredentials; headers?: HeadersInit; fetch?: typeof globalThis.fetch; retry?: RetryConfig | false; middleware?: readonly ClientMiddleware[]; validateResponses?: boolean; hooks?: ClientHooks; codecs?: Record<string, Codec>; validation?: ClientValidation; multipartEncoder?: MultipartEncoder }
-export type ParameterStyle = { style?: 'simple' | 'label' | 'matrix' | 'form' | 'spaceDelimited' | 'pipeDelimited' | 'deepObject'; explode?: boolean }
+export type ParameterStyle = { contentType?: string; style?: 'simple' | 'label' | 'matrix' | 'form' | 'spaceDelimited' | 'pipeDelimited' | 'deepObject'; explode?: boolean }
 export type ParameterStyles = Partial<Record<'path' | 'query' | 'header' | 'cookie', Record<string, ParameterStyle>>>
 export type FormPartHeader = { required?: boolean; style?: ParameterStyle['style']; explode?: boolean; allowReserved?: boolean; schema_definition?: unknown; example_json?: string }
-export type FormEncoding = { contentType?: string; headers?: Record<string, FormPartHeader>; style?: 'form' | 'spaceDelimited' | 'pipeDelimited'; explode?: boolean; allowReserved?: boolean }
+export type FormEncoding = { contentType?: string; headers?: Record<string, FormPartHeader>; style?: 'form' | 'spaceDelimited' | 'pipeDelimited'; explode?: boolean; allowReserved?: boolean; encoding?: Record<string, FormEncoding>; prefixEncoding?: FormEncoding[]; itemEncoding?: FormEncoding }
 export type FormEncodings = Record<string, Record<string, FormEncoding>>
 export type FormPartHeaders = Record<string, Record<string, Record<string, unknown>>>
 export type MultipartPart = { name: string; value: string | Blob; contentType?: string; headers?: Record<string, string> }
 export interface MultipartEncoder { encode(parts: readonly MultipartPart[]): { body: BodyInit; contentType: string } }
-export type RequestConfig = { requestOptions?: RequestOptions; method: string; url: string; body?: unknown; path?: Record<string, unknown>; query?: Record<string, unknown>; headers?: HeadersInit | Record<string, unknown>; cookies?: Record<string, unknown>; throwOnError?: boolean; security?: SecurityDescriptor[][]; contentType?: { request?: string }; responseType?: 'stream'; styles?: ParameterStyles; formEncodings?: FormEncodings; formHeaders?: FormPartHeaders; validation?: ClientValidation; validateResponses?: boolean; paginationUrl?: string; idempotencyHeader?: string }
+export type RequestConfig = { requestOptions?: RequestOptions; method: string; url: string; body?: unknown; path?: Record<string, unknown>; query?: Record<string, unknown>; querystring?: Record<string, unknown>; wholeQuery?: { name: string; contentType: string }; headers?: HeadersInit | Record<string, unknown>; cookies?: Record<string, unknown>; throwOnError?: boolean; security?: SecurityDescriptor[][]; contentType?: { request?: string }; responseType?: 'stream' | 'arraybuffer'; styles?: ParameterStyles; formEncodings?: FormEncodings; formHeaders?: FormPartHeaders; multipartPlan?: MultipartPlan; validation?: ClientValidation; validateResponses?: boolean; paginationUrl?: string; idempotencyHeader?: string }
 export type ClientInstance = (request: RequestConfig) => Promise<unknown>
-export type Options<T, ThrowOnError extends boolean> = T & { requestOptions?: RequestOptions; client?: ClientInstance; throwOnError?: ThrowOnError; formHeaders?: FormPartHeaders; validation?: ClientValidation }
+export type Options<T, ThrowOnError extends boolean> = T & { requestOptions?: RequestOptions; client?: ClientInstance; throwOnError?: ThrowOnError; formHeaders?: FormPartHeaders; multipartPlan?: MultipartPlan; validation?: ClientValidation }
 export type SuccessOf<T> = T[Extract<keyof T, `2${string}`>]
 type StatusCode<S> = S extends `${infer Code extends number}` ? Code : number
 type MediaResult<S, T> = T extends { contentType: infer ContentType extends string; data: infer Data } ? { status: StatusCode<S>; contentType: ContentType; data: Data; headers: Headers } : { status: StatusCode<S>; contentType: string; data: T; headers: Headers }
@@ -1255,15 +1255,57 @@ export type RequestResult<T, ThrowOnError extends boolean> = ThrowOnError extend
 export type ResponseResult<T extends { status: number; data: unknown }, ThrowOnError extends boolean> = ThrowOnError extends true ? T['data'] : T
 export type EventStreamResult<T> = AsyncIterable<T>
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
-const styleFor = (styles: ParameterStyles | undefined, location: keyof ParameterStyles, name: string): Required<ParameterStyle> => {
+const serializeWholeQuery = (value: unknown, contentType: string): string => {
+  if (value === undefined) return ''
+  const media = contentType.split(';')[0].trim().toLowerCase()
+  if (value === null && media !== 'application/json' && !media.endsWith('+json')) return ''
+  if (media === 'text/plain') { const raw = String(value).replace(/^\?/, ''); if (/[#\r\n]/.test(raw)) throw new TypeError('Whole-query value contains a fragment or line break'); return raw }
+  if (media === 'application/json' || media.endsWith('+json')) return encodeURIComponent(JSON.stringify(value))
+  if (media !== 'application/x-www-form-urlencoded') throw new TypeError(`Unsupported whole-query content type: ${contentType}`)
+  if (!isRecord(value)) throw new TypeError('Form whole-query value must be an object')
+  const params = new URLSearchParams()
+  for (const [name, item] of Object.entries(value)) {
+    if (item === undefined || item === null) continue
+    for (const part of Array.isArray(item) ? item : [item]) params.append(name, String(part))
+  }
+  return params.toString()
+}
+const appendWholeQuery = (url: string, querystring: Record<string, unknown> | undefined, metadata: { name: string; contentType: string } | undefined): string => {
+  if (!metadata) return url
+  const search = serializeWholeQuery(querystring?.[metadata.name], metadata.contentType)
+  return search ? `${url}${url.includes('?') ? '&' : '?'}${search}` : url
+}
+const decodeSequence = (text: string, contentType: string, jsonPlan?: JsonPlan, status = 200): unknown[] => {
+  if (new TextEncoder().encode(text).length > 64 * 1024 * 1024) throw new TypeError('Sequential response exceeds 64 MiB')
+  const media = contentType.split(';')[0].trim().toLowerCase()
+  if (media === 'application/json-seq' && text.split('\x1e')[0].trim()) throw new TypeError('JSON sequence must begin with a record separator')
+  const records = media === 'application/json-seq' ? text.split('\x1e') : text.split(/\r?\n/)
+  const values = records.map(record => record.trim()).filter(Boolean)
+  if (values.length > 100000) throw new TypeError('Sequential response exceeds 100000 records')
+  const itemShape = jsonPlan ? resolvedShape(responseJsonShape(jsonPlan, status, contentType), jsonPlan.refs)?.items : undefined
+  return values.map(record => jsonPlan?.lossless ? parseJson(record, itemShape, jsonPlan.refs) : JSON.parse(record) as unknown)
+}
+const isJsonSequence = (contentType: string): boolean => ['application/json-seq', 'application/x-ndjson', 'application/ndjson', 'application/jsonl'].includes(contentType.split(';')[0].trim().toLowerCase())
+const encodeSequence = (body: unknown, contentType: string, jsonPlan?: JsonPlan): string => {
+  if (!Array.isArray(body)) throw new TypeError('Sequential JSON request body must be an array')
+  return body.map(item => {
+    const itemShape = jsonPlan ? resolvedShape(requestJsonShape(jsonPlan, contentType), jsonPlan.refs)?.items : undefined
+    const encoded = jsonPlan?.lossless ? stringifyJson(item, itemShape, jsonPlan.refs) : JSON.stringify(item)
+    if (encoded === undefined) throw new TypeError('Sequential JSON item must be serializable')
+    return (contentType.split(';')[0].trim().toLowerCase() === 'application/json-seq' ? '\x1e' : '') + encoded + '\n'
+  }).join('')
+}
+const styleFor = (styles: ParameterStyles | undefined, location: keyof ParameterStyles, name: string): Required<Omit<ParameterStyle, 'contentType'>> & Pick<ParameterStyle, 'contentType'> => {
   const configured = styles?.[location]?.[name] ?? {}
   const style = configured.style ?? (location === 'path' || location === 'header' ? 'simple' : 'form')
-  return { style, explode: configured.explode ?? (style === 'form') }
+  return { style, explode: configured.explode ?? (style === 'form'), contentType: configured.contentType ?? '' }
 }
 const scalar = (value: unknown) => encodeURIComponent(String(value))
+const contentParameter = (value: unknown, contentType: string): string => contentType.split(';')[0].includes('json') ? JSON.stringify(value) : String(value)
 const pairs = (value: Record<string, unknown>, separator: string) => Object.entries(value).map(([key, item]) => `${scalar(key)}=${scalar(item)}`).join(separator)
-const serializePath = (name: string, value: unknown, parameter: Required<ParameterStyle>) => {
-  if (value === undefined || value === null) return ''
+const serializePath = (name: string, value: unknown, parameter: Required<Omit<ParameterStyle, 'contentType'>> & Pick<ParameterStyle, 'contentType'>) => {
+  if (value === undefined || (value === null && !parameter.contentType)) return ''
+  if (parameter.contentType) return encodeURIComponent(contentParameter(value, parameter.contentType))
   const values = Array.isArray(value) ? value : undefined
   const object = isRecord(value) ? value : undefined
   if (parameter.style === 'label') return `.${values ? values.map(scalar).join(parameter.explode ? '.' : ',') : object ? (parameter.explode ? pairs(object, '.') : Object.entries(object).flatMap(([key, item]) => [scalar(key), scalar(item)]).join(',')) : scalar(value)}`
@@ -1276,8 +1318,9 @@ const serializePath = (name: string, value: unknown, parameter: Required<Paramet
   if (object) return parameter.explode ? pairs(object, ',') : Object.entries(object).flatMap(([key, item]) => [scalar(key), scalar(item)]).join(',')
   return scalar(value)
 }
-const appendQuery = (params: URLSearchParams, name: string, value: unknown, parameter: Required<ParameterStyle>) => {
-  if (value === undefined || value === null) return
+const appendQuery = (params: URLSearchParams, name: string, value: unknown, parameter: Required<Omit<ParameterStyle, 'contentType'>> & Pick<ParameterStyle, 'contentType'>) => {
+  if (value === undefined || (value === null && !parameter.contentType)) return
+  if (parameter.contentType) { params.append(name, contentParameter(value, parameter.contentType)); return }
   const values = Array.isArray(value) ? value : undefined
   const object = isRecord(value) ? value : undefined
   if (parameter.style === 'deepObject' && object) { for (const [key, item] of Object.entries(object)) params.append(`${name}[${key}]`, String(item)); return }
@@ -1319,7 +1362,7 @@ const formEntries = (name: string, value: unknown, encoding: FormEncoding = {}):
 const formPartHeaders = (contentType: string, property: string, encoding: FormEncoding | undefined, values: FormPartHeaders | undefined): Record<string, string> | undefined => {
   const supplied = values?.[contentType]?.[property]
   const declared = encoding?.headers ?? {}
-  for (const [name, header] of Object.entries(declared)) if (header.required && !Object.keys(supplied ?? {}).some((key) => key.toLowerCase() === name.toLowerCase())) throw new TypeError(`Missing required multipart header ${name} for ${property}`)
+  for (const [name, header] of Object.entries(declared)) if (name.toLowerCase() !== 'content-type' && header.required && !Object.keys(supplied ?? {}).some((key) => key.toLowerCase() === name.toLowerCase())) throw new TypeError(`Missing required multipart header ${name} for ${property}`)
   if (!supplied) return undefined
   return Object.fromEntries(Object.entries(supplied).map(([name, value]) => {
     const header = Object.entries(declared).find(([declaredName]) => declaredName.toLowerCase() === name.toLowerCase())?.[1]
@@ -1334,12 +1377,14 @@ const multipartParts = (body: Record<string, unknown>, encodings: FormEncodings 
 const appendForm = (form: FormData, parts: readonly MultipartPart[]) => { for (const part of parts) { if (part.headers && Object.keys(part.headers).length) throw new TypeError('Native FormData cannot set per-part headers; configure client.multipartEncoder') ; const item = part.contentType ? new Blob([part.value], { type: part.contentType }) : part.value; form.append(part.name, item) } return form }
 const formComponent = (value: string, allowReserved?: boolean) => allowReserved ? encodeURI(value).replace(/[&=]/g, (char) => char === '&' ? '%26' : '%3D') : encodeURIComponent(value)
 const encodedForm = (body: Record<string, unknown>, encodings: FormEncodings | undefined, contentType: string) => Object.entries(body).flatMap(([key, value]) => { const encoding = encodings?.[contentType]?.[key]; return formEntries(key, value, encoding).map(([part, item]) => [part, typeof item === 'string' ? item : String(item), encoding?.allowReserved] as const) }).map(([part, item, allowReserved]) => `${formComponent(part, allowReserved)}=${formComponent(item, allowReserved)}`).join('&')
-const requestBody = (body: unknown, headers: Headers, contentType: string | undefined, codecs?: Record<string, Codec>, formEncodings?: FormEncodings, formHeaders?: FormPartHeaders, multipartEncoder?: MultipartEncoder) => {
+const requestBody = (body: unknown, headers: Headers, contentType: string | undefined, codecs?: Record<string, Codec>, formEncodings?: FormEncodings, formHeaders?: FormPartHeaders, multipartEncoder?: MultipartEncoder, multipartPlan?: MultipartPlan) => {
   if (body === undefined || body === null) return undefined
   const mediaType = contentType ?? headers.get('content-type') ?? 'application/json'
+  if (multipartPlan) { const encoded = encodePlannedMultipart(body, multipartPlan, formHeaders); headers.set('content-type', encoded.type); return encoded }
   if (mediaType.startsWith('multipart/form-data') && isRecord(body)) { const parts = multipartParts(body, formEncodings, mediaType, formHeaders); if (multipartEncoder) { const encoded = multipartEncoder.encode(parts); headers.set('content-type', encoded.contentType); return encoded.body }; headers.delete('content-type'); return appendForm(new FormData(), parts) }
   const codec = codecFor(codecs, mediaType)
   if (codec?.encode) { if (!headers.has('content-type') && !mediaType.startsWith('multipart/form-data')) headers.set('content-type', mediaType); return codec.encode(body) }
+  if (isJsonSequence(mediaType)) { if (!headers.has('content-type')) headers.set('content-type', mediaType); return encodeSequence(body, mediaType, jsonPlan) }
   if (body instanceof FormData || body instanceof URLSearchParams || body instanceof Blob || typeof body === 'string') return body as BodyInit
   if (mediaType.startsWith('application/x-www-form-urlencoded') && isRecord(body)) { if (!headers.has('content-type')) headers.set('content-type', mediaType); return encodedForm(body, formEncodings, mediaType) }
   if (!headers.has('content-type')) headers.set('content-type', mediaType)
@@ -1350,6 +1395,7 @@ const responseBody = async (response: Response, codecs?: Record<string, Codec>) 
   const mediaType = contentType.split(';')[0].trim().toLowerCase()
   const codec = codecFor(codecs, contentType)
   if (codec?.decode) return codec.decode(await response.text(), contentType)
+  if (isJsonSequence(contentType)) return decodeSequence(await response.text(), contentType, jsonPlan, response.status)
   if (mediaType.includes('json') || mediaType.endsWith('+json')) return response.json()
   if (mediaType.startsWith('text/') || mediaType.includes('xml') || mediaType.includes('yaml')) return response.text()
   return response.arrayBuffer()
@@ -1390,7 +1436,7 @@ const retryDelay = async (attempt: number, retry: RetryConfig, retryAfter?: stri
   const delay = Math.max(0, Math.min(fromHeader ?? exponential, retry.maxDelayMs ?? 8_000))
   await requestRetryPause(delay, signal)
 }
-const createTransport = (config: ClientConfig = {}): ClientInstance => async ({ method, url, body, path, query, headers, cookies, throwOnError: _throwOnError, security, contentType, responseType, styles, formEncodings, formHeaders, validation, paginationUrl, idempotencyHeader, requestOptions }) => {
+const createTransport = (config: ClientConfig = {}): ClientInstance => async ({ method, url, body, path, query, querystring, wholeQuery, headers, cookies, throwOnError: _throwOnError, security, contentType, responseType, styles, formEncodings, formHeaders, multipartPlan, validation, paginationUrl, idempotencyHeader, requestOptions }) => {
   const signal = requestOptions?.signal
   const mergedHeaders = new Headers(config.headers)
   if (config.apiKey) mergedHeaders.set(config.apiKeyHeader ?? 'authorization', `${config.apiKeyPrefix ?? 'Bearer '}${config.apiKey}`)
@@ -1398,10 +1444,10 @@ const createTransport = (config: ClientConfig = {}): ClientInstance => async ({ 
   new Headers(requestOptions?.headers).forEach((value, key) => mergedHeaders.set(key, value))
   const resolvedQuery = { ...(query ?? {}) }
   applySecurity(mergedHeaders, resolvedQuery, security, config.auth)
-  for (const [name, value] of Object.entries(cookies ?? {})) { if (value !== undefined && value !== null) mergedHeaders.append('cookie', `${name}=${serializePath(name, value, styleFor(styles, 'cookie', name))}`) }
-  for (const [name, value] of Object.entries(headers as Record<string, unknown> ?? {})) if (styles?.header?.[name]) mergedHeaders.set(name, serializePath(name, value, styleFor(styles, 'header', name)))
+  for (const [name, value] of Object.entries(cookies ?? {})) { if (value !== undefined && (value !== null || styles?.cookie?.[name]?.contentType)) mergedHeaders.append('cookie', `${name}=${serializePath(name, value, styleFor(styles, 'cookie', name))}`) }
+  for (const [name, value] of Object.entries(headers as Record<string, unknown> ?? {})) if (styles?.header?.[name]) mergedHeaders.set(name, styles.header[name]?.contentType ? contentParameter(value, styles.header[name]!.contentType!) : serializePath(name, value, styleFor(styles, 'header', name)))
   new Headers(requestOptions?.headers).forEach((value, key) => mergedHeaders.set(key, value))
-  const requestUrl = paginationUrl ? resolvePaginationUrl(paginationUrl, config.baseUrl) : `${config.baseUrl ?? ''}${resolveUrl(url, path, resolvedQuery, styles)}`
+  const requestUrl = paginationUrl ? resolvePaginationUrl(paginationUrl, config.baseUrl) : `${config.baseUrl ?? ''}${appendWholeQuery(resolveUrl(url, path, resolvedQuery, styles), querystring, wholeQuery)}`
   const request = { method, url: requestUrl, body, path, query: resolvedQuery, headers: mergedHeaders }
   await validate(validation?.request ?? config.validation?.request, body)
   await config.hooks?.beforeRequest?.(request)
@@ -1411,7 +1457,7 @@ const createTransport = (config: ClientConfig = {}): ClientInstance => async ({ 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       signal?.throwIfAborted()
     try {
-      response = await (config.fetch ?? globalThis.fetch)(requestUrl, { method, body: requestBody(body, mergedHeaders, contentType?.request, config.codecs, formEncodings, formHeaders, config.multipartEncoder), headers: mergedHeaders, signal })
+      response = await (config.fetch ?? globalThis.fetch)(requestUrl, { method, body: requestBody(body, mergedHeaders, contentType?.request, config.codecs, formEncodings, formHeaders, config.multipartEncoder, multipartPlan), headers: mergedHeaders, signal })
       if (attempt + 1 < maxAttempts && retryableStatus(response.status)) {
         await retryDelay(attempt, retry ?? {}, response.headers.get('retry-after'), response.headers.get('retry-after-ms'), signal)
         continue
@@ -1499,17 +1545,17 @@ export interface StandardSchema { readonly ['~standard']?: { readonly validate: 
 export type Validator = StandardSchema | ((value: unknown) => void | Promise<void>)
 export interface ClientValidation { request?: Validator; response?: Validator }
 export interface ClientConfig { timeoutMs?: number; baseUrl?: string; apiKey?: string; apiKeyHeader?: string; apiKeyPrefix?: string; auth?: SecurityCredentials; headers?: Record<string, string>; client?: AxiosInstance; retry?: RetryConfig | false; middleware?: readonly ClientMiddleware[]; validateResponses?: boolean; hooks?: ClientHooks; codecs?: Record<string, Codec>; validation?: ClientValidation; multipartEncoder?: MultipartEncoder }
-export type ParameterStyle = { style?: 'simple' | 'label' | 'matrix' | 'form' | 'spaceDelimited' | 'pipeDelimited' | 'deepObject'; explode?: boolean }
+export type ParameterStyle = { contentType?: string; style?: 'simple' | 'label' | 'matrix' | 'form' | 'spaceDelimited' | 'pipeDelimited' | 'deepObject'; explode?: boolean }
 export type ParameterStyles = Partial<Record<'path' | 'query' | 'header' | 'cookie', Record<string, ParameterStyle>>>
 export type FormPartHeader = { required?: boolean; style?: ParameterStyle['style']; explode?: boolean; allowReserved?: boolean; schema_definition?: unknown; example_json?: string }
-export type FormEncoding = { contentType?: string; headers?: Record<string, FormPartHeader>; style?: 'form' | 'spaceDelimited' | 'pipeDelimited'; explode?: boolean; allowReserved?: boolean }
+export type FormEncoding = { contentType?: string; headers?: Record<string, FormPartHeader>; style?: 'form' | 'spaceDelimited' | 'pipeDelimited'; explode?: boolean; allowReserved?: boolean; encoding?: Record<string, FormEncoding>; prefixEncoding?: FormEncoding[]; itemEncoding?: FormEncoding }
 export type FormEncodings = Record<string, Record<string, FormEncoding>>
 export type FormPartHeaders = Record<string, Record<string, Record<string, unknown>>>
 export type MultipartPart = { name: string; value: unknown; contentType?: string; headers?: Record<string, string> }
 export interface MultipartEncoder { encode(parts: readonly MultipartPart[]): { body: unknown; contentType: string } }
-export type RequestConfig = { requestOptions?: RequestOptions; method: string; url: string; body?: unknown; path?: Record<string, unknown>; query?: Record<string, unknown>; headers?: Record<string, unknown>; cookies?: Record<string, unknown>; throwOnError?: boolean; security?: SecurityDescriptor[][]; contentType?: { request?: string }; responseType?: 'stream'; styles?: ParameterStyles; formEncodings?: FormEncodings; formHeaders?: FormPartHeaders; validation?: ClientValidation; validateResponses?: boolean; paginationUrl?: string; idempotencyHeader?: string }
+export type RequestConfig = { requestOptions?: RequestOptions; method: string; url: string; body?: unknown; path?: Record<string, unknown>; query?: Record<string, unknown>; querystring?: Record<string, unknown>; wholeQuery?: { name: string; contentType: string }; headers?: Record<string, unknown>; cookies?: Record<string, unknown>; throwOnError?: boolean; security?: SecurityDescriptor[][]; contentType?: { request?: string }; responseType?: 'stream' | 'arraybuffer'; styles?: ParameterStyles; formEncodings?: FormEncodings; formHeaders?: FormPartHeaders; multipartPlan?: MultipartPlan; validation?: ClientValidation; validateResponses?: boolean; paginationUrl?: string; idempotencyHeader?: string }
 export type ClientInstance = (request: RequestConfig) => Promise<unknown>
-export type Options<T, ThrowOnError extends boolean> = T & { requestOptions?: RequestOptions; client?: ClientInstance; throwOnError?: ThrowOnError; formHeaders?: FormPartHeaders; validation?: ClientValidation }
+export type Options<T, ThrowOnError extends boolean> = T & { requestOptions?: RequestOptions; client?: ClientInstance; throwOnError?: ThrowOnError; formHeaders?: FormPartHeaders; multipartPlan?: MultipartPlan; validation?: ClientValidation }
 export type SuccessOf<T> = T[Extract<keyof T, `2${string}`>]
 type StatusCode<S> = S extends `${infer Code extends number}` ? Code : number
 type MediaResult<S, T> = T extends { contentType: infer ContentType extends string; data: infer Data } ? { status: StatusCode<S>; contentType: ContentType; data: Data; headers: Record<string, unknown> } : { status: StatusCode<S>; contentType: string; data: T; headers: Record<string, unknown> }
@@ -1519,15 +1565,57 @@ export type RequestResult<T, ThrowOnError extends boolean> = ThrowOnError extend
 export type ResponseResult<T extends { status: number; data: unknown }, ThrowOnError extends boolean> = ThrowOnError extends true ? T['data'] : T
 export type EventStreamResult<T> = AsyncIterable<T>
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
-const styleFor = (styles: ParameterStyles | undefined, location: keyof ParameterStyles, name: string): Required<ParameterStyle> => {
+const serializeWholeQuery = (value: unknown, contentType: string): string => {
+  if (value === undefined) return ''
+  const media = contentType.split(';')[0].trim().toLowerCase()
+  if (value === null && media !== 'application/json' && !media.endsWith('+json')) return ''
+  if (media === 'text/plain') { const raw = String(value).replace(/^\?/, ''); if (/[#\r\n]/.test(raw)) throw new TypeError('Whole-query value contains a fragment or line break'); return raw }
+  if (media === 'application/json' || media.endsWith('+json')) return encodeURIComponent(JSON.stringify(value))
+  if (media !== 'application/x-www-form-urlencoded') throw new TypeError(`Unsupported whole-query content type: ${contentType}`)
+  if (!isRecord(value)) throw new TypeError('Form whole-query value must be an object')
+  const params = new URLSearchParams()
+  for (const [name, item] of Object.entries(value)) {
+    if (item === undefined || item === null) continue
+    for (const part of Array.isArray(item) ? item : [item]) params.append(name, String(part))
+  }
+  return params.toString()
+}
+const appendWholeQuery = (url: string, querystring: Record<string, unknown> | undefined, metadata: { name: string; contentType: string } | undefined): string => {
+  if (!metadata) return url
+  const search = serializeWholeQuery(querystring?.[metadata.name], metadata.contentType)
+  return search ? `${url}${url.includes('?') ? '&' : '?'}${search}` : url
+}
+const decodeSequence = (text: string, contentType: string, jsonPlan?: JsonPlan, status = 200): unknown[] => {
+  if (new TextEncoder().encode(text).length > 64 * 1024 * 1024) throw new TypeError('Sequential response exceeds 64 MiB')
+  const media = contentType.split(';')[0].trim().toLowerCase()
+  if (media === 'application/json-seq' && text.split('\x1e')[0].trim()) throw new TypeError('JSON sequence must begin with a record separator')
+  const records = media === 'application/json-seq' ? text.split('\x1e') : text.split(/\r?\n/)
+  const values = records.map(record => record.trim()).filter(Boolean)
+  if (values.length > 100000) throw new TypeError('Sequential response exceeds 100000 records')
+  const itemShape = jsonPlan ? resolvedShape(responseJsonShape(jsonPlan, status, contentType), jsonPlan.refs)?.items : undefined
+  return values.map(record => jsonPlan?.lossless ? parseJson(record, itemShape, jsonPlan.refs) : JSON.parse(record) as unknown)
+}
+const isJsonSequence = (contentType: string): boolean => ['application/json-seq', 'application/x-ndjson', 'application/ndjson', 'application/jsonl'].includes(contentType.split(';')[0].trim().toLowerCase())
+const encodeSequence = (body: unknown, contentType: string, jsonPlan?: JsonPlan): string => {
+  if (!Array.isArray(body)) throw new TypeError('Sequential JSON request body must be an array')
+  return body.map(item => {
+    const itemShape = jsonPlan ? resolvedShape(requestJsonShape(jsonPlan, contentType), jsonPlan.refs)?.items : undefined
+    const encoded = jsonPlan?.lossless ? stringifyJson(item, itemShape, jsonPlan.refs) : JSON.stringify(item)
+    if (encoded === undefined) throw new TypeError('Sequential JSON item must be serializable')
+    return (contentType.split(';')[0].trim().toLowerCase() === 'application/json-seq' ? '\x1e' : '') + encoded + '\n'
+  }).join('')
+}
+const styleFor = (styles: ParameterStyles | undefined, location: keyof ParameterStyles, name: string): Required<Omit<ParameterStyle, 'contentType'>> & Pick<ParameterStyle, 'contentType'> => {
   const configured = styles?.[location]?.[name] ?? {}
   const style = configured.style ?? (location === 'path' || location === 'header' ? 'simple' : 'form')
-  return { style, explode: configured.explode ?? (style === 'form') }
+  return { style, explode: configured.explode ?? (style === 'form'), contentType: configured.contentType ?? '' }
 }
 const scalar = (value: unknown) => encodeURIComponent(String(value))
+const contentParameter = (value: unknown, contentType: string): string => contentType.split(';')[0].includes('json') ? JSON.stringify(value) : String(value)
 const pairs = (value: Record<string, unknown>, separator: string) => Object.entries(value).map(([key, item]) => `${scalar(key)}=${scalar(item)}`).join(separator)
-const serializePath = (name: string, value: unknown, parameter: Required<ParameterStyle>) => {
-  if (value === undefined || value === null) return ''
+const serializePath = (name: string, value: unknown, parameter: Required<Omit<ParameterStyle, 'contentType'>> & Pick<ParameterStyle, 'contentType'>) => {
+  if (value === undefined || (value === null && !parameter.contentType)) return ''
+  if (parameter.contentType) return encodeURIComponent(contentParameter(value, parameter.contentType))
   const values = Array.isArray(value) ? value : undefined
   const object = isRecord(value) ? value : undefined
   if (parameter.style === 'label') return `.${values ? values.map(scalar).join(parameter.explode ? '.' : ',') : object ? (parameter.explode ? pairs(object, '.') : Object.entries(object).flatMap(([key, item]) => [scalar(key), scalar(item)]).join(',')) : scalar(value)}`
@@ -1538,7 +1626,7 @@ const serializePath = (name: string, value: unknown, parameter: Required<Paramet
 }
 const serializeQuery = (query: Record<string, unknown>, styles?: ParameterStyles) => {
   const output: Record<string, unknown> = {}
-  for (const [name, value] of Object.entries(query)) { if (value === undefined || value === null) continue; const parameter = styleFor(styles, 'query', name); if (parameter.style === 'deepObject' && isRecord(value)) { for (const [key, item] of Object.entries(value)) output[`${name}[${key}]`] = item } else if (isRecord(value) && parameter.explode) Object.assign(output, value); else output[name] = Array.isArray(value) ? (parameter.explode && parameter.style === 'form' ? value : value.join(parameter.style === 'spaceDelimited' ? ' ' : parameter.style === 'pipeDelimited' ? '|' : ',')) : isRecord(value) ? Object.entries(value).flatMap(([key, item]) => [key, String(item)]).join(',') : value }
+  for (const [name, value] of Object.entries(query)) { const parameter = styleFor(styles, 'query', name); if (value === undefined || (value === null && !parameter.contentType)) continue; if (parameter.contentType) { output[name] = contentParameter(value, parameter.contentType); continue }; if (parameter.style === 'deepObject' && isRecord(value)) { for (const [key, item] of Object.entries(value)) output[`${name}[${key}]`] = item } else if (isRecord(value) && parameter.explode) Object.assign(output, value); else output[name] = Array.isArray(value) ? (parameter.explode && parameter.style === 'form' ? value : value.join(parameter.style === 'spaceDelimited' ? ' ' : parameter.style === 'pipeDelimited' ? '|' : ',')) : isRecord(value) ? Object.entries(value).flatMap(([key, item]) => [key, String(item)]).join(',') : value }
   return output
 }
 const resolvePath = (template: string, path?: Record<string, unknown>, styles?: ParameterStyles) => template.replace(/\{([^}]+)\}/g, (_match, key) => serializePath(key, path?.[key], styleFor(styles, 'path', key)) || `{${key}}`)
@@ -1554,7 +1642,7 @@ const formEntries = (name: string, value: unknown, encoding: FormEncoding = {}):
 const formPartHeaders = (contentType: string, property: string, encoding: FormEncoding | undefined, values: FormPartHeaders | undefined): Record<string, string> | undefined => {
   const supplied = values?.[contentType]?.[property]
   const declared = encoding?.headers ?? {}
-  for (const [name, header] of Object.entries(declared)) if (header.required && !Object.keys(supplied ?? {}).some((key) => key.toLowerCase() === name.toLowerCase())) throw new TypeError(`Missing required multipart header ${name} for ${property}`)
+  for (const [name, header] of Object.entries(declared)) if (name.toLowerCase() !== 'content-type' && header.required && !Object.keys(supplied ?? {}).some((key) => key.toLowerCase() === name.toLowerCase())) throw new TypeError(`Missing required multipart header ${name} for ${property}`)
   if (!supplied) return undefined
   return Object.fromEntries(Object.entries(supplied).map(([name, value]) => {
     const header = Object.entries(declared).find(([declaredName]) => declaredName.toLowerCase() === name.toLowerCase())?.[1]
@@ -1569,13 +1657,15 @@ const multipartParts = (body: Record<string, unknown>, encodings: FormEncodings 
 const appendForm = (form: FormData, parts: readonly MultipartPart[]) => { for (const part of parts) { if (part.headers && Object.keys(part.headers).length) throw new TypeError('Native FormData cannot set per-part headers; configure client.multipartEncoder'); const item = part.value instanceof Blob && part.contentType ? new Blob([part.value], { type: part.contentType }) : part.value instanceof Blob ? part.value : String(part.value); form.append(part.name, item) } return form }
 const formComponent = (value: string, allowReserved?: boolean) => allowReserved ? encodeURI(value).replace(/[&=]/g, (char) => char === '&' ? '%26' : '%3D') : encodeURIComponent(value)
 const encodeForm = (body: Record<string, unknown>, encodings: FormEncodings | undefined, contentType: string) => Object.entries(body).flatMap(([key, value]) => { const encoding = encodings?.[contentType]?.[key]; return formEntries(key, value, encoding).map(([part, item]) => [part, item, encoding?.allowReserved] as const) }).map(([key, value, allowReserved]) => `${formComponent(key, allowReserved)}=${formComponent(String(value), allowReserved)}`).join('&')
-const encodeBody = (body: unknown, headers: Record<string, string>, contentType: string | undefined, codecs?: Record<string, Codec>, formEncodings?: FormEncodings, formHeaders?: FormPartHeaders, multipartEncoder?: MultipartEncoder) => {
+const encodeBody = (body: unknown, headers: Record<string, string>, contentType: string | undefined, codecs?: Record<string, Codec>, formEncodings?: FormEncodings, formHeaders?: FormPartHeaders, multipartEncoder?: MultipartEncoder, multipartPlan?: MultipartPlan) => {
   if (body === undefined || body === null) return undefined
   const mediaType = contentType ?? 'application/json'
+  if (multipartPlan) { const encoded = encodePlannedMultipart(body, multipartPlan, formHeaders); headers['content-type'] = encoded.type; return encoded }
   if (mediaType.startsWith('multipart/form-data') && isRecord(body)) { const parts = multipartParts(body, formEncodings, mediaType, formHeaders); if (multipartEncoder) { const encoded = multipartEncoder.encode(parts); headers['content-type'] = encoded.contentType; return encoded.body }; delete headers['content-type']; return appendForm(new FormData(), parts) }
   const codec = codecFor(codecs, mediaType)
   if (codec?.encode) return codec.encode(body)
   if (body instanceof FormData || body instanceof URLSearchParams || body instanceof Blob || typeof body === 'string') return body
+  if (isJsonSequence(mediaType)) { headers['content-type'] ??= mediaType; return encodeSequence(body, mediaType, jsonPlan) }
   if (mediaType.startsWith('application/x-www-form-urlencoded') && isRecord(body)) return encodeForm(body, formEncodings, mediaType)
   return body
 }
@@ -1631,17 +1721,17 @@ const createTransport = (config: ClientConfig = {}): ClientInstance => {
   const headers = { ...config.headers }
   if (config.apiKey) headers[config.apiKeyHeader ?? 'authorization'] = `${config.apiKeyPrefix ?? 'Bearer '}${config.apiKey}`
   const instance = config.client ?? axios.create({ baseURL: config.baseUrl, headers })
-  return async ({ method, url, body, path, query, headers: requestHeaders, cookies, throwOnError: _throwOnError, security, contentType, responseType, styles, formEncodings, formHeaders, validation, paginationUrl, idempotencyHeader, requestOptions }) => {
+  return async ({ method, url, body, path, query, querystring, wholeQuery, headers: requestHeaders, cookies, throwOnError: _throwOnError, security, contentType, responseType, styles, formEncodings, formHeaders, multipartPlan, validation, paginationUrl, idempotencyHeader, requestOptions }) => {
     const signal = requestOptions?.signal
     const resolvedHeaders: Record<string, string> = { ...headers, ...Object.fromEntries(Object.entries(requestHeaders ?? {}).map(([key, value]) => [key, String(value)])) }
     new Headers(requestOptions?.headers).forEach((value, key) => { resolvedHeaders[key] = value })
     const resolvedQuery = { ...(query ?? {}) }
     applySecurity(resolvedHeaders, resolvedQuery, security, config.auth)
-    for (const [name, value] of Object.entries(requestHeaders ?? {})) if (styles?.header?.[name]) resolvedHeaders[name] = serializePath(name, value, styleFor(styles, 'header', name))
+    for (const [name, value] of Object.entries(requestHeaders ?? {})) if (styles?.header?.[name]) resolvedHeaders[name] = styles.header[name]?.contentType ? contentParameter(value, styles.header[name]!.contentType!) : serializePath(name, value, styleFor(styles, 'header', name))
     new Headers(requestOptions?.headers).forEach((value, key) => { resolvedHeaders[key] = value })
     if (contentType?.request && !contentType.request.startsWith('multipart/form-data')) resolvedHeaders['content-type'] ??= contentType.request
-    if (cookies) resolvedHeaders.cookie = [...(resolvedHeaders.cookie ? [resolvedHeaders.cookie] : []), ...Object.entries(cookies).filter(([, value]) => value !== undefined && value !== null).map(([name, value]) => `${name}=${serializePath(name, value, styleFor(styles, 'cookie', name))}`)].join('; ')
-    const requestUrl = paginationUrl ? resolvePaginationUrl(paginationUrl, config.baseUrl) : resolvePath(url, path, styles)
+    if (cookies) resolvedHeaders.cookie = [...(resolvedHeaders.cookie ? [resolvedHeaders.cookie] : []), ...Object.entries(cookies).filter(([name, value]) => value !== undefined && (value !== null || styles?.cookie?.[name]?.contentType)).map(([name, value]) => `${name}=${serializePath(name, value, styleFor(styles, 'cookie', name))}`)].join('; ')
+    const requestUrl = paginationUrl ? resolvePaginationUrl(paginationUrl, config.baseUrl) : appendWholeQuery(resolvePath(url, path, styles), querystring, wholeQuery)
     const request = { method, url: requestUrl, body, path, query: resolvedQuery, headers: resolvedHeaders }
     await validate(validation?.request ?? config.validation?.request, body)
     await config.hooks?.beforeRequest?.(request)
@@ -1651,7 +1741,7 @@ const createTransport = (config: ClientConfig = {}): ClientInstance => {
       signal?.throwIfAborted()
       let response
       try {
-        response = await instance.request({ method, url: requestUrl, data: encodeBody(body, resolvedHeaders, contentType?.request, config.codecs, formEncodings, formHeaders, config.multipartEncoder), params: serializeQuery(resolvedQuery, styles), headers: resolvedHeaders, signal, responseType: responseType === 'stream' ? 'stream' : undefined, validateStatus: () => true })
+        response = await instance.request({ method, url: requestUrl, data: encodeBody(body, resolvedHeaders, contentType?.request, config.codecs, formEncodings, formHeaders, config.multipartEncoder, multipartPlan), params: serializeQuery(resolvedQuery, styles), headers: resolvedHeaders, signal, responseType: responseType === 'stream' ? 'stream' : responseType === 'arraybuffer' ? 'arraybuffer' : undefined, validateStatus: () => true })
       } catch (error) {
         // validateStatus above keeps HTTP responses out of this branch. Only
         // adapter/network failures retry; a hook, codec, or validator failure
@@ -1668,11 +1758,11 @@ const createTransport = (config: ClientConfig = {}): ClientInstance => {
         continue
       }
       const mediaType = String(response.headers['content-type'] ?? '')
-      const data = await codecFor(config.codecs, mediaType)?.decode?.(response.data, mediaType) ?? response.data
+      const data = await codecFor(config.codecs, mediaType)?.decode?.(response.data, mediaType) ?? (isJsonSequence(mediaType) ? decodeSequence(String(response.data), mediaType, jsonPlan, response.status) : (jsonPlan?.lossless && typeof response.data === 'string' && (mediaType.includes('json') || mediaType.includes('+json')) ? parseJson(response.data, responseJsonShape(jsonPlan, response.status, mediaType), jsonPlan.refs) : response.data))
       try {
         await config.hooks?.afterResponse?.({ request, status: response.status, headers: response.headers as Record<string, unknown>, data })
         if (response.status >= 400 && _throwOnError !== false) throw new ApiError(response.status, data)
-        await validate(validation?.response ?? config.validation?.response, data)
+        if (responseType !== 'stream') await validate(validation?.response ?? config.validation?.response, data)
         return { status: response.status, contentType: mediaType.split(';')[0].trim(), data, headers: response.headers as Record<string, unknown> }
       } catch (error) {
         await config.hooks?.onError?.(error, request)
@@ -1733,21 +1823,21 @@ export const resolveResponse = <T extends { status: number; data: unknown }, Thr
             )
         }
     };
+    let runtime = format!("{}\n{}", runtime, include_str!("multipart32.ts.txt"));
     let runtime = runtime.replace("paginationUrl?: string; idempotencyHeader?: string }", "paginationUrl?: string; idempotencyHeader?: string; jsonPlan?: JsonPlan }")
         .replace("validation, paginationUrl, idempotencyHeader, requestOptions })", "validation, paginationUrl, idempotencyHeader, requestOptions, jsonPlan })")
-        .replace("formHeaders, config.multipartEncoder)", "formHeaders, config.multipartEncoder, jsonPlan)")
-        .replace("multipartEncoder?: MultipartEncoder) =>", "multipartEncoder?: MultipartEncoder, jsonPlan?: JsonPlan) =>")
+        .replace("formHeaders, config.multipartEncoder, multipartPlan)", "formHeaders, config.multipartEncoder, multipartPlan, jsonPlan)")
+        .replace("multipartEncoder?: MultipartEncoder, multipartPlan?: MultipartPlan) =>", "multipartEncoder?: MultipartEncoder, multipartPlan?: MultipartPlan, jsonPlan?: JsonPlan) =>")
         .replace("return JSON.stringify(body)", "return jsonPlan?.lossless ? stringifyJson(body, requestJsonShape(jsonPlan, mediaType), jsonPlan.refs) : JSON.stringify(body)")
         .replace("const responseBody = async (response: Response, codecs?: Record<string, Codec>)", "const responseBody = async (response: Response, codecs?: Record<string, Codec>, jsonPlan?: JsonPlan)")
         .replace("return response.json()", "return jsonPlan?.lossless ? parseJson(await response.text(), responseJsonShape(jsonPlan, response.status, contentType), jsonPlan.refs) : response.json()")
         .replace("responseBody(response.clone(), config.codecs)", "responseBody(response.clone(), config.codecs, jsonPlan)")
         .replace("  return body\n}", "  return jsonPlan?.lossless && (mediaType.includes('json') || mediaType.endsWith('+json')) ? stringifyJson(body, requestJsonShape(jsonPlan, mediaType), jsonPlan.refs) : body\n}")
-        .replace("responseType === 'stream' ? 'stream' : undefined", "responseType === 'stream' ? 'stream' : jsonPlan?.lossless ? 'text' : undefined")
-        .replace("validateStatus: () => true })", "validateStatus: () => true, ...(jsonPlan?.lossless && responseType !== 'stream' ? { transformResponse: [(value: unknown) => value] } : {}) })")
+        .replace("responseType === 'arraybuffer' ? 'arraybuffer' : undefined", "responseType === 'arraybuffer' ? 'arraybuffer' : jsonPlan?.lossless ? 'text' : undefined")
+        .replace("validateStatus: () => true })", "validateStatus: () => true, ...(jsonPlan?.lossless && responseType !== 'stream' && responseType !== 'arraybuffer' ? { transformResponse: [(value: unknown) => value] } : {}) })")
         .replace("?? response.data", "?? (jsonPlan?.lossless && typeof response.data === 'string' && (mediaType.includes('json') || mediaType.includes('+json')) ? parseJson(response.data, responseJsonShape(jsonPlan, response.status, mediaType), jsonPlan.refs) : response.data)")
         .replace("(response: Promise<unknown>): Promise<EventStreamResult<T>>", "(response: Promise<unknown>, jsonPlan?: JsonPlan): Promise<EventStreamResult<T>>")
         .replace("const stream = raw instanceof Response ? raw.body : raw as ReadableStream<Uint8Array> | null", "const stream = raw instanceof Response ? raw.body : (raw && typeof raw === 'object' && 'data' in raw ? raw.data : raw) as ReadableStream<Uint8Array> | null")
-        .replace("await validate(validation?.response ?? config.validation?.response, data)", "if (responseType !== 'stream') await validate(validation?.response ?? config.validation?.response, data)")
         .replace("yield JSON.parse(data) as T", "yield (jsonPlan ? parseJson(data, responseJsonShape(jsonPlan, eventStreamStatus(raw), 'text/event-stream'), jsonPlan.refs) : JSON.parse(data)) as T");
     format!(
         "{}\n{}\n{}",

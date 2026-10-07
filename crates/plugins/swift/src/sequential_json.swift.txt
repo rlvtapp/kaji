@@ -1,0 +1,34 @@
+    internal func normalizeSequentialJSON(_ data:Data, contentType:String?) throws -> Data {
+        let media=contentType?.split(separator:";",maxSplits:1).first?.trimmingCharacters(in:.whitespaces)
+        let sequence=media=="application/json-seq"
+        guard sequence || ["application/x-ndjson","application/ndjson","application/jsonl"].contains(media ?? "") else{return data}
+        guard data.count<=64*1024*1024,let text=String(data:data,encoding:.utf8) else{throw KajiAPIError.invalidResponse}
+        guard !sequence || text.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty || text.first=="\u{1e}" else{throw KajiAPIError.invalidResponse}
+        var records=text.components(separatedBy:sequence ? "\u{1e}":"\n")
+        if sequence {records.removeFirst()}
+        var values:[Any]=[]
+        for record in records {
+            if record.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty {if sequence{throw KajiAPIError.invalidResponse};continue}
+            guard values.count<100000 else{throw KajiAPIError.invalidResponse}
+            values.append(try JSONSerialization.jsonObject(with:Data(record.utf8),options:[.fragmentsAllowed]))
+        }
+        return try JSONSerialization.data(withJSONObject:values,options:[.fragmentsAllowed])
+    }
+
+    internal func applyWholeQuery(_ request:inout URLRequest,raw:String) throws {
+        let bytes=Array(raw.utf8);var index=0
+        guard !raw.hasPrefix("?") else{throw KajiAPIError.invalidResponse}
+        while index<bytes.count {let byte=bytes[index];guard byte>=32,byte != 127,byte != 35 else{throw KajiAPIError.invalidResponse};if byte==37 {guard index+2<bytes.count, String(bytes:bytes[(index+1)...(index+2)],encoding:.utf8)?.allSatisfy({$0.isHexDigit})==true else{throw KajiAPIError.invalidResponse};index+=2};index+=1}
+        guard let url=request.url,var components=URLComponents(url:url,resolvingAgainstBaseURL:false) else{throw KajiAPIError.invalidResponse}
+        components.percentEncodedQuery=raw.isEmpty ? nil : raw
+        guard let final=components.url else{throw KajiAPIError.invalidResponse};request.url=final
+    }
+    internal func encodeSequentialJSON<T:Encodable>(_ body:T,media:String) throws -> Data {
+        let data=try encoder.encode(body)
+        guard let items=try JSONSerialization.jsonObject(with:data) as? [Any],items.count<=100000 else{throw KajiAPIError.invalidResponse}
+        var wire=Data()
+        for item in items {if media=="application/json-seq"{wire.append(0x1e)};wire.append(try JSONSerialization.data(withJSONObject:item,options:[.fragmentsAllowed]));wire.append(0x0a);guard wire.count<=64*1024*1024 else{throw KajiAPIError.invalidResponse}}
+        return wire
+    }
+
+    internal func jsonParameter<T:Encodable>(_ value:T)throws->String {let data=try encoder.encode(value);guard let text=String(data:data,encoding:.utf8)else{throw KajiAPIError.invalidResponse};return text}

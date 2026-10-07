@@ -1,10 +1,17 @@
-  # Explicit buffered parts: add repeated fields by calling add_text/add_file again.
+  # Ordered buffered parts. Encoding metadata is applied by generated operations.
   class MultipartBody
     MAX_BYTES = 64 * 1024 * 1024
     MAX_PARTS = 1024
 
     def initialize
       @parts = []
+      @encoding = {}
+    end
+
+    def with_encoding(encoding)
+      copy = dup
+      copy.instance_variable_set(:@encoding, encoding || {})
+      copy
     end
 
     def add_text(name, value)
@@ -19,30 +26,79 @@
       add_part(name, data, filename: filename, content_type: content_type)
     end
 
-    def add_part(name, data, filename: nil, content_type: 'application/octet-stream')
+    def add_part(name, data, filename: nil, content_type: 'application/octet-stream', headers: {})
       raise ArgumentError, 'too many multipart parts' if @parts.length >= MAX_PARTS
-      [name, filename, content_type].compact.each do |value|
-        raise ArgumentError, 'invalid multipart metadata' unless value.is_a?(String) && !value.empty? && value.bytesize <= 4096 && !value.match?(/[\r\n\x00]/)
-      end
-      raise ArgumentError, 'multipart data must be a String' unless data.is_a?(String)
-      raise ArgumentError, 'multipart body exceeds buffer limit' if data.bytesize + @parts.sum { |part| part[1].bytesize } > MAX_BYTES
-      @parts << [name.dup.freeze, data.b.dup.freeze, filename&.dup&.freeze, content_type.dup.freeze]
+      [name, filename, content_type].compact.each { |value| validate_metadata(value) }
+      raise ArgumentError, 'multipart data must be a String or MultipartBody' unless data.is_a?(String) || data.is_a?(MultipartBody)
+      raise ArgumentError, 'multipart headers must be a Hash' unless headers.is_a?(Hash) && headers.length <= 64
+      headers.each { |key, value| validate_header(key, value) }
+      data = data.snapshot if data.is_a?(MultipartBody)
+      size = data.is_a?(String) ? data.bytesize : data.encode[1].bytesize
+      raise ArgumentError, 'multipart body exceeds buffer limit' if size + @parts.sum { |part| part[1].is_a?(String) ? part[1].bytesize : part[1].encode[1].bytesize } > MAX_BYTES
+      @parts << [name.dup.freeze, data.is_a?(String) ? data.b.dup.freeze : data, filename&.dup&.freeze, content_type.dup.freeze, headers.transform_keys(&:to_s).transform_values(&:to_s)]
       self
     end
 
-    def encode
+    def encode(depth = 0)
+      raise ArgumentError, 'multipart nesting exceeds 32 levels' if depth > 32
       require 'securerandom'
       boundary = "kaji-#{SecureRandom.hex(24)}"
       quote = ->(value) { value.gsub('\\', '\\\\').gsub('"', '\\"') }
+      media_type = @encoding['content_type'] || @encoding['contentType'] || 'multipart/form-data'
+      raise ArgumentError, 'multipart content type required' unless media_type.start_with?('multipart/')
+      validate_metadata(media_type)
       encoded = ''.b
-      @parts.each do |name, data, filename, content_type|
+      @parts.each_with_index do |part, index|
+        name, data, filename, content_type, supplied = part
+        prefix = @encoding['prefix_encoding'] || @encoding['prefixEncoding'] || []
+        plan = prefix[index] || @encoding['item_encoding'] || @encoding['itemEncoding'] || (@encoding['encoding'] || {})[name] || {}
+        headers = supplied.dup
+        (plan['headers'] || {}).each do |key, declaration|
+          next if headers.keys.any? { |existing| existing.downcase == key.downcase }
+          value = declaration['example_json'] ? JSON.parse(declaration['example_json']) : (declaration['schema_definition'] || {})['default']
+          raise ArgumentError, "required multipart header #{key} is missing" if value.nil? && declaration['required']
+          headers[key] = value.is_a?(String) ? value : JSON.generate(value) unless value.nil?
+        end
+        raise ArgumentError, 'too many multipart headers' if headers.length > 64
+        headers.each { |key, value| validate_header(key, value) }
+        if data.is_a?(MultipartBody)
+          content_type, data = data.with_encoding(plan).encode(depth + 1)
+        else
+          content_type = plan['contentType'] || content_type
+          validate_metadata(content_type)
+        end
         encoded << "--#{boundary}\r\nContent-Disposition: form-data; name=\"#{quote.call(name)}\"".b
         encoded << "; filename=\"#{quote.call(filename)}\"".b if filename
-        encoded << "\r\nContent-Type: #{content_type}\r\n\r\n".b << data << "\r\n".b
+        encoded << "\r\nContent-Type: #{content_type}\r\n".b
+        headers.each { |key, value| encoded << "#{key}: #{value}\r\n".b }
+        encoded << "\r\n".b << data << "\r\n".b
         raise ArgumentError, 'multipart body exceeds buffer limit' if encoded.bytesize > MAX_BYTES
       end
       encoded << "--#{boundary}--\r\n".b
       raise ArgumentError, 'multipart body exceeds buffer limit' if encoded.bytesize > MAX_BYTES
-      ["multipart/form-data; boundary=#{boundary}", encoded]
+      ["#{media_type}; boundary=#{boundary}", encoded]
+    end
+
+    def snapshot(depth = 0)
+      raise ArgumentError, 'multipart nesting exceeds 32 levels' if depth > 32
+      copy = dup
+      parts = @parts.map do |part|
+        item = part.dup
+        item[1] = item[1].snapshot(depth + 1) if item[1].is_a?(MultipartBody)
+        item
+      end
+      copy.instance_variable_set(:@parts, parts)
+      copy
+    end
+
+    private
+    def validate_metadata(value)
+      raise ArgumentError, 'invalid multipart metadata' unless value.is_a?(String) && !value.empty? && value.bytesize <= 4096 && !value.match?(/[\r\n\x00]/)
+    end
+    def validate_header(key, value)
+      validate_metadata(key)
+      raise ArgumentError, 'invalid multipart header name' unless key.match?(/\A[!#$%&'*+.^_`|~0-9A-Za-z-]+\z/)
+      raise ArgumentError, 'reserved multipart header' if ['content-type', 'content-disposition'].include?(key.downcase)
+      raise ArgumentError, 'invalid multipart header value' unless value.is_a?(String) && value.bytesize <= 8192 && !value.match?(/[\r\n\x00]/)
     end
   end

@@ -63,6 +63,8 @@ jobs:
           cargo test -p kaji-plugin-typescript native_standard_webhook_vectors_execute -- --ignored
           cargo test -p kaji-plugin-typescript native_oauth_singleflight_replay_cancellation_and_redaction -- --ignored
           cargo test -p kaji-plugin-typescript native_fetch_and_axios_per_call -- --ignored
+          cargo test -p kaji-plugin-typescript native_whole_query_and_json_sequences -- --ignored
+          cargo test -p kaji-plugin-typescript native_open_enum_types_accept_future_values_and_preserve_wire -- --ignored
           cargo test -p kaji-cli --test openapi32 -- --ignored
       - name: Verify generated Postman exports against the official schema
         run: cargo test -p kaji-plugin-postman validates_actual_official_draft04_schema -- --ignored
@@ -332,6 +334,7 @@ jobs:
           cargo test -p kaji-plugin-rust native_standard_webhook_vectors_execute -- --ignored
           cargo test -p kaji-plugin-rust native_oauth_singleflight_replay_and_dropped_refresh_are_safe -- --ignored
           cargo test -p kaji-plugin-rust native_unknown_union_roundtrips_and_default_decoding_remains_strict -- --ignored
+          cargo test -p kaji-plugin-rust native_nested_future_enum_absent_null_and_unknown_fields_roundtrip -- --ignored
           cargo test -p kaji-plugin-rust native_multipart_buffered_parts_preserve_bytes_and_safe_retries -- --ignored
       - name: Execute generated public operations against shared runtime scenarios
         run: node packages/runtime-contract/runner.mjs "${{ matrix.path }}" "$RUNNER_TEMP/runtime-contract-fixture/sdk/${{ matrix.path }}"

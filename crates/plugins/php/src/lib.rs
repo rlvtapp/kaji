@@ -44,6 +44,13 @@ fn render_sdk(
     package_name: Option<&str>,
     style: SdkClientStyle,
 ) -> Result<GeneratedTree> {
+    for operation in &api.operations {
+        kaji_core::openapi32::request_content(operation)?;
+        kaji_core::openapi32::response_content(operation)?;
+        for parameter in &operation.parameters {
+            kaji_core::openapi32::parameter_content(parameter)?;
+        }
+    }
     let root = output_dir.trim_matches('/');
     let package_name = package_name
         .filter(|name| !name.trim().is_empty())
@@ -203,6 +210,7 @@ fn insert(tree: &mut GeneratedTree, root: &str, path: &str, contents: String) ->
 struct NamedTypes {
     models: BTreeSet<String>,
     enums: BTreeSet<String>,
+    enum_wire_types: BTreeMap<String, String>,
     wrappers: BTreeSet<String>,
 }
 
@@ -216,6 +224,20 @@ impl NamedTypes {
                     types.models.insert(name);
                 }
                 _ if is_backed_enum(&schema.value) => {
+                    types.enum_wire_types.insert(
+                        name.clone(),
+                        if schema
+                            .value
+                            .enum_values
+                            .iter()
+                            .all(|value| value.as_i64().is_some())
+                        {
+                            "int"
+                        } else {
+                            "string"
+                        }
+                        .into(),
+                    );
                     types.enums.insert(name);
                 }
                 _ => {
@@ -333,14 +355,19 @@ fn render_object_model(
         .collect::<Vec<_>>()
         .join(", ");
     if open {
-        let _ = writeln!(
-            output,
-            "            {extra_name}: array_diff_key($data, array_fill_keys([{known}], true)),"
-        );
+        let extras = format!("array_diff_key($data, array_fill_keys([{known}], true))");
+        let extras = match additional_properties {
+            AdditionalProperties::Schema { value } => format!(
+                "array_map(static fn(mixed $item): mixed => {}, {extras})",
+                from_value("$item", value, named_types)
+            ),
+            _ => extras,
+        };
+        let _ = writeln!(output, "            {extra_name}: {extras},");
     }
     let _ = writeln!(
         output,
-        "        );\n        $instance->{presence_name} = array_keys($data);\n        return $instance;\n    }}\n\n    public function jsonSerialize(): object\n    {{\n        $value = [];"
+        "        );\n        $instance->{presence_name} = array_keys($data);\n        return $instance;\n    }}\n\n    /** Return a copy with explicit nulls present at the given wire keys. */\n    public function withPresentFields(array $fields): self\n    {{\n        foreach ($fields as $field) {{\n            if (!is_string($field) || !in_array($field, [{known}], true)) throw new \\InvalidArgumentException('unknown model wire field');\n        }}\n        $copy = clone $this;\n        $copy->{presence_name} = array_values(array_unique(array_merge($this->{presence_name} ?? [], $fields)));\n        return $copy;\n    }}\n\n    public function jsonSerialize(): object\n    {{\n        $value = [];"
     );
     if open {
         let _ = writeln!(
@@ -538,9 +565,42 @@ fn render_client(api: &Api, namespace: &str, style: SdkClientStyle) -> String {
         "$this->kajiQueryString($query)",
     );
     let query_runtime = r#"
-    /** OpenAPI form/explode query scalars and repeated list values. */
-    private function kajiQueryString(array $query): string
+    private function kajiParameterContent(mixed $value, string $contentType): string
     {
+        if ($contentType === 'application/json' || str_ends_with($contentType, '+json')) return json_encode($value, JSON_THROW_ON_ERROR);
+        if ($contentType === 'application/x-www-form-urlencoded' && is_array($value)) return $this->kajiQueryString($value);
+        if (!is_string($value)) throw new \InvalidArgumentException('parameter content must be a serialized string');
+        return $value;
+    }
+
+    private function kajiWholeQuery(mixed $value, string $contentType, bool $allowNull = false): string
+    {
+        if ($value === null && !$allowNull) return '';
+        if ($contentType === 'application/json' || str_ends_with($contentType, '+json')) return rawurlencode(json_encode($value, JSON_THROW_ON_ERROR));
+        if (is_array($value) && $contentType === 'application/x-www-form-urlencoded') return $this->kajiQueryString($value);
+        if (!is_string($value)) throw new \InvalidArgumentException('whole query must be a serialized string');
+        if (str_starts_with($value, '?')) $value = substr($value, 1);
+        if (strpbrk($value, "?#\r\n") !== false) throw new \InvalidArgumentException('unsafe whole query');
+        return $value;
+    }
+
+    private function kajiSequentialJson(string $body, string $contentType): array
+    {
+        if (strlen($body) > 64 * 1024 * 1024) throw new \UnexpectedValueException('sequential response exceeds 64 MiB');
+        if ($contentType === 'application/json-seq') {
+            $records = explode("\x1e", $body);
+            $prefix = array_shift($records);
+            if (trim($prefix) !== '' || (trim($body) !== '' && $records === [])) throw new \UnexpectedValueException('JSON sequence requires record separators');
+        } else {
+            $records = array_values(array_filter(explode("\n", $body), static fn(string $line): bool => trim($line) !== ''));
+        }
+        return array_map(static fn(string $record): mixed => json_decode($record, true, 512, JSON_THROW_ON_ERROR), $records);
+    }
+
+    /** OpenAPI form/explode query scalars and repeated list values. */
+    private function kajiQueryString(array|string $query): string
+    {
+        if (is_string($query)) return $query;
         $pairs = [];
         foreach ($query as $name => $value) {
             foreach (is_array($value) ? $value : [$value] as $item) {
@@ -566,6 +626,12 @@ fn render_client(api: &Api, namespace: &str, style: SdkClientStyle) -> String {
                 }} elseif ($bodyKind === 'binary') {{"
     );
     output = output.replace(body_branch, &multipart_branch);
+    output = output.replace(
+        "array $query, array $headers",
+        "array|string $query, array $headers",
+    );
+    output = output.replace("$query = array_filter($query, static fn (mixed $value): bool => $value !== null);", "$query = is_array($query) ? array_filter($query, static fn (mixed $value): bool => $value !== null) : $query;");
+    output = output.replace("if ($query !== [])", "if ($query !== [] && $query !== '')");
     output
 }
 
@@ -608,6 +674,29 @@ fn render_operation_trait(
     }
     output.push_str("}\n");
     output
+}
+
+fn json_content_allows_null(parameter: &kaji_core::OperationParameter) -> bool {
+    fn allows(value: &SchemaValue) -> bool {
+        value.nullable
+            || matches!(value.kind, SchemaKind::Any | SchemaKind::Null)
+            || match &value.kind {
+                SchemaKind::OneOf { variants } | SchemaKind::AnyOf { variants } => {
+                    variants.iter().any(allows)
+                }
+                _ => false,
+            }
+    }
+    parameter.schema.as_ref().is_none_or(allows)
+}
+
+fn is_json_parameter_content(parameter: &kaji_core::OperationParameter) -> bool {
+    kaji_core::openapi32::parameter_content(parameter)
+        .ok()
+        .and_then(|items| items.into_iter().next())
+        .is_some_and(|content| {
+            content.content_type == "application/json" || content.content_type.ends_with("+json")
+        })
 }
 
 fn render_operation(operation: &Operation, namespace: &str, named_types: &NamedTypes) -> String {
@@ -719,6 +808,32 @@ fn render_operation(operation: &Operation, namespace: &str, named_types: &NamedT
         "        $path = {};\n",
         php_string(&operation.path)
     ));
+    for (parameter, variable, _) in &arguments {
+        if parameter.location != "querystring" {
+            if let Some(content) = kaji_core::openapi32::parameter_content(parameter)
+                .ok()
+                .and_then(|items| items.into_iter().next())
+            {
+                let required_json = parameter.required && is_json_parameter_content(parameter);
+                if required_json && !json_content_allows_null(parameter) {
+                    let _ = writeln!(
+                        output,
+                        "        if (${variable} === null) throw new \\InvalidArgumentException('required JSON parameter is not nullable');"
+                    );
+                }
+                let guard = if required_json {
+                    String::new()
+                } else {
+                    format!("if (${variable} !== null) ")
+                };
+                let _ = writeln!(
+                    output,
+                    "        {guard}${variable} = $this->kajiParameterContent(${variable}, {});",
+                    php_string(&content.content_type)
+                );
+            }
+        }
+    }
     let mut query = Vec::new();
     let mut headers = Vec::new();
     let mut body = "null";
@@ -741,6 +856,50 @@ fn render_operation(operation: &Operation, namespace: &str, named_types: &NamedT
     } else {
         format!("[{}]", query.join(", "))
     };
+    let query = if let Some((parameter, variable, _)) = arguments
+        .iter()
+        .find(|(parameter, _, _)| parameter.location == "querystring")
+    {
+        let content = kaji_core::openapi32::parameter_content(parameter)
+            .ok()
+            .and_then(|items| items.into_iter().next())
+            .map(|item| item.content_type)
+            .unwrap_or_else(|| "text/plain".into());
+        if parameter.required
+            && is_json_parameter_content(parameter)
+            && !json_content_allows_null(parameter)
+        {
+            let _ = writeln!(
+                output,
+                "        if (${variable} === null) throw new \\InvalidArgumentException('required JSON query is not nullable');"
+            );
+        }
+        let allow_null = parameter.required
+            && is_json_parameter_content(parameter)
+            && json_content_allows_null(parameter);
+        format!(
+            "$this->kajiWholeQuery(${variable}, {}, {allow_null})",
+            php_string(&content)
+        )
+    } else {
+        query
+    };
+    let cookies = arguments
+        .iter()
+        .filter(|(parameter, _, _)| parameter.location == "cookie")
+        .map(|(parameter, variable, _)| {
+            format!(
+                "(${variable} === null ? null : {} . '=' . rawurlencode((string) ${variable}))",
+                php_string(&parameter.name)
+            )
+        })
+        .collect::<Vec<_>>();
+    if !cookies.is_empty() {
+        headers.push(format!(
+            "'Cookie' => implode('; ', array_filter([{}], static fn($value) => $value !== null))",
+            cookies.join(", ")
+        ));
+    }
     let headers = if headers.is_empty() {
         if is_sse {
             "[]".into()
@@ -758,6 +917,21 @@ fn render_operation(operation: &Operation, namespace: &str, named_types: &NamedT
             headers.join(", ")
         )
     };
+    if let Some(content) = kaji_core::openapi32::request_content(operation)
+        .ok()
+        .and_then(|items| {
+            items
+                .into_iter()
+                .find(|content| content.content_type.starts_with("multipart/"))
+        })
+    {
+        let definition = serde_json::to_string(&content).expect("multipart content metadata");
+        let _ = writeln!(
+            output,
+            "        if ($body instanceof \\{namespace}\\MultipartBody) $body = $body->withEncoding(json_decode({}, true, 512, JSON_THROW_ON_ERROR));",
+            php_string(&definition)
+        );
+    }
     let body_kind = operation_body_kind(operation);
     let pagination_argument = if has_url_pagination {
         ", $_kajiPaginationUrl"
@@ -798,14 +972,38 @@ fn render_operation(operation: &Operation, namespace: &str, named_types: &NamedT
     } else if operation_is_binary_response(operation) {
         output.push_str("        return $contents;\n");
     } else {
-        if return_type.starts_with('?') {
+        if return_type.starts_with('?') || return_type.ends_with("|null") {
             output
                 .push_str("        if ($contents === '') {\n            return null;\n        }\n");
         } else {
             output.push_str("        if ($contents === '') {\n            throw new \\UnexpectedValueException('API response body was empty');\n        }\n");
         }
-        output
-            .push_str("        $data = json_decode($contents, true, 512, JSON_THROW_ON_ERROR);\n");
+        let sequential = operation
+            .responses
+            .iter()
+            .find(|response| response.status.starts_with('2'))
+            .and_then(|response| response.media_types.first())
+            .map(|media| media.content_type.as_str())
+            .filter(|content| {
+                [
+                    "application/x-ndjson",
+                    "application/ndjson",
+                    "application/jsonl",
+                    "application/json-seq",
+                ]
+                .contains(content)
+            });
+        if let Some(content) = sequential {
+            let _ = writeln!(
+                output,
+                "        $data = $this->kajiSequentialJson($contents, {});",
+                php_string(content)
+            );
+        } else {
+            output.push_str(
+                "        $data = json_decode($contents, true, 512, JSON_THROW_ON_ERROR);\n",
+            );
+        }
         if let Some(schema) = response {
             output.push_str(&format!(
                 "        return {};\n",
@@ -1159,7 +1357,7 @@ fn operation_has_multipart(operation: &Operation) -> bool {
     operation.request_body.as_ref().is_some_and(|body| {
         body.media_types
             .iter()
-            .any(|media| media.content_type == "multipart/form-data")
+            .any(|media| media.content_type.starts_with("multipart/"))
     })
 }
 
@@ -1536,7 +1734,9 @@ fn php_type(value: &SchemaValue, named_types: &NamedTypes) -> String {
         SchemaKind::Object { .. } => "array".into(),
         SchemaKind::Reference { reference } => {
             let name = type_name(reference.rsplit('/').next().unwrap_or(reference));
-            if named_types.is_class(&name) {
+            if let Some(wire) = named_types.enum_wire_types.get(&name) {
+                format!("{name}|{wire}")
+            } else if named_types.is_class(&name) {
                 name
             } else {
                 "mixed".into()
@@ -1551,19 +1751,25 @@ fn php_type(value: &SchemaValue, named_types: &NamedTypes) -> String {
 
 fn nullable_type(type_name: &str, nullable: bool) -> String {
     if nullable && type_name != "mixed" && type_name != "null" && !type_name.starts_with('?') {
-        format!("?{type_name}")
+        if type_name.contains('|') {
+            format!("{type_name}|null")
+        } else {
+            format!("?{type_name}")
+        }
     } else {
         type_name.into()
     }
 }
 
 fn from_value(value: &str, schema: &SchemaValue, named_types: &NamedTypes) -> String {
-    match &schema.kind {
+    let decoded = match &schema.kind {
         SchemaKind::Reference { reference } => {
             let name = type_name(reference.rsplit('/').next().unwrap_or(reference));
             if named_types.models.contains(&name) {
                 format!("{name}::fromArray({value})")
-            } else if named_types.enums.contains(&name) || named_types.wrappers.contains(&name) {
+            } else if named_types.enums.contains(&name) {
+                format!("({name}::tryFrom({value}) ?? {value})")
+            } else if named_types.wrappers.contains(&name) {
                 format!("{name}::from({value})")
             } else {
                 value.into()
@@ -1578,6 +1784,11 @@ fn from_value(value: &str, schema: &SchemaValue, named_types: &NamedTypes) -> St
         SchemaKind::String => format!("(string) {value}"),
         SchemaKind::Boolean => format!("(bool) {value}"),
         _ => value.into(),
+    };
+    if schema.nullable && !matches!(schema.kind, SchemaKind::Null | SchemaKind::Any) {
+        format!("({value} === null ? null : {decoded})")
+    } else {
+        decoded
     }
 }
 
@@ -1737,6 +1948,157 @@ mod tests {
         Field, HttpMethod, OperationMediaType, OperationParameter, OperationRequestBody,
         OperationResponse,
     };
+
+    #[test]
+    fn required_json_content_nullability_controls_omission_guards() {
+        let mut parameter = kaji_core::OperationParameter {
+            name: "data".into(),
+            location: "query".into(),
+            required: true,
+            schema: Some(SchemaValue::new(SchemaKind::String)),
+            description: None,
+            annotations: [(
+                "kaji.parameter_content".into(),
+                serde_json::json!([{"content_type":"application/json"}]),
+            )]
+            .into(),
+        };
+        assert!(is_json_parameter_content(&parameter));
+        assert!(!json_content_allows_null(&parameter));
+        parameter.schema.as_mut().unwrap().nullable = true;
+        assert!(json_content_allows_null(&parameter));
+        parameter.schema = Some(SchemaValue::new(SchemaKind::Any));
+        assert!(json_content_allows_null(&parameter));
+    }
+
+    #[test]
+    fn content_parameters_sequences_and_positional_metadata_reach_operations() {
+        let mut operation = Operation {
+            id: "probe".into(),
+            method: kaji_core::HttpMethod::Get,
+            path: "/{id}".into(),
+            parameters: [
+                ("id", "path"),
+                ("data", "query"),
+                ("X-Data", "header"),
+                ("session", "cookie"),
+            ]
+            .iter()
+            .map(|(name, location)| kaji_core::OperationParameter {
+                name: (*name).into(),
+                location: (*location).into(),
+                required: true,
+                schema: Some(SchemaValue::new(SchemaKind::Any)),
+                description: None,
+                annotations: [(
+                    "kaji.parameter_content".into(),
+                    serde_json::json!([{"content_type":"application/json"}]),
+                )]
+                .into(),
+            })
+            .collect(),
+            responses: vec![kaji_core::OperationResponse {
+                status: "200".into(),
+                description: None,
+                media_types: vec![kaji_core::OperationMediaType {
+                    content_type: "application/x-ndjson".into(),
+                    schema: Some(SchemaValue::new(SchemaKind::Array {
+                        items: Box::new(SchemaValue::new(SchemaKind::Any)),
+                    })),
+                }],
+            }],
+            ..Default::default()
+        };
+        let rendered = render_operation(&operation, "Probe", &NamedTypes::default());
+        assert_eq!(rendered.matches("kajiParameterContent(").count(), 4);
+        assert!(rendered.to_ascii_lowercase().contains("cookie"));
+        operation.parameters = vec![kaji_core::OperationParameter {
+            name: "filters".into(),
+            location: "querystring".into(),
+            required: true,
+            schema: Some(SchemaValue::new(SchemaKind::String)),
+            description: None,
+            annotations: [(
+                "kaji.parameter_content".into(),
+                serde_json::json!([{"content_type":"text/plain"}]),
+            )]
+            .into(),
+        }];
+        assert!(
+            (render_operation(&operation, "Probe", &NamedTypes::default()))
+                .contains("kajiWholeQuery(")
+        );
+        operation.parameters.clear();
+        operation.request_body = Some(kaji_core::OperationRequestBody {
+            required: true,
+            description: None,
+            media_types: vec![kaji_core::OperationMediaType {
+                content_type: "multipart/mixed".into(),
+                schema: Some(SchemaValue::new(SchemaKind::Array {
+                    items: Box::new(SchemaValue::new(SchemaKind::String)),
+                })),
+            }],
+        });
+        operation.annotations.insert("kaji.request_content".into(), serde_json::json!([{"content_type":"multipart/mixed","prefix_encoding":[{"contentType":"application/json"}],"item_encoding":{"contentType":"text/plain"}}]));
+        let rendered = render_operation(&operation, "Probe", &NamedTypes::default());
+        assert!(rendered.contains("withEncoding("));
+        assert!(rendered.contains("prefix_encoding"));
+    }
+
+    #[test]
+    #[ignore = "requires PHP 8.2 or newer; native OpenAPI whole query and sequential JSON"]
+    fn native_whole_query_and_sequential_json_preserve_wire() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(
+            root.path().join("MultipartBody.php"),
+            include_str!("multipart.php.txt").replace("__NAMESPACE__", "Probe"),
+        )
+        .unwrap();
+        std::fs::write(
+            root.path().join("Client.php"),
+            render_client(&Api::default(), "Probe", SdkClientStyle::Flat),
+        )
+        .unwrap();
+        let script = r#"<?php
+require __DIR__.'/Client.php';
+require __DIR__.'/MultipartBody.php';
+$client=(new ReflectionClass(\Probe\Client::class))->newInstanceWithoutConstructor();
+$query = new ReflectionMethod($client, 'kajiWholeQuery');
+$content = new ReflectionMethod($client, 'kajiParameterContent');
+if ($content->invoke($client, ['flag'=>false, 'zero'=>0, 'null'=>null], 'application/json') !== '{"flag":false,"zero":0,"null":null}') throw new Exception('parameter JSON changed');
+if ($content->invoke($client, null, 'application/json') !== 'null') throw new Exception('required JSON null lost');
+if ($query->invoke($client, null, 'application/json', true) !== 'null') throw new Exception('nullable JSON whole query lost');
+if ($query->invoke($client, null, 'application/json') !== '') throw new Exception('optional whole query changed');
+
+$sequence = new ReflectionMethod($client, 'kajiSequentialJson');
+if ($query->invoke($client, '?tag=a&tag=b&escaped=%26', 'text/plain') !== 'tag=a&tag=b&escaped=%26') throw new Exception('raw query changed');
+if ($query->invoke($client, ['tag'=>['a','b'], 'flag'=>false, 'zero'=>0], 'application/x-www-form-urlencoded') !== 'tag=a&tag=b&flag=false&zero=0') throw new Exception('form changed');
+if (rawurldecode($query->invoke($client, ['future'=>false], 'application/json')) !== '{"future":false}') throw new Exception('JSON query changed');
+if ($sequence->invoke($client, "0\nfalse\nnull\n{\"future\":[0,false,null]}\n", 'application/x-ndjson') !== [0,false,null,['future'=>[0,false,null]]]) throw new Exception('NDJSON changed');
+if ($sequence->invoke($client, "\x1e0\n\x1efalse\n", 'application/json-seq') !== [0,false]) throw new Exception('sequence changed');
+$nested = (new \Probe\MultipartBody())->addText('inner', 'nested');
+$plan = json_decode('{"content_type":"multipart/mixed","prefix_encoding":[{"contentType":"application/json","headers":{"X-Position":{"required":true,"schema_definition":{"default":"first"}}}},{"contentType":"multipart/mixed","prefixEncoding":[{"contentType":"text/custom"}]}],"item_encoding":{"contentType":"application/custom"}}', true, flags: JSON_THROW_ON_ERROR);
+$ordered = (new \Probe\MultipartBody())->addJson('first',['zero'=>0])->addPart('second',$nested)->addFile('third',"\x00\xff",'tail.bin')->withEncoding($plan);
+[$media,$encoded] = $ordered->encode();
+if (!str_starts_with($media, 'multipart/mixed; boundary=')) throw new Exception('top media changed');
+foreach (['Content-Type: application/json', 'X-Position: first', 'Content-Type: multipart/mixed', 'Content-Type: text/custom', 'Content-Type: application/custom', "\x00\xff"] as $wire) if (!str_contains($encoded,$wire)) throw new Exception('positional encoding changed');
+if (strpos($encoded,'name="first"') >= strpos($encoded,'name="second"')) throw new Exception('part order changed');
+foreach (['#bad', 'x=1?next', "x=1\nheader"] as $raw) { try { $query->invoke($client,$raw,'text/plain'); throw new Exception('unsafe accepted'); } catch (InvalidArgumentException $e) {} }
+foreach (["prefix\x1e{}", "\x1e", "\x1e{}\x1einvalid"] as $raw) { try { $sequence->invoke($client,$raw,'application/json-seq'); throw new Exception('invalid sequence accepted'); } catch (UnexpectedValueException|JsonException $e) {} }
+"#;
+        let path = root.path().join("probe.php");
+        std::fs::write(&path, script).unwrap();
+        let output = std::process::Command::new("php")
+            .arg(path)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{} {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 
     #[test]
     #[ignore = "requires PHP 8.2+; executes generated multipart codec and request/retry methods"]
@@ -1940,6 +2302,87 @@ if($query!=='text=h%C3%A9llo%20%E9%9B%AA&flag=false&count=0&tags=a&tags=b')throw
         let client = render_client(&api(), "Example", SdkClientStyle::Flat);
         assert!(client.contains("$scalar = is_bool($item) ? ($item ? 'true' : 'false')"));
         assert!(client.contains("foreach (is_array($value) ? $value : [$value] as $item)"));
+    }
+
+    #[test]
+    fn enum_references_keep_known_cases_and_allow_future_wire_values() {
+        let mut api = api();
+        let mut value = SchemaValue::new(SchemaKind::String);
+        value.enum_values = vec![serde_json::json!("known")];
+        api.schemas.push(Schema::new("State", value));
+        let types = NamedTypes::from_api(&api);
+        let mut reference = SchemaValue::new(SchemaKind::Reference {
+            reference: "#/components/schemas/State".into(),
+        });
+        assert_eq!(php_type(&reference, &types), "State|string");
+        reference.nullable = true;
+        assert_eq!(php_type(&reference, &types), "State|string|null");
+        assert_eq!(
+            from_value("$value", &reference, &types),
+            "($value === null ? null : (State::tryFrom($value) ?? $value))"
+        );
+    }
+
+    #[test]
+    #[ignore = "requires PHP 8.2 or newer; native forward enum and model roundtrip"]
+    fn native_future_enums_preserve_known_types_and_unknown_wire_values() {
+        let mut api = api();
+        let mut value = SchemaValue::new(SchemaKind::String);
+        value.enum_values = vec![serde_json::json!("known")];
+        api.schemas.push(Schema::new("State", value));
+        api.schemas.push(Schema::new(
+            "Future",
+            SchemaValue::new(SchemaKind::Object {
+                fields: vec![kaji_core::Field {
+                    name: "state".into(),
+                    value: SchemaValue::new(SchemaKind::Reference {
+                        reference: "#/components/schemas/State".into(),
+                    }),
+                    required: false,
+                    annotations: Default::default(),
+                }],
+                additional_properties: AdditionalProperties::Any,
+            }),
+        ));
+        let types = NamedTypes::from_api(&api);
+        let root = tempfile::tempdir().unwrap();
+        for schema in api
+            .schemas
+            .iter()
+            .filter(|schema| ["State", "Future"].contains(&schema.name.as_str()))
+        {
+            std::fs::write(
+                root.path().join(format!("{}.php", schema.name)),
+                render_model(schema, "Probe", &types),
+            )
+            .unwrap();
+        }
+        let script = r#"<?php
+require __DIR__ . '/State.php';
+require __DIR__ . '/Future.php';
+$original = new \Probe\Models\Future();
+$manual = $original->withPresentFields(['state']);
+if (json_encode($manual) !== '{"state":null}' || json_encode($original) !== '{}') throw new Exception('explicit null helper changed original');
+try { $original->withPresentFields(['missing']); throw new Exception('unknown field accepted'); } catch (InvalidArgumentException $e) {}
+
+foreach ([[], ['state' => null], ['state' => 'future', 'extra' => ['null' => null, 'zero' => 0, 'false' => false]], ['state' => 'known']] as $wire) {
+    $model = \Probe\Models\Future::fromArray($wire);
+    if (json_decode(json_encode($model)) != json_decode(json_encode((object) $wire))) { throw new Exception('roundtrip changed'); }
+    if (($wire['state'] ?? null) === 'known' && !($model->state instanceof \Probe\Models\State)) { throw new Exception('known enum lost'); }
+}
+"#;
+        let path = root.path().join("probe.php");
+        std::fs::write(&path, script).unwrap();
+        let output = std::process::Command::new("php")
+            .arg(path)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{} {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     #[test]

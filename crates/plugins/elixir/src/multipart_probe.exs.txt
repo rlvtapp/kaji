@@ -28,3 +28,49 @@ try do
   MultipartBody.add_text(limited, "x", "")
   raise "part limit ignored"
 rescue ArgumentError -> :ok end
+
+nested = MultipartBody.new() |> MultipartBody.add_text("inner", "nested")
+plan = %{"content_type" => "multipart/mixed", "prefix_encoding" => [%{"contentType" => "application/json", "headers" => %{"X-Position" => %{"required" => true, "schema_definition" => %{"default" => "first"}}}}, %{"contentType" => "multipart/mixed", "prefixEncoding" => [%{"contentType" => "text/custom"}]}], "item_encoding" => %{"contentType" => "application/custom"}}
+ordered = MultipartBody.new() |> MultipartBody.add_json("first", %{"zero" => 0}) |> MultipartBody.add_part("second", nested) |> MultipartBody.add_file("third", <<0, 255>>, "tail.bin") |> MultipartBody.with_encoding(plan)
+{media, encoded} = MultipartBody.encode(ordered)
+if not String.starts_with?(media, "multipart/mixed; boundary="), do: raise("top media type changed")
+for wire <- ["Content-Type: application/json", "X-Position: first", "Content-Type: multipart/mixed", "Content-Type: text/custom", "Content-Type: application/custom", <<0, 255>>] do
+  if not String.contains?(encoded, wire), do: raise("positional/nested encoding lost")
+end
+if not (:binary.match(encoded, "name=\"first\"") < :binary.match(encoded, "name=\"second\"")), do: raise("part order changed")
+
+raw = Client.whole_query("?tag=a&tag=b&escaped=%26", "text/plain")
+transport = fn request, _options ->
+  if request.query != "tag=a&tag=b&escaped=%26", do: raise("whole query changed")
+  {:ok, %Finch.Response{status: 200, headers: [], body: "0\nfalse\nnull\n{\"future\":[0,false,null]}\n"}}
+end
+{:ok, client} = Client.new(base_url: "https://example.test", transport: transport)
+{:ok, [0, false, nil, %{"future" => [0, false, nil]}]} = Client.request(client, :get, "/items", raw, [], nil, :json, :ndjson)
+{:kaji_query, form} = Client.whole_query(%{"tag" => ["a", "b"], "flag" => false, "zero" => 0}, "application/x-www-form-urlencoded")
+if URI.decode_query(form)["flag"] != "false" or not String.contains?(form, "tag=a&tag=b"), do: raise("form query changed")
+{:kaji_query, encoded_json} = Client.whole_query(%{"future" => false}, "application/json")
+if Jason.decode!(URI.decode_www_form(encoded_json)) != %{"future" => false}, do: raise("JSON query changed")
+for unsafe <- ["#bad", "x=1?next", "x=1\nheader"] do
+  try do
+    Client.whole_query(unsafe, "text/plain")
+    raise "unsafe query accepted"
+  rescue ArgumentError -> :ok end
+end
+for body <- ["prefix" <> <<30>> <> "{}", <<30>>, <<30>> <> "{}" <> <<30>> <> "invalid"] do
+  transport = fn _, _ -> {:ok, %Finch.Response{status: 200, headers: [], body: body}} end
+  {:ok, client} = Client.new(base_url: "https://example.test", transport: transport)
+  case Client.request(client, :get, "/items", [], [], nil, :json, :json_seq) do
+    {:error, _} -> :ok
+    _ -> raise "invalid JSON sequence accepted"
+  end
+end
+
+if Jason.decode!(Client.parameter_content(%{"flag" => false, "zero" => 0, "null" => nil}, "application/json")) != %{"flag" => false, "zero" => 0, "null" => nil}, do: raise("parameter JSON content changed")
+
+{:ok, nil} = Client.required_present([data: nil], :data)
+{:error, {:missing_required_option, :data}} = Client.required_present([], :data)
+{:error, {:missing_required_option, :data}} = Client.required([data: nil], :data)
+if Client.parameter_content(nil, "application/json", true) != "null", do: raise("required JSON null lost")
+if Client.parameter_content(nil, "application/json", false) != nil, do: raise("optional JSON nil changed")
+{:kaji_query, "null"} = Client.whole_query(nil, "application/json", true)
+{:kaji_query, ""} = Client.whole_query(nil, "application/json", false)

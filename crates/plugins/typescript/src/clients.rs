@@ -172,6 +172,57 @@ fn render_operation(
     // first matching branch (form body *or* security *or* styles), silently
     // losing metadata when an operation used more than one OpenAPI feature.
     let mut metadata = String::new();
+    if operation
+        .success_schema()
+        .is_some_and(|schema| schema.format.as_deref() == Some("binary"))
+        && operation
+            .responses
+            .iter()
+            .flat_map(|response| &response.media_types)
+            .any(|media| {
+                media
+                    .content_type
+                    .to_ascii_lowercase()
+                    .starts_with("multipart/")
+            })
+    {
+        metadata.push_str("      responseType: 'arraybuffer',\n");
+    }
+    if let Some(parameter) = operation
+        .parameters
+        .iter()
+        .find(|p| p.location == "querystring")
+    {
+        let content_type = parameter
+            .annotations
+            .get("kaji.parameter_content")
+            .and_then(Value::as_array)
+            .and_then(|m| m.first())
+            .and_then(|m| m.get("content_type"))
+            .and_then(Value::as_str)
+            .unwrap_or("application/x-www-form-urlencoded");
+        metadata.push_str(&format!(
+            "      wholeQuery: {{ name: {}, contentType: {} }},\n",
+            serde_json::to_string(&parameter.name).expect("parameter name"),
+            serde_json::to_string(content_type).expect("media type")
+        ));
+    }
+    if let Ok(content) = kaji_core::openapi32::request_content(operation) {
+        if let Some(media) = content.iter().find(|m| {
+            !m.prefix_encoding.is_empty()
+                || m.item_encoding.is_some()
+                || m.encoding.values().any(|e| {
+                    !e.encoding.is_empty()
+                        || !e.prefix_encoding.is_empty()
+                        || e.item_encoding.is_some()
+                })
+        }) {
+            metadata.push_str(&format!(
+                "      multipartPlan: {},\n",
+                serde_json::to_string(media).expect("multipart plan")
+            ));
+        }
+    }
     if let Some(content_type) = request_content_type(operation) {
         metadata.push_str(&format!(
             "      contentType: {{ request: '{content_type}' }},\n"
@@ -222,8 +273,19 @@ fn render_parameter_styles(operation: &Operation) -> Option<String> {
                         .annotations
                         .get("explode")
                         .and_then(Value::as_bool);
-                    (style.is_some() || explode.is_some()).then(|| {
+                    let content_type = kaji_core::openapi32::parameter_content(parameter)
+                        .ok()
+                        .and_then(|content| {
+                            content.first().map(|media| media.content_type.clone())
+                        });
+                    (style.is_some() || explode.is_some() || content_type.is_some()).then(|| {
                         let mut fields = Vec::new();
+                        if let Some(content_type) = &content_type {
+                            fields.push(format!(
+                                "contentType: {}",
+                                serde_json::to_string(content_type).expect("media type")
+                            ));
+                        }
                         if let Some(style) = style {
                             fields.push(format!("style: '{style}'"));
                         }
@@ -356,6 +418,41 @@ fn render_event_stream_operation(
     let link_path = operation.path.replace('{', ":").replace('}', "");
     let method = operation.method.as_str().replace('\'', "\\'");
     let mut metadata = String::new();
+    if let Some(parameter) = operation
+        .parameters
+        .iter()
+        .find(|p| p.location == "querystring")
+    {
+        let content_type = parameter
+            .annotations
+            .get("kaji.parameter_content")
+            .and_then(Value::as_array)
+            .and_then(|m| m.first())
+            .and_then(|m| m.get("content_type"))
+            .and_then(Value::as_str)
+            .unwrap_or("application/x-www-form-urlencoded");
+        metadata.push_str(&format!(
+            "      wholeQuery: {{ name: {}, contentType: {} }},\n",
+            serde_json::to_string(&parameter.name).expect("parameter name"),
+            serde_json::to_string(content_type).expect("media type")
+        ));
+    }
+    if let Ok(content) = kaji_core::openapi32::request_content(operation) {
+        if let Some(media) = content.iter().find(|m| {
+            !m.prefix_encoding.is_empty()
+                || m.item_encoding.is_some()
+                || m.encoding.values().any(|e| {
+                    !e.encoding.is_empty()
+                        || !e.prefix_encoding.is_empty()
+                        || e.item_encoding.is_some()
+                })
+        }) {
+            metadata.push_str(&format!(
+                "      multipartPlan: {},\n",
+                serde_json::to_string(media).expect("multipart plan")
+            ));
+        }
+    }
     if let Some(content_type) = request_content_type(operation) {
         metadata.push_str(&format!(
             "      contentType: {{ request: '{content_type}' }},\n"
@@ -393,10 +490,15 @@ fn request_content_type(operation: &Operation) -> Option<&str> {
         .media_types
         .iter()
         .find_map(|media_type| {
-            matches!(
-                media_type.content_type.as_str(),
-                "multipart/form-data" | "application/x-www-form-urlencoded"
-            )
+            (media_type.content_type.starts_with("multipart/")
+                || matches!(
+                    media_type.content_type.as_str(),
+                    "application/x-www-form-urlencoded"
+                        | "application/json-seq"
+                        | "application/x-ndjson"
+                        | "application/ndjson"
+                        | "application/jsonl"
+                ))
             .then_some(media_type.content_type.as_str())
         })
 }

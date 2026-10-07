@@ -49,6 +49,13 @@ fn render_sdk(
     package_name: Option<&str>,
     client_style: SdkClientStyle,
 ) -> Result<GeneratedTree> {
+    for operation in &api.operations {
+        kaji_core::openapi32::request_content(operation)?;
+        kaji_core::openapi32::response_content(operation)?;
+        for parameter in &operation.parameters {
+            kaji_core::openapi32::parameter_content(parameter)?;
+        }
+    }
     let root = output_dir.trim_matches('/');
     if root.is_empty() {
         bail!("Elixir SDK output directory cannot be empty");
@@ -320,6 +327,14 @@ fn render_client(module: &str) -> String {
   end
 
   @doc false
+  def required_present(options, key) do
+    case Keyword.fetch(options, key) do
+      {:ok, value} -> {:ok, value}
+      :error -> {:error, {:missing_required_option, key}}
+    end
+  end
+
+  @doc false
   def idempotency_key do
     <<a::32, b::16, _version::4, c::12, _variant::2, d::14, e::48>> = :crypto.strong_rand_bytes(16)
     # Replace the random version/variant bits with UUID v4's fixed bits.
@@ -506,6 +521,28 @@ fn render_client(module: &str) -> String {
   defp decode_response(response, :binary), do: {:ok, response}
   defp decode_response(response, :text), do: {:ok, response}
   defp decode_response(response, :json), do: JSON.decode(response)
+  defp decode_response(response, kind) when kind in [:ndjson, :json_seq] do
+    if byte_size(response) > 64 * 1024 * 1024 do
+      {:error, :sequential_response_too_large}
+    else
+      records = if kind == :json_seq do
+        [prefix | records] = String.split(response, <<30>>)
+        if String.trim(prefix) != "" or (String.trim(response) != "" and records == []), do: raise(ArgumentError, "JSON sequence requires record separators")
+        records
+      else
+        response |> String.split("\n") |> Enum.reject(&(String.trim(&1) == ""))
+      end
+      Enum.reduce_while(records, {:ok, []}, fn record, {:ok, values} ->
+        case if(String.trim(record) == "", do: {:error, :empty_sequential_record}, else: JSON.decode(record)) do
+          {:ok, item} -> {:cont, {:ok, [item | values]}}
+          {:error, reason} -> {:halt, {:error, reason}}
+        end
+      end)
+      |> case do {:ok, values} -> {:ok, Enum.reverse(values)}; error -> error end
+    end
+  rescue
+    error -> {:error, error}
+  end
 
   defp retryable?(method, _headers, _idempotency_header) when method in [:get, :head, :options, :trace, "QUERY", :put, :delete], do: true
   defp retryable?(method, headers, idempotency_header) when method in [:post, :patch], do: Enum.any?(headers, fn {name, value} -> (String.downcase(name) == "idempotency-key" or (is_binary(idempotency_header) and String.downcase(name) == String.downcase(idempotency_header))) and String.trim(to_string(value)) != "" end)
@@ -577,6 +614,34 @@ fn render_client(module: &str) -> String {
   defp request_url(_client, {:kaji_url, _}, _query), do: {:error, :unsafe_pagination_url}
   defp request_url(client, path, query), do: {:ok, client.base_url <> path <> encode_query(query)}
 
+  @doc false
+  def parameter_content(value, content_type, allow_null \\ false)
+  def parameter_content(nil, _content_type, false), do: nil
+  def parameter_content(value, content_type, _allow_null) do
+    cond do
+      content_type == "application/json" or String.ends_with?(content_type, "+json") -> value |> JSON.to_wire() |> Jason.encode!()
+      content_type == "application/x-www-form-urlencoded" and is_map(value) -> value |> Map.to_list() |> flatten_query() |> URI.encode_query()
+      is_binary(value) -> value
+      true -> raise ArgumentError, "parameter content must be a serialized string"
+    end
+  end
+  @doc false
+  def whole_query(value, content_type, allow_null \\ false)
+  def whole_query(nil, _content_type, false), do: {:kaji_query, ""}
+  def whole_query(value, content_type, _allow_null) do
+    encoded = cond do
+      content_type == "application/json" or String.ends_with?(content_type, "+json") -> value |> JSON.to_wire() |> Jason.encode!() |> URI.encode_www_form()
+      content_type == "application/x-www-form-urlencoded" and is_map(value) -> value |> Map.to_list() |> flatten_query() |> URI.encode_query()
+      is_binary(value) ->
+        raw = case value do <<"?", rest::binary>> -> rest; other -> other end
+        if String.contains?(raw, ["?", <<35>>, "\r", "\n"]), do: raise(ArgumentError, "unsafe whole query")
+        raw
+      true -> raise ArgumentError, "whole query must be a serialized string"
+    end
+    {:kaji_query, encoded}
+  end
+  defp encode_query({:kaji_query, ""}), do: ""
+  defp encode_query({:kaji_query, query}), do: "?" <> query
   defp encode_query([]), do: ""
   defp encode_query(query), do: "?" <> URI.encode_query(flatten_query(query))
   defp flatten_query(query), do: Enum.flat_map(query, fn {_name, nil} -> []; {name, values} when is_list(values) -> Enum.map(values, &{name, scalar(&1)}); {name, value} -> [{name, scalar(value)}] end)
@@ -624,6 +689,22 @@ fn render_model(module: &str, schema: &Schema) -> String {
             fields,
             additional_properties,
         } => {
+            let open = !matches!(additional_properties, AdditionalProperties::Forbidden);
+            let mut presence = "kaji_present_fields".to_owned();
+            while fields
+                .iter()
+                .any(|field| elixir_identifier(&field.name) == presence)
+            {
+                presence.push('_');
+            }
+            let mut extras = "additional_properties".to_owned();
+            while extras == presence
+                || fields
+                    .iter()
+                    .any(|field| elixir_identifier(&field.name) == extras)
+            {
+                extras.push('_');
+            }
             let mut output = format!(
                 "{NOTICE}\ndefmodule {model} do\n  @moduledoc \"Generated model for {}.\"\n  alias {module}.JSON\n\n",
                 escape_elixir_string(&schema.name)
@@ -636,10 +717,15 @@ fn render_model(module: &str, schema: &Schema) -> String {
                     .collect::<Vec<_>>();
                 let _ = writeln!(output, "  @enforce_keys [{}]", required.join(", "));
             }
-            let names = fields
+            let mut names = fields
                 .iter()
                 .map(|field| format!(":{}", elixir_identifier(&field.name)))
                 .collect::<Vec<_>>();
+            names.push(format!("{presence}: nil"));
+            if open {
+                names.push(format!("{extras}: %{{}}"));
+            }
+            // Keyword defaults must follow positional atom entries.
             let _ = writeln!(output, "  defstruct [{}]", names.join(", "));
             output.push_str("\n  @type t :: %__MODULE__{\n");
             for field in fields {
@@ -652,6 +738,10 @@ fn render_model(module: &str, schema: &Schema) -> String {
                     if optional { " | nil" } else { "" }
                 );
             }
+            let _ = writeln!(output, "    {presence}: [String.t()] | nil,");
+            if open {
+                let _ = writeln!(output, "    {extras}: map(),");
+            }
             output.push_str("  }\n\n  @spec to_map(t()) :: map()\n  def to_map(model) do\n    [\n");
             for field in fields {
                 let _ = writeln!(
@@ -661,14 +751,28 @@ fn render_model(module: &str, schema: &Schema) -> String {
                     elixir_identifier(&field.name)
                 );
             }
+            let known_keys = fields
+                .iter()
+                .map(|field| format!("\"{}\"", escape_elixir_string(&field.name)))
+                .collect::<Vec<_>>()
+                .join(", ");
             let required_keys = fields
                 .iter()
                 .filter(|field| field.required)
                 .map(|field| format!("\"{}\"", escape_elixir_string(&field.name)))
                 .collect::<Vec<_>>()
                 .join(", ");
-            output.push_str(&format!("    ]\n    |> Enum.reject(fn {{key, value}} -> is_nil(value) and key not in [{required_keys}] end)\n"));
-            output.push_str("    |> Map.new(fn {key, value} -> {key, JSON.to_wire(value)} end)\n  end\n\n  @spec from_map(map()) :: t()\n  def from_map(map) do\n    %__MODULE__{\n");
+            output.push_str(&format!("    ]\n    |> Enum.reject(fn {{key, value}} -> is_nil(value) and key not in [{required_keys}] and key not in (model.{presence} || []) end)\n"));
+            output.push_str("    |> Map.new(fn {key, value} -> {key, JSON.to_wire(value)} end)\n");
+            if open {
+                output.push_str(&format!(
+                    "    |> then(fn known -> Map.merge(Map.drop(JSON.to_wire(model.{extras}), [{known_keys}]), known) end)\n"
+                ));
+            }
+            let _ = writeln!(
+                output,
+                "  end\n\n  @doc \"Return a copy with explicit nulls present at the given wire keys.\"\n  @spec with_present_fields(t(), [String.t() | atom()]) :: t()\n  def with_present_fields(model, fields) when is_list(fields) do\n    keys = Enum.map(fields, &to_string/1)\n    if Enum.any?(keys, &(&1 not in [{known_keys}])), do: raise(ArgumentError, \"unknown model wire field\")\n    %{{model | {presence}: Enum.uniq((model.{presence} || []) ++ keys)}}\n  end\n\n  @spec from_map(map()) :: t()\n  def from_map(map) do\n    %__MODULE__{{"
+            );
             for field in fields {
                 let access = format!("Map.get(map, \"{}\")", escape_elixir_string(&field.name));
                 let _ = writeln!(
@@ -678,10 +782,23 @@ fn render_model(module: &str, schema: &Schema) -> String {
                     decode_value(&access, &field.value, module)
                 );
             }
-            output.push_str("    }\n  end\nend\n");
-            if matches!(additional_properties, AdditionalProperties::Schema { .. }) {
-                output.push_str("\n# Additional properties are retained by the JSON response but are not typed fields.\n");
+            let _ = writeln!(output, "      {presence}: Map.keys(map),");
+            if open {
+                let known = fields
+                    .iter()
+                    .map(|field| format!("\"{}\"", escape_elixir_string(&field.name)))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let extra_value = match additional_properties {
+                    AdditionalProperties::Schema { value } => format!(
+                        "Map.new(Map.drop(map, [{known}]), fn {{key, item}} -> {{key, {}}} end)",
+                        decode_value("item", value, module)
+                    ),
+                    _ => format!("Map.drop(map, [{known}])"),
+                };
+                let _ = writeln!(output, "      {extras}: {extra_value},");
             }
+            output.push_str("    }\n  end\nend\n");
             output
         }
         _ => format!(
@@ -914,6 +1031,29 @@ fn operation_is_sse(operation: &Operation) -> bool {
     })
 }
 
+fn json_content_allows_null(parameter: &kaji_core::OperationParameter) -> bool {
+    fn allows(value: &SchemaValue) -> bool {
+        value.nullable
+            || matches!(value.kind, SchemaKind::Any | SchemaKind::Null)
+            || match &value.kind {
+                SchemaKind::OneOf { variants } | SchemaKind::AnyOf { variants } => {
+                    variants.iter().any(allows)
+                }
+                _ => false,
+            }
+    }
+    parameter.schema.as_ref().is_none_or(allows)
+}
+
+fn is_json_parameter_content(parameter: &kaji_core::OperationParameter) -> bool {
+    kaji_core::openapi32::parameter_content(parameter)
+        .ok()
+        .and_then(|items| items.into_iter().next())
+        .is_some_and(|content| {
+            content.content_type == "application/json" || content.content_type.ends_with("+json")
+        })
+}
+
 fn render_operation(module: &str, api: &Api, operation: &Operation) -> String {
     let name = snake_case(&operation.id);
     let return_type = if operation_is_sse(operation) {
@@ -949,7 +1089,14 @@ fn render_operation(module: &str, api: &Api, operation: &Operation) -> String {
             .iter()
             .map(|parameter| {
                 let variable = elixir_identifier(&parameter.name);
-                format!("{{:ok, {variable}}} <- Client.required(options, :{variable})")
+                let helper = if is_json_parameter_content(parameter)
+                    && json_content_allows_null(parameter)
+                {
+                    "required_present"
+                } else {
+                    "required"
+                };
+                format!("{{:ok, {variable}}} <- Client.{helper}(options, :{variable})")
             })
             .collect::<Vec<_>>();
         if request_body_required(operation) {
@@ -968,6 +1115,23 @@ fn render_operation(module: &str, api: &Api, operation: &Operation) -> String {
         output.push_str(&render_cursor_paginator(operation, &pagination));
     }
     output
+}
+
+fn parameter_content_value(parameter: &kaji_core::OperationParameter, value: &str) -> String {
+    if let Some(content) = kaji_core::openapi32::parameter_content(parameter)
+        .ok()
+        .and_then(|items| items.into_iter().next())
+    {
+        let allow_null = parameter.required
+            && is_json_parameter_content(parameter)
+            && json_content_allows_null(parameter);
+        format!(
+            "Client.parameter_content({value}, \"{}\", {allow_null})",
+            escape_elixir_string(&content.content_type)
+        )
+    } else {
+        value.to_owned()
+    }
 }
 
 fn render_operation_body(
@@ -994,6 +1158,7 @@ fn render_operation_body(
         } else {
             format!("Keyword.get(options, :{value})")
         };
+        let value = parameter_content_value(parameter, &value);
         let _ = writeln!(
             output,
             "{pad}path = String.replace(path, \"{{{}}}\", URI.encode(to_string({value}), &URI.char_unreserved?/1))",
@@ -1024,10 +1189,36 @@ fn render_operation_body(
             } else {
                 format!("Keyword.get(options, :{variable})")
             };
+            let value = parameter_content_value(parameter, &value);
             format!("{{\"{}\", {value}}}", escape_elixir_string(&parameter.name))
         })
         .collect::<Vec<_>>();
     let _ = writeln!(output, "{pad}query = [{}]", query.join(", "));
+    if let Some(parameter) = operation
+        .parameters
+        .iter()
+        .find(|parameter| parameter.location == "querystring")
+    {
+        let name = elixir_identifier(&parameter.name);
+        let value = if parameter.required {
+            name.clone()
+        } else {
+            format!("Keyword.get(options, :{name})")
+        };
+        let content = kaji_core::openapi32::parameter_content(parameter)
+            .ok()
+            .and_then(|items| items.into_iter().next())
+            .map(|item| item.content_type)
+            .unwrap_or_else(|| "text/plain".into());
+        let allow_null = parameter.required
+            && is_json_parameter_content(parameter)
+            && json_content_allows_null(parameter);
+        let _ = writeln!(
+            output,
+            "{pad}query = Client.whole_query({value}, \"{}\", {allow_null})",
+            escape_elixir_string(&content)
+        );
+    }
     let headers = operation
         .parameters
         .iter()
@@ -1039,6 +1230,7 @@ fn render_operation_body(
             } else {
                 format!("Keyword.get(options, :{variable})")
             };
+            let value = parameter_content_value(parameter, &value);
             let value = if operation
                 .annotations
                 .get("x-kaji-idempotency-resolved")
@@ -1060,6 +1252,20 @@ fn render_operation_body(
         })
         .collect::<Vec<_>>();
     let _ = writeln!(output, "{pad}headers = [{}]", headers.join(", "));
+    let cookies = operation.parameters.iter().filter(|parameter| parameter.location == "cookie").map(|parameter| {
+        let id = elixir_identifier(&parameter.name);
+        let value = if parameter.required { id } else { format!("Keyword.get(options, :{id})") };
+        let value = parameter_content_value(parameter, &value);
+        format!("case {value} do nil -> nil; value -> \"{}=\" <> URI.encode(to_string(value), &URI.char_unreserved?/1) end", escape_elixir_string(&parameter.name))
+    }).collect::<Vec<_>>();
+    if !cookies.is_empty() {
+        let _ = writeln!(
+            output,
+            "{pad}headers = headers ++ [{{\"cookie\", [{}] |> Enum.reject(&is_nil/1) |> Enum.join(\"; \")}}]",
+            cookies.join(", ")
+        );
+    }
+
     let _ = writeln!(
         output,
         "{pad}headers = headers |> Enum.reject(fn {{_name, value}} -> is_nil(value) end) |> Enum.map(fn {{name, value}} -> {{name, to_string(value)}} end)"
@@ -1072,6 +1278,25 @@ fn render_operation_body(
         }
     } else {
         "nil".into()
+    };
+    let body = if let Some(content) = kaji_core::openapi32::request_content(operation)
+        .ok()
+        .and_then(|items| {
+            items
+                .into_iter()
+                .find(|content| content.content_type.starts_with("multipart/"))
+        }) {
+        let definition = serde_json::to_string(&content).expect("multipart content metadata");
+        let _ = writeln!(
+            output,
+            "{pad}body = case {body} do %{}.MultipartBody{{}} = value -> {}.MultipartBody.with_encoding(value, Jason.decode!(\"{}\")); other -> other end",
+            module,
+            module,
+            escape_elixir_string(&definition)
+        );
+        "body".to_owned()
+    } else {
+        body
     };
     let response = response_decode(api, operation, module, "response");
     let body_kind = operation_body_kind(operation);
@@ -1169,7 +1394,7 @@ fn operation_body_kind(operation: &Operation) -> &'static str {
     if operation.request_body.as_ref().is_some_and(|body| {
         body.media_types
             .iter()
-            .any(|media| media.content_type == "multipart/form-data")
+            .any(|media| media.content_type.starts_with("multipart/"))
     }) {
         return if operation.request_body.as_ref().is_some_and(|body| {
             body.media_types.iter().any(|media| {
@@ -1201,6 +1426,8 @@ fn operation_response_kind(operation: &Operation) -> &'static str {
         .and_then(|response| response.media_types.first())
         .map(|media| media.content_type.as_str());
     match content_type {
+        Some("application/json-seq") => "json_seq",
+        Some("application/x-ndjson" | "application/ndjson" | "application/jsonl") => "ndjson",
         Some(value) if value == "application/octet-stream" || value.starts_with("image/") => {
             "binary"
         }
@@ -1594,6 +1821,102 @@ mod tests {
     }
 
     #[test]
+    fn required_json_content_nullability_controls_omission_guards() {
+        let mut parameter = kaji_core::OperationParameter {
+            name: "data".into(),
+            location: "query".into(),
+            required: true,
+            schema: Some(SchemaValue::new(SchemaKind::String)),
+            description: None,
+            annotations: [(
+                "kaji.parameter_content".into(),
+                serde_json::json!([{"content_type":"application/json"}]),
+            )]
+            .into(),
+        };
+        assert!(is_json_parameter_content(&parameter));
+        assert!(!json_content_allows_null(&parameter));
+        parameter.schema.as_mut().unwrap().nullable = true;
+        assert!(json_content_allows_null(&parameter));
+        parameter.schema = Some(SchemaValue::new(SchemaKind::Any));
+        assert!(json_content_allows_null(&parameter));
+    }
+
+    #[test]
+    fn content_parameters_sequences_and_positional_metadata_reach_operations() {
+        let mut operation = Operation {
+            id: "probe".into(),
+            method: kaji_core::HttpMethod::Get,
+            path: "/{id}".into(),
+            parameters: [
+                ("id", "path"),
+                ("data", "query"),
+                ("X-Data", "header"),
+                ("session", "cookie"),
+            ]
+            .iter()
+            .map(|(name, location)| kaji_core::OperationParameter {
+                name: (*name).into(),
+                location: (*location).into(),
+                required: true,
+                schema: Some(SchemaValue::new(SchemaKind::Any)),
+                description: None,
+                annotations: [(
+                    "kaji.parameter_content".into(),
+                    serde_json::json!([{"content_type":"application/json"}]),
+                )]
+                .into(),
+            })
+            .collect(),
+            responses: vec![kaji_core::OperationResponse {
+                status: "200".into(),
+                description: None,
+                media_types: vec![kaji_core::OperationMediaType {
+                    content_type: "application/x-ndjson".into(),
+                    schema: Some(SchemaValue::new(SchemaKind::Array {
+                        items: Box::new(SchemaValue::new(SchemaKind::Any)),
+                    })),
+                }],
+            }],
+            ..Default::default()
+        };
+        let rendered = render_operation("Probe", &Api::default(), &operation);
+        assert_eq!(rendered.matches("Client.parameter_content(").count(), 4);
+        assert!(rendered.to_ascii_lowercase().contains("cookie"));
+        operation.parameters = vec![kaji_core::OperationParameter {
+            name: "filters".into(),
+            location: "querystring".into(),
+            required: true,
+            schema: Some(SchemaValue::new(SchemaKind::String)),
+            description: None,
+            annotations: [(
+                "kaji.parameter_content".into(),
+                serde_json::json!([{"content_type":"text/plain"}]),
+            )]
+            .into(),
+        }];
+        assert!(
+            (render_operation("Probe", &Api::default(), &operation))
+                .contains("Client.whole_query(")
+        );
+        operation.parameters.clear();
+        operation.request_body = Some(kaji_core::OperationRequestBody {
+            required: true,
+            description: None,
+            media_types: vec![kaji_core::OperationMediaType {
+                content_type: "multipart/mixed".into(),
+                schema: Some(SchemaValue::new(SchemaKind::Array {
+                    items: Box::new(SchemaValue::new(SchemaKind::String)),
+                })),
+            }],
+        });
+        operation.annotations.insert("kaji.request_content".into(), serde_json::json!([{"content_type":"multipart/mixed","prefix_encoding":[{"contentType":"application/json"}],"item_encoding":{"contentType":"text/plain"}}]));
+        let rendered = render_operation("Probe", &Api::default(), &operation);
+        assert!(rendered.contains("MultipartBody.with_encoding("));
+        assert!(rendered.contains("prefix_encoding"));
+    }
+
+    #[test]
     #[ignore = "requires Elixir Mix project with Finch/Jason; KAJI_ELIXIR_NATIVE_PROJECT optional"]
     fn native_multipart_binary_json_limits_and_retry_bytes() {
         let root = tempfile::tempdir().unwrap();
@@ -1675,6 +1998,69 @@ mod tests {
             output.status.success(),
             "{}",
             String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
+    fn open_models_emit_collision_safe_presence_and_extension_storage() {
+        let schema = forward_model_schema();
+        let source = render_model("Probe", &schema);
+        assert!(source.contains("kaji_present_fields_: Map.keys(map)"));
+        assert!(source.contains("additional_properties_: Map.drop(map"));
+        assert!(source.contains("Map.merge(Map.drop(JSON.to_wire(model.additional_properties_)"));
+    }
+
+    fn forward_model_schema() -> Schema {
+        Schema::new(
+            "FutureModel",
+            SchemaValue::new(SchemaKind::Object {
+                fields: ["note", "additional_properties", "kaji_present_fields"]
+                    .iter()
+                    .map(|name| Field {
+                        name: (*name).into(),
+                        value: SchemaValue::new(SchemaKind::Any),
+                        required: false,
+                        annotations: Default::default(),
+                    })
+                    .collect(),
+                additional_properties: AdditionalProperties::Any,
+            }),
+        )
+    }
+
+    #[test]
+    #[ignore = "requires Elixir; dependency-free forward model roundtrip"]
+    fn native_forward_models_preserve_unknown_properties_and_presence() {
+        let script = String::from("defmodule Probe.JSON do\n def to_wire(value), do: value\nend\n")
+            + &render_model("Probe", &forward_model_schema())
+            + r#"
+model = struct(Probe.Models.FutureModel)
+manual = Probe.Models.FutureModel.with_present_fields(model, ["note"])
+if Probe.Models.FutureModel.to_map(manual) != %{"note" => nil}, do: raise("explicit null helper failed")
+if Probe.Models.FutureModel.to_map(model) != %{}, do: raise("presence helper mutated original")
+try do
+  Probe.Models.FutureModel.with_present_fields(model, ["missing"])
+  raise "unknown presence field accepted"
+rescue ArgumentError -> :ok end
+for wire <- [%{}, %{"note" => nil}, %{"future" => %{"enum" => "new", "union" => [false, 0, nil]}}, %{"additional_properties" => false, "kaji_present_fields" => 0}] do
+  restored = Probe.Models.FutureModel.from_map(wire)
+  if Probe.Models.FutureModel.to_map(restored) != wire, do: raise("wire presence or extension changed")
+end
+model = Probe.Models.FutureModel.from_map(%{"note" => "known"})
+model = %{model | additional_properties_: %{"note" => "override", "future" => nil}}
+if Probe.Models.FutureModel.to_map(model) != %{"note" => "known", "future" => nil}, do: raise("known fields must win")
+"#;
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("probe.exs");
+        std::fs::write(&path, script).unwrap();
+        let result = std::process::Command::new("elixir")
+            .arg(path)
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
         );
     }
 
@@ -1800,7 +2186,7 @@ if Probe.Models.WireInput.to_map(restored)!=expected, do: raise("roundtrip prese
         let model = first
             .get("sdk/elixir/lib/example_api_sdk/models/contact.ex")
             .unwrap();
-        assert!(model.contains("defstruct [:id, :display_name]"));
+        assert!(model.contains("defstruct [:id, :display_name, kaji_present_fields: nil]"));
         assert!(model.contains("{\"display-name\", model.display_name}"));
         let client = first
             .get("sdk/elixir/lib/example_api_sdk/client.ex")

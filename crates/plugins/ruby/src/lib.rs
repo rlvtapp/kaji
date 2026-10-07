@@ -28,6 +28,13 @@ fn render_sdk(
     package_name: Option<&str>,
     client_style: SdkClientStyle,
 ) -> Result<GeneratedTree> {
+    for operation in &api.operations {
+        kaji_core::openapi32::request_content(operation)?;
+        kaji_core::openapi32::response_content(operation)?;
+        for parameter in &operation.parameters {
+            kaji_core::openapi32::parameter_content(parameter)?;
+        }
+    }
     let root = output_dir.trim_matches('/');
     if root.is_empty() {
         bail!("Ruby SDK output directory cannot be empty");
@@ -229,7 +236,7 @@ fn render_model(api: &Api, schema: &Schema) -> String {
     match &schema.value.kind {
         SchemaKind::Object {
             fields,
-            additional_properties: _,
+            additional_properties,
         } => {
             let mut extra_name = "additional_properties".to_owned();
             while fields
@@ -298,17 +305,38 @@ fn render_model(api: &Api, schema: &Schema) -> String {
                 } else {
                     format!("{values}, ")
                 };
+                let extra_decode = match additional_properties {
+                    AdditionalProperties::Schema { value } => format!(
+                        ".transform_values {{ |item| Models.decode_model_value(item, {}) }}",
+                        ruby_decode_shape(value)
+                    ),
+                    _ => String::new(),
+                };
                 let _ = writeln!(
                     out,
-                    "        instance = new({values}{extra_name}: value.reject {{ |key, _| [{}].include?(key) }})",
-                    known
+                    "        instance = new({values}{extra_name}: value.reject {{ |key, _| [{known}].include?(key) }}{extra_decode})"
                 );
             }
             let _ = writeln!(
                 out,
                 "        instance.instance_variable_set(:@{present_name}, value.keys)\n        instance"
             );
-            out.push_str("      end\n\n      def to_h\n        value = {}\n");
+            let known = fields
+                .iter()
+                .map(|field| ruby_string(&field.name))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let mut helper = "with_present_fields".to_owned();
+            while fields
+                .iter()
+                .any(|field| ruby_identifier(&field.name) == helper)
+            {
+                helper.push('_');
+            }
+            let _ = writeln!(
+                out,
+                "      end\n\n      # Return a copy with explicit nulls present at these wire keys.\n      def {helper}(*names)\n        keys = names.map(&:to_s)\n        raise ArgumentError, 'unknown model wire field' unless (keys - [{known}]).empty?\n        copy = dup\n        copy.instance_variable_set(:@{present_name}, ((@{present_name} || []) + keys).uniq)\n        copy\n      end\n\n      def to_h\n        value = {{}}"
+            );
             {
                 let known = fields
                     .iter()
@@ -328,13 +356,13 @@ fn render_model(api: &Api, schema: &Schema) -> String {
                     String::new()
                 } else {
                     format!(
-                        " unless {id}.nil? && !(@{present_name} || []).include?({})",
+                        " unless @{id}.nil? && !(@{present_name} || []).include?({})",
                         ruby_string(&field.name)
                     )
                 };
                 let _ = writeln!(
                     out,
-                    "        value[{}] = Models.to_wire({id}){condition}",
+                    "        value[{}] = Models.to_wire(@{id}){condition}",
                     ruby_string(&field.name)
                 );
             }
@@ -424,6 +452,29 @@ fn ruby_request_options_name(operation: &Operation) -> String {
     name
 }
 
+fn json_content_allows_null(parameter: &kaji_core::OperationParameter) -> bool {
+    fn allows(value: &SchemaValue) -> bool {
+        value.nullable
+            || matches!(value.kind, SchemaKind::Any | SchemaKind::Null)
+            || match &value.kind {
+                SchemaKind::OneOf { variants } | SchemaKind::AnyOf { variants } => {
+                    variants.iter().any(allows)
+                }
+                _ => false,
+            }
+    }
+    parameter.schema.as_ref().is_none_or(allows)
+}
+
+fn is_json_parameter_content(parameter: &kaji_core::OperationParameter) -> bool {
+    kaji_core::openapi32::parameter_content(parameter)
+        .ok()
+        .and_then(|items| items.into_iter().next())
+        .is_some_and(|content| {
+            content.content_type == "application/json" || content.content_type.ends_with("+json")
+        })
+}
+
 fn render_operation(api: &Api, operation: &Operation) -> String {
     let name = ruby_identifier(&snake_case(&operation.id));
     let mut args = Vec::new();
@@ -470,6 +521,35 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
     for parameter in operation
         .parameters
         .iter()
+        .filter(|parameter| parameter.location != "querystring")
+    {
+        if let Some(content) = kaji_core::openapi32::parameter_content(parameter)
+            .ok()
+            .and_then(|items| items.into_iter().next())
+        {
+            let id = ruby_identifier(&parameter.name);
+            let required_json = parameter.required && is_json_parameter_content(parameter);
+            if required_json && !json_content_allows_null(parameter) {
+                let _ = writeln!(
+                    out,
+                    "      raise ArgumentError, 'required JSON parameter is not nullable' if {id}.nil?"
+                );
+            }
+            let guard = if required_json {
+                String::new()
+            } else {
+                format!(" unless {id}.nil?")
+            };
+            let _ = writeln!(
+                out,
+                "      {id} = kaji_parameter_content({id}, {}){guard}",
+                ruby_string(&content.content_type)
+            );
+        }
+    }
+    for parameter in operation
+        .parameters
+        .iter()
         .filter(|parameter| parameter.location == "path")
     {
         let id = ruby_identifier(&parameter.name);
@@ -492,6 +572,35 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
             ruby_string(&parameter.name)
         );
     }
+    if let Some(parameter) = operation
+        .parameters
+        .iter()
+        .find(|parameter| parameter.location == "querystring")
+    {
+        let id = ruby_identifier(&parameter.name);
+        let content = kaji_core::openapi32::parameter_content(parameter)
+            .ok()
+            .and_then(|items| items.into_iter().next())
+            .map(|item| item.content_type)
+            .unwrap_or_else(|| "text/plain".into());
+        if parameter.required
+            && is_json_parameter_content(parameter)
+            && !json_content_allows_null(parameter)
+        {
+            let _ = writeln!(
+                out,
+                "      raise ArgumentError, 'required JSON query is not nullable' if {id}.nil?"
+            );
+        }
+        let allow_null = parameter.required
+            && is_json_parameter_content(parameter)
+            && json_content_allows_null(parameter);
+        let _ = writeln!(
+            out,
+            "      query = kaji_whole_query({id}, {}, {allow_null})",
+            ruby_string(&content)
+        );
+    }
     out.push_str("      headers = {}\n");
     for parameter in operation
         .parameters
@@ -505,6 +614,25 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
             ruby_string(&parameter.name)
         );
     }
+    let cookies = operation
+        .parameters
+        .iter()
+        .filter(|parameter| parameter.location == "cookie")
+        .map(|parameter| {
+            let id = ruby_identifier(&parameter.name);
+            format!(
+                "({id}.nil? ? nil : {} + '=' + CGI.escape({id}.to_s).gsub('+', '%20'))",
+                ruby_string(&parameter.name)
+            )
+        })
+        .collect::<Vec<_>>();
+    if !cookies.is_empty() {
+        let _ = writeln!(
+            out,
+            "      headers['Cookie'] = [{}].compact.join('; ')",
+            cookies.join(", ")
+        );
+    }
     let response = response_model(api, operation);
     let body = if operation.request_body.is_some() {
         "body"
@@ -514,8 +642,23 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
     let multipart = operation.request_body.as_ref().is_some_and(|body| {
         body.media_types
             .iter()
-            .any(|media| media.content_type == "multipart/form-data")
+            .any(|media| media.content_type.starts_with("multipart/"))
     });
+    if let Some(content) = kaji_core::openapi32::request_content(operation)
+        .ok()
+        .and_then(|items| {
+            items
+                .into_iter()
+                .find(|content| content.content_type.starts_with("multipart/"))
+        })
+    {
+        let definition = serde_json::to_string(&content).expect("multipart content metadata");
+        let _ = writeln!(
+            out,
+            "      body = body.with_encoding(JSON.parse({})) if body.is_a?(MultipartBody)",
+            ruby_string(&definition)
+        );
+    }
     let retry_header = kaji_core::idempotency::resolved(operation)
         .map(|p| ruby_string(&p.header))
         .unwrap_or_else(|| "nil".into());
@@ -530,6 +673,16 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
             let _ = writeln!(
                 out,
                 "      result.is_a?(Hash) ? Models::{model}.from_hash(result) : result\n    end\n\n"
+            );
+        }
+        None if operation
+            .success_schema()
+            .is_some_and(|schema| matches!(schema.kind, SchemaKind::Array { .. })) =>
+        {
+            let shape = ruby_decode_shape(operation.success_schema().unwrap());
+            let _ = writeln!(
+                out,
+                "      Models.decode_model_value(result, {shape})\n    end\n"
             );
         }
         None => out.push_str("      result\n    end\n\n"),
@@ -757,6 +910,264 @@ mod tests {
     use super::*;
     use kaji_core::{Field, HttpMethod, OperationParameter, OperationResponse};
     use std::process::Command;
+
+    #[test]
+    fn required_json_content_nullability_controls_omission_guards() {
+        let mut parameter = kaji_core::OperationParameter {
+            name: "data".into(),
+            location: "query".into(),
+            required: true,
+            schema: Some(SchemaValue::new(SchemaKind::String)),
+            description: None,
+            annotations: [(
+                "kaji.parameter_content".into(),
+                serde_json::json!([{"content_type":"application/json"}]),
+            )]
+            .into(),
+        };
+        assert!(is_json_parameter_content(&parameter));
+        assert!(!json_content_allows_null(&parameter));
+        parameter.schema.as_mut().unwrap().nullable = true;
+        assert!(json_content_allows_null(&parameter));
+        parameter.schema = Some(SchemaValue::new(SchemaKind::Any));
+        assert!(json_content_allows_null(&parameter));
+    }
+
+    #[test]
+    fn content_parameters_sequences_and_positional_metadata_reach_operations() {
+        let mut operation = Operation {
+            id: "probe".into(),
+            method: kaji_core::HttpMethod::Get,
+            path: "/{id}".into(),
+            parameters: [
+                ("id", "path"),
+                ("data", "query"),
+                ("X-Data", "header"),
+                ("session", "cookie"),
+            ]
+            .iter()
+            .map(|(name, location)| kaji_core::OperationParameter {
+                name: (*name).into(),
+                location: (*location).into(),
+                required: true,
+                schema: Some(SchemaValue::new(SchemaKind::Any)),
+                description: None,
+                annotations: [(
+                    "kaji.parameter_content".into(),
+                    serde_json::json!([{"content_type":"application/json"}]),
+                )]
+                .into(),
+            })
+            .collect(),
+            responses: vec![kaji_core::OperationResponse {
+                status: "200".into(),
+                description: None,
+                media_types: vec![kaji_core::OperationMediaType {
+                    content_type: "application/x-ndjson".into(),
+                    schema: Some(SchemaValue::new(SchemaKind::Array {
+                        items: Box::new(SchemaValue::new(SchemaKind::Any)),
+                    })),
+                }],
+            }],
+            ..Default::default()
+        };
+        let rendered = render_operation(&Api::default(), &operation);
+        assert_eq!(rendered.matches("kaji_parameter_content(").count(), 4);
+        assert!(rendered.to_ascii_lowercase().contains("cookie"));
+        operation.parameters = vec![kaji_core::OperationParameter {
+            name: "filters".into(),
+            location: "querystring".into(),
+            required: true,
+            schema: Some(SchemaValue::new(SchemaKind::String)),
+            description: None,
+            annotations: [(
+                "kaji.parameter_content".into(),
+                serde_json::json!([{"content_type":"text/plain"}]),
+            )]
+            .into(),
+        }];
+        assert!((render_operation(&Api::default(), &operation)).contains("kaji_whole_query("));
+        operation.parameters.clear();
+        operation.request_body = Some(kaji_core::OperationRequestBody {
+            required: true,
+            description: None,
+            media_types: vec![kaji_core::OperationMediaType {
+                content_type: "multipart/mixed".into(),
+                schema: Some(SchemaValue::new(SchemaKind::Array {
+                    items: Box::new(SchemaValue::new(SchemaKind::String)),
+                })),
+            }],
+        });
+        operation.annotations.insert("kaji.request_content".into(), serde_json::json!([{"content_type":"multipart/mixed","prefix_encoding":[{"contentType":"application/json"}],"item_encoding":{"contentType":"text/plain"}}]));
+        let rendered = render_operation(&Api::default(), &operation);
+        assert!(rendered.contains("with_encoding("));
+        assert!(rendered.contains("prefix_encoding"));
+    }
+
+    #[test]
+    fn native_whole_query_and_sequential_json_preserve_wire() {
+        let root = tempfile::tempdir().unwrap();
+        let mut api = Api::default();
+        api.schemas.push(Schema::new(
+            "SequenceItem",
+            SchemaValue::new(SchemaKind::Object {
+                fields: vec![
+                    kaji_core::Field {
+                        name: "value".into(),
+                        value: SchemaValue::new(SchemaKind::Integer),
+                        required: true,
+                        annotations: Default::default(),
+                    },
+                    kaji_core::Field {
+                        name: "note".into(),
+                        value: SchemaValue::new(SchemaKind::Any),
+                        required: false,
+                        annotations: Default::default(),
+                    },
+                ],
+                additional_properties: AdditionalProperties::Any,
+            }),
+        ));
+        api.operations.push(Operation {
+            id: "getItems".into(),
+            method: kaji_core::HttpMethod::Get,
+            path: "/items".into(),
+            parameters: vec![kaji_core::OperationParameter {
+                name: "filters".into(),
+                location: "querystring".into(),
+                required: true,
+                schema: Some(SchemaValue::new(SchemaKind::String)),
+                description: None,
+                annotations: [(
+                    "kaji.parameter_content".into(),
+                    serde_json::json!([{"content_type":"text/plain"}]),
+                )]
+                .into(),
+            }],
+            responses: vec![kaji_core::OperationResponse {
+                status: "200".into(),
+                description: None,
+                media_types: vec![kaji_core::OperationMediaType {
+                    content_type: "application/x-ndjson".into(),
+                    schema: Some(SchemaValue::new(SchemaKind::Array {
+                        items: Box::new(SchemaValue::reference(
+                            "#/components/schemas/SequenceItem",
+                        )),
+                    })),
+                }],
+            }],
+            ..Default::default()
+        });
+        api.operations.push(Operation {
+            id: "contentParameters".into(),
+            method: kaji_core::HttpMethod::Get,
+            path: "/items/{id}".into(),
+            parameters: [
+                ("id", "path"),
+                ("data", "query"),
+                ("X-Data", "header"),
+                ("session", "cookie"),
+            ]
+            .iter()
+            .map(|(name, location)| kaji_core::OperationParameter {
+                name: (*name).into(),
+                location: (*location).into(),
+                required: true,
+                schema: Some(SchemaValue::new(SchemaKind::Any)),
+                description: None,
+                annotations: [(
+                    "kaji.parameter_content".into(),
+                    serde_json::json!([{"content_type":"application/json"}]),
+                )]
+                .into(),
+            })
+            .collect(),
+            responses: vec![kaji_core::OperationResponse::json(
+                "200",
+                SchemaValue::new(SchemaKind::Any),
+            )],
+            ..Default::default()
+        });
+        let mut strict = api.operations.last().unwrap().clone();
+        strict.id = "strictParameters".into();
+        for parameter in &mut strict.parameters {
+            parameter.schema = Some(SchemaValue::new(SchemaKind::String));
+        }
+        api.operations.push(strict);
+        render_sdk(&api, "sdk", Some("probe-sdk"), SdkClientStyle::Flat)
+            .unwrap()
+            .write_to(root.path())
+            .unwrap();
+        let script = r#"require 'probe_sdk'
+Response = Struct.new(:code, :body, :content_type)
+body = "0\nfalse\nnull\n{\"future\":[0,false,null]}\n"
+transport = ->(request) { raise 'query changed' unless request.uri.query == 'tag=a&tag=b&escaped=%26'; Response.new('200', body, 'application/x-ndjson') }
+client = ProbeSdk::Client.new(base_url: 'https://example.test', transport: transport)
+query = client.send(:kaji_whole_query, '?tag=a&tag=b&escaped=%26', 'text/plain')
+result = client.send(:request, 'GET', '/', query: query, headers: {}, body: nil)
+raise 'sequence changed' unless result == [0, false, nil, {'future'=>[0,false,nil]}]
+body = "{\"value\":0,\"future\":false}\n"
+items = client.get_items(filters: '?tag=a&tag=b&escaped=%26')
+raise "typed sequence model lost: #{items.inspect}" unless items.first.is_a?(ProbeSdk::Models::SequenceItem) && items.first.to_h == {'value'=>0,'future'=>false}
+
+
+manual = ProbeSdk::Models::SequenceItem.new(value: 0)
+raise 'manual known changed' unless manual.to_h == {'value'=>0}
+manual = manual.with_present_fields('note')
+raise 'explicit null not serialized' unless manual.to_h == {'value'=>0, 'note'=>nil}
+begin; manual.with_present_fields('missing'); raise 'unknown field accepted'; rescue ArgumentError; end
+raise 'form changed' unless client.send(:kaji_whole_query, {'tag'=>['a','b'], 'zero'=>0, 'flag'=>false}, 'application/x-www-form-urlencoded') == 'tag=a&tag=b&zero=0&flag=false'
+raise 'json changed' unless URI.decode_www_form_component(client.send(:kaji_whole_query, {'future'=>false}, 'application/json')) == '{"future":false}'
+raise 'json seq changed' unless client.send(:kaji_sequential_json, "\x1e0\n\x1efalse\n", 'application/json-seq') == [0,false]
+nested = ProbeSdk::MultipartBody.new.add_text('inner', 'nested')
+plan = {'content_type'=>'multipart/mixed', 'prefix_encoding'=>[{'contentType'=>'application/json', 'headers'=>{'X-Position'=>{'required'=>true,'schema_definition'=>{'default'=>'first'}}}}, {'contentType'=>'multipart/mixed', 'prefixEncoding'=>[{'contentType'=>'text/custom'}]}], 'item_encoding'=>{'contentType'=>'application/custom'}}
+ordered = ProbeSdk::MultipartBody.new.add_json('first', {'zero'=>0}).add_part('second', nested).add_file('third', "\x00\xff".b, filename: 'tail.bin').with_encoding(plan)
+media, encoded = ordered.encode
+raise 'top media type changed' unless media.start_with?('multipart/mixed; boundary=')
+['Content-Type: application/json', 'X-Position: first', 'Content-Type: multipart/mixed', 'Content-Type: text/custom', 'Content-Type: application/custom', "\x00\xff".b].each { |wire| raise 'positional encoding changed' unless encoded.include?(wire) }
+raise 'part order changed' unless encoded.index('name="first"') < encoded.index('name="second"')
+expected_parameter_json = '{"flag":false}'
+parameter_transport = ->(request) {
+  raise 'JSON query content changed' unless URI.decode_www_form(request.uri.query).to_h['data'] == expected_parameter_json
+  raise 'JSON path content changed' unless CGI.unescape(request.uri.path.split('/').last) == expected_parameter_json
+  raise 'JSON header content changed' unless request['X-Data'] == expected_parameter_json
+  raise 'JSON cookie content changed' unless CGI.unescape(request['Cookie'].split('=',2).last) == expected_parameter_json
+  Response.new('200', '{}', 'application/json')
+}
+parameter_client = ProbeSdk::Client.new(base_url: 'https://example.test', transport: parameter_transport)
+parameter_client.content_parameters(id: {'flag'=>false}, data: {'flag'=>false}, x_data: {'flag'=>false}, session: {'flag'=>false})
+expected_parameter_json = 'null'
+parameter_client.content_parameters(id: nil, data: nil, x_data: nil, session: nil)
+begin
+  parameter_client.strict_parameters(id: nil, data: nil, x_data: nil, session: nil)
+  raise 'nonnullable JSON null accepted'
+rescue ArgumentError
+end
+
+raise 'nullable JSON whole query lost' unless client.send(:kaji_whole_query, nil, 'application/json', true) == 'null'
+raise 'optional JSON whole query changed' unless client.send(:kaji_whole_query, nil, 'application/json') == ''
+
+
+
+['#bad', 'x=1?next', "x=1\nheader"].each do |raw|
+  begin; client.send(:kaji_whole_query, raw, 'text/plain'); raise 'unsafe query accepted'; rescue ArgumentError; end
+end
+['prefix' + "\x1e{}", "\x1e", "\x1e{}\x1einvalid"].each do |raw|
+  begin; client.send(:kaji_sequential_json, raw, 'application/json-seq'); raise 'invalid sequence accepted'; rescue JSON::ParserError; end
+end
+"#;
+        let result = std::process::Command::new("ruby")
+            .args(["-Ilib", "-e", script])
+            .current_dir(root.path().join("sdk"))
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{} {}",
+            String::from_utf8_lossy(&result.stdout),
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
 
     #[test]
     fn native_multipart_binary_json_limits_and_retry_bytes() {

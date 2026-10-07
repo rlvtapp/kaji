@@ -1,5 +1,35 @@
     private
 
+    def kaji_parameter_content(value, content_type)
+      return JSON.generate(Models.to_wire(value)) if content_type == 'application/json' || content_type.end_with?('+json')
+      return URI.encode_www_form(value) if content_type == 'application/x-www-form-urlencoded' && value.is_a?(Hash)
+      raise ArgumentError, 'parameter content must be a serialized string' unless value.is_a?(String)
+      value
+    end
+
+    def kaji_whole_query(value, content_type, allow_null = false)
+      return '' if value.nil? && !allow_null
+      if content_type == 'application/json' || content_type.end_with?('+json')
+        return URI.encode_www_form_component(JSON.generate(Models.to_wire(value)))
+      end
+      return URI.encode_www_form(value.flat_map { |key, item| Array(item).map { |part| [key, part] } }) if value.is_a?(Hash) && content_type == 'application/x-www-form-urlencoded'
+      raise ArgumentError, 'whole query must be a serialized string' unless value.is_a?(String)
+      value = value.sub(/\A\?/, '')
+      raise ArgumentError, 'unsafe whole query' if value.match?(/[?#\r\n]/)
+      value
+    end
+
+    def kaji_sequential_json(body, content_type)
+      raise ArgumentError, 'sequential response exceeds 64 MiB' if body.bytesize > 64 * 1024 * 1024
+      if content_type == 'application/json-seq'
+        prefix, *records = body.split("\x1e", -1)
+        raise JSON::ParserError, 'JSON sequence requires record separators' unless prefix.strip.empty? && (body.strip.empty? || !records.empty?)
+        records.map { |record| JSON.parse(record) }
+      else
+        body.lines.reject { |line| line.strip.empty? }.map { |line| JSON.parse(line) }
+      end
+    end
+
     def request(method, path, query:, headers:, body:, response_schemas: nil, idempotency_header: nil, request_options: nil, multipart: false)
       options = request_options || {}
       raise ArgumentError, 'request_options must be a Hash' unless options.is_a?(Hash)
@@ -13,7 +43,7 @@
       cancelled = -> { (@cancelled && @cancelled.call) || (supplied_cancelled && supplied_cancelled.call) }
       check_cancellation(cancelled)
       uri = URI.join(@base_url + "/", path.sub(%r{^/}, ""))
-      uri.query = URI.encode_www_form(query) unless query.empty?
+      uri.query = query.is_a?(String) ? query : URI.encode_www_form(query) unless query.empty?
       request = if %w[GET HEAD POST PUT DELETE OPTIONS TRACE PATCH].include?(method.upcase) && Net::HTTP.const_defined?(method.capitalize, false)
         Net::HTTP.const_get(method.capitalize, false).new(uri)
       else
@@ -39,6 +69,10 @@
         handler = ->(native_request) { item.call(native_request, following) }
       end
       response = Timeout.timeout(timeout, KajiTimeoutError) { execute_with_retry(handler, request, idempotency_header, cancelled: cancelled) }
+      content_type = (response.respond_to?(:content_type) ? response.content_type : (response["Content-Type"] rescue nil)).to_s.split(';', 2).first
+      if response.code.to_i.between?(200, 299) && ['application/x-ndjson', 'application/ndjson', 'application/jsonl', 'application/json-seq'].include?(content_type)
+        return kaji_sequential_json(response.body.to_s, content_type)
+      end
       shape = nil
       if @validate_responses && response_schemas && response.code.to_i.between?(200, 299)
         content_type = response.respond_to?(:[]) ? response["Content-Type"] : nil

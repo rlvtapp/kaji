@@ -322,3 +322,107 @@ fn native_urlsession_multipart_wire_retry_guard_and_socket_cancellation() {
         String::from_utf8_lossy(&output.stderr)
     );
 }
+
+#[test]
+#[ignore = "requires Swift 6 native compiler"]
+fn native_ordered_nested_multipart_applies_positional_plan() {
+    let operation = Operation {
+        id: "orderedUpload".into(),
+        method: kaji_core::HttpMethod::Put,
+        path: "/upload".into(),
+        request_body: Some(OperationRequestBody {
+            required: true,
+            description: None,
+            media_types: vec![OperationMediaType {
+                content_type: "multipart/mixed".into(),
+                schema: Some(SchemaValue::new(SchemaKind::Array {
+                    items: Box::new(SchemaValue::new(SchemaKind::Any)),
+                })),
+            }],
+        }),
+        annotations: std::collections::BTreeMap::from([(
+            "kaji.request_content".into(),
+            json!([{"content_type":"multipart/mixed","prefix_encoding":[{"contentType":"text/plain","headers":{"Content-ID":{"required":true}}},{"contentType":"multipart/mixed","prefixEncoding":[{"contentType":"application/json"}],"itemEncoding":{"contentType":"image/png"}}],"item_encoding":{"contentType":"application/octet-stream"}}]),
+        )]),
+        ..Default::default()
+    };
+    let download = Operation {
+        id: "download".into(),
+        method: kaji_core::HttpMethod::Get,
+        path: "/incoming".into(),
+        responses: vec![OperationResponse {
+            status: "200".into(),
+            description: None,
+            media_types: vec![OperationMediaType {
+                content_type: "multipart/mixed".into(),
+                schema: Some(SchemaValue::new(SchemaKind::Array {
+                    items: Box::new(SchemaValue::new(SchemaKind::Any)),
+                })),
+            }],
+        }],
+        ..Default::default()
+    };
+    let api = Api {
+        name: "Ordered".into(),
+        version: "1".into(),
+        operations: vec![operation, download],
+        ..Default::default()
+    };
+    let tree = render_sdk(&api, "sdk", Some("Ordered"), SdkClientStyle::Namespaced).unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    tree.write_to(directory.path()).unwrap();
+    std::fs::write(directory.path().join("Probe.swift"),r#"import Foundation
+actor ResponseTransport: KajiTransport {
+ func execute(_ request:URLRequest) async throws -> (Data,URLResponse) {(Data([0xff,0,13,10]),HTTPURLResponse(url:request.url!,statusCode:200,httpVersion:nil,headerFields:["Content-Type":"multipart/mixed; boundary=test"])!)}
+}
+@main struct Probe {
+ static func main() async throws {
+  let client=KajiClient(options:KajiClientOptions(baseURL:URL(string:"https://example.test")!),transport:ResponseTransport())
+  let received:Data=try await client.download();guard received == Data([0xff,0,13,10]) else {fatalError("MIME response bytes changed")}
+  let facade:Data=try await client.incoming.download();guard facade == received else {fatalError("facade response differs")}
+  let parts:[KajiOrderedPart] = [.init(.text("hello"), headers:["Content-ID":"first"]), .init(.nested([.init(.json(.object(["zero":.integer(0),"flag":.bool(false),"nil":.null]))),.init(.bytes(Data([0xff,0])))])),.init(.bytes(Data([0]))) ]
+  let body=OrderedUploadMultipartBody(parts:parts)
+  let encoded=try body.kajiEncoded()
+  guard encoded.contentType.hasPrefix("multipart/mixed; boundary="),encoded.body.range(of:Data([0xff,0])) != nil else {fatalError("subtype or bytes lost")}
+  let readable=String(decoding:encoded.body,as:UTF8.self)
+  guard readable.contains("Content-ID: first"),readable.contains("Content-Type: image/png"),readable.contains("Content-Type: application/json"),readable.contains("Content-Type: application/octet-stream"),readable.contains("\"nil\":null"),!readable.contains("name=\"\"") else {fatalError(readable)}
+  let first=readable.range(of:"hello")!,nested=readable.range(of:"Content-Type: multipart/mixed;")!;guard first.lowerBound<nested.lowerBound else {fatalError("part order changed")}
+  do {_ = try OrderedUploadMultipartBody(parts:[.init(.text("no header"))]).kajiEncoded();fatalError("required part header ignored")}catch KajiMultipartError.missingHeader("Content-ID") {}
+  do {_ = try OrderedUploadMultipartBody(parts:parts,maximumBodyBytes:8).kajiEncoded();fatalError("limit ignored")}catch KajiMultipartError.bodyTooLarge {}
+  let cancelled=Task {try Task.checkCancellation();return try body.kajiEncoded()};cancelled.cancel();do {_ = try await cancelled.value;fatalError("cancellation ignored")}catch is CancellationError {}
+ }
+}
+"#).unwrap();
+    let mut compiler = Command::new("swiftc");
+    compiler.args(["-swift-version", "6", "-parse-as-library"]);
+    for (path, _) in tree.iter().filter(|(path, _)| {
+        path.starts_with("sdk/Sources/")
+            && path
+                .extension()
+                .is_some_and(|extension| extension == "swift")
+    }) {
+        compiler.arg(directory.path().join(path));
+    }
+    let binary = directory.path().join("probe");
+    compiler
+        .arg(directory.path().join("Probe.swift"))
+        .arg("-o")
+        .arg(&binary);
+    let cache = std::env::temp_dir().join("kaji-swift-cache");
+    compiler
+        .env("CLANG_MODULE_CACHE_PATH", &cache)
+        .env("SWIFT_MODULECACHE_PATH", &cache);
+    let output = compiler.output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let output = Command::new(binary).output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}

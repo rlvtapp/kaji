@@ -1,0 +1,37 @@
+#[allow(dead_code)]
+fn kaji_decode_json<T: serde::de::DeserializeOwned>(body: &[u8], content_type: &str) -> Result<T, serde_json::Error> {
+    let media = content_type.split(';').next().unwrap_or("").trim();
+    if !matches!(media, "application/x-ndjson" | "application/ndjson" | "application/jsonl" | "application/json-seq") { return serde_json::from_slice(body); }
+    let fail = |message: &str| <serde_json::Error as serde::de::Error>::custom(message);
+    if body.len() > 64 * 1024 * 1024 { return Err(fail("sequential JSON exceeds 64MiB")); }
+    let text = std::str::from_utf8(body).map_err(|_|fail("sequential JSON must be UTF-8"))?;
+    let sequence = media == "application/json-seq";
+    if sequence && !text.trim().is_empty() && !text.starts_with('\u{1e}') { return Err(fail("JSON sequence must begin with a record separator")); }
+    let records: Vec<&str> = if sequence { text.split('\u{1e}').skip(1).collect() } else { text.lines().collect() };
+    let mut values = Vec::new();
+    for record in records {
+        if record.trim().is_empty() { if sequence { return Err(fail("empty JSON sequence record")); } continue; }
+        if values.len() >= 100_000 { return Err(fail("sequential JSON exceeds 100000 records")); }
+        values.push(serde_json::from_str::<serde_json::Value>(record)?);
+    }
+    serde_json::from_value(serde_json::Value::Array(values))
+}
+
+#[allow(dead_code)]
+fn kaji_valid_raw_query(raw:&str)->bool {
+ let bytes=raw.as_bytes(); let mut index=0;
+ if raw.starts_with('?'){return false}
+ while index<bytes.len(){let byte=bytes[index];if byte<32||byte==127||byte==b'#'{return false} if byte==b'%' {if index+2>=bytes.len()||!bytes[index+1].is_ascii_hexdigit()||!bytes[index+2].is_ascii_hexdigit(){return false}index+=2;}index+=1;}true
+}
+#[allow(dead_code)]
+fn kaji_encode_sequence<T:serde::Serialize>(body:&T,media:&str)->Result<Vec<u8>,serde_json::Error> {
+    let value=serde_json::to_value(body)?;
+    let fail=|message:&str| <serde_json::Error as serde::ser::Error>::custom(message);
+    let items=value.as_array().ok_or_else(||fail("Sequential JSON request requires an array"))?;
+    if items.len()>100_000{return Err(fail("Sequential JSON exceeds 100000 records"))}
+    let mut bytes=Vec::new();
+    for item in items {if media=="application/json-seq"{bytes.push(0x1e)}serde_json::to_writer(&mut bytes,item)?;bytes.push(b'\n');if bytes.len()>64*1024*1024{return Err(fail("Sequential JSON exceeds 64MiB"))}}
+    Ok(bytes)
+}
+
+#[allow(dead_code)]fn kaji_parameter_json<T:serde::Serialize>(value:&T)->String{serde_json::to_string(value).expect("generated JSON parameter serialization")}

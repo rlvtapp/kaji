@@ -1787,6 +1787,7 @@ fn typescript_models(plugin: &PluginConfig) -> Result<ts::ModelOptions> {
         other => bail!("TypeScript int64 must be number, string, or bigint; got {other:?}"),
     };
     Ok(ts::ModelOptions {
+        open_enums: plugin.open_enums.unwrap_or(false),
         integer_as_string: plugin.integer_as_string.unwrap_or(false),
         int64_type,
         ..Default::default()
@@ -2268,8 +2269,16 @@ fn config_profiles(
                     .find(|plugin| plugin.name == "sdk")
                     .and_then(|plugin| plugin.open_unions)
                     .unwrap_or(false);
-                let mut package_builder =
-                    package_builder.open_unions(open_unions).with(rust::sdk());
+                let open_enums = package
+                    .plugins
+                    .iter()
+                    .find(|plugin| plugin.name == "sdk")
+                    .and_then(|plugin| plugin.open_enums)
+                    .unwrap_or(false);
+                let mut package_builder = package_builder
+                    .open_unions(open_unions)
+                    .open_enums(open_enums)
+                    .with(rust::sdk());
                 if package.plugins.iter().any(|p| p.name == "operation-tests") {
                     package_builder = package_builder.with(rust::operation_tests());
                 }
@@ -2320,6 +2329,7 @@ fn config_profiles(
                 };
                 let plugin = sdk_plugin(package)?;
                 let mut package_builder = package_builder
+                    .open_enums(plugin.open_enums.unwrap_or(false))
                     .with(python::sdk().async_client(plugin.async_client.unwrap_or(false)));
                 for consumer in &package.plugins {
                     match consumer.name.as_str() {

@@ -247,6 +247,29 @@ fn mixed(operation: &Operation) -> bool {
         .iter()
         .any(|media| json_media(&media.content_type))
 }
+fn ordered(api: &Api, operation: &Operation) -> bool {
+    let Some(body) = operation.request_body.as_ref() else {
+        return false;
+    };
+    body.media_types.iter().any(|media| {
+        media
+            .content_type
+            .to_ascii_lowercase()
+            .starts_with("multipart/")
+            && (media.content_type != "multipart/form-data"
+                || media
+                    .schema
+                    .as_ref()
+                    .and_then(|s| resolve(api, s, 0).ok())
+                    .is_some_and(|s| matches!(s.kind, SchemaKind::Array { .. })))
+    }) || kaji_core::openapi32::request_content(operation)
+        .ok()
+        .is_some_and(|content| {
+            content
+                .iter()
+                .any(|media| !media.prefix_encoding.is_empty() || media.item_encoding.is_some())
+        })
+}
 pub(crate) fn prepare(api: &Api) -> Result<std::borrow::Cow<'_, Api>> {
     if !api.operations.iter().any(selected) {
         return Ok(std::borrow::Cow::Borrowed(api));
@@ -257,7 +280,9 @@ pub(crate) fn prepare(api: &Api) -> Result<std::borrow::Cow<'_, Api>> {
         .iter_mut()
         .filter(|operation| selected(operation))
     {
-        fields(api, operation)?;
+        if !ordered(api, operation) {
+            fields(api, operation)?;
+        }
         let body_type = if mixed(operation) {
             format!("{}RequestBody", type_name(&operation.id))
         } else {
@@ -271,6 +296,9 @@ pub(crate) fn prepare(api: &Api) -> Result<std::borrow::Cow<'_, Api>> {
             "KajiMultipartEncoder".into(),
             "KajiEncodedMultipart".into(),
             "KajiMultipartPart".into(),
+            "KajiOrderedPart".into(),
+            "KajiOrderedDefinition".into(),
+            "KajiOrderedEncoding".into(),
         ] {
             ensure!(
                 !api.schemas
@@ -297,6 +325,9 @@ fn field_type(api: &Api, field: &Field) -> Result<String> {
     Ok(format!("{base}{}", if field.required { "" } else { "?" }))
 }
 fn render_body(api: &Api, operation: &Operation) -> Result<String> {
+    if ordered(api, operation) {
+        return render_ordered_body(operation);
+    }
     let name = dto_name(operation);
     let fields = fields(api, operation)?;
     let mut declarations = String::new();
@@ -440,6 +471,51 @@ fn render_body(api: &Api, operation: &Operation) -> Result<String> {
             .unwrap_or_else(|| "JSONValue".into());
         let wrapper = body_type(operation).unwrap();
         source.push_str(&format!("\n/// Select the declared wire representation explicitly.\npublic enum {wrapper}: Sendable {{\n    case multipart({name})\n    case json({ty})\n\n    internal func kajiEncoded() throws -> KajiEncodedMultipart {{\n        try Task.checkCancellation()\n        switch self {{\n        case .multipart(let value): return try value.kajiEncoded()\n        case .json(let value):\n            let body = try JSONEncoder().encode(value)\n            guard body.count <= {MAX_BODY_BYTES} else {{ throw KajiMultipartError.bodyTooLarge }}\n            return KajiEncodedMultipart(body: body, contentType: {:?})\n        }}\n    }}\n}}\n",media.content_type));
+    }
+    Ok(source)
+}
+fn render_ordered_body(operation: &Operation) -> Result<String> {
+    let name = dto_name(operation);
+    let media = operation
+        .request_body
+        .as_ref()
+        .unwrap()
+        .media_types
+        .iter()
+        .find(|media| {
+            media
+                .content_type
+                .to_ascii_lowercase()
+                .starts_with("multipart/")
+        })
+        .unwrap();
+    let definition = kaji_core::openapi32::request_content(operation)?
+        .into_iter()
+        .find(|content| content.content_type == media.content_type)
+        .unwrap_or_else(|| kaji_core::openapi32::ContentDefinition {
+            content_type: media.content_type.clone(),
+            ..Default::default()
+        });
+    let definition = serde_json::to_string(&definition)?;
+    let mut source = format!(
+        "{NOTICE}\nimport Foundation\n\npublic struct {name}: Sendable {{\n    public var parts: [KajiOrderedPart]\n    public var maximumBodyBytes: Int\n    public init(parts: [KajiOrderedPart], maximumBodyBytes: Int = {MAX_BODY_BYTES}) {{ self.parts = parts; self.maximumBodyBytes = maximumBodyBytes }}\n    internal func kajiEncoded() throws -> KajiEncodedMultipart {{\n        let definition = try JSONDecoder().decode(KajiOrderedDefinition.self, from: Data({definition:?}.utf8))\n        return try kajiOrderedEncode(parts: parts, contentType: definition.content_type, named: definition.encoding ?? [:], prefix: definition.prefix_encoding ?? [], item: definition.item_encoding, maximumBodyBytes: maximumBodyBytes)\n    }}\n}}\n"
+    );
+    if mixed(operation) {
+        let json = operation
+            .request_body
+            .as_ref()
+            .unwrap()
+            .media_types
+            .iter()
+            .find(|media| json_media(&media.content_type))
+            .unwrap();
+        let ty = json
+            .schema
+            .as_ref()
+            .map(|schema| swift_type(schema, false))
+            .unwrap_or_else(|| "JSONValue".into());
+        let wrapper = body_type(operation).unwrap();
+        source.push_str(&format!("\npublic enum {wrapper}: Sendable {{\n    case multipart({name})\n    case json({ty})\n    internal func kajiEncoded() throws -> KajiEncodedMultipart {{\n        switch self {{\n        case .multipart(let value): return try value.kajiEncoded()\n        case .json(let value):\n            try Task.checkCancellation()\n            let bytes = try JSONEncoder().encode(value)\n            guard bytes.count <= {MAX_BODY_BYTES} else {{ throw KajiMultipartError.bodyTooLarge }}\n            return KajiEncodedMultipart(body: bytes, contentType: {:?})\n        }}\n    }}\n}}\n",json.content_type));
     }
     Ok(source)
 }

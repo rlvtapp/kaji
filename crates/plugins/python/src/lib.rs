@@ -100,6 +100,10 @@ fn render_sdk(
         render_runtime(api),
     )?)?;
     tree.insert(GeneratedFile::new(
+        format!("{root}/src/{module}/presence.py"),
+        include_str!("presence.py"),
+    )?)?;
+    tree.insert(GeneratedFile::new(
         format!("{root}/src/{module}/response_validation.py"),
         response_validation::render(api),
     )?)?;
@@ -504,9 +508,15 @@ fn render_schema(output: &mut String, schema: &Schema) {
                         .map(|item| format!("{:?}", item.name))
                         .collect::<Vec<_>>()
                         .join(", ");
+                    let item = match additional_properties {
+                        AdditionalProperties::Schema { value } => {
+                            format!("decode_model_value(item, {})", python_decode_shape(value))
+                        }
+                        _ => "item".into(),
+                    };
                     let _ = writeln!(
                         output,
-                        "            {additional_field}={{key: item for key, item in value.items() if key not in [{declared}]}},"
+                        "            {additional_field}={{key: {item} for key, item in value.items() if key not in [{declared}]}},"
                     );
                 }
                 let _ = writeln!(
@@ -522,7 +532,35 @@ fn render_schema(output: &mut String, schema: &Schema) {
                 .iter()
                 .map(python_literal)
                 .collect::<Vec<_>>();
-            let _ = writeln!(output, "{name} = Literal[{}]", values.join(", "));
+            let future = if schema
+                .value
+                .extensions
+                .get("x-kaji-open-enum")
+                .and_then(serde_json::Value::as_bool)
+                == Some(true)
+            {
+                let mut primitives = std::collections::BTreeSet::new();
+                for value in &schema.value.enum_values {
+                    primitives.insert(if value.is_string() {
+                        "str"
+                    } else if value.is_boolean() {
+                        "bool"
+                    } else if value.is_i64() || value.is_u64() {
+                        "int"
+                    } else if value.is_number() {
+                        "float"
+                    } else {
+                        "None"
+                    });
+                }
+                format!(
+                    " | {}",
+                    primitives.into_iter().collect::<Vec<_>>().join(" | ")
+                )
+            } else {
+                String::new()
+            };
+            let _ = writeln!(output, "{name} = Literal[{}]{future}", values.join(", "));
         }
         _ => {
             let mut references = std::collections::BTreeSet::new();
@@ -744,6 +782,12 @@ class BaseClient:
                 data, multipart_content_type = encode_multipart(body, to_wire)
                 request_headers = {{key: value for key, value in request_headers.items() if key.lower() != "content-type"}}
                 request_headers["Content-Type"] = multipart_content_type
+            elif body_kind in ("json-seq", "ndjson", "application/json-seq", "application/x-ndjson", "application/ndjson", "application/jsonl"):
+                value = to_wire(body)
+                if not isinstance(value, list):
+                    raise TypeError("Sequential JSON request bodies must serialize to a list")
+                request_headers.setdefault("Content-Type", body_kind if body_kind.startswith("application/") else "application/json-seq" if body_kind == "json-seq" else "application/x-ndjson")
+                data = "".join(("\x1e" if body_kind in ("json-seq", "application/json-seq") else "") + json.dumps(item, allow_nan=False) + "\n" for item in value).encode("utf-8")
             elif body_kind == "binary":
                 if not isinstance(body, (bytes, bytearray, memoryview)):
                     raise TypeError("binary request bodies must be bytes-like")
@@ -770,8 +814,8 @@ class BaseClient:
                     if self.after_response is not None:
                         self.after_response({{"request": request_context, "status_code": status_code, "headers": response_headers, "body": raw}})
                     content_type = response.headers.get_content_type()
-                    from .response_validation import decode_json
-                    decoded = decode_json(raw, self.validate_responses) if raw and (content_type == "application/json" or content_type.endswith("+json")) else raw or None
+                    from .response_validation import decode_json, decode_sequence
+                    decoded = decode_sequence(raw, content_type, self.validate_responses) if raw and content_type in ("application/json-seq", "application/x-ndjson", "application/ndjson", "application/jsonl") else decode_json(raw, self.validate_responses) if raw and (content_type == "application/json" or content_type.endswith("+json")) else raw or None
                     if self.validate_responses and response_operation is not None and method.upper() != "HEAD":
                         from .response_validation import PLANS, check_response
                         check_response(decoded, PLANS["operations"].get(response_operation, {{}}), PLANS["refs"], status_code, content_type)
@@ -979,7 +1023,7 @@ class BaseClient:
 
 fn render_operation_chunk(api: &Api, operations: &[Operation], index: usize) -> String {
     let mut output = format!(
-        "{NOTICE}from __future__ import annotations\n\nfrom typing import Any, Iterator, cast\nfrom uuid import uuid4\nfrom urllib.parse import quote\n\nfrom .runtime import ApiError, _kaji_json_path, _kaji_with_body_value\nfrom .multipart import MultipartBody\nfrom .models import *\n\n\nclass Operations{index:03}:\n"
+        "{NOTICE}from __future__ import annotations\n\nfrom typing import Any, Iterator, cast\nfrom uuid import uuid4\nfrom urllib.parse import quote\n\nfrom .runtime import ApiError, _kaji_json_path, _kaji_with_body_value, to_wire\nfrom .multipart import MultipartBody\nfrom .models import *\n\n\nclass Operations{index:03}:\n"
     );
     for operation in operations {
         output.push_str(&render_operation(api, operation));
@@ -1390,17 +1434,34 @@ fn render_url_paginator(operation: &Operation, pagination: &UrlPagination) -> St
     )
 }
 
+fn python_parameter_value_name(parameter: &kaji_core::OperationParameter) -> String {
+    let name = python_identifier(&parameter.name);
+    if parameter.location != "querystring"
+        && kaji_core::openapi32::parameter_content(parameter)
+            .ok()
+            .is_some_and(|content| !content.is_empty())
+    {
+        format!("_kaji_content_{name}")
+    } else {
+        name
+    }
+}
+
 fn render_operation(api: &Api, operation: &Operation) -> String {
     let name = python_identifier(&snake_case(&operation.id));
     let response = response_type(operation);
     let has_url_pagination = url_pagination(operation).is_some();
     let mut args = Vec::new();
     for parameter in &operation.parameters {
-        let field_type = parameter
-            .schema
-            .as_ref()
-            .map(python_type)
-            .unwrap_or_else(|| "Any".into());
+        let field_type = if parameter.location == "querystring" {
+            "str".to_owned()
+        } else {
+            parameter
+                .schema
+                .as_ref()
+                .map(python_type)
+                .unwrap_or_else(|| "Any".into())
+        };
         let parameter_name = python_identifier(&parameter.name);
         if parameter.required {
             args.push(format!("{parameter_name}: {field_type}"));
@@ -1447,13 +1508,46 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
             }
         }
     }
+    for parameter in operation
+        .parameters
+        .iter()
+        .filter(|p| p.location != "querystring")
+    {
+        if let Ok(content) = kaji_core::openapi32::parameter_content(parameter) {
+            if let Some(media) = content.first() {
+                let name = python_identifier(&parameter.name);
+                let value = if media
+                    .content_type
+                    .split(';')
+                    .next()
+                    .unwrap_or("")
+                    .contains("json")
+                {
+                    format!(
+                        "_kaji_json.dumps(to_wire({name}), separators=(\",\", \":\"), allow_nan=False)"
+                    )
+                } else {
+                    format!("str({name})")
+                };
+                let serialized = if parameter.required && media.content_type.contains("json") {
+                    value
+                } else {
+                    format!("{value} if {name} is not None else None")
+                };
+                let _ = writeln!(
+                    output,
+                    "        import json as _kaji_json\n        _kaji_content_{name} = {serialized}"
+                );
+            }
+        }
+    }
     let _ = writeln!(output, "        _kaji_path = {:?}", operation.path);
     for parameter in operation
         .parameters
         .iter()
         .filter(|parameter| parameter.location == "path")
     {
-        let value = python_identifier(&parameter.name);
+        let value = python_parameter_value_name(parameter);
         let _ = writeln!(
             output,
             "        _kaji_path = _kaji_path.replace({:?}, quote(str({value}), safe=\"\"))",
@@ -1470,13 +1564,24 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
     } else {
         output.push_str("        _kaji_query: dict[str, Any] | None = {}\n");
         for parameter in query {
-            let value = python_identifier(&parameter.name);
+            let value = python_parameter_value_name(parameter);
             let _ = writeln!(
                 output,
                 "        if {value} is not None:\n            _kaji_query[{name:?}] = {value}",
                 name = parameter.name
             );
         }
+    }
+    for parameter in operation
+        .parameters
+        .iter()
+        .filter(|p| p.location == "querystring")
+    {
+        let value = python_parameter_value_name(parameter);
+        let _ = writeln!(
+            output,
+            "        if {value} is not None:\n            if any(character in {value} for character in (\"#\", \"?\", \"\\r\", \"\\n\")):\n                raise ValueError(\"Whole-query value must be serialized without a URL fragment or query delimiter\")\n            _kaji_path += (\"&\" if \"?\" in _kaji_path else \"?\") + {value}"
+        );
     }
     let headers = operation
         .parameters
@@ -1488,11 +1593,41 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
     } else {
         output.push_str("        _kaji_headers: dict[str, str] | None = {}\n");
         for parameter in headers {
-            let value = python_identifier(&parameter.name);
+            let value = python_parameter_value_name(parameter);
             let _ = writeln!(
                 output,
                 "        if {value} is not None:\n            _kaji_headers[{name:?}] = str({value})",
                 name = parameter.name
+            );
+        }
+    }
+    for parameter in operation
+        .parameters
+        .iter()
+        .filter(|p| p.location == "cookie")
+    {
+        let value = python_parameter_value_name(parameter);
+        let _ = writeln!(
+            output,
+            "        if {value} is not None:\n            _kaji_headers = _kaji_headers or {{}}\n            _kaji_cookie = {:?} + \"=\" + quote(str({value}), safe=\"\")\n            _kaji_headers[\"Cookie\"] = (_kaji_headers[\"Cookie\"] + \"; \" if _kaji_headers.get(\"Cookie\") else \"\") + _kaji_cookie",
+            parameter.name
+        );
+    }
+    if let Ok(content) = kaji_core::openapi32::request_content(operation) {
+        if let Some(media) = content.iter().find(|m| {
+            m.content_type.starts_with("multipart/")
+                && (!m.prefix_encoding.is_empty()
+                    || m.item_encoding.is_some()
+                    || m.encoding.values().any(|e| {
+                        !e.encoding.is_empty()
+                            || !e.prefix_encoding.is_empty()
+                            || e.item_encoding.is_some()
+                    }))
+        }) {
+            let plan = serde_json::to_string(media).expect("multipart plan");
+            let _ = writeln!(
+                output,
+                "        import json as _kaji_json\n        _kaji_plan = _kaji_json.loads({plan:?})\n        body = (body if isinstance(body, MultipartBody) else MultipartBody.positional(body) if isinstance(body, list) else MultipartBody(body)).with_encoding(_kaji_plan)"
             );
         }
     }
@@ -1623,12 +1758,20 @@ fn operation_body_kind(operation: &Operation) -> &'static str {
     let multipart = body
         .media_types
         .iter()
-        .any(|media| media.content_type == "multipart/form-data");
+        .any(|media| media.content_type.starts_with("multipart/"));
     let other = body
         .media_types
         .iter()
-        .find(|media| media.content_type != "multipart/form-data");
+        .find(|media| !media.content_type.starts_with("multipart/"));
     match (multipart, other.map(|media| media.content_type.as_str())) {
+        (false, Some("application/json-seq")) => "application/json-seq",
+        (true, Some("application/json-seq")) => "application/json-seq_or_multipart",
+        (false, Some("application/jsonl")) => "application/jsonl",
+        (true, Some("application/jsonl")) => "application/jsonl_or_multipart",
+        (false, Some("application/ndjson")) => "application/ndjson",
+        (true, Some("application/ndjson")) => "application/ndjson_or_multipart",
+        (false, Some("application/x-ndjson")) => "application/x-ndjson",
+        (true, Some("application/x-ndjson")) => "application/x-ndjson_or_multipart",
         (true, None) => "multipart",
         (true, Some("application/x-www-form-urlencoded")) => "form_or_multipart",
         (true, Some("application/octet-stream")) => "binary_or_multipart",
@@ -1741,7 +1884,7 @@ fn render_init(api: &Api, client_style: SdkClientStyle) -> String {
         String::new()
     };
     format!(
-        "{NOTICE}\nfrom .client import Client\nfrom .oauth import OAuthClientCredentials, AsyncOAuthClientCredentials\nfrom .multipart import MultipartBody, FilePart, JsonPart, RawJsonPart\nfrom .response_validation import ResponseDecodeError\nfrom .runtime import {}\nfrom .models import *\n{resource_import}",
+        "{NOTICE}\nfrom .client import Client\nfrom .presence import with_present_fields\nfrom .oauth import OAuthClientCredentials, AsyncOAuthClientCredentials\nfrom .multipart import MultipartBody, FilePart, JsonPart, RawJsonPart\nfrom .response_validation import ResponseDecodeError\nfrom .runtime import {}\nfrom .models import *\n{resource_import}",
         client_imports.join(", "),
     )
 }
@@ -2726,6 +2869,80 @@ asyncio.run(main())
             .status()
             .unwrap();
         assert!(status.success());
+    }
+
+    #[test]
+    fn open_enum_setting_preserves_known_literals_and_scalar_wire_types() {
+        let mut value = SchemaValue::new(SchemaKind::String);
+        value.enum_values = vec![serde_json::json!("known")];
+        let strict = render_model(&Schema::new("State", value.clone()));
+        assert!(strict.contains("State = Literal[\"known\"]"));
+        value
+            .extensions
+            .insert("x-kaji-open-enum".into(), serde_json::json!(true));
+        let open = render_model(&Schema::new("State", value));
+        assert!(open.contains("State = Literal[\"known\"] | str"));
+        assert!(!open.contains("State = Any"));
+    }
+
+    #[test]
+    fn forward_values_preserve_known_models_unknown_unions_and_optional_nulls() {
+        let mut source = api();
+        let mut enum_value = SchemaValue::new(SchemaKind::String);
+        enum_value.enum_values = vec![serde_json::json!("known")];
+        source.schemas = vec![
+            Schema::new("State", enum_value),
+            Schema::new(
+                "Variant",
+                SchemaValue::new(SchemaKind::OneOf {
+                    variants: vec![
+                        SchemaValue::reference("#/components/schemas/State"),
+                        SchemaValue::new(SchemaKind::Integer),
+                    ],
+                }),
+            ),
+            Schema::new(
+                "FutureModel",
+                SchemaValue::new(SchemaKind::Object {
+                    fields: ["state", "variant"]
+                        .iter()
+                        .map(|name| Field {
+                            name: (*name).into(),
+                            value: SchemaValue::reference(if *name == "state" {
+                                "#/components/schemas/State"
+                            } else {
+                                "#/components/schemas/Variant"
+                            }),
+                            required: false,
+                            annotations: Default::default(),
+                        })
+                        .collect(),
+                    additional_properties: AdditionalProperties::Any,
+                }),
+            ),
+        ];
+        let root = tempfile::tempdir().unwrap();
+        render_test_sdk(&source, "sdk/python", Some("example-api-sdk"))
+            .unwrap()
+            .write_to(root.path())
+            .unwrap();
+        let script = r#"from example_api_sdk.models import FutureModel, _to_wire
+for wire in [{}, {"state": None}, {"state": "future", "variant": {"new": [0, False, None]}, "extra": {"nested": None}}, {"state": "known", "variant": 0}]:
+    restored = FutureModel.from_dict(wire)
+    assert isinstance(restored, FutureModel)
+    assert _to_wire(restored) == wire
+"#;
+        let output = std::process::Command::new("python3")
+            .args(["-c", script])
+            .env("PYTHONPATH", root.path().join("sdk/python/src"))
+            .env("PYTHONDONTWRITEBYTECODE", "1")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     #[test]
@@ -3876,3 +4093,158 @@ pub use package::{
     OperationTests, PackageExt, Python, PythonModels, Roundtrips, Sdk, Settings, Webhooks,
     operation_tests, package, roundtrips, sdk, webhooks,
 };
+
+#[cfg(test)]
+mod openapi32_native_tests {
+    use std::process::Command;
+    #[test]
+    fn native_buffered_sequences_round_trip_and_reject_invalid_records() {
+        let root = tempfile::tempdir().unwrap();
+        let mut api = kaji_core::Api {
+            name: "Example API".into(),
+            version: "1".into(),
+            ..Default::default()
+        };
+        let mut nullable = kaji_core::SchemaValue::new(kaji_core::SchemaKind::String);
+        nullable.nullable = true;
+        api.schemas.push(kaji_core::Schema::new(
+            "Note",
+            kaji_core::SchemaValue::new(kaji_core::SchemaKind::Object {
+                fields: vec![kaji_core::Field {
+                    name: "note-value".into(),
+                    value: nullable,
+                    required: false,
+                    annotations: Default::default(),
+                }],
+                additional_properties: kaji_core::AdditionalProperties::Forbidden,
+            }),
+        ));
+        api.operations.push(kaji_core::Operation {
+            id: "search".into(),
+            method: kaji_core::HttpMethod::Get,
+            path: "/search".into(),
+            parameters: vec![kaji_core::OperationParameter {
+                name: "filter".into(),
+                location: "querystring".into(),
+                required: true,
+                schema: Some(kaji_core::SchemaValue::new(kaji_core::SchemaKind::String)),
+                description: None,
+                annotations: Default::default(),
+            }],
+            request_body: None,
+            responses: vec![],
+            security: vec![],
+            annotations: Default::default(),
+        });
+        let parameters = [("selector", "path"), ("filter", "query"), ("condition", "header"), ("preferences", "cookie")].into_iter().map(|(name, location)| kaji_core::OperationParameter {
+            name: name.into(), location: location.into(), required: true, description: None,
+            schema: Some(kaji_core::SchemaValue::unknown()), annotations: std::collections::BTreeMap::from([("kaji.parameter_content".into(), serde_json::json!([{"content_type":"application/json","schema_definition":{"type":"object"}}]))]),
+        }).collect();
+        api.operations.push(kaji_core::Operation {
+            id: "filter".into(),
+            method: kaji_core::HttpMethod::Get,
+            path: "/items/{selector}".into(),
+            parameters,
+            request_body: None,
+            responses: vec![],
+            security: vec![],
+            annotations: Default::default(),
+        });
+        super::render_sdk_with_async(
+            &api,
+            "sdk/python",
+            Some("example-api-sdk"),
+            kaji_core::SdkClientStyle::Flat,
+            true,
+        )
+        .unwrap()
+        .write_to(root.path())
+        .unwrap();
+        let script = r#"import json
+from email.message import Message
+from example_api_sdk import Client
+import example_api_sdk.runtime as runtime
+from example_api_sdk.response_validation import decode_sequence, ResponseDecodeError
+from example_api_sdk import Note,with_present_fields
+from example_api_sdk.runtime import to_wire
+original=Note()
+assert to_wire(original)=={}
+explicit=with_present_fields(original,'note-value')
+assert to_wire(explicit)=={'note-value':None} and to_wire(original)=={}
+try: with_present_fields(original,'typo')
+except ValueError: pass
+else: raise AssertionError('unknown presence key accepted')
+
+seen=[]
+class Response:
+    status=200
+    headers=Message()
+    headers['content-type']='application/json-seq'
+    def __enter__(self): return self
+    def __exit__(self,*args): pass
+    def read(self): return b'\x1e{"id":1}\n\x1enull\n'
+def opened(request,timeout): seen.append(request); return Response()
+runtime.urlopen=opened
+client=Client('https://api.example', max_retries=0)
+result=client._request('POST','/items?tag=a&tag=b',body=[{'id':2},None],body_kind='json-seq')
+assert result == [{'id':1},None]
+assert seen[0].data == b'\x1e{"id": 2}\n\x1enull\n',seen[0].data
+assert seen[0].full_url == 'https://api.example/items?tag=a&tag=b'
+client.search(filter='tag=a&tag=b')
+assert seen[-1].full_url == 'https://api.example/search?tag=a&tag=b'
+client.filter(selector={'id':0},filter={'enabled':False},condition={'id':1},preferences={'id':2})
+from urllib.parse import urlsplit,parse_qs,unquote
+assert unquote(urlsplit(seen[-1].full_url).path)=='/items/{"id":0}'
+assert parse_qs(urlsplit(seen[-1].full_url).query)=={'filter':['{"enabled":false}']}
+assert seen[-1].get_header('Condition')=='{"id":1}'
+assert unquote(seen[-1].get_header('Cookie'))=='preferences={"id":2}'
+
+assert decode_sequence(b'{"id":3}\nnull\n','application/x-ndjson') == [{'id':3},None]
+import asyncio
+from types import SimpleNamespace
+from example_api_sdk.async_runtime import AsyncBaseClient
+class AsyncResponse:
+    status_code=200
+    headers={'content-type':'application/x-ndjson'}
+    async def aread(self): return b'{"id":5}\nnull\n'
+    async def aclose(self): pass
+class Driver:
+    def build_request(self,method,url,**options):
+        assert options['content'] == b'\x1e{"id": 6}\n\x1enull\n'
+        assert url.endswith('?tag=a&tag=b')
+        return SimpleNamespace(method=method,url=url)
+    async def send(self,request,stream=False): return AsyncResponse()
+async def verify():
+    result=await AsyncBaseClient('https://api.example',http_client=Driver(),max_retries=0)._request('POST','/items?tag=a&tag=b',body=[{'id':6},None],body_kind='json-seq')
+    assert result == [{'id':5},None]
+asyncio.run(verify())
+from example_api_sdk.multipart import MultipartBody,JsonPart,FilePart
+from email.parser import BytesParser
+from email.policy import default
+nested=MultipartBody.positional(['nested',None,FilePart(b'\x00\xff')])
+plan={'content_type':'multipart/mixed','prefix_encoding':[{'contentType':'application/json'},{'contentType':'multipart/mixed','prefixEncoding':[{'contentType':'text/plain'},{'contentType':'application/json'}],'itemEncoding':{'contentType':'application/octet-stream'}}]}
+body=MultipartBody.positional([JsonPart({'id':7}),nested])
+encoded,media=body.with_encoding(plan).encode()
+message=BytesParser(policy=default).parsebytes(('Content-Type: '+media+'\r\nMIME-Version: 1.0\r\n\r\n').encode()+encoded)
+parts=list(message.iter_parts())
+assert len(parts)==2 and json.loads(parts[0].get_payload(decode=True))=={'id':7}
+children=list(parts[1].iter_parts())
+assert children[0].get_payload(decode=True)==b'nested'
+assert children[1].get_payload(decode=True)==b'null'
+assert children[2].get_payload(decode=True)==b'\x00\xff'
+assert body.encode()[1].startswith('multipart/form-data;')
+
+for malformed in [b'\x1e{"bad":\n',b'{}\x1e{}']:
+    try: decode_sequence(malformed,'application/json-seq')
+    except (ResponseDecodeError,ValueError): pass
+    else: raise AssertionError('malformed JSON sequence accepted')
+"#;
+        let status = Command::new("python3")
+            .args(["-c", script])
+            .env("PYTHONPATH", root.path().join("sdk/python/src"))
+            .env("PYTHONDONTWRITEBYTECODE", "1")
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+}

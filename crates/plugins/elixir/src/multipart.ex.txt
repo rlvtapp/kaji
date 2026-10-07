@@ -1,14 +1,15 @@
 defmodule __KAJI_MODULE__.MultipartBody do
   @moduledoc "Explicit buffered multipart parts, including repeated names and binary files."
-  defstruct parts: [], size: 0
+  defstruct parts: [], size: 0, encoding: %{}
   @max_bytes 67_108_864
   @max_parts 1024
 
   def new, do: %__MODULE__{}
+  def with_encoding(body, encoding), do: %{body | encoding: encoding}
   def add_text(body, name, value), do: add_part(body, name, to_string(value), nil, "text/plain; charset=utf-8")
   def add_json(body, name, value), do: add_part(body, name, Jason.encode!(value), nil, "application/json")
   def add_file(body, name, bytes, filename, content_type \\ "application/octet-stream"), do: add_part(body, name, bytes, filename, content_type)
-  def add_part(%__MODULE__{} = body, name, bytes, filename \\ nil, content_type \\ "application/octet-stream") do
+  def add_part(%__MODULE__{} = body, name, bytes, filename \\ nil, content_type \\ "application/octet-stream", headers \\ %{}) do
     if length(body.parts) >= @max_parts, do: raise(ArgumentError, "too many multipart parts")
     Enum.each([name, filename, content_type], fn
       nil -> :ok
@@ -16,20 +17,47 @@ defmodule __KAJI_MODULE__.MultipartBody do
         if value == "" or byte_size(value) > 4096 or String.contains?(value, ["\r", "\n", <<0>>]), do: raise(ArgumentError, "invalid multipart metadata")
       _ -> raise(ArgumentError, "multipart metadata must be strings")
     end)
-    if not is_binary(bytes), do: raise(ArgumentError, "multipart data must be binary")
-    if body.size + byte_size(bytes) > @max_bytes, do: raise(ArgumentError, "multipart body exceeds buffer limit")
-    %{body | parts: [{name, bytes, filename, content_type} | body.parts], size: body.size + byte_size(bytes)}
+    if not is_binary(bytes) and not is_struct(bytes, __MODULE__), do: raise(ArgumentError, "multipart data must be binary or MultipartBody")
+    if not is_map(headers) or map_size(headers) > 64, do: raise(ArgumentError, "invalid multipart headers")
+    Enum.each(headers, fn {key, value} -> validate_header(key, value) end)
+    size = if is_binary(bytes), do: byte_size(bytes), else: bytes |> encode() |> elem(1) |> byte_size()
+    if body.size + size > @max_bytes, do: raise(ArgumentError, "multipart body exceeds buffer limit")
+    %{body | parts: [{name, bytes, filename, content_type, headers} | body.parts], size: body.size + size}
   end
 
-  def encode(%__MODULE__{} = body) do
+  def encode(%__MODULE__{} = body, depth \\ 0) do
+    if depth > 32, do: raise(ArgumentError, "multipart nesting exceeds 32 levels")
     boundary = "kaji-" <> Base.encode16(:crypto.strong_rand_bytes(24), case: :lower)
-    chunks = Enum.map(Enum.reverse(body.parts), fn {name, bytes, filename, content_type} ->
+    media_type = body.encoding["content_type"] || body.encoding["contentType"] || "multipart/form-data"
+    if not String.starts_with?(media_type, "multipart/") or String.contains?(media_type, ["\r", "\n", <<0>>]), do: raise(ArgumentError, "invalid multipart content type")
+    chunks = body.parts |> Enum.reverse() |> Enum.with_index() |> Enum.map(fn {{name, bytes, filename, content_type, headers}, index} ->
+      prefix = body.encoding["prefix_encoding"] || body.encoding["prefixEncoding"] || []
+      plan = Enum.at(prefix, index) || body.encoding["item_encoding"] || body.encoding["itemEncoding"] || (body.encoding["encoding"] || %{})[name] || %{}
+      headers = Enum.reduce(plan["headers"] || %{}, headers, fn {key, declaration}, values ->
+        if Enum.any?(Map.keys(values), &(String.downcase(&1) == String.downcase(key))) do
+          values
+        else
+          value = if declaration["example_json"], do: Jason.decode!(declaration["example_json"]), else: (declaration["schema_definition"] || %{})["default"]
+          if is_nil(value) and declaration["required"], do: raise(ArgumentError, "required multipart header is missing")
+          if is_nil(value), do: values, else: Map.put(values, key, if(is_binary(value), do: value, else: Jason.encode!(value)))
+        end
+      end)
+      if map_size(headers) > 64, do: raise(ArgumentError, "too many multipart headers")
+      Enum.each(headers, fn {key, value} -> validate_header(key, value) end)
+      {content_type, bytes} = if is_struct(bytes, __MODULE__), do: bytes |> with_encoding(plan) |> encode(depth + 1), else: {plan["contentType"] || content_type, bytes}
+      if content_type == "" or byte_size(content_type) > 4096 or String.contains?(content_type, ["\r", "\n", <<0>>]), do: raise(ArgumentError, "invalid multipart content type")
+      extra_headers = Enum.map(headers, fn {key, value} -> [key, ": ", value, "\r\n"] end)
       file_header = if filename, do: "; filename=\"" <> quote_metadata(filename) <> "\"", else: ""
-      ["--", boundary, "\r\nContent-Disposition: form-data; name=\"", quote_metadata(name), "\"", file_header, "\r\nContent-Type: ", content_type, "\r\n\r\n", bytes, "\r\n"]
+      ["--", boundary, "\r\nContent-Disposition: form-data; name=\"", quote_metadata(name), "\"", file_header, "\r\nContent-Type: ", content_type, "\r\n", extra_headers, "\r\n", bytes, "\r\n"]
     end)
     chunks = [chunks, "--", boundary, "--\r\n"]
     if IO.iodata_length(chunks) > @max_bytes, do: raise(ArgumentError, "multipart body exceeds buffer limit")
-    {"multipart/form-data; boundary=" <> boundary, IO.iodata_to_binary(chunks)}
+    {media_type <> "; boundary=" <> boundary, IO.iodata_to_binary(chunks)}
+  end
+  defp validate_header(key, value) do
+    if not is_binary(key) or byte_size(key) > 4096 or not Regex.match?(~r/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/, key), do: raise(ArgumentError, "invalid multipart header name")
+    if String.downcase(key) in ["content-type", "content-disposition"], do: raise(ArgumentError, "reserved multipart header")
+    if not is_binary(value) or byte_size(value) > 8192 or String.contains?(value, ["\r", "\n", <<0>>]), do: raise(ArgumentError, "invalid multipart header value")
   end
   defp quote_metadata(value), do: value |> String.replace("\\", "\\\\") |> String.replace("\"", "\\\"")
 end

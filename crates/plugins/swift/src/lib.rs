@@ -23,8 +23,8 @@ use std::fmt::Write;
 
 use anyhow::{Result, bail};
 use kaji_core::{
-    AdditionalProperties, Api, Field, GeneratedFile, GeneratedTree, Operation, Schema, SchemaKind,
-    SchemaValue, SdkClientStyle,
+    AdditionalProperties, Api, Field, GeneratedFile, GeneratedTree, Operation, OperationParameter,
+    Schema, SchemaKind, SchemaValue, SdkClientStyle,
 };
 use serde_json::Value;
 
@@ -239,7 +239,7 @@ fn json_value() -> String {
 
 fn client_runtime() -> String {
     let runtime = format!(
-        "{NOTICE}\nimport Foundation\n#if canImport(FoundationNetworking)\nimport FoundationNetworking\n#endif\n\npublic struct KajiClientOptions: Sendable {{\n    public var baseURL: URL\n    public var headers: [String: String]\n    public var timeout: TimeInterval\n\n    public init(baseURL: URL, headers: [String: String] = [:], timeout: TimeInterval = 30) {{\n        self.baseURL = baseURL\n        self.headers = headers\n        self.timeout = timeout\n    }}\n}}\n\npublic enum KajiAPIError: Error, Sendable {{\n    case invalidURL(String)\n    case invalidResponse\n    case status(code: Int, body: Data)\n}}\n\n/// Receives lifecycle notifications without requiring a logging framework.\npublic protocol KajiClientHook: Sendable {{\n    func willSend(_ request: URLRequest)\n    func didReceive(_ response: HTTPURLResponse, body: Data)\n}}\n\npublic final class KajiClient: @unchecked Sendable {{\n    private let options: KajiClientOptions\n    private let session: URLSession\n    private let hooks: [any KajiClientHook]\n    private let encoder = JSONEncoder()\n    private let decoder = JSONDecoder()\n\n    public init(options: KajiClientOptions, session: URLSession = .shared, hooks: [any KajiClientHook] = []) {{\n        self.options = options\n        self.session = session\n        self.hooks = hooks\n    }}\n\n    internal func makeRequest(method: String, path: String, query: [URLQueryItem] = []) throws -> URLRequest {{\n        guard var components = URLComponents(url: options.baseURL, resolvingAgainstBaseURL: false), let operationPath = URLComponents(string: path.replacingOccurrences(of: \"?\", with: \"%3F\").replacingOccurrences(of: \"#\", with: \"%23\"))?.percentEncodedPath else {{\n            throw KajiAPIError.invalidURL(path)\n        }}\n        let basePath = components.percentEncodedPath.trimmingCharacters(in: CharacterSet(charactersIn: \"/\"))\n        components.percentEncodedPath = (basePath.isEmpty ? \"\" : \"/\" + basePath) + \"/\" + operationPath.trimmingCharacters(in: CharacterSet(charactersIn: \"/\"))\n        components.queryItems = query.isEmpty ? nil : query\n        guard let url = components.url else {{ throw KajiAPIError.invalidURL(path) }}\n        var request = URLRequest(url: url, timeoutInterval: options.timeout)\n        request.httpMethod = method\n        request.setValue(\"application/json\", forHTTPHeaderField: \"Accept\")\n        for (name, value) in options.headers {{ request.setValue(value, forHTTPHeaderField: name) }}\n        return request\n    }}\n\n    internal func send<T: Decodable>(_ request: URLRequest, as type: T.Type) async throws -> T {{\n        hooks.forEach {{ $0.willSend(request) }}\n        let (data, response) = try await session.data(for: request)\n        guard let http = response as? HTTPURLResponse else {{ throw KajiAPIError.invalidResponse }}\n        hooks.forEach {{ $0.didReceive(http, body: data) }}\n        guard (200..<300).contains(http.statusCode) else {{ throw KajiAPIError.status(code: http.statusCode, body: data) }}\n        return try decoder.decode(T.self, from: data)\n    }}\n\n    internal func sendVoid(_ request: URLRequest) async throws {{\n        hooks.forEach {{ $0.willSend(request) }}\n        let (data, response) = try await session.data(for: request)\n        guard let http = response as? HTTPURLResponse else {{ throw KajiAPIError.invalidResponse }}\n        hooks.forEach {{ $0.didReceive(http, body: data) }}\n        guard (200..<300).contains(http.statusCode) else {{ throw KajiAPIError.status(code: http.statusCode, body: data) }}\n    }}\n\n    internal func encode<T: Encodable>(_ body: T) throws -> Data {{ try encoder.encode(body) }}\n}}\n\nextension String {{\n    var kajiPathComponent: String {{ addingPercentEncoding(withAllowedCharacters: CharacterSet(charactersIn: \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~\")) ?? self }}\n}}\n"
+        "{NOTICE}\nimport Foundation\n#if canImport(FoundationNetworking)\nimport FoundationNetworking\n#endif\n\npublic struct KajiClientOptions: Sendable {{\n    public var baseURL: URL\n    public var headers: [String: String]\n    public var timeout: TimeInterval\n\n    public init(baseURL: URL, headers: [String: String] = [:], timeout: TimeInterval = 30) {{\n        self.baseURL = baseURL\n        self.headers = headers\n        self.timeout = timeout\n    }}\n}}\n\npublic enum KajiAPIError: Error, Sendable {{\n    case invalidURL(String)\n    case invalidResponse\n    case status(code: Int, body: Data)\n}}\n\n/// Receives lifecycle notifications without requiring a logging framework.\npublic protocol KajiClientHook: Sendable {{\n    func willSend(_ request: URLRequest)\n    func didReceive(_ response: HTTPURLResponse, body: Data)\n}}\n\npublic final class KajiClient: @unchecked Sendable {{\n    private let options: KajiClientOptions\n    private let session: URLSession\n    private let hooks: [any KajiClientHook]\n    private let encoder = JSONEncoder()\n    private let decoder = JSONDecoder()\n\n    public init(options: KajiClientOptions, session: URLSession = .shared, hooks: [any KajiClientHook] = []) {{\n        self.options = options\n        self.session = session\n        self.hooks = hooks\n    }}\n\n    internal func makeRequest(method: String, path: String, query: [URLQueryItem] = []) throws -> URLRequest {{\n        guard var components = URLComponents(url: options.baseURL, resolvingAgainstBaseURL: false), let operationPath = URLComponents(string: path.replacingOccurrences(of: \"?\", with: \"%3F\").replacingOccurrences(of: \"#\", with: \"%23\"))?.percentEncodedPath else {{\n            throw KajiAPIError.invalidURL(path)\n        }}\n        let basePath = components.percentEncodedPath.trimmingCharacters(in: CharacterSet(charactersIn: \"/\"))\n        components.percentEncodedPath = (basePath.isEmpty ? \"\" : \"/\" + basePath) + \"/\" + operationPath.trimmingCharacters(in: CharacterSet(charactersIn: \"/\"))\n        components.queryItems = query.isEmpty ? nil : query\n        guard let url = components.url else {{ throw KajiAPIError.invalidURL(path) }}\n        var request = URLRequest(url: url, timeoutInterval: options.timeout)\n        request.httpMethod = method\n        request.setValue(\"application/json\", forHTTPHeaderField: \"Accept\")\n        for (name, value) in options.headers {{ request.setValue(value, forHTTPHeaderField: name) }}\n        return request\n    }}\n\n    internal func send<T: Decodable>(_ request: URLRequest, as type: T.Type) async throws -> T {{\n        hooks.forEach {{ $0.willSend(request) }}\n        let (data, response) = try await session.data(for: request)\n        guard let http = response as? HTTPURLResponse else {{ throw KajiAPIError.invalidResponse }}\n        hooks.forEach {{ $0.didReceive(http, body: data) }}\n        guard (200..<300).contains(http.statusCode) else {{ throw KajiAPIError.status(code: http.statusCode, body: data) }}\n        return try decoder.decode(T.self, from: normalizeSequentialJSON(data, contentType: http.value(forHTTPHeaderField: \"Content-Type\")))\n    }}\n\n    internal func sendVoid(_ request: URLRequest) async throws {{\n        hooks.forEach {{ $0.willSend(request) }}\n        let (data, response) = try await session.data(for: request)\n        guard let http = response as? HTTPURLResponse else {{ throw KajiAPIError.invalidResponse }}\n        hooks.forEach {{ $0.didReceive(http, body: data) }}\n        guard (200..<300).contains(http.statusCode) else {{ throw KajiAPIError.status(code: http.statusCode, body: data) }}\n    }}\n\n    internal func encode<T: Encodable>(_ body: T) throws -> Data {{ try encoder.encode(body) }}\n}}\n\nextension String {{\n    var kajiPathComponent: String {{ addingPercentEncoding(withAllowedCharacters: CharacterSet(charactersIn: \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~\")) ?? self }}\n}}\n"
     );
     runtime.replace("public final class KajiClient: @unchecked Sendable {", r#"
 /// Replace execution or compose middleware around the Foundation transport.
@@ -301,11 +301,25 @@ public final class KajiClient: @unchecked Sendable {"#)
     .replace("        hooks.forEach { $0.willSend(request) }\n", "")
     .replace("        hooks.forEach { $0.didReceive(http, body: data) }\n", "")
     .replace("let (data, response) = try await transport.execute(request)", "let (data, response) = try await executeWithRetry(request, idempotencyHeader: idempotencyHeader)")
+    .replace("    internal func encode<T:", &(include_str!("sequential_json.swift.txt").to_owned()+"\n    internal func encode<T:"))
     .replace("    internal func encode<T:", &(include_str!("retry_runtime.swift.txt").to_owned()+"\n    internal func encode<T:"))
     // Preserve the default adapter's direct Foundation execution.
     .replace("        try await transport.execute(request)\n    }\n}\npublic typealias", "        try await session.data(for: request)\n    }\n}\npublic typealias")
 }
 
+fn operation_is_multipart_response(operation: &Operation) -> bool {
+    operation
+        .responses
+        .iter()
+        .find(|response| response.status.starts_with('2'))
+        .and_then(|response| response.media_types.first())
+        .is_some_and(|media| {
+            media
+                .content_type
+                .to_ascii_lowercase()
+                .starts_with("multipart/")
+        })
+}
 fn operation_is_sse(operation: &Operation) -> bool {
     operation
         .responses
@@ -586,6 +600,8 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
     let sse = operation_is_sse(operation);
     let response = if sse {
         "KajiByteStream".to_owned()
+    } else if operation_is_multipart_response(operation) {
+        "Data".to_owned()
     } else {
         operation
             .success_schema()
@@ -608,9 +624,14 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
         .filter(|parameter| parameter.location == "path")
     {
         let value = identifier(&parameter.name);
+        let serialized = if parameter_json_content(parameter) {
+            format!("try jsonParameter({value})")
+        } else {
+            format!("String(describing: {value})")
+        };
         let _ = writeln!(
             output,
-            "{indent}    let {value}Path = String(describing: {value}).kajiPathComponent"
+            "{indent}    let {value}Path = ({serialized}).kajiPathComponent"
         );
         path = path.replace(
             &format!("{{{}}}", parameter.name),
@@ -624,7 +645,11 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
         .and_then(|value| value.get("type"))
         .and_then(serde_json::Value::as_str)
         == Some("url");
-    let request_binding = if sse
+    let request_binding = if operation
+        .parameters
+        .iter()
+        .any(|p| p.location == "querystring")
+        || sse
         || url_pagination
         || operation.request_body.is_some()
         || operation
@@ -663,6 +688,22 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
         .filter(|parameter| parameter.location == "query")
     {
         let value = identifier(&parameter.name);
+        if parameter_json_content(parameter) {
+            let value = identifier(&parameter.name);
+            let expression = if parameter.required {
+                format!(
+                    "{indent}    {query_binding}.append(URLQueryItem(name:{:?},value:try jsonParameter({value})))",
+                    parameter.name
+                )
+            } else {
+                format!(
+                    "{indent}    if let value={value} {{{query_binding}.append(URLQueryItem(name:{:?},value:try jsonParameter(value)))}}",
+                    parameter.name
+                )
+            };
+            let _ = writeln!(output, "{expression}");
+            continue;
+        }
         let array = parameter
             .schema
             .as_ref()
@@ -721,22 +762,65 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
     for parameter in operation
         .parameters
         .iter()
+        .filter(|p| p.location == "querystring")
+    {
+        let value = identifier(&parameter.name);
+        let expression = if parameter.required {
+            format!("Optional({value})")
+        } else {
+            value
+        };
+        let _ = writeln!(
+            output,
+            "{indent}    if let rawQuery = {expression} {{ try applyWholeQuery(&request, raw:rawQuery) }}"
+        );
+    }
+    for parameter in operation
+        .parameters
+        .iter()
         .filter(|parameter| parameter.location == "header")
     {
         let value = identifier(&parameter.name);
+        let serialized = if parameter_json_content(parameter) {
+            format!("try jsonParameter({value})")
+        } else {
+            format!("String(describing: {value})")
+        };
         if parameter.required {
             let _ = writeln!(
                 output,
-                "{indent}    request.setValue(String(describing: {value}), forHTTPHeaderField: {:?})",
+                "{indent}    request.setValue({serialized}, forHTTPHeaderField: {:?})",
                 parameter.name
             );
         } else {
             let _ = writeln!(
                 output,
-                "{indent}    if let {value} {{ request.setValue(String(describing: {value}), forHTTPHeaderField: {:?}) }}",
+                "{indent}    if let {value} {{ request.setValue({serialized}, forHTTPHeaderField: {:?}) }}",
                 parameter.name
             );
         }
+    }
+    for parameter in operation
+        .parameters
+        .iter()
+        .filter(|p| p.location == "cookie")
+    {
+        let value = identifier(&parameter.name);
+        let expression = if parameter.required {
+            format!("Optional({value})")
+        } else {
+            value
+        };
+        let serialized = if parameter_json_content(parameter) {
+            "try jsonParameter(value)"
+        } else {
+            "String(describing:value)"
+        };
+        let _ = writeln!(
+            output,
+            "{indent}    if let value={expression} {{let cookie={:?}+\"=\"+({serialized}).kajiPathComponent;request.setValue(request.value(forHTTPHeaderField: \"Cookie\").map{{$0+\"; \"+cookie}} ?? cookie,forHTTPHeaderField: \"Cookie\")}}",
+            parameter.name
+        );
     }
     if let Some(policy) =
         kaji_core::idempotency::resolved(operation).filter(|policy| policy.auto_generate)
@@ -771,12 +855,23 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
                 output,
                 "{indent}    request.setValue({content_type:?}, forHTTPHeaderField: \"Content-Type\")"
             );
+            let encoding = if matches!(
+                content_type,
+                "application/x-ndjson"
+                    | "application/ndjson"
+                    | "application/jsonl"
+                    | "application/json-seq"
+            ) {
+                format!("encodeSequentialJSON(body,media:{content_type:?})")
+            } else {
+                "encode(body)".into()
+            };
             if body.required {
-                let _ = writeln!(output, "{indent}    request.httpBody = try encode(body)");
+                let _ = writeln!(output, "{indent}    request.httpBody = try {encoding}");
             } else {
                 let _ = writeln!(
                     output,
-                    "{indent}    if let body {{ request.httpBody = try encode(body) }}"
+                    "{indent}    if let body {{ request.httpBody = try {encoding} }}"
                 );
             }
         }
@@ -788,6 +883,11 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
         let _ = writeln!(
             output,
             "{indent}    request.setValue(\"text/event-stream\", forHTTPHeaderField: \"Accept\")\n{indent}    return try await streamEvents(request)"
+        );
+    } else if operation_is_multipart_response(operation) {
+        let _ = writeln!(
+            output,
+            "{indent}    return try await sendBytes(request, idempotencyHeader: {retry_header})"
         );
     } else if response == "Void" {
         let _ = writeln!(
@@ -865,19 +965,40 @@ struct ParameterRender {
     signature: String,
 }
 
+fn parameter_json_content(parameter: &OperationParameter) -> bool {
+    kaji_core::openapi32::parameter_content(parameter)
+        .ok()
+        .and_then(|items| items.into_iter().next())
+        .is_some_and(|content| {
+            content.content_type == "application/json" || content.content_type.ends_with("+json")
+        })
+}
 fn operation_parameters(operation: &Operation) -> Vec<ParameterRender> {
     let mut values = operation
         .parameters
         .iter()
-        .filter(|parameter| matches!(parameter.location.as_str(), "path" | "query" | "header"))
+        .filter(|parameter| {
+            matches!(
+                parameter.location.as_str(),
+                "path" | "query" | "header" | "cookie" | "querystring"
+            )
+        })
         .map(|parameter| ParameterRender {
             signature: format!(
                 "{}: {}{}",
                 identifier(&parameter.name),
-                parameter.schema.as_ref().map_or_else(
-                    || "JSONValue".to_owned(),
-                    |schema| swift_type(schema, !parameter.required)
-                ),
+                if parameter.location == "querystring" {
+                    if parameter.required {
+                        "String".into()
+                    } else {
+                        "String?".into()
+                    }
+                } else {
+                    parameter.schema.as_ref().map_or_else(
+                        || "JSONValue".to_owned(),
+                        |schema| swift_type(schema, !parameter.required),
+                    )
+                },
                 if parameter.required { "" } else { " = nil" }
             ),
         })
@@ -933,6 +1054,8 @@ fn render_resource(api: &Api, resource: &str, operations: &[&Operation]) -> Stri
         let sse = operation_is_sse(operation);
         let response = if sse {
             "KajiEventSequence".to_owned()
+        } else if operation_is_multipart_response(operation) {
+            "Data".to_owned()
         } else {
             operation
                 .success_schema()

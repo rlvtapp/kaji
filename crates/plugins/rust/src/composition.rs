@@ -254,6 +254,7 @@ impl Plugin<Rust> for Provider {
             client_style: SdkClientStyle::Flat,
             operation_prefix: self.prefix.clone(),
             open_unions: cx.settings.open_unions,
+            open_enums: cx.settings.open_enums,
         };
         match self.part {
             Part::Models => {

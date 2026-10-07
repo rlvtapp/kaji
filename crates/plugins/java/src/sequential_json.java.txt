@@ -1,0 +1,36 @@
+    /** Buffered sequential JSON with strict records, UTF-8 and finite record/size bounds. */
+    protected String normalizeSequentialJson(String body,String contentType) {
+        var media=contentType.split(";",2)[0].trim();
+        var sequence=media.equals("application/json-seq");
+        if(!sequence&&!java.util.Set.of("application/x-ndjson","application/ndjson","application/jsonl").contains(media))return body;
+        if(body.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>64*1024*1024)throw new IllegalStateException("Sequential JSON exceeds 64MiB");
+        if(sequence&&!body.isBlank()&&!body.startsWith("\u001e"))throw new IllegalStateException("JSON sequence must begin with a record separator");
+        var records=body.split(sequence?"\u001e":"\\r?\\n",-1);
+        var array=mapper.createArrayNode();
+        for(int index=sequence?1:0;index<records.length;index++){
+            var record=records[index];
+            if(record.isBlank()){if(sequence)throw new IllegalStateException("Empty JSON sequence record");continue;}
+            if(array.size()>=100000)throw new IllegalStateException("Sequential JSON exceeds 100000 records");
+            try(var parser=mapper.createParser(record)){
+                com.fasterxml.jackson.databind.JsonNode value=mapper.readTree(parser);
+                if(value==null||parser.nextToken()!=null)throw new IllegalStateException("Invalid JSON record");
+                array.add(value);
+            }catch(java.io.IOException error){throw new IllegalStateException("Invalid sequential JSON record",error);}
+        }
+        return array.toString();
+    }
+
+    protected static void validateWholeQuery(String raw) {
+        if(raw.startsWith("?"))throw new IllegalArgumentException("Whole query excludes leading ?");
+        for(int i=0;i<raw.length();i++){char c=raw.charAt(i);if(c<32||c==127||c=='#')throw new IllegalArgumentException("Invalid whole query");if(c=='%'){if(i+2>=raw.length()||Character.digit(raw.charAt(i+1),16)<0||Character.digit(raw.charAt(i+2),16)<0)throw new IllegalArgumentException("Invalid whole query percent escape");i+=2;}}
+    }
+    protected String encodeSequentialJson(java.lang.Object body,String media) throws com.fasterxml.jackson.core.JsonProcessingException {
+        com.fasterxml.jackson.databind.JsonNode node=mapper.valueToTree(body);
+        if(!node.isArray()||node.size()>100000)throw new IllegalArgumentException("Sequential JSON request requires an array of at most 100000 records");
+        var wire=new StringBuilder();
+        for(var item:node){if(media.equals("application/json-seq"))wire.append('\u001e');wire.append(mapper.writeValueAsString(item)).append('\n');if(wire.length()>64*1024*1024)throw new IllegalArgumentException("Sequential JSON exceeds 64MiB");}
+        if(wire.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8).length>64*1024*1024)throw new IllegalArgumentException("Sequential JSON exceeds 64MiB");
+        return wire.toString();
+    }
+
+    protected String jsonParameter(Object value){try{return mapper.writeValueAsString(value);}catch(com.fasterxml.jackson.core.JsonProcessingException error){throw new IllegalArgumentException("Invalid JSON parameter",error);}}

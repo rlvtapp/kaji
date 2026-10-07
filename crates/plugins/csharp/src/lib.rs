@@ -9,8 +9,8 @@ use std::fmt::Write;
 
 use anyhow::{Result, bail};
 use kaji_core::{
-    AdditionalProperties, Api, GeneratedFile, GeneratedTree, Operation, OperationResponse, Schema,
-    SchemaKind, SchemaValue, SdkClientStyle,
+    AdditionalProperties, Api, GeneratedFile, GeneratedTree, Operation, OperationParameter,
+    OperationResponse, Schema, SchemaKind, SchemaValue, SdkClientStyle,
 };
 
 #[cfg(test)]
@@ -412,14 +412,14 @@ fn render_client(api: &Api, namespace: &str, client_style: SdkClientStyle) -> St
         );
     }
     output.push_str(
-        "    private HttpRequestMessage CreateRequest(HttpMethod method, string path, List<KeyValuePair<string, string?>>? query = null)\n    {\n        var uri = new Uri(_baseUri, path.TrimStart('/'));\n        if (query is { Count: > 0 })\n        {\n            var encoded = string.Join(\"&\", query\n                .Where(item => item.Value is not null)\n                .Select(item => $\"{Uri.EscapeDataString(item.Key)}={Uri.EscapeDataString(item.Value!)}\"));\n            if (!string.IsNullOrEmpty(encoded))\n            {\n                var builder = new UriBuilder(uri) { Query = encoded };\n                uri = builder.Uri;\n            }\n        }\n\n        var request = new HttpRequestMessage(method, uri);\n        request.Headers.Accept.ParseAdd(\"application/json\");\n        if (!string.IsNullOrWhiteSpace(_apiKey))\n        {\n            var credential = string.IsNullOrWhiteSpace(_apiKeyPrefix)\n                ? _apiKey\n                : $\"{_apiKeyPrefix} {_apiKey}\";\n            request.Headers.TryAddWithoutValidation(_apiKeyHeader, credential);\n        }\n        return request;\n    }\n\n    private async Task<T> SendAsync<T>(HttpRequestMessage request, CancellationToken cancellationToken)\n    {\n        using (request)\n        using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);\n        var contents = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);\n        if (!response.IsSuccessStatusCode)\n        {\n            throw new ApiException((int)response.StatusCode, contents);\n        }\n        if (string.IsNullOrWhiteSpace(contents))\n        {\n            return default!;\n        }\n        return JsonSerializer.Deserialize<T>(contents, JsonOptions)\n            ?? throw new JsonException(\"Kaji received an empty JSON response.\");\n    }\n\n    private async Task SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)\n    {\n        using (request)\n        using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);\n        var contents = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);\n        if (!response.IsSuccessStatusCode)\n        {\n            throw new ApiException((int)response.StatusCode, contents);\n        }\n    }\n\n    private static string ParameterString<T>(T value)\n    {\n        return value switch\n        {\n            null => string.Empty,\n            bool boolean => boolean ? \"true\" : \"false\",\n            IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture) ?? string.Empty,\n            _ => value.ToString() ?? string.Empty,\n        };\n    }\n}\n",
+        "    private HttpRequestMessage CreateRequest(HttpMethod method, string path, List<KeyValuePair<string, string?>>? query = null)\n    {\n        var uri = new Uri(_baseUri, path.TrimStart('/'));\n        if (query is { Count: > 0 })\n        {\n            var encoded = string.Join(\"&\", query\n                .Where(item => item.Value is not null)\n                .Select(item => $\"{Uri.EscapeDataString(item.Key)}={Uri.EscapeDataString(item.Value!)}\"));\n            if (!string.IsNullOrEmpty(encoded))\n            {\n                var builder = new UriBuilder(uri) { Query = encoded };\n                uri = builder.Uri;\n            }\n        }\n\n        var request = new HttpRequestMessage(method, uri);\n        request.Headers.Accept.ParseAdd(\"application/json\");\n        if (!string.IsNullOrWhiteSpace(_apiKey))\n        {\n            var credential = string.IsNullOrWhiteSpace(_apiKeyPrefix)\n                ? _apiKey\n                : $\"{_apiKeyPrefix} {_apiKey}\";\n            request.Headers.TryAddWithoutValidation(_apiKeyHeader, credential);\n        }\n        return request;\n    }\n\n    private async Task<T> SendAsync<T>(HttpRequestMessage request, CancellationToken cancellationToken)\n    {\n        using (request)\n        using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);\n        var contents = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);\n        if (!response.IsSuccessStatusCode)\n        {\n            throw new ApiException((int)response.StatusCode, contents);\n        }\n        if (string.IsNullOrWhiteSpace(contents))\n        {\n            return default!;\n        }\n        return JsonSerializer.Deserialize<T>(NormalizeSequentialJson(contents, response.Content.Headers.ContentType?.MediaType), JsonOptions)\n            ?? throw new JsonException(\"Kaji received an empty JSON response.\");\n    }\n\n    private async Task SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)\n    {\n        using (request)\n        using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);\n        var contents = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);\n        if (!response.IsSuccessStatusCode)\n        {\n            throw new ApiException((int)response.StatusCode, contents);\n        }\n    }\n\n    private static string ParameterString<T>(T value)\n    {\n        return value switch\n        {\n            null => string.Empty,\n            bool boolean => boolean ? \"true\" : \"false\",\n            IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture) ?? string.Empty,\n            _ => value.ToString() ?? string.Empty,\n        };\n    }\n}\n",
     );
     // The base template above closes KajiClient. The retry helpers are part of
     // that class, so reopen the tail before adding them and restore it below.
     debug_assert!(output.ends_with("}\n"));
     output.truncate(output.len() - 2);
     output.push_str(
-        "\n    // The template request is cloned for every attempt: HttpRequestMessage instances\n    // are single-use, and replaying an unsafe POST would be incorrect.\n    private async Task<T> SendWithRetryAsync<T>(HttpRequestMessage template, CancellationToken cancellationToken)\n    {\n        using (template)\n        {\n            var maxAttempts = IsRetryAllowed(template) ? Math.Max(1, _retry.MaxAttempts) : 1;\n            Exception? transportError = null;\n            for (var attempt = 0; attempt < maxAttempts; attempt++)\n            {\n                using var request = await CloneRequestAsync(template, cancellationToken).ConfigureAwait(false);\n                try\n                {\n                    _hooks?.BeforeRequest(request);\n                    using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);\n                    if (attempt + 1 < maxAttempts && IsRetryable(response.StatusCode))\n                    {\n                        await DelayForRetryAsync(attempt, response.Headers, cancellationToken).ConfigureAwait(false);\n                        continue;\n                    }\n                    var contents = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);\n                    if (!response.IsSuccessStatusCode)\n                    {\n                        var error = new ApiException((int)response.StatusCode, contents);\n                        _hooks?.OnError(error);\n                        throw error;\n                    }\n                    _hooks?.AfterResponse(response);\n                    if (string.IsNullOrWhiteSpace(contents)) return default!;\n                    return JsonSerializer.Deserialize<T>(contents, JsonOptions)\n                        ?? throw new JsonException(\"Kaji received an empty JSON response.\");\n                }\n                catch (HttpRequestException error) when (attempt + 1 < maxAttempts)\n                {\n                    transportError = error;\n                    await DelayForRetryAsync(attempt, null, cancellationToken).ConfigureAwait(false);\n                }\n                catch (Exception error)\n                {\n                    _hooks?.OnError(error);\n                    throw;\n                }\n            }\n            _hooks?.OnError(transportError ?? new HttpRequestException(\"Kaji retry loop completed without a response.\"));\n            throw transportError ?? new HttpRequestException(\"Kaji retry loop completed without a response.\");\n        }\n    }\n\n    private async Task SendWithRetryAsync(HttpRequestMessage template, CancellationToken cancellationToken)\n    {\n        await SendWithRetryAsync<JsonElement>(template, cancellationToken).ConfigureAwait(false);\n    }\n\n    private static bool IsRetryAllowed(HttpRequestMessage request)\n    {\n        return (request.Options.TryGetValue(new HttpRequestOptionsKey<string>(\"Kaji.IdempotencyHeader\"), out var header) && HasNonEmptyHeader(request, header)) || request.Method == HttpMethod.Get || request.Method == HttpMethod.Head || request.Method == HttpMethod.Options || request.Method == HttpMethod.Trace || request.Method.Method == \"QUERY\" || request.Method == HttpMethod.Put || request.Method == HttpMethod.Delete\n            || ((request.Method == HttpMethod.Post || request.Method == HttpMethod.Patch) && HasNonEmptyHeader(request, \"Idempotency-Key\"));\n    }\n\n    private static bool HasNonEmptyHeader(HttpRequestMessage request, string name)\n    {\n        return request.Headers.TryGetValues(name, out var values) && values.Any(value => !string.IsNullOrWhiteSpace(value));\n    }\n\n    private static bool IsRetryable(HttpStatusCode status)\n    {\n        return status is HttpStatusCode.RequestTimeout or (HttpStatusCode)429 or HttpStatusCode.InternalServerError or HttpStatusCode.BadGateway or HttpStatusCode.ServiceUnavailable or HttpStatusCode.GatewayTimeout;\n    }\n\n    private static double? RetryAfterMilliseconds(HttpResponseHeaders? headers, DateTimeOffset now)\n    {\n        if (headers is null) return null;\n        if (headers.TryGetValues(\"retry-after-ms\", out var values))\n        {\n            var value = values.FirstOrDefault();\n            if (double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var milliseconds) && double.IsFinite(milliseconds) && milliseconds >= 0) return milliseconds;\n        }\n        var retryAfter = headers.RetryAfter;\n        if (retryAfter?.Delta is { } delta) return Math.Max(0, delta.TotalMilliseconds);\n        if (retryAfter?.Date is { } date) return Math.Max(0, (date - now).TotalMilliseconds);\n        return null;\n    }\n\n    private async Task DelayForRetryAsync(int attempt, HttpResponseHeaders? headers, CancellationToken cancellationToken)\n    {\n        // Task.Delay accepts at most uint.MaxValue - 1 milliseconds on .NET 8.\n        var cap = Math.Min(Math.Max(0, _retry.MaxDelay.TotalMilliseconds), uint.MaxValue - 1d);\n        var milliseconds = RetryAfterMilliseconds(headers, DateTimeOffset.UtcNow)\n            ?? Math.Max(0, _retry.InitialDelay.TotalMilliseconds) * Math.Pow(2, Math.Min(attempt, 30));\n        var delay = TimeSpan.FromMilliseconds(Math.Min(milliseconds, cap));\n        if (delay > TimeSpan.Zero) await Task.Delay(delay, cancellationToken).ConfigureAwait(false);\n    }\n\n    private static async Task<HttpRequestMessage> CloneRequestAsync(HttpRequestMessage source, CancellationToken cancellationToken)\n    {\n        var clone = new HttpRequestMessage(source.Method, source.RequestUri);\n        foreach (var header in source.Headers) clone.Headers.TryAddWithoutValidation(header.Key, header.Value);\n        if (source.Content is not null)\n        {\n            var bytes = await source.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);\n            clone.Content = new ByteArrayContent(bytes);\n            foreach (var header in source.Content.Headers) clone.Content.Headers.TryAddWithoutValidation(header.Key, header.Value);\n        }\n        return clone;\n    }\n",
+        "\n    // The template request is cloned for every attempt: HttpRequestMessage instances\n    // are single-use, and replaying an unsafe POST would be incorrect.\n    private async Task<T> SendWithRetryAsync<T>(HttpRequestMessage template, CancellationToken cancellationToken)\n    {\n        using (template)\n        {\n            var maxAttempts = IsRetryAllowed(template) ? Math.Max(1, _retry.MaxAttempts) : 1;\n            Exception? transportError = null;\n            for (var attempt = 0; attempt < maxAttempts; attempt++)\n            {\n                using var request = await CloneRequestAsync(template, cancellationToken).ConfigureAwait(false);\n                try\n                {\n                    _hooks?.BeforeRequest(request);\n                    using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);\n                    if (attempt + 1 < maxAttempts && IsRetryable(response.StatusCode))\n                    {\n                        await DelayForRetryAsync(attempt, response.Headers, cancellationToken).ConfigureAwait(false);\n                        continue;\n                    }\n                    var contents = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);\n                    if (!response.IsSuccessStatusCode)\n                    {\n                        var error = new ApiException((int)response.StatusCode, contents);\n                        _hooks?.OnError(error);\n                        throw error;\n                    }\n                    _hooks?.AfterResponse(response);\n                    if (string.IsNullOrWhiteSpace(contents)) return default!;\n                    return JsonSerializer.Deserialize<T>(NormalizeSequentialJson(contents, response.Content.Headers.ContentType?.MediaType), JsonOptions)\n                        ?? throw new JsonException(\"Kaji received an empty JSON response.\");\n                }\n                catch (HttpRequestException error) when (attempt + 1 < maxAttempts)\n                {\n                    transportError = error;\n                    await DelayForRetryAsync(attempt, null, cancellationToken).ConfigureAwait(false);\n                }\n                catch (Exception error)\n                {\n                    _hooks?.OnError(error);\n                    throw;\n                }\n            }\n            _hooks?.OnError(transportError ?? new HttpRequestException(\"Kaji retry loop completed without a response.\"));\n            throw transportError ?? new HttpRequestException(\"Kaji retry loop completed without a response.\");\n        }\n    }\n\n    private async Task SendWithRetryAsync(HttpRequestMessage template, CancellationToken cancellationToken)\n    {\n        await SendWithRetryAsync<JsonElement>(template, cancellationToken).ConfigureAwait(false);\n    }\n\n    private static bool IsRetryAllowed(HttpRequestMessage request)\n    {\n        return (request.Options.TryGetValue(new HttpRequestOptionsKey<string>(\"Kaji.IdempotencyHeader\"), out var header) && HasNonEmptyHeader(request, header)) || request.Method == HttpMethod.Get || request.Method == HttpMethod.Head || request.Method == HttpMethod.Options || request.Method == HttpMethod.Trace || request.Method.Method == \"QUERY\" || request.Method == HttpMethod.Put || request.Method == HttpMethod.Delete\n            || ((request.Method == HttpMethod.Post || request.Method == HttpMethod.Patch) && HasNonEmptyHeader(request, \"Idempotency-Key\"));\n    }\n\n    private static bool HasNonEmptyHeader(HttpRequestMessage request, string name)\n    {\n        return request.Headers.TryGetValues(name, out var values) && values.Any(value => !string.IsNullOrWhiteSpace(value));\n    }\n\n    private static bool IsRetryable(HttpStatusCode status)\n    {\n        return status is HttpStatusCode.RequestTimeout or (HttpStatusCode)429 or HttpStatusCode.InternalServerError or HttpStatusCode.BadGateway or HttpStatusCode.ServiceUnavailable or HttpStatusCode.GatewayTimeout;\n    }\n\n    private static double? RetryAfterMilliseconds(HttpResponseHeaders? headers, DateTimeOffset now)\n    {\n        if (headers is null) return null;\n        if (headers.TryGetValues(\"retry-after-ms\", out var values))\n        {\n            var value = values.FirstOrDefault();\n            if (double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var milliseconds) && double.IsFinite(milliseconds) && milliseconds >= 0) return milliseconds;\n        }\n        var retryAfter = headers.RetryAfter;\n        if (retryAfter?.Delta is { } delta) return Math.Max(0, delta.TotalMilliseconds);\n        if (retryAfter?.Date is { } date) return Math.Max(0, (date - now).TotalMilliseconds);\n        return null;\n    }\n\n    private async Task DelayForRetryAsync(int attempt, HttpResponseHeaders? headers, CancellationToken cancellationToken)\n    {\n        // Task.Delay accepts at most uint.MaxValue - 1 milliseconds on .NET 8.\n        var cap = Math.Min(Math.Max(0, _retry.MaxDelay.TotalMilliseconds), uint.MaxValue - 1d);\n        var milliseconds = RetryAfterMilliseconds(headers, DateTimeOffset.UtcNow)\n            ?? Math.Max(0, _retry.InitialDelay.TotalMilliseconds) * Math.Pow(2, Math.Min(attempt, 30));\n        var delay = TimeSpan.FromMilliseconds(Math.Min(milliseconds, cap));\n        if (delay > TimeSpan.Zero) await Task.Delay(delay, cancellationToken).ConfigureAwait(false);\n    }\n\n    private static async Task<HttpRequestMessage> CloneRequestAsync(HttpRequestMessage source, CancellationToken cancellationToken)\n    {\n        var clone = new HttpRequestMessage(source.Method, source.RequestUri);\n        foreach (var header in source.Headers) clone.Headers.TryAddWithoutValidation(header.Key, header.Value);\n        if (source.Content is not null)\n        {\n            var bytes = await source.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);\n            clone.Content = new ByteArrayContent(bytes);\n            foreach (var header in source.Content.Headers) clone.Content.Headers.TryAddWithoutValidation(header.Key, header.Value);\n        }\n        return clone;\n    }\n",
     );
     output = output.replacen(
         "                        var error = new ApiException((int)response.StatusCode, contents);\n                        _hooks?.OnError(error);\n                        throw error;",
@@ -480,6 +480,7 @@ fn render_client(api: &Api, namespace: &str, client_style: SdkClientStyle) -> St
     }
 "#);
     output.push_str(include_str!("call_options.cs.txt"));
+    output.push_str(include_str!("sequential_json.cs.txt"));
     output.push_str("}\n");
     output=output.replacen("/// <summary>Typed asynchronous client", "public sealed record KajiCallOptions { public IReadOnlyDictionary<string,string>? Headers {get;init;} public TimeSpan? Timeout {get;init;} }\n\n/// <summary>Typed asynchronous client",1);
     let deadline = include_str!("call_deadline.cs.txt");
@@ -510,11 +511,19 @@ fn render_operation(output: &mut String, operation: &Operation) {
     let mut optional_parameters = Vec::new();
     for parameter in &operation.parameters {
         let parameter_name = camel_case(&parameter.name);
-        let parameter_type = parameter
-            .schema
-            .as_ref()
-            .map(|schema| csharp_type(schema, !parameter.required))
-            .unwrap_or_else(|| "JsonElement".into());
+        let parameter_type = if parameter.location == "querystring" {
+            if parameter.required {
+                "string".into()
+            } else {
+                "string?".into()
+            }
+        } else {
+            parameter
+                .schema
+                .as_ref()
+                .map(|schema| csharp_type(schema, !parameter.required))
+                .unwrap_or_else(|| "JsonElement".into())
+        };
         if parameter.required {
             required_parameters.push(format!("{parameter_type} {parameter_name}"));
         } else {
@@ -569,9 +578,14 @@ fn render_operation(output: &mut String, operation: &Operation) {
         .filter(|parameter| parameter.location == "path")
     {
         let name = camel_case(&parameter.name);
+        let serialized = if parameter_json_content(parameter) {
+            format!("JsonSerializer.Serialize({name},JsonOptions)")
+        } else {
+            format!("ParameterString({name})")
+        };
         let _ = writeln!(
             output,
-            "        kajiRequestPath = kajiRequestPath.Replace({:?}, Uri.EscapeDataString(ParameterString({name})), StringComparison.Ordinal);",
+            "        kajiRequestPath = kajiRequestPath.Replace({:?}, Uri.EscapeDataString({serialized}), StringComparison.Ordinal);",
             format!("{{{}}}", parameter.name),
         );
     }
@@ -582,6 +596,19 @@ fn render_operation(output: &mut String, operation: &Operation) {
         .filter(|parameter| parameter.location == "query")
     {
         let name = camel_case(&parameter.name);
+        if parameter_json_content(parameter) {
+            let guard = if parameter.required {
+                "true".to_owned()
+            } else {
+                format!("{name} is not null")
+            };
+            let _ = writeln!(
+                output,
+                "        if ({guard}) query.Add(new KeyValuePair<string,string?>({:?},JsonSerializer.Serialize({name},JsonOptions)));",
+                parameter.name
+            );
+            continue;
+        }
         if parameter
             .schema
             .as_ref()
@@ -605,6 +632,17 @@ fn render_operation(output: &mut String, operation: &Operation) {
             );
         }
     }
+    for parameter in operation
+        .parameters
+        .iter()
+        .filter(|p| p.location == "querystring")
+    {
+        let name = camel_case(&parameter.name);
+        let _ = writeln!(
+            output,
+            "        if (!string.IsNullOrEmpty({name})) {{ ValidateWholeQuery({name}); kajiRequestPath += \"?\" + {name}; }}"
+        );
+    }
     let _ = writeln!(
         output,
         "        var request = CreateRequest({}, kajiRequestPath, query);",
@@ -616,10 +654,42 @@ fn render_operation(output: &mut String, operation: &Operation) {
         .filter(|parameter| parameter.location == "header")
     {
         let name = camel_case(&parameter.name);
+        let serialized = if parameter_json_content(parameter) {
+            format!("JsonSerializer.Serialize({name},JsonOptions)")
+        } else {
+            format!("ParameterString({name})")
+        };
+        let guard = if parameter.required && parameter_json_content(parameter) {
+            "true".to_owned()
+        } else {
+            format!("{name} is not null")
+        };
         let _ = writeln!(
             output,
-            "        if ({name} is not null) request.Headers.TryAddWithoutValidation({:?}, ParameterString({name}));",
+            "        if ({guard}) request.Headers.TryAddWithoutValidation({:?}, {serialized});",
             parameter.name,
+        );
+    }
+    for parameter in operation
+        .parameters
+        .iter()
+        .filter(|p| p.location == "cookie")
+    {
+        let name = camel_case(&parameter.name);
+        let serialized = if parameter_json_content(parameter) {
+            format!("JsonSerializer.Serialize({name},JsonOptions)")
+        } else {
+            format!("ParameterString({name})")
+        };
+        let guard = if parameter.required && parameter_json_content(parameter) {
+            "true".to_owned()
+        } else {
+            format!("{name} is not null")
+        };
+        let _ = writeln!(
+            output,
+            "        if ({guard}) request.Headers.TryAddWithoutValidation(\"Cookie\",{:?}+\"=\"+Uri.EscapeDataString({serialized}));",
+            parameter.name
         );
     }
     if let Some(policy) = kaji_core::idempotency::resolved(operation) {
@@ -646,6 +716,25 @@ fn render_operation(output: &mut String, operation: &Operation) {
             output.push_str(&format!("        if (body is {} multipart) request.Content = multipart.ToContent(); else if (body is KajiRawBody raw) request.Content = raw.ToContent(); else if (body is not null) request.Content = JsonContent.Create(body, options: JsonOptions);\n",multipart::body_name(operation)));
         } else if multipart::selected(operation) {
             output.push_str("        if (body is not null) request.Content = body.ToContent();\n");
+        } else if let Some(media) = operation
+            .request_body
+            .as_ref()
+            .and_then(|body| body.media_types.first())
+            .map(|media| media.content_type.as_str())
+            .filter(|media| {
+                matches!(
+                    *media,
+                    "application/x-ndjson"
+                        | "application/ndjson"
+                        | "application/jsonl"
+                        | "application/json-seq"
+                )
+            })
+        {
+            let _ = writeln!(
+                output,
+                "        if (body is not null) request.Content=EncodeSequentialJson(body,{media:?});"
+            );
         } else if binary_body {
             output.push_str("        if (body is not null)\n        {\n            request.Content = new ByteArrayContent(body);\n            request.Content.Headers.ContentType = new MediaTypeHeaderValue(\"application/octet-stream\");\n        }\n");
         } else {
@@ -946,6 +1035,15 @@ fn render_resource_operation(output: &mut String, operation: &Operation) {
     );
 }
 
+fn parameter_json_content(parameter: &OperationParameter) -> bool {
+    kaji_core::openapi32::parameter_content(parameter)
+        .ok()
+        .and_then(|items| items.into_iter().next())
+        .is_some_and(|content| {
+            content.content_type == "application/json" || content.content_type.ends_with("+json")
+        })
+}
+
 /// The generated direct client intentionally orders required parameters before
 /// optional ones. Facades use the same order and defaults so the delegation is
 /// a transparent, strongly typed forwarding call.
@@ -955,11 +1053,19 @@ fn facade_parameters(operation: &Operation) -> Vec<String> {
     for parameter in &operation.parameters {
         let declaration = format!(
             "{} {}{}",
-            parameter
-                .schema
-                .as_ref()
-                .map(|schema| csharp_type(schema, !parameter.required))
-                .unwrap_or_else(|| "JsonElement".into()),
+            if parameter.location == "querystring" {
+                if parameter.required {
+                    "string".into()
+                } else {
+                    "string?".into()
+                }
+            } else {
+                parameter
+                    .schema
+                    .as_ref()
+                    .map(|schema| csharp_type(schema, !parameter.required))
+                    .unwrap_or_else(|| "JsonElement".into())
+            },
             camel_case(&parameter.name),
             if parameter.required { "" } else { " = default" },
         );

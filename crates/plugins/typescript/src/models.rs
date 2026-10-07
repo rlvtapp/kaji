@@ -277,6 +277,8 @@ pub struct ModelOptions {
     pub integer_as_string: bool,
     pub int64_type: Int64Type,
     pub remove_optional_properties: bool,
+    /// Accept future scalar enum wire values while preserving known members.
+    pub open_enums: bool,
 }
 
 impl Default for ModelOptions {
@@ -292,6 +294,7 @@ impl Default for ModelOptions {
             integer_as_string: false,
             int64_type: Int64Type::Number,
             remove_optional_properties: false,
+            open_enums: false,
         }
     }
 }
@@ -364,6 +367,33 @@ fn generated_notice(api: &Api) -> String {
 
 fn render_schema(name: &str, value: &SchemaValue, options: &ModelOptions, notice: &str) -> String {
     let identifier = type_identifier(name);
+    if options.open_enums && !value.enum_values.is_empty() {
+        let mut closed = options.clone();
+        closed.open_enums = false;
+        if matches!(closed.enum_type, EnumType::Enum | EnumType::ConstEnum) {
+            closed.enum_type = EnumType::AsConst;
+            closed.enum_type_suffix.clear();
+            closed.enum_const_casing = EnumConstCasing::PascalCase;
+        }
+        let source = render_schema(name, value, &closed, notice);
+        let future = open_enum_wire(value, options);
+        if future.is_empty() {
+            return source;
+        }
+        return source
+            .lines()
+            .map(|line| {
+                if line.starts_with("export type ") {
+                    format!("{line} | {future}")
+                } else {
+                    line.to_owned()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+            + "\n";
+    }
+
     if !value.enum_values.is_empty()
         && crate::json::representation(value, options) != Int64Type::Number
     {
@@ -448,6 +478,35 @@ fn render_schema(name: &str, value: &SchemaValue, options: &ModelOptions, notice
         _ => render_value(value, options),
     };
     format!("{notice}export type {identifier} = {body}\n")
+}
+
+fn open_enum_wire(value: &SchemaValue, options: &ModelOptions) -> String {
+    let mut kinds = BTreeSet::new();
+    for literal in &value.enum_values {
+        let kind = if literal.is_string() {
+            "string"
+        } else if literal.is_boolean() {
+            "boolean"
+        } else if literal.is_number() {
+            if crate::json::representation(value, options) == Int64Type::String {
+                "string"
+            } else if crate::json::representation(value, options) == Int64Type::BigInt {
+                "bigint"
+            } else {
+                "number"
+            }
+        } else if literal.is_null() {
+            "null"
+        } else {
+            continue;
+        };
+        kinds.insert(if kind == "null" {
+            "null".to_owned()
+        } else {
+            format!("({kind} & {{}})")
+        });
+    }
+    kinds.into_iter().collect::<Vec<_>>().join(" | ")
 }
 
 fn render_as_const_enum(
@@ -568,7 +627,7 @@ fn upper_camel_word(word: &str) -> String {
 }
 
 fn render_object_fields(fields: &[kaji_core::ast::Field], options: &ModelOptions) -> String {
-    render_object(fields, &AdditionalProperties::Unspecified, options)
+    render_object(fields, &AdditionalProperties::Forbidden, options)
 }
 
 /// Kaji's TypeScript printer turns OpenAPI `readOnly` into a property modifier
@@ -580,12 +639,7 @@ fn render_object(
     additional_properties: &AdditionalProperties,
     options: &ModelOptions,
 ) -> String {
-    if fields.is_empty()
-        && matches!(
-            additional_properties,
-            AdditionalProperties::Unspecified | AdditionalProperties::Forbidden
-        )
-    {
+    if fields.is_empty() && matches!(additional_properties, AdditionalProperties::Forbidden) {
         return "object".into();
     }
     let mut object = String::from("{\n");
@@ -610,12 +664,12 @@ fn render_object(
         );
     }
     let index_value = match additional_properties {
-        AdditionalProperties::Any => Some("unknown".into()),
+        AdditionalProperties::Any | AdditionalProperties::Unspecified => Some("unknown".into()),
         AdditionalProperties::Schema { value } if fields.is_empty() => {
             Some(render_value(value, options))
         }
         AdditionalProperties::Schema { .. } if !fields.is_empty() => Some("unknown".into()),
-        AdditionalProperties::Unspecified | AdditionalProperties::Forbidden => None,
+        AdditionalProperties::Forbidden => None,
         AdditionalProperties::Schema { .. } => unreachable!("fields emptiness is exhaustive"),
     };
     if let Some(index_value) = index_value {
@@ -659,6 +713,7 @@ fn render_operation(operation: &Operation, options: &ModelOptions, notice: &str)
     let parameter_groups = [
         ("path", "Path"),
         ("query", "Query"),
+        ("querystring", "Querystring"),
         ("header", "Headers"),
         ("cookie", "Cookies"),
     ]
@@ -688,11 +743,19 @@ fn render_operation(operation: &Operation, options: &ModelOptions, notice: &str)
                 .iter()
                 .map(|media| MediaResponse {
                     content_type: media.content_type.clone(),
-                    value: media
-                        .schema
-                        .as_ref()
-                        .map(|schema| render_operation_value(schema, options))
-                        .unwrap_or_else(|| "void".into()),
+                    value: if media
+                        .content_type
+                        .to_ascii_lowercase()
+                        .starts_with("multipart/")
+                    {
+                        "ArrayBuffer | Uint8Array".into()
+                    } else {
+                        media
+                            .schema
+                            .as_ref()
+                            .map(|schema| render_operation_value(schema, options))
+                            .unwrap_or_else(|| "void".into())
+                    },
                     description: None,
                     doc_type: None,
                 })
@@ -814,6 +877,7 @@ fn render_operation(operation: &Operation, options: &ModelOptions, notice: &str)
     for (location, suffix, property) in [
         ("path", "Path", "path"),
         ("query", "Query", "query"),
+        ("querystring", "Querystring", "querystring"),
         ("header", "Headers", "headers"),
         ("cookie", "Cookies", "cookies"),
     ] {
@@ -1076,6 +1140,16 @@ fn render_value(value: &SchemaValue, options: &ModelOptions) -> String {
     } else {
         body
     };
+    let body = if options.open_enums && !value.enum_values.is_empty() {
+        let wire = open_enum_wire(value, options);
+        if wire.is_empty() {
+            body
+        } else {
+            format!("{body} | {wire}")
+        }
+    } else {
+        body
+    };
     if value.nullable && body != "null" {
         format!("{body} | null")
     } else {
@@ -1195,5 +1269,136 @@ fn lower_camel_identifier(value: &str) -> String {
     match characters.next() {
         Some(first) => first.to_lowercase().collect::<String>() + characters.as_str(),
         None => "type".into(),
+    }
+}
+
+#[cfg(test)]
+mod forward_enum_tests {
+    use super::*;
+
+    #[test]
+    fn unspecified_properties_keep_typed_fields_and_unknown_extension_values() {
+        let fields = vec![kaji_core::Field {
+            name: "name".into(),
+            value: SchemaValue::new(SchemaKind::String),
+            required: true,
+            annotations: Default::default(),
+        }];
+        let open = render_object(
+            &fields,
+            &AdditionalProperties::Unspecified,
+            &Default::default(),
+        );
+        assert!(open.contains("name: string"));
+        assert!(open.contains("[key: string]: unknown"));
+        assert!(
+            !render_object(
+                &fields,
+                &AdditionalProperties::Forbidden,
+                &Default::default()
+            )
+            .contains("[key:")
+        );
+        assert!(
+            render_object(&[], &AdditionalProperties::Unspecified, &Default::default())
+                .contains("[key: string]: unknown")
+        );
+        assert!(!render_object_fields(&fields, &Default::default()).contains("[key:"));
+    }
+
+    #[test]
+    fn open_enum_types_preserve_literals_and_future_primitives() {
+        let mut value = SchemaValue::new(SchemaKind::String);
+        value.enum_values = vec![serde_json::json!("known")];
+        for enum_type in [
+            EnumType::Literal,
+            EnumType::AsConst,
+            EnumType::Enum,
+            EnumType::ConstEnum,
+        ] {
+            let options = ModelOptions {
+                enum_type,
+                open_enums: true,
+                ..Default::default()
+            };
+            let source = render_schema("State", &value, &options, "");
+            assert!(source.contains("(string & {})"));
+            assert!(source.contains("\"known\"") || source.contains("'known'"));
+            assert!(!source.contains("any"));
+            assert!(!source.contains("unknown"));
+        }
+        let strict = render_schema("State", &value, &Default::default(), "");
+        assert!(!strict.contains("string &"));
+        assert!(
+            render_value(
+                &value,
+                &ModelOptions {
+                    open_enums: true,
+                    ..Default::default()
+                }
+            )
+            .contains("string &")
+        );
+    }
+
+    #[test]
+    #[ignore = "requires Node and TypeScript compiler"]
+    fn native_open_enum_types_accept_future_values_and_preserve_wire() {
+        let mut value = SchemaValue::new(SchemaKind::String);
+        value.enum_values = vec![serde_json::json!("known")];
+        let root = tempfile::tempdir().unwrap();
+        for (index, enum_type) in [
+            EnumType::Literal,
+            EnumType::AsConst,
+            EnumType::Enum,
+            EnumType::ConstEnum,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let options = ModelOptions {
+                enum_type,
+                open_enums: true,
+                ..Default::default()
+            };
+            let type_name = if enum_type == EnumType::AsConst {
+                "StateKey"
+            } else {
+                "State"
+            };
+            let source = render_schema("State", &value, &options, "")
+                + &format!(
+                    "\nconst known: {type_name} = 'known';\nconst future: {type_name} = 'future';\nconst wire = {{state: future, extra: {{nested: [null, false, 0]}}}};\nif (JSON.stringify(JSON.parse(JSON.stringify(wire))) !== JSON.stringify(wire)) throw new Error('wire changed');\n"
+                );
+            let path = root.path().join(format!("probe{index}.ts"));
+            std::fs::write(&path, source).unwrap();
+            let compiler = std::env::var("KAJI_TSC_JS").expect("set KAJI_TSC_JS");
+            let output = std::process::Command::new("node")
+                .arg(&compiler)
+                .args([
+                    "--strict",
+                    "--target",
+                    "es2020",
+                    "--module",
+                    "commonjs",
+                    "--skipLibCheck",
+                ])
+                .arg(&path)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{} {}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            assert!(
+                std::process::Command::new("node")
+                    .arg(path.with_extension("js"))
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+        }
     }
 }

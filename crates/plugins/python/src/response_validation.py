@@ -79,3 +79,17 @@ def check_response(value: Any, schemas: dict[str, Any], refs: dict[str, Any],
                  candidates.get(f"{media.split('/')[0]}/*", candidates.get("*/*")))
     assert_shape(value, shape, refs)
     return value
+
+
+def decode_sequence(raw: bytes, content_type: str, strict: bool = False) -> list[Any]:
+    """Decode buffered JSON records; malformed records fail the whole response."""
+    if len(raw) > 64 * 1024 * 1024:
+        raise ResponseDecodeError("$", "sequential response at most 64 MiB")
+    text = raw.decode("utf-8")
+    if content_type == "application/json-seq" and text.split("\x1e")[0].strip():
+        raise ResponseDecodeError("$", "JSON sequence beginning with a record separator")
+    records = text.split("\x1e") if content_type == "application/json-seq" else text.splitlines()
+    records = [record for record in records if record.strip()]
+    if len(records) > 100000:
+        raise ResponseDecodeError("$", "at most 100000 records")
+    return [decode_json(record.encode("utf-8"), True) for record in records]

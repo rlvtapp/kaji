@@ -22,6 +22,7 @@ pub(super) struct RenderOptions {
     pub client_style: SdkClientStyle,
     pub operation_prefix: Option<String>,
     pub open_unions: bool,
+    pub open_enums: bool,
 }
 
 impl Default for RenderOptions {
@@ -31,6 +32,7 @@ impl Default for RenderOptions {
             client_style: SdkClientStyle::Namespaced,
             operation_prefix: None,
             open_unions: false,
+            open_enums: false,
         }
     }
 }
@@ -75,7 +77,7 @@ impl RustModels {
                 let _ = writeln!(chunk_index_source, "pub use {module}::*;");
                 files.push(GeneratedFile::new(
                     format!("src/models/{chunk}/{module}.rs"),
-                    render_model(schema, options.open_unions),
+                    render_model(schema, options.open_unions, options.open_enums),
                 )?);
             }
             files.push(GeneratedFile::new(
@@ -117,11 +119,11 @@ impl RustPackage {
     }
 }
 
-fn render_model(schema: &Schema, open_unions: bool) -> String {
+fn render_model(schema: &Schema, open_unions: bool, open_enums: bool) -> String {
     let mut output = format!(
         "{NOTICE}\n\n#[allow(unused_imports)]\nuse crate::models::*;\n#[allow(unused_imports)]\nuse serde::{{Deserialize, Serialize}};\n\n"
     );
-    render_schema(&mut output, schema, open_unions);
+    render_schema(&mut output, schema, open_unions, open_enums);
     output
 }
 
@@ -145,7 +147,7 @@ fn bounded_module_stem(name: &str) -> String {
     }
 }
 
-fn render_schema(output: &mut String, schema: &Schema, open_unions: bool) {
+fn render_schema(output: &mut String, schema: &Schema, open_unions: bool, open_enums: bool) {
     let name = type_name(&schema.name);
     match &schema.value.kind {
         SchemaKind::Object {
@@ -185,13 +187,27 @@ fn render_schema(output: &mut String, schema: &Schema, open_unions: bool) {
                 AdditionalProperties::Forbidden => None,
             };
             if let Some(extra_type) = extra_type {
+                let mut extra_name = "additional_properties".to_owned();
+                while fields
+                    .iter()
+                    .any(|field| rust_field_name(&field.name) == extra_name)
+                {
+                    extra_name.push('_');
+                }
                 output.push_str("    #[serde(flatten)]\n");
                 let _ = writeln!(
                     output,
-                    "    pub additional_properties: std::collections::BTreeMap<String, {extra_type}>,"
+                    "    pub {extra_name}: std::collections::BTreeMap<String, {extra_type}>,"
                 );
             }
             output.push_str("}\n");
+        }
+        SchemaKind::String
+            if open_enums
+                && !schema.value.enum_values.is_empty()
+                && schema.value.enum_values.iter().all(Value::is_string) =>
+        {
+            super::model_compatibility::render_open_enum(output, &name, &schema.value.enum_values);
         }
         SchemaKind::OneOf { variants } | SchemaKind::AnyOf { variants } => {
             output
@@ -321,6 +337,7 @@ fn kaji_query_pairs<T: Serialize>(name: &str, value: &T, style: &str, explode: b
     output.push_str(include_str!("token_provider_contract.rs.txt"));
     output.push_str(include_str!("multipart_runtime.rs.txt"));
     output.push_str(include_str!("call_options_runtime.rs.txt"));
+    output.push_str(include_str!("sequential_json.rs.txt"));
     output.push_str(
         "impl Client {\n    pub fn new(base_url: impl Into<String>) -> Self {\n        Self { base_url: base_url.into().trim_end_matches('/').to_owned(), http: reqwest::Client::new(), bearer_token: None }\n    }\n\n    /// Configures a bearer token for operations that declare OpenAPI security.\n    /// Other credential kinds are intentionally not guessed by this generated client.\n    pub fn with_bearer_token(mut self, token: impl Into<String>) -> Self {\n        self.bearer_token = Some(token.into());\n        self\n    }\n\n",
     );
@@ -541,7 +558,7 @@ fn render_operation(operation: &Operation, config: &RenderOptions) -> String {
     let path_binding = if operation
         .parameters
         .iter()
-        .any(|parameter| parameter.location == "path")
+        .any(|parameter| matches!(parameter.location.as_str(), "path" | "querystring"))
     {
         "mut "
     } else {
@@ -574,6 +591,22 @@ fn render_operation(operation: &Operation, config: &RenderOptions) -> String {
     for parameter in &operation.parameters {
         render_parameter_use(&mut output, parameter);
     }
+    for parameter in operation
+        .parameters
+        .iter()
+        .filter(|p| p.location == "querystring")
+    {
+        let field = rust_field_name(&parameter.name);
+        let value = if parameter.required {
+            format!("Some(input.{field}.as_str())")
+        } else {
+            format!("input.{field}.as_deref()")
+        };
+        let _ = writeln!(
+            output,
+            "        if let Some(raw_query) = {value} {{ if !kaji_valid_raw_query(raw_query) {{ return Err({error}::UnsupportedRequestMedia(\"invalid serialized whole query\")); }} if !raw_query.is_empty() {{ path.push('?'); path.push_str(raw_query); }} }}"
+        );
+    }
     let retry_allowed = rust_retry_allowed(operation);
     let native_method = match &operation.method {
         kaji_core::HttpMethod::Query => {
@@ -586,8 +619,24 @@ fn render_operation(operation: &Operation, config: &RenderOptions) -> String {
         _ => format!("Method::{}", operation.method.as_str()),
     };
     if matches!(request_media_kind(operation), RequestMediaKind::Multipart) {
-        output
-            .push_str("        let (multipart_content_type, multipart_bytes) = body.encoded();\n");
+        let plan = kaji_core::openapi32::request_content(operation)
+            .ok()
+            .and_then(|items| {
+                items
+                    .into_iter()
+                    .find(|item| item.content_type.starts_with("multipart/"))
+            })
+            .and_then(|item| serde_json::to_string(&item).ok());
+        if let Some(plan) = plan {
+            let _ = writeln!(
+                output,
+                "        let plan:serde_json::Value=serde_json::from_str({plan:?}).expect(\"generated multipart plan\");\n        let (multipart_content_type,multipart_bytes)=body.encoded_with_plan(&plan).map_err(|_|{error}::UnsupportedRequestMedia(\"invalid multipart input or encoding plan\"))?;"
+            );
+        } else {
+            output.push_str(
+                "        let (multipart_content_type, multipart_bytes) = body.encoded();\n",
+            );
+        }
     }
     output.push_str(&format!(
         "        let request_url = format!(\"{{}}{{}}\", self.base_url, path);\n        let request_info = RequestInfo {{ method: {}, url: request_url.clone() }};\n        self.kaji_before_request(&request_info);\n        let retry_allowed = {retry_allowed};\n        let max_attempts = self.retry.max_attempts.max(1);\n        let mut attempt = 0_usize;\n        let mut oauth_replayed = false;\n        #[allow(unused_mut)]\n        let mut oauth_token: Option<String> = None;\n        loop {{\n            attempt += 1;\n            let mut request = self.http.request({}, request_url.clone()).headers(self.call_options.headers.clone());\n            if let Some(timeout) = self.call_options.timeout {{ request = request.timeout(timeout); }}\n            if !query.is_empty() {{ request = request.query(&query); }}\n",
@@ -595,7 +644,7 @@ fn render_operation(operation: &Operation, config: &RenderOptions) -> String {
         native_method,
     ));
     for parameter in &operation.parameters {
-        if parameter.location == "header" {
+        if matches!(parameter.location.as_str(), "header" | "cookie") {
             render_header_use(&mut output, parameter);
         }
     }
@@ -605,7 +654,10 @@ fn render_operation(operation: &Operation, config: &RenderOptions) -> String {
     if operation.request_body.is_some() {
         match request_media_kind(operation) {
             RequestMediaKind::Json | RequestMediaKind::Unknown => {
-                output.push_str("        request = request.json(body);\n");
+                let media = operation.request_body.as_ref().and_then(|body|body.media_types.first()).map(|media|media.content_type.as_str()).unwrap_or("");
+                if matches!(media,"application/x-ndjson"|"application/ndjson"|"application/jsonl"|"application/json-seq") {
+                    let _ = writeln!(output,"        request = request.header(reqwest::header::CONTENT_TYPE,{media:?}).body(kaji_encode_sequence(body,{media:?}).map_err(|_|{error}::UnsupportedRequestMedia(\"invalid sequential JSON request\"))?);");
+                } else { output.push_str("        request = request.json(body);\n"); }
             }
             RequestMediaKind::Multipart => output.push_str("        request = request.header(reqwest::header::CONTENT_TYPE, multipart_content_type.clone()).body(multipart_bytes.clone());\n"),
             RequestMediaKind::Unsupported(content_type) => {
@@ -636,7 +688,7 @@ fn render_operation(operation: &Operation, config: &RenderOptions) -> String {
             "            return response.bytes().await.map(|body| String::from_utf8_lossy(&body).into_owned()).map_err({error}::Transport);\n"
         )),
         ResponseKind::Json => output.push_str(&format!(
-            "            let headers = response.headers().clone();\n            let body = response.bytes().await.map_err({error}::Transport)?.to_vec();\n            return match serde_json::from_slice::<{response}>(&body) {{\n                Ok(value) => Ok(value),\n                Err(source) => {{\n                    self.kaji_on_error(&request_info, &source.to_string());\n                    Err({error}::Decode {{ source, response: ApiResponse {{ status, headers, body }} }})\n                }}\n            }};\n"
+            "            let headers = response.headers().clone();\n            let body = response.bytes().await.map_err({error}::Transport)?.to_vec();\n            return match kaji_decode_json::<{response}>(&body, headers.get(reqwest::header::CONTENT_TYPE).and_then(|value|value.to_str().ok()).unwrap_or(\"\")) {{\n                Ok(value) => Ok(value),\n                Err(source) => {{\n                    self.kaji_on_error(&request_info, &source.to_string());\n                    Err({error}::Decode {{ source, response: ApiResponse {{ status, headers, body }} }})\n                }}\n            }};\n"
         )),
     }
     output.push_str("        }\n    }\n\n");
@@ -1141,6 +1193,7 @@ fn response_kind(operation: &Operation) -> ResponseKind {
     };
     match content_type {
         "text/event-stream" => ResponseKind::ServerSentEvents,
+        content_type if content_type.starts_with("multipart/") => ResponseKind::Binary,
         "application/octet-stream" | "application/pdf" | "image/png" | "image/jpeg" => {
             ResponseKind::Binary
         }
@@ -1213,7 +1266,7 @@ fn multipart_alternative(operation: &Operation) -> Option<Operation> {
     let media = body
         .media_types
         .iter()
-        .find(|media| media.content_type == "multipart/form-data")?
+        .find(|media| media.content_type.starts_with("multipart/"))?
         .clone();
     let mut form = operation.clone();
     form.request_body.as_mut().unwrap().media_types = vec![media];
@@ -1248,11 +1301,19 @@ fn request_media_kind(operation: &Operation) -> RequestMediaKind<'_> {
     {
         None => RequestMediaKind::Unknown,
         Some(content_type)
-            if content_type == "application/json" || content_type.ends_with("+json") =>
+            if content_type == "application/json"
+                || content_type.ends_with("+json")
+                || matches!(
+                    content_type,
+                    "application/x-ndjson"
+                        | "application/ndjson"
+                        | "application/jsonl"
+                        | "application/json-seq"
+                ) =>
         {
             RequestMediaKind::Json
         }
-        Some("multipart/form-data") => RequestMediaKind::Multipart,
+        Some(content_type) if content_type.starts_with("multipart/") => RequestMediaKind::Multipart,
         Some(content_type) => RequestMediaKind::Unsupported(content_type),
     }
 }
@@ -1379,11 +1440,15 @@ fn render_operation_request(operation: &Operation) -> String {
     );
     for parameter in &operation.parameters {
         let name = rust_field_name(&parameter.name);
-        let mut value_type = parameter
-            .schema
-            .as_ref()
-            .map(rust_type)
-            .unwrap_or_else(|| "serde_json::Value".into());
+        let mut value_type = if parameter.location == "querystring" {
+            "String".into()
+        } else {
+            parameter
+                .schema
+                .as_ref()
+                .map(rust_type)
+                .unwrap_or_else(|| "serde_json::Value".into())
+        };
         if !parameter.required && !value_type.starts_with("Option<") {
             value_type = format!("Option<{value_type}>");
         }
@@ -1393,8 +1458,40 @@ fn render_operation_request(operation: &Operation) -> String {
     output
 }
 
+fn parameter_json_content(parameter: &OperationParameter) -> bool {
+    kaji_core::openapi32::parameter_content(parameter)
+        .ok()
+        .and_then(|items| items.into_iter().next())
+        .is_some_and(|content| {
+            content.content_type == "application/json" || content.content_type.ends_with("+json")
+        })
+}
 fn render_parameter_use(output: &mut String, parameter: &OperationParameter) {
     let field = format!("input.{}", rust_field_name(&parameter.name));
+    if parameter_json_content(parameter) && matches!(parameter.location.as_str(), "path" | "query")
+    {
+        let value = if parameter.required {
+            format!("Some(&{field})")
+        } else {
+            format!("{field}.as_ref()")
+        };
+        let expression = if parameter.location == "path" {
+            format!(
+                "path=path.replace({:?},&kaji_path_segment(&kaji_parameter_json(value)));",
+                format!("{{{}}}", parameter.name)
+            )
+        } else {
+            format!(
+                "query.push(({:?}.to_owned(),kaji_parameter_json(value)));",
+                parameter.name
+            )
+        };
+        let _ = writeln!(
+            output,
+            "        if let Some(value)={value} {{{expression}}}"
+        );
+        return;
+    }
     match parameter.location.as_str() {
         "path" => {
             if parameter.required {
@@ -1442,16 +1539,39 @@ fn render_parameter_use(output: &mut String, parameter: &OperationParameter) {
 
 fn render_header_use(output: &mut String, parameter: &OperationParameter) {
     let field = format!("input.{}", rust_field_name(&parameter.name));
+    if parameter.location == "cookie" {
+        let serializer = if parameter_json_content(parameter) {
+            "kaji_parameter_json"
+        } else {
+            "kaji_query_value"
+        };
+        let value = if parameter.required {
+            format!("Some(&{field})")
+        } else {
+            format!("{field}.as_ref()")
+        };
+        let _ = writeln!(
+            output,
+            "        if let Some(value)={value} {{request=request.header(reqwest::header::COOKIE,format!(\"{{}}={{}}\",{:?},kaji_path_segment(&{serializer}(value))));}}",
+            parameter.name
+        );
+        return;
+    }
+    let serializer = if parameter_json_content(parameter) {
+        "kaji_parameter_json"
+    } else {
+        "kaji_query_value"
+    };
     if parameter.required {
         let _ = writeln!(
             output,
-            "        request = request.header({:?}, kaji_query_value(&{field}));",
+            "        request = request.header({:?}, {serializer}(&{field}));",
             parameter.name,
         );
     } else {
         let _ = writeln!(
             output,
-            "        if let Some(value) = {field}.as_ref() {{ request = request.header({:?}, kaji_query_value(value)); }}",
+            "        if let Some(value) = {field}.as_ref() {{ request = request.header({:?}, {serializer}(value)); }}",
             parameter.name,
         );
     }
@@ -1789,6 +1909,21 @@ pub(crate) fn kebab_case(name: &str) -> String {
     rust_field_name(name)
         .trim_start_matches("r#")
         .replace('_', "-")
+}
+
+/// Collision-safe identifiers for extensible enum constructors.
+pub(super) fn enum_helper_name(raw: &str) -> String {
+    let name = rust_field_name(raw);
+    if matches!(
+        name.as_str(),
+        "as_str" | "is_known" | "from" | "fmt" | "clone" | "default"
+    ) {
+        format!("{name}_value")
+    } else if name.is_empty() {
+        "empty_value".into()
+    } else {
+        name
+    }
 }
 
 #[cfg(test)]

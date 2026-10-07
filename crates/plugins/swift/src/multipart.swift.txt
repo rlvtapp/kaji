@@ -117,3 +117,81 @@ internal struct KajiMultipartEncoder {
         return KajiEncodedMultipart(body: body, contentType: "multipart/form-data; boundary=\(boundary)")
     }
 }
+
+/// One explicitly ordered multipart part. JSON preserves null, false and zero.
+public struct KajiOrderedPart: Sendable {
+    public indirect enum Value: Sendable { case bytes(Data), text(String), json(JSONValue), nested([KajiOrderedPart]) }
+    public var value: Value
+    public var name: String?
+    public var filename: String?
+    public var contentType: String?
+    public var headers: [String: String]
+    public init(_ value: Value, name: String? = nil, filename: String? = nil, contentType: String? = nil, headers: [String: String] = [:]) {
+        self.value = value; self.name = name; self.filename = filename; self.contentType = contentType; self.headers = headers
+    }
+}
+internal final class KajiOrderedEncoding: Decodable, Sendable {
+    struct Header: Decodable, Sendable { let required: Bool? }
+    let contentType: String?
+    let headers: [String: Header]?
+    let encoding: [String: KajiOrderedEncoding]?
+    let prefixEncoding: [KajiOrderedEncoding]?
+    let itemEncoding: KajiOrderedEncoding?
+}
+internal struct KajiOrderedDefinition: Decodable, Sendable {
+    let content_type: String
+    let encoding: [String: KajiOrderedEncoding]?
+    let prefix_encoding: [KajiOrderedEncoding]?
+    let item_encoding: KajiOrderedEncoding?
+}
+internal func kajiOrderedEncode(parts: [KajiOrderedPart], contentType: String, named: [String: KajiOrderedEncoding] = [:], prefix: [KajiOrderedEncoding] = [], item: KajiOrderedEncoding? = nil, maximumBodyBytes: Int, depth: Int = 0) throws -> KajiEncodedMultipart {
+    try Task.checkCancellation()
+    guard depth <= 16 else { throw KajiMultipartError.bodyTooLarge }
+    guard maximumBodyBytes > 0 && maximumBodyBytes <= 268_435_456 else { throw KajiMultipartError.invalidLimit }
+    guard parts.count <= 1024 else { throw KajiMultipartError.tooManyParts }
+    let rootMedia = String(contentType.split(separator: ";", maxSplits: 1)[0]).trimmingCharacters(in: .whitespaces)
+    guard !contentType.contains("\r"), !contentType.contains("\n"), !contentType.lowercased().contains("boundary="), KajiMultipartEncoder.mediaType(rootMedia), rootMedia.lowercased().hasPrefix("multipart/") else { throw KajiMultipartError.invalidContentType }
+    var encoded: [(KajiOrderedPart, Data, String)] = []
+    var payloadBytes = 0
+    for (index, part) in parts.enumerated() {
+        try Task.checkCancellation()
+        let plan = (!prefix.isEmpty || item != nil) ? (index < prefix.count ? prefix[index] : item) : named[part.name ?? ""]
+        let required = plan?.headers?.filter { $0.value.required == true && $0.key.lowercased() != "content-type" }.map(\.key) ?? []
+        _ = try KajiMultipartEncoder.headers(part.headers, required: required)
+        var selected = part.contentType ?? plan?.contentType
+        var data: Data
+        switch part.value {
+        case .bytes(let value): data = value; selected = selected ?? "application/octet-stream"
+        case .text(let value): data = Data(value.utf8); selected = selected ?? "text/plain"
+        case .json(let value): data = try JSONEncoder().encode(value); selected = selected ?? "application/json"
+        case .nested(let values):
+            let nested = try kajiOrderedEncode(parts: values, contentType: selected ?? "multipart/mixed", named: plan?.encoding ?? [:], prefix: plan?.prefixEncoding ?? [], item: plan?.itemEncoding, maximumBodyBytes: maximumBodyBytes, depth: depth + 1)
+            data = nested.body; selected = nested.contentType
+        }
+        guard data.count <= maximumBodyBytes - payloadBytes else { throw KajiMultipartError.bodyTooLarge }; payloadBytes += data.count
+        guard let mime = selected, !mime.contains("\r"), !mime.contains("\n"), !mime.contains(","), KajiMultipartEncoder.mediaType(String(mime.split(separator: ";", maxSplits: 1)[0])) else { throw KajiMultipartError.invalidContentType }
+        encoded.append((part, data, mime))
+    }
+    var boundary = ""
+    for _ in 0..<4 { let candidate = "kaji-" + UUID().uuidString.lowercased(); if !encoded.contains(where: { $0.1.range(of: Data(("--" + candidate).utf8)) != nil }) { boundary = candidate; break } }
+    guard !boundary.isEmpty else { throw KajiMultipartError.boundaryCollision }
+    var result = Data()
+    func append(_ data: Data) throws { guard data.count <= maximumBodyBytes - result.count else { throw KajiMultipartError.bodyTooLarge }; result.append(data) }
+    func quoted(_ value: String) throws -> String {
+        guard value.utf8.count <= 4096, !value.contains("\r"), !value.contains("\n"), !value.contains("\0") else { throw KajiMultipartError.invalidFilename }
+        return value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+    }
+    for (part, data, mime) in encoded {
+        try Task.checkCancellation()
+        var head = "--\(boundary)\r\n"
+        if rootMedia.lowercased() == "multipart/form-data" { guard let name = part.name else { throw KajiMultipartError.unknownPart }; head += "Content-Disposition: form-data; name=\"\(try quoted(name))\"" }
+        else if part.name != nil || part.filename != nil { head += "Content-Disposition: attachment"; if let name = part.name { head += "; name=\"\(try quoted(name))\"" } }
+        if let filename = part.filename { head += "; filename=\"\(try quoted(filename))\"" }
+        if rootMedia.lowercased() == "multipart/form-data" || part.name != nil || part.filename != nil { head += "\r\n" }
+        head += "Content-Type: \(mime)\r\n"
+        for key in part.headers.keys.sorted() { head += "\(key): \(part.headers[key]!)\r\n" }; head += "\r\n"
+        try append(Data(head.utf8)); try append(data); try append(Data("\r\n".utf8))
+    }
+    try append(Data("--\(boundary)--\r\n".utf8)); try Task.checkCancellation()
+    return KajiEncodedMultipart(body: result, contentType: "\(contentType); boundary=\(boundary)")
+}

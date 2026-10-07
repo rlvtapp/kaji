@@ -42,6 +42,66 @@ fn native_multipart_buffered_parts_preserve_bytes_and_safe_retries() {
         path: "/collision".into(),
         ..Default::default()
     });
+    let array = kaji_core::SchemaValue::new(kaji_core::SchemaKind::Array {
+        items: Box::new(kaji_core::SchemaValue::new(kaji_core::SchemaKind::Any)),
+    });
+    api.operations.push(kaji_core::Operation {
+        id: "sequence".into(),
+        method: kaji_core::HttpMethod::Post,
+        path: "/sequence".into(),
+        parameters: vec![kaji_core::OperationParameter {
+            name: "whole_query".into(),
+            location: "querystring".into(),
+            required: true,
+            schema: Some(kaji_core::SchemaValue::new(kaji_core::SchemaKind::Object {
+                fields: vec![],
+                additional_properties: kaji_core::AdditionalProperties::Any,
+            })),
+            description: None,
+            annotations: Default::default(),
+        }],
+        request_body: Some(kaji_core::OperationRequestBody {
+            required: true,
+            description: None,
+            media_types: vec![kaji_core::OperationMediaType {
+                content_type: "application/x-ndjson".into(),
+                schema: Some(array.clone()),
+            }],
+        }),
+        responses: vec![kaji_core::OperationResponse {
+            status: "200".into(),
+            description: None,
+            media_types: vec![kaji_core::OperationMediaType {
+                content_type: "application/x-ndjson".into(),
+                schema: Some(array),
+            }],
+        }],
+        ..Default::default()
+    });
+    let mut params = kaji_core::Operation {
+        id: "jsonParameters".into(),
+        method: kaji_core::HttpMethod::Get,
+        path: "/params/{path}".into(),
+        ..Default::default()
+    };
+    for (name, location) in [
+        ("path", "path"),
+        ("filter", "query"),
+        ("x-json", "header"),
+        ("cookie", "cookie"),
+    ] {
+        let mut parameter = kaji_core::OperationParameter {
+            name: name.into(),
+            location: location.into(),
+            required: true,
+            schema: Some(kaji_core::SchemaValue::new(kaji_core::SchemaKind::String)),
+            description: None,
+            annotations: Default::default(),
+        };
+        parameter.annotations.insert("kaji.parameter_content".into(),serde_json::json!([{"content_type":"application/json","schema_definition":{"type":"string"}}]));
+        params.parameters.push(parameter);
+    }
+    api.operations.push(params);
     let tree = kaji_core::engine::Packages::new()
         .package(
             crate::package("sdk")
