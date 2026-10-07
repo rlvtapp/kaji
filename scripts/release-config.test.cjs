@@ -57,7 +57,10 @@ test('CLI native tests build the compiler first and releases require explicit en
   const build = ci.indexOf('go build -o ../target/debug/kaji-openapi .');
   const probe = ci.indexOf('cargo test -p kaji-cli --test local_references');
   assert.ok(build >= 0 && probe > build);
-  assert.match(read('.github/workflows/release-please.yml'), /skip-github-release: \$\{\{ vars\.KAJI_RELEASE_ENABLED != 'true' \}\}/);
+  const release = read('.github/workflows/release-please.yml');
+  assert.match(release, /skip-github-release: \$\{\{ vars\.KAJI_RELEASE_ENABLED != 'true' \}\}/);
+  assert.match(release, /on:\n  workflow_dispatch:/);
+  assert.doesNotMatch(release, /^  push:/m);
 });
 
 test('pending feature release uses the last published version rather than skipping 0.5.0', () => {

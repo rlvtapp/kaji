@@ -1,7 +1,5 @@
 name: Kaji release PR
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read

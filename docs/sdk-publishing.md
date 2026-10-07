@@ -7,7 +7,8 @@ regenerate the SDK, create its tag, register an account or establish registry tr
 
 ## Kaji's own repository releases
 
-Kaji's root release workflow prepares Release Please pull requests on `main`.
+Kaji's root release workflow runs only through manual dispatch. Pushes to `main`
+run checks without preparing or creating releases.
 It uses the simple strategy and explicit TOML updates because member crates inherit
 `workspace.package.version`. `version.txt` tracks the source version; the release
 manifest tracks the last published version, currently `0.4.0`. Minor features bump
