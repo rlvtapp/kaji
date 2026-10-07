@@ -2075,6 +2075,20 @@ fn config_profiles(
     }
     let mut profiles = ProfileSet::new(".").common(Common::default().client_style(default_style));
     for package in packages {
+        if matches!(
+            package.language.as_str(),
+            "php" | "java" | "csharp" | "dotnet" | "elixir" | "ruby" | "swift"
+        ) {
+            for consumer in &package.plugins {
+                if consumer.name == "operation-tests" {
+                    ensure!(
+                        consumer.uses.is_empty(),
+                        "{} operation-tests recipes infer the bundled SDK; explicit uses bindings require the typed Rust API",
+                        package.language
+                    );
+                }
+            }
+        }
         let style = match package.client_style.as_deref() {
             Some(style) => parse_style(Some(style))?,
             None => default_style,
@@ -2253,7 +2267,7 @@ fn config_profiles(
                 profiles.package(with_configured_middleware(package_builder, package))
             }
             "php" => {
-                has_only_known_plugins(package, &["sdk", "webhooks"])?;
+                has_only_known_plugins(package, &["sdk", "webhooks", "operation-tests"])?;
                 let package_builder =
                     php::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
@@ -2264,6 +2278,9 @@ fn config_profiles(
                 let mut package_builder = package_builder.with(php::sdk());
                 if package.plugins.iter().any(|p| p.name == "webhooks") {
                     package_builder = package_builder.with(php::webhooks());
+                }
+                if package.plugins.iter().any(|p| p.name == "operation-tests") {
+                    package_builder = package_builder.with(php::operation_tests());
                 }
                 profiles.package(with_configured_middleware(package_builder, package))
             }
@@ -2288,7 +2305,7 @@ fn config_profiles(
                 ))
             }
             "java" => {
-                has_only_known_plugins(package, &["sdk", "webhooks"])?;
+                has_only_known_plugins(package, &["sdk", "webhooks", "operation-tests"])?;
                 let package_builder =
                     java::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
@@ -2302,10 +2319,13 @@ fn config_profiles(
                 if package.plugins.iter().any(|p| p.name == "webhooks") {
                     package_builder = package_builder.with(java::webhooks());
                 }
+                if package.plugins.iter().any(|p| p.name == "operation-tests") {
+                    package_builder = package_builder.with(java::operation_tests());
+                }
                 profiles.package(with_configured_middleware(package_builder, package))
             }
             "csharp" | "dotnet" => {
-                has_only_known_plugins(package, &["sdk", "webhooks"])?;
+                has_only_known_plugins(package, &["sdk", "webhooks", "operation-tests"])?;
                 let package_builder =
                     csharp::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
@@ -2313,14 +2333,19 @@ fn config_profiles(
                 } else {
                     package_builder
                 };
-                let mut package_builder = package_builder.with(csharp::sdk());
+                let plugin = sdk_plugin(package)?;
+                let mut package_builder = package_builder
+                    .with(csharp::sdk().open_enums(plugin.open_enums.unwrap_or(false)));
                 if package.plugins.iter().any(|p| p.name == "webhooks") {
                     package_builder = package_builder.with(csharp::webhooks());
+                }
+                if package.plugins.iter().any(|p| p.name == "operation-tests") {
+                    package_builder = package_builder.with(csharp::operation_tests());
                 }
                 profiles.package(with_configured_middleware(package_builder, package))
             }
             "elixir" => {
-                has_only_known_plugins(package, &["sdk", "webhooks"])?;
+                has_only_known_plugins(package, &["sdk", "webhooks", "operation-tests"])?;
                 let package_builder =
                     elixir::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
@@ -2332,10 +2357,13 @@ fn config_profiles(
                 if package.plugins.iter().any(|p| p.name == "webhooks") {
                     package_builder = package_builder.with(elixir::webhooks());
                 }
+                if package.plugins.iter().any(|p| p.name == "operation-tests") {
+                    package_builder = package_builder.with(elixir::operation_tests());
+                }
                 profiles.package(with_configured_middleware(package_builder, package))
             }
             "ruby" => {
-                has_only_known_plugins(package, &["sdk", "webhooks"])?;
+                has_only_known_plugins(package, &["sdk", "webhooks", "operation-tests"])?;
                 let package_builder =
                     ruby::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
@@ -2349,10 +2377,13 @@ fn config_profiles(
                         package_builder = package_builder.with(ruby::webhooks());
                     }
                 }
+                if package.plugins.iter().any(|p| p.name == "operation-tests") {
+                    package_builder = package_builder.with(ruby::operation_tests());
+                }
                 profiles.package(with_configured_middleware(package_builder, package))
             }
             "swift" => {
-                has_only_known_plugins(package, &["sdk", "webhooks"])?;
+                has_only_known_plugins(package, &["sdk", "webhooks", "operation-tests"])?;
                 let package_builder =
                     swift::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
@@ -2363,6 +2394,9 @@ fn config_profiles(
                 let mut package_builder = package_builder.with(swift::sdk());
                 if package.plugins.iter().any(|p| p.name == "webhooks") {
                     package_builder = package_builder.with(swift::webhooks());
+                }
+                if package.plugins.iter().any(|p| p.name == "operation-tests") {
+                    package_builder = package_builder.with(swift::operation_tests());
                 }
                 profiles.package(with_configured_middleware(package_builder, package))
             }
@@ -5083,6 +5117,50 @@ mod tests {
         malformed[0].plugins[1]
             .uses
             .insert("client".into(), "native".into());
+        assert!(config_profiles(SdkClientStyle::Namespaced, &malformed).is_err());
+    }
+    #[test]
+    fn every_sdk_recipe_can_select_native_operation_tests() {
+        let languages = [
+            "typescript",
+            "rust",
+            "go",
+            "python",
+            "php",
+            "java",
+            "csharp",
+            "dotnet",
+            "elixir",
+            "ruby",
+            "swift",
+        ];
+        let packages: Vec<PackageConfig> = serde_json::from_value(serde_json::Value::Array(languages.iter().map(|language| serde_json::json!({"language":language,"path":language,"plugins":[{"name":"sdk"},{"name":"operation-tests"}]})).collect())).unwrap();
+        let api = Api {
+            name: "Recipe".into(),
+            ..Default::default()
+        };
+        let tree = kaji::generate(
+            &api,
+            config_profiles(SdkClientStyle::Namespaced, &packages).unwrap(),
+        )
+        .unwrap();
+        for language in languages {
+            assert!(
+                tree.iter()
+                    .any(|(path, _)| path.starts_with(format!("./{language}"))
+                        && (path.to_string_lossy().contains("operation")
+                            || path.to_string_lossy().contains("Operation"))),
+                "missing operation test output for {language}"
+            );
+        }
+        let mut malformed = packages;
+        let java = malformed
+            .iter_mut()
+            .find(|package| package.language == "java")
+            .unwrap();
+        java.plugins[1]
+            .uses
+            .insert("models".into(), "missing-provider".into());
         assert!(config_profiles(SdkClientStyle::Namespaced, &malformed).is_err());
     }
     #[test]

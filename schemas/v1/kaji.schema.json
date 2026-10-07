@@ -454,7 +454,7 @@
         },
         "open_enums": {
           "type": "boolean",
-          "description": "Generate forward-compatible Java enum value classes."
+          "description": "Generate forward-compatible Java or C# enum value classes."
         }
       }
     },
@@ -1159,7 +1159,8 @@
             }
           }
         }
-      }
+      },
+      "description": "Generate bounded fake-driver public-operation tests and unsupported-case diagnostics. All SDK recipes support inference; named uses roles are supported by TypeScript recipes only."
     }
   }
 }

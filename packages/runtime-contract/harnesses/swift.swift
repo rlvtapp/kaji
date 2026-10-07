@@ -11,7 +11,10 @@ import FoundationNetworking
             rewritten.setValue("yes", forHTTPHeaderField: "X-Contract-Middleware")
             return try await following(rewritten)
         }
-        let options = KajiClientOptions(baseURL: URL(string: environment["KAJI_CONTRACT_URL"]!)!, headers: ["Authorization": "Bearer " + environment["KAJI_CONTRACT_CASE"]!])
+        var options = KajiClientOptions(baseURL: URL(string: environment["KAJI_CONTRACT_URL"]!)!, headers: ["Authorization": "Bearer " + environment["KAJI_CONTRACT_CASE"]!])
+        options.maxAttempts = 3
+        options.retryBaseDelay = 0
+        options.retryMaxDelay = 0
         let client = KajiClient(options: options, transport: policy)
         let result: [String: String]
         do {

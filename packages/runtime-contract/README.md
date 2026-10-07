@@ -24,10 +24,10 @@ node packages/runtime-contract/runner.mjs python /tmp/kaji-runtime-fixture/sdk/p
 | Java | 15 | Permissive missing/wrong-field decoding; native execution requires Java/Maven CI |
 | PHP | 15 | Permissive missing/wrong-field decoding; native execution requires PHP/Composer CI |
 | Elixir | 15 | Permissive missing/wrong-field decoding; native execution requires Elixir/Mix CI |
-| Swift | 13 | No automatic retry policy |
-| Ruby | 12 | No automatic retry policy; default malformed JSON is returned as text |
+| Swift | 17 | Harness enables opt-in retries |
+| Ruby | 16 | Harness enables opt-in retries; default malformed JSON is returned as text |
 
-“Supported” means implemented assertions, not proof of a passing run on every platform. TypeScript, Python, Go, Rust, Swift and Ruby were executed locally (93 supported scenarios). Java, C#, PHP and Elixir await native CI execution. Every scenario must have a supported or unsupported entry in the manifest; missing tools fail the runner.
+“Supported” means implemented assertions, not proof of a passing run on every platform. TypeScript, Python, Go, Rust, Swift and Ruby were executed locally (101 supported scenarios). Java, C#, PHP and Elixir await native CI execution. Every scenario must have a supported or unsupported entry in the manifest; missing tools fail the runner.
 
 This corpus covers a small neutral API. It does not establish exhaustive SSE, multipart, date, union, wide-integer or authentication coverage. Unknown fields are accepted; preservation is not asserted in every language. Dedicated native probes additionally cover middleware, cancellation, OAuth refresh concurrency, nested models and pagination. A passing suite does not claim complete runtime parity.
 

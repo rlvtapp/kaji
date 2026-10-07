@@ -334,7 +334,7 @@
       "requests_wire": [
         {
           "query": {
-            "text": "héllo 雪",
+            "text": "h\u00e9llo \u96ea",
             "flag": "false",
             "count": "0",
             "tags": [
@@ -457,14 +457,13 @@
         "page_short",
         "strict_missing",
         "strict_wrong",
-        "serialize_controls"
+        "serialize_controls",
+        "retry_503",
+        "create_retry",
+        "patch_retry",
+        "key_override"
       ],
-      "unsupported": {
-        "retry_503": "This Foundation runtime has no automatic retry policy.",
-        "create_retry": "This native transport has no automatic retry policy.",
-        "patch_retry": "This native transport has no automatic retry policy.",
-        "key_override": "This native transport has no automatic retry policy."
-      }
+      "unsupported": {}
     },
     "ruby": {
       "supported": [
@@ -479,14 +478,14 @@
         "page_short",
         "strict_missing",
         "strict_wrong",
-        "serialize_controls"
+        "serialize_controls",
+        "retry_503",
+        "create_retry",
+        "patch_retry",
+        "key_override"
       ],
       "unsupported": {
-        "retry_503": "This Net::HTTP runtime has no automatic retries.",
-        "invalid_json": "The current runtime returns raw response text when JSON parsing fails.",
-        "create_retry": "This native transport has no automatic retry policy.",
-        "patch_retry": "This native transport has no automatic retry policy.",
-        "key_override": "This native transport has no automatic retry policy."
+        "invalid_json": "The current runtime returns raw response text when JSON parsing fails."
       }
     },
     "java": {
