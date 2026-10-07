@@ -81,3 +81,9 @@ no credentials, uses no proxy, follows no redirects, and pins validated public D
 addresses before dialing. Requests have a 30-second timeout; each document is
 limited to 16 MiB and the closure to 256 MiB / 16,384 documents. Private-network,
 HTTP and authenticated reference servers require explicit local bundling.
+
+For a root document downloaded by the CLI, `--source-url` communicates its original
+HTTP(S) origin to the compiler using the already-downloaded bytes. Relative remote
+references resolve from that URL; root authentication is not forwarded to children.
+External referenced documents still require public HTTPS. Standalone compiler
+users can pass `--source-url` with a downloaded local file themselves.

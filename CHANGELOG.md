@@ -9,6 +9,8 @@
 - Resolve bounded public-HTTPS reference closures with provenance invalidation,
   and retain OpenAPI 3.2 custom HTTP methods with unsafe-by-default retries.
 - Add a sourced SDK-generator comparison and Kaji ownership/plugin positioning.
+- Rust generator API: `HttpMethod` now carries `Custom(String)` and is no longer
+  `Copy`; clone stored values when needed, or borrow them for `as_str()`.
 
 
 ### Added

@@ -7,11 +7,13 @@ properties separately and make their release workflow run the same checks.
 
 ## Latest 0.5.0 integration evidence
 
-The integrated workspace passes 434 tests, formatting checks and Clippy with
+The integrated workspace passes 441 tests, formatting checks and Clippy with
 warnings denied. Freshly generated SDKs pass 163 shared HTTP scenarios across
 all ten runtimes. Additional native probes cover rebuilding an ejected renderer,
 local-reference provenance, OpenAPI 3.2 QUERY requests, scoped HTTP controls,
-OAuth refresh and buffered multipart uploads. All 17 Swift native probes pass.
+OAuth refresh and buffered multipart uploads. All 17 previously documented Swift native probes pass. New Swift/PHP/Elixir
+OAuth and scoped-client probes pass, as do Ruby/PHP/Elixir multipart probes and
+custom-method wire probes in Go, Fetch/Axios, Rust and Ruby.
 
 The complete pinned OpenAI contract generates and compiles or imports in
 TypeScript, Rust, Python, Go, Java, C# and Ruby. All six pinned public contracts
