@@ -1,7 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using Probe;
+using Kaji.Probe;
 sealed class Driver(string? target=null) : HttpMessageHandler {
     public List<string> URLs { get; }=[];
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken token) {

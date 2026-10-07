@@ -43,6 +43,17 @@ pub(crate) fn render(
                     ),
                 );
             }
+            // Convenience constructors must accept the same presence types as record components.
+            for field in fields.iter().filter(|f| !f.required) {
+                source = source.replace(
+                    &format!("{} {}", java_type(&field.value), field_name(&field.name)),
+                    &format!(
+                        "Presence<{}> {}",
+                        java_type(&field.value),
+                        field_name(&field.name)
+                    ),
+                );
+            }
             tree.replace(GeneratedFile::new(
                 format!(
                     "{root}src/main/java/{path}/model/{}.java",
@@ -107,6 +118,7 @@ mod tests {
             .unwrap();
         assert!(source.contains("Presence<String> note"));
         assert!(source.contains("Presence<Long> count"));
+        assert!(source.contains("public Event(Presence<String> note, Presence<Long> count)"));
         assert!(
             tree.get("src/main/java/io/kaji/presence/model/Presence.java")
                 .unwrap()

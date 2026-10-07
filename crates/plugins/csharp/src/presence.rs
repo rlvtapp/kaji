@@ -120,7 +120,7 @@ mod tests {
             .unwrap();
         let dir = tempfile::tempdir().unwrap();
         tree.write_to(dir.path()).unwrap();
-        std::fs::write(dir.path().join("sdk/tests/OperationTests/Program.cs"),r#"using System.Text.Json;using Kaji.KajiPresence;class Probe{static void Main(){foreach(var wire in new[]{"{}","{\"note\":null}","{\"note\":\"future\",\"count\":0}","{\"note\":null,\"future\":[false,0,null]}"}){var model=JsonSerializer.Deserialize<Event>(wire)!;if(JsonSerializer.Serialize(model)!=wire)throw new Exception("presence wire");}if(JsonSerializer.Deserialize<Event>("{}")!.Note.IsPresent)throw new Exception("omitted");var present=JsonSerializer.Deserialize<Event>("{\"note\":null}")!.Note;if(!present.IsPresent||present.Value!=null)throw new Exception("null");}}"#).unwrap();
+        std::fs::write(dir.path().join("sdk/tests/OperationTests/Program.cs"),r#"using System.Text.Json;using Kaji.KajiPresence;class Probe{static void Main(){foreach(var wire in new[]{"{}","{\"note\":null}","{\"note\":\"future\",\"count\":0}","{\"note\":null,\"future\":[false,0,null]}"}){var model=JsonSerializer.Deserialize<EventValue>(wire)!;if(JsonSerializer.Serialize(model)!=wire)throw new Exception("presence wire");}if(JsonSerializer.Deserialize<EventValue>("{}")!.Note.IsPresent)throw new Exception("omitted");var present=JsonSerializer.Deserialize<EventValue>("{\"note\":null}")!.Note;if(!present.IsPresent||present.Value!=null)throw new Exception("null");}}"#).unwrap();
         let output = std::process::Command::new("dotnet")
             .args([
                 "run",

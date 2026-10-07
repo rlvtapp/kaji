@@ -7,14 +7,13 @@ defmodule __MODULE__.OperationSmokeTests do
     fixtures = Jason.decode!(File.read!("tests/operation-fixtures.json"))
     for fixture <- fixtures["cases"] do
       transport = fn request, _ ->
-        uri = URI.parse(request.url)
         path = Enum.reduce(fixture["parameters"], fixture["path"], fn parameter, path ->
           if parameter["location"] == "path", do: String.replace(path, "{" <> parameter["name"] <> "}", URI.encode(to_string(parameter["value"]), &URI.char_unreserved?/1)), else: path
         end)
-        assert uri.path == path
+        assert request.path == path
         assert String.upcase(to_string(request.method)) == fixture["method"]
         query = fixture["parameters"] |> Enum.filter(&(&1["location"] == "query")) |> Map.new(&{&1["name"], to_string(&1["value"])})
-        assert URI.decode_query(uri.query || "") == query
+        assert URI.decode_query(request.query || "") == query
         for parameter <- fixture["parameters"], parameter["location"] == "header" do
           assert Enum.any?(request.headers, fn {key,value} -> String.downcase(key) == String.downcase(parameter["name"]) and value == to_string(parameter["value"]) end)
         end

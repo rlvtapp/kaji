@@ -74,7 +74,7 @@ public final class KajiOperationTests {
     }
     static void assertResult(Driver driver,Object result)throws Exception {
         check(driver.calls==1,"one native request required");
-        check(MAPPER.valueToTree(result).equals(driver.fixture.get("response")),"response round trip");
+        check(MAPPER.readTree(MAPPER.writeValueAsBytes(result)).equals(driver.fixture.get("response")),"response round trip");
     }
     public static void main(String[] args)throws Exception {
 __CASES__

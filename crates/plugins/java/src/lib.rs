@@ -221,6 +221,21 @@ fn render_sdk_with_policy(
             )?;
         }
     }
+    if api.schemas.is_empty() {
+        let imports = tree
+            .iter()
+            .filter(|(path, _)| path.extension().is_some_and(|ext| ext == "java"))
+            .map(|(path, source)| {
+                (
+                    path.to_path_buf(),
+                    source.replace(&format!("import {package}.model.*;\n"), ""),
+                )
+            })
+            .collect::<Vec<_>>();
+        for (path, source) in imports {
+            tree.replace(GeneratedFile::new(path, source)?)?;
+        }
+    }
     Ok(tree)
 }
 
@@ -1478,7 +1493,7 @@ fn render_resource_chunk(
         )
     };
     let mut output = format!(
-        "package {package}.internal.resources;\n\nimport {package}.*;\nimport {package}.model.*;\n\n{NOTICE}\n/** Bounded operations for the {resource} resource. */\npublic class {resource}ResourcePart{index:03}{parent} {{\n{field}\n{constructor}\n\n",
+        "package {package}.internal.resources;\n\nimport com.fasterxml.jackson.databind.JsonNode;\nimport java.util.List;\nimport java.util.Map;\nimport {package}.*;\nimport {package}.model.*;\n\n{NOTICE}\n/** Bounded operations for the {resource} resource. */\npublic class {resource}ResourcePart{index:03}{parent} {{\n{field}\n{constructor}\n\n",
         field = if index == 0 {
             "    protected final Client client;\n"
         } else {

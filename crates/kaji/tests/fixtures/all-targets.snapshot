@@ -1,10 +1,10 @@
-sdk/dotnet/ApiException.cs	487	986dad8a9e037919
-sdk/dotnet/KajiClient.cs	16437	fd593a0afeb76bc2
+sdk/dotnet/ApiException.cs	528	d35edeb501135f6f
+sdk/dotnet/KajiClient.cs	16454	e84545564b7fe1c1
 sdk/dotnet/KajiContractApiSdk.csproj	454	05f103a9c11ac4c0
-sdk/dotnet/Models/Contact_00000_87bae2710b2492c3.cs	368	c08c041b70bad996
-sdk/dotnet/Operations/KajiClientOperations000.cs	689	40eea8fe99322898
+sdk/dotnet/Models/Contact_00000_87bae2710b2492c3.cs	385	1673b1726a45efff
+sdk/dotnet/Operations/KajiClientOperations000.cs	706	2e8efe67b9252cd7
 sdk/dotnet/README.md	2068	dbaa28a46b5dbbfa
-sdk/dotnet/Resources/ContactsResource000.cs	600	b7bf1fe9d1997f23
+sdk/dotnet/Resources/ContactsResource000.cs	641	8d71aab73a601475
 sdk/dotnet/STYLE_GUIDE.md	2007	9791f08491c308a0
 sdk/elixir/README.md	2173	86f99f703f46243c
 sdk/elixir/STYLE_GUIDE.md	942	2d8892e1eee0e3dd
@@ -40,7 +40,7 @@ sdk/java/src/main/java/io/kaji/kajicontractapi/ClientHooks.java	361	855f116cb2c9
 sdk/java/src/main/java/io/kaji/kajicontractapi/ContactsResource.java	321	147fdfe8f5ff9edb
 sdk/java/src/main/java/io/kaji/kajicontractapi/RetryConfig.java	651	1c9e2128a970b225
 sdk/java/src/main/java/io/kaji/kajicontractapi/internal/Operations000.java	1109	9d3bd9c482de49f7
-sdk/java/src/main/java/io/kaji/kajicontractapi/internal/resources/ContactsResourcePart000.java	444	91d9f65f94fa5c2e
+sdk/java/src/main/java/io/kaji/kajicontractapi/internal/resources/ContactsResourcePart000.java	537	48dc958d4762ac7b
 sdk/java/src/main/java/io/kaji/kajicontractapi/model/Contact.java	1018	96ba76f3337466f2
 sdk/mock-server/.env.example	20	2a938fbab76d2e73
 sdk/mock-server/Dockerfile	195	bb4c0a79e9e7fa35

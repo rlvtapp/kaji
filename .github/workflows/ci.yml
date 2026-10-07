@@ -278,24 +278,12 @@ jobs:
           cargo test -p kaji-plugin-csharp native_models_preserve_alias_union_and_unknown_enum_wire_values -- --ignored
           cargo test -p kaji-plugin-csharp native_omitted_and_null_presence_roundtrip -- --ignored
           cargo test -p kaji-plugin-csharp native_multipart_http_bytes_preserve_unicode_falsy_and_binary -- --ignored
-      - name: Verify native PHP pagination generation and iteration
+      - name: Verify all native PHP probes
         if: matrix.language == 'PHP'
-        run: |
-          cargo test -p kaji-plugin-php page_pagination_executes_native_query_body_and_selectors -- --ignored
-          cargo test -p kaji-plugin-php native_auto_idempotency_preserves_key_and_scopes_retry_header -- --ignored
-          cargo test -p kaji-plugin-php native_retry_after_ms_has_precedence_and_configured_cap -- --ignored
-          cargo test -p kaji-plugin-php native_required_null_and_scalar_query_serialization -- --ignored
-          cargo test -p kaji-plugin-php webhooks::tests::generated_webhook_verifier_executes_native_security_cases -- --ignored
-          cargo test -p kaji-plugin-php generated_operation_tests_execute_native_public_calls_and_decode_failures -- --ignored
-      - name: Verify native Elixir pagination generation and iteration
+        run: cargo test -p kaji-plugin-php -- --ignored
+      - name: Verify all native Elixir probes
         if: matrix.language == 'Elixir'
-        run: |
-          cargo test -p kaji-plugin-elixir generated_page_stream_executes_lazily -- --ignored
-          cargo test -p kaji-plugin-elixir elixir_customer_middleware_executes -- --ignored
-          cargo test -p kaji-plugin-elixir native_required_null_and_optional_omission -- --ignored
-          cargo test -p kaji-plugin-elixir webhooks::tests::generated_webhook_verifier_executes_native_security_cases -- --ignored
-          cargo test -p kaji-plugin-elixir generated_operation_tests_execute_native_public_calls_and_decode_failures -- --ignored
-          cargo test -p kaji-plugin-elixir generated_offset_and_url_streams_preserve_laziness_and_auth_origin -- --ignored
+        run: cargo test -p kaji-plugin-elixir -- --ignored
       - name: Verify native Swift middleware models pagination and cancellation
         if: matrix.language == 'Swift'
         run: cargo test -p kaji-plugin-swift -- --ignored

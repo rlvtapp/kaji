@@ -1258,19 +1258,9 @@ fn elixir_type(value: &SchemaValue, module: &str) -> String {
         SchemaKind::Boolean => "boolean()".into(),
         SchemaKind::Integer => "integer()".into(),
         SchemaKind::Number => "number()".into(),
-        SchemaKind::String => {
-            if value.enum_values.is_empty() {
-                "String.t()".into()
-            } else {
-                value
-                    .enum_values
-                    .iter()
-                    .filter_map(|item| item.as_str())
-                    .map(|item| format!("\"{}\"", escape_elixir_string(item)))
-                    .collect::<Vec<_>>()
-                    .join(" | ")
-            }
-        }
+        // Elixir typespecs cannot express binary literal unions. Keep wire
+        // enums as strings rather than inventing atom values for the API.
+        SchemaKind::String => "String.t()".into(),
         SchemaKind::Array { items } => format!("[{}]", elixir_type(items, module)),
         SchemaKind::Object {
             additional_properties: AdditionalProperties::Schema { value },
@@ -1547,6 +1537,34 @@ mod tests {
             }],
             annotations: Default::default(),
         }
+    }
+
+    #[test]
+    #[ignore = "requires Elixir; dependency-free model required-null probe"]
+    fn native_string_enum_typespecs_preserve_wire_strings() {
+        let mut value = SchemaValue::new(SchemaKind::String);
+        value.enum_values = vec![serde_json::json!("temperature_2m"), serde_json::json!("λ")];
+        value.nullable = true;
+        let array = SchemaValue::new(SchemaKind::Array {
+            items: Box::new(value.clone()),
+        });
+        let source = format!(
+            "defmodule EnumProbe do\n @type wire :: {}\n @type list_wire :: {}\n @spec echo(wire()) :: wire()\n def echo(value), do: value\nend\nfor value <- [\"temperature_2m\", \"λ\", \"future\", nil] do\n if EnumProbe.echo(value) != value, do: raise(\"wire value changed\")\nend\n",
+            elixir_type(&value, "EnumProbe"),
+            elixir_type(&array, "EnumProbe")
+        );
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("probe.exs");
+        std::fs::write(&path, source).unwrap();
+        let output = std::process::Command::new("elixir")
+            .arg(path)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     #[test]
