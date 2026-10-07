@@ -19,20 +19,36 @@ export function validateManifest(value){
     }
 }
 validateManifest(manifest)
+export function validateKeyLifetime(scenario,requests){
+    const keys=requests.map(request=>request.headers['x-once'])
+    if(scenario.key_policy==='stable'||scenario.key_policy==='fresh'){
+        for(const key of keys)assert.match(key,/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,`${scenario.id}: secure UUID`)
+        assert.equal(new Set(keys).size,scenario.key_policy==='fresh'?keys.length:1,`${scenario.id}: key lifetime`)
+    }
+    if(scenario.key_policy==='override')for(const key of keys)assert.equal(key,scenario.caller_key,`${scenario.id}: caller key`)
+    if(scenario.key_policy==='blank')for(const key of keys)assert.equal((key??'').trim(),'',`${scenario.id}: blank key replaced`)
+}
 export async function wireServer(value=manifest){
-    const counts=new Map();const violations=[]
-    const server=createServer((request,response)=>{
+    const counts=new Map();const requests=new Map();const violations=[]
+    const server=createServer(async(request,response)=>{
         const scenario=value.scenarios.find(s=>request.headers.authorization===`Bearer ${s.id}`)
         if(!scenario){violations.push('missing or unexpected bearer credential');response.writeHead(401);response.end('{}');return}
-        if(request.method!==value.operation.method||request.url!==value.operation.path)violations.push(`${scenario.id}: method/path mismatch`)
+        const operation=scenario.operation??value.operation
+        const url=new URL(request.url,'http://fixture.test')
+        if(request.method!==operation.method||url.pathname!==operation.path)violations.push(`${scenario.id}: method/path mismatch`)
         if(request.headers['x-contract-middleware']!=='yes')violations.push(`${scenario.id}: consumer middleware header missing`)
         const count=counts.get(scenario.id)??0;counts.set(scenario.id,count+1)
+        const expected=scenario.requests_wire?.[count]
+        if(expected?.query)try{assert.deepEqual(Object.fromEntries(Object.keys(expected.query).map(key=>[key,Array.isArray(expected.query[key])?url.searchParams.getAll(key):url.searchParams.get(key)])),expected.query);assert.equal(new Set(url.searchParams.keys()).size,Object.keys(expected.query).length)}catch{violations.push(`${scenario.id}: query mismatch`)}
+        if(expected?.headers)for(const [name,value]of Object.entries(expected.headers))if(request.headers[name]!==value)violations.push(`${scenario.id}: header mismatch ${name}`)
+        if(expected?.body){let body='';for await(const chunk of request)body+=chunk;try{assert.deepEqual(JSON.parse(body),expected.body)}catch{violations.push(`${scenario.id}: body mismatch`)}}
+        const captures=requests.get(scenario.id)??[];captures.push({method:request.method,path:request.url,headers:{...request.headers}});requests.set(scenario.id,captures)
         const reply=scenario.responses[Math.min(count,scenario.responses.length-1)]
         response.writeHead(reply.status,{'content-type':'application/json','connection':'close','retry-after':'0'})
         response.end(reply.body)
     })
     await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve)})
-    return {url:`http://127.0.0.1:${server.address().port}`,counts,violations,close:()=>new Promise(resolve=>server.close(resolve))}
+    return {url:`http://127.0.0.1:${server.address().port}`,counts,requests,violations,close:()=>new Promise(resolve=>server.close(resolve))}
 }
 export function execute(program,args,options={}){
     return new Promise((resolve,reject)=>{
@@ -107,10 +123,11 @@ export async function run(language,source){
         const [program,args,environment]=await prepare(language,sdk,root)
         server=await wireServer()
         for(const scenario of manifest.scenarios.filter(s=>manifest.coverage[language].supported.includes(s.id))){
-            const stdout=await execute(program,args,{cwd:sdk,env:{...environment,KAJI_CONTRACT_URL:server.url,KAJI_CONTRACT_CASE:scenario.id},timeout:30000})
+            const stdout=await execute(program,args,{cwd:sdk,env:{...environment,KAJI_CONTRACT_URL:server.url,KAJI_CONTRACT_CASE:scenario.id,KAJI_CONTRACT_SCENARIO:JSON.stringify(scenario)},timeout:30000})
             const result=JSON.parse(stdout.trim().split('\n').at(-1));assert.equal(result.outcome,scenario.outcome,`${language}/${scenario.id}: outcome`)
             if(scenario.outcome==='success')assert.equal(result.id,scenario.contact_id,`${language}/${scenario.id}: model`)
             assert.equal(server.counts.get(scenario.id),scenario.requests,`${language}/${scenario.id}: HTTP attempt count`)
+            validateKeyLifetime(scenario,server.requests.get(scenario.id)??[])
             assert.deepEqual(server.violations,[],`${language}/${scenario.id}: wire contract`)
             console.log(`PASS ${language}/${scenario.id}`)
         }

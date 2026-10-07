@@ -57,3 +57,49 @@ test('manual workflow plan fails closed on repositories prefixes mutable refs an
   assert.equal(validateRecipe(recipe,input).packages.length,1);
   recipe.packages[0].name='@production/sdk';assert.throws(()=>validateRecipe(recipe,input),/prefix/);
 });
+
+test('every failed delivery phase stops subsequent checks and cleans its checkout', async t => {
+  const {existsSync, readFileSync} = await import('node:fs');
+  for (let failedStep=0; failedStep<7; failedStep++) {
+    await t.test(`failure at phase ${failedStep+1}`, () => {
+      const calls=[];let temporaryRoot;
+      assert.throws(() => execute(deliveryPlan({mode:'mock'}), (program,args,options) => {
+        temporaryRoot=options.cwd;
+        assert(existsSync(temporaryRoot));
+        const recipe=JSON.parse(readFileSync(`${temporaryRoot}/kaji.json`,'utf8'));
+        assert.equal(recipe.packages[0].release.publisher.registry,'npm');
+        assert.equal(options.encoding,'utf8');
+        calls.push(args);
+        return {status:calls.length-1===failedStep?1:0,stdout:'{"added":[],"modified":[],"removed":[]}'};
+      }), /delivery step failed/);
+      assert.equal(calls.length,failedStep+1);
+      assert(!existsSync(temporaryRoot), 'failed checkout must be removed');
+      assert(!calls.some(args=>args.includes('publish')||args.includes('pr')||args.includes('install')));
+    });
+  }
+});
+
+test('nonempty drift and malformed reports cannot reach builds or delivery setup', async t => {
+  const {existsSync}=await import('node:fs');
+  for (const report of [
+    '{"added":["untracked.ts"],"modified":[],"removed":[]}',
+    '{"added":[],"modified":["client.ts"],"removed":[]}',
+    '{"added":[],"modified":[],"removed":["old.ts"]}',
+    '{"added":[],"modified":[]}',
+    'not a JSON report',
+    '{broken'
+  ]) {
+    let calls=0;let root;
+    assert.throws(()=>execute(deliveryPlan({mode:'mock'}),(_,args,options)=>{
+      root=options.cwd;calls++;
+      return {status:0,stdout:calls===2?report:''};
+    }));
+    assert.equal(calls,2);assert(!existsSync(root));
+  }
+  await t.test('valid reports and completed preview also clean temporary sources',()=>{
+    let root;const result=execute(deliveryPlan({mode:'mock'}),(_,args,options)=>{
+      root=options.cwd;return {status:0,stdout:'{"added":[],"modified":[],"removed":[]}'};
+    });
+    assert.equal(result.steps,7);assert(!existsSync(root));
+  });
+});

@@ -67,6 +67,291 @@
       ],
       "outcome": "error",
       "requests": 1
+    },
+    {
+      "id": "create_retry",
+      "action": "createContact",
+      "operation": {
+        "id": "createContact",
+        "method": "POST",
+        "path": "/contacts"
+      },
+      "responses": [
+        {
+          "status": 503,
+          "body": "{}"
+        },
+        {
+          "status": 200,
+          "body": "{\"id\":\"mutated\"}"
+        }
+      ],
+      "outcome": "success",
+      "contact_id": "mutated",
+      "requests": 2,
+      "key_policy": "stable"
+    },
+    {
+      "id": "patch_retry",
+      "action": "patchContact",
+      "operation": {
+        "id": "patchContact",
+        "method": "PATCH",
+        "path": "/contacts"
+      },
+      "responses": [
+        {
+          "status": 503,
+          "body": "{}"
+        },
+        {
+          "status": 200,
+          "body": "{\"id\":\"mutated\"}"
+        }
+      ],
+      "outcome": "success",
+      "contact_id": "mutated",
+      "requests": 2,
+      "key_policy": "stable"
+    },
+    {
+      "id": "unsafe_post",
+      "action": "unsafeCreateContact",
+      "operation": {
+        "id": "unsafeCreateContact",
+        "method": "POST",
+        "path": "/unsafe"
+      },
+      "responses": [
+        {
+          "status": 503,
+          "body": "{}"
+        }
+      ],
+      "outcome": "error",
+      "contact_id": "mutated",
+      "requests": 1
+    },
+    {
+      "id": "unsafe_patch",
+      "action": "unsafePatchContact",
+      "operation": {
+        "id": "unsafePatchContact",
+        "method": "PATCH",
+        "path": "/unsafe"
+      },
+      "responses": [
+        {
+          "status": 503,
+          "body": "{}"
+        }
+      ],
+      "outcome": "error",
+      "contact_id": "mutated",
+      "requests": 1
+    },
+    {
+      "id": "key_override",
+      "action": "createContact",
+      "operation": {
+        "id": "createContact",
+        "method": "POST",
+        "path": "/contacts"
+      },
+      "responses": [
+        {
+          "status": 503,
+          "body": "{}"
+        },
+        {
+          "status": 200,
+          "body": "{\"id\":\"mutated\"}"
+        }
+      ],
+      "outcome": "success",
+      "contact_id": "mutated",
+      "requests": 2,
+      "caller_key": "caller-key",
+      "key_policy": "override"
+    },
+    {
+      "id": "key_empty",
+      "action": "createContact",
+      "operation": {
+        "id": "createContact",
+        "method": "POST",
+        "path": "/contacts"
+      },
+      "responses": [
+        {
+          "status": 503,
+          "body": "{}"
+        }
+      ],
+      "outcome": "error",
+      "contact_id": "mutated",
+      "requests": 1,
+      "caller_key": "",
+      "key_policy": "blank"
+    },
+    {
+      "id": "key_blank",
+      "action": "createContact",
+      "operation": {
+        "id": "createContact",
+        "method": "POST",
+        "path": "/contacts"
+      },
+      "responses": [
+        {
+          "status": 503,
+          "body": "{}"
+        }
+      ],
+      "outcome": "error",
+      "contact_id": "mutated",
+      "requests": 1,
+      "caller_key": "   ",
+      "key_policy": "blank"
+    },
+    {
+      "id": "key_fresh",
+      "action": "createContact",
+      "operation": {
+        "id": "createContact",
+        "method": "POST",
+        "path": "/contacts"
+      },
+      "responses": [
+        {
+          "status": 200,
+          "body": "{\"id\":\"first\"}"
+        },
+        {
+          "status": 200,
+          "body": "{\"id\":\"second\"}"
+        }
+      ],
+      "outcome": "success",
+      "contact_id": "second",
+      "requests": 2,
+      "repeats": 2,
+      "key_policy": "fresh"
+    },
+    {
+      "id": "page_short",
+      "action": "listContactsPages",
+      "operation": {
+        "id": "listContactsPages",
+        "method": "GET",
+        "path": "/contacts"
+      },
+      "responses": [
+        {
+          "status": 200,
+          "body": "{\"items\":[{\"id\":\"one\"},{\"id\":\"two\"}]}"
+        },
+        {
+          "status": 200,
+          "body": "{\"items\":[{\"id\":\"three\"}]}"
+        }
+      ],
+      "outcome": "success",
+      "contact_id": "one,two,three",
+      "requests": 2,
+      "page": 1,
+      "limit": 2,
+      "requests_wire": [
+        {
+          "query": {
+            "page": "1",
+            "limit": "2"
+          }
+        },
+        {
+          "query": {
+            "page": "2",
+            "limit": "2"
+          }
+        }
+      ]
+    },
+    {
+      "id": "strict_missing",
+      "action": "getContact",
+      "operation": {
+        "id": "getContact",
+        "method": "GET",
+        "path": "/v1/contacts/current"
+      },
+      "responses": [
+        {
+          "status": 200,
+          "body": "{}"
+        }
+      ],
+      "outcome": "error",
+      "contact_id": "mutated",
+      "requests": 1,
+      "validate_responses": true
+    },
+    {
+      "id": "strict_wrong",
+      "action": "getContact",
+      "operation": {
+        "id": "getContact",
+        "method": "GET",
+        "path": "/v1/contacts/current"
+      },
+      "responses": [
+        {
+          "status": 200,
+          "body": "{\"id\":4}"
+        }
+      ],
+      "outcome": "error",
+      "contact_id": "mutated",
+      "requests": 1,
+      "validate_responses": true
+    },
+    {
+      "id": "serialize_controls",
+      "action": "echoWire",
+      "operation": {
+        "id": "echoWire",
+        "method": "POST",
+        "path": "/wire/caf%C3%A9%2F%E9%9B%AA"
+      },
+      "responses": [
+        {
+          "status": 200,
+          "body": "{\"id\":\"wire\"}"
+        }
+      ],
+      "outcome": "success",
+      "contact_id": "wire",
+      "requests": 1,
+      "requests_wire": [
+        {
+          "query": {
+            "text": "héllo 雪",
+            "flag": "false",
+            "count": "0",
+            "tags": [
+              "a",
+              "b"
+            ]
+          },
+          "headers": {
+            "x-label": "caller"
+          },
+          "body": {
+            "enabled": false,
+            "count": 0,
+            "note": null
+          }
+        }
+      ]
     }
   ],
   "coverage": {
@@ -76,8 +361,21 @@
         "future_fields",
         "retry_503",
         "status_400",
-        "invalid_json"
-      ]
+        "invalid_json",
+        "create_retry",
+        "patch_retry",
+        "unsafe_post",
+        "unsafe_patch",
+        "key_override",
+        "key_empty",
+        "key_blank",
+        "key_fresh",
+        "page_short",
+        "strict_missing",
+        "strict_wrong",
+        "serialize_controls"
+      ],
+      "unsupported": {}
     },
     "go": {
       "supported": [
@@ -85,8 +383,21 @@
         "future_fields",
         "retry_503",
         "status_400",
-        "invalid_json"
-      ]
+        "invalid_json",
+        "create_retry",
+        "patch_retry",
+        "unsafe_post",
+        "unsafe_patch",
+        "key_override",
+        "key_empty",
+        "key_blank",
+        "key_fresh",
+        "page_short",
+        "strict_missing",
+        "strict_wrong",
+        "serialize_controls"
+      ],
+      "unsupported": {}
     },
     "python": {
       "supported": [
@@ -94,8 +405,21 @@
         "future_fields",
         "retry_503",
         "status_400",
-        "invalid_json"
-      ]
+        "invalid_json",
+        "create_retry",
+        "patch_retry",
+        "unsafe_post",
+        "unsafe_patch",
+        "key_override",
+        "key_empty",
+        "key_blank",
+        "key_fresh",
+        "page_short",
+        "strict_missing",
+        "strict_wrong",
+        "serialize_controls"
+      ],
+      "unsupported": {}
     },
     "rust": {
       "supported": [
@@ -103,29 +427,66 @@
         "future_fields",
         "retry_503",
         "status_400",
-        "invalid_json"
-      ]
+        "invalid_json",
+        "create_retry",
+        "patch_retry",
+        "unsafe_post",
+        "unsafe_patch",
+        "key_override",
+        "key_empty",
+        "key_blank",
+        "key_fresh",
+        "page_short",
+        "strict_missing",
+        "strict_wrong",
+        "serialize_controls"
+      ],
+      "unsupported": {}
     },
     "swift": {
       "supported": [
         "success",
         "future_fields",
         "status_400",
-        "invalid_json"
+        "invalid_json",
+        "unsafe_post",
+        "unsafe_patch",
+        "key_empty",
+        "key_blank",
+        "key_fresh",
+        "page_short",
+        "strict_missing",
+        "strict_wrong",
+        "serialize_controls"
       ],
       "unsupported": {
-        "retry_503": "This Foundation runtime has no automatic retry policy."
+        "retry_503": "This Foundation runtime has no automatic retry policy.",
+        "create_retry": "This native transport has no automatic retry policy.",
+        "patch_retry": "This native transport has no automatic retry policy.",
+        "key_override": "This native transport has no automatic retry policy."
       }
     },
     "ruby": {
       "supported": [
         "success",
         "future_fields",
-        "status_400"
+        "status_400",
+        "unsafe_post",
+        "unsafe_patch",
+        "key_empty",
+        "key_blank",
+        "key_fresh",
+        "page_short",
+        "strict_missing",
+        "strict_wrong",
+        "serialize_controls"
       ],
       "unsupported": {
         "retry_503": "This Net::HTTP runtime has no automatic retries.",
-        "invalid_json": "The current runtime returns raw response text when JSON parsing fails."
+        "invalid_json": "The current runtime returns raw response text when JSON parsing fails.",
+        "create_retry": "This native transport has no automatic retry policy.",
+        "patch_retry": "This native transport has no automatic retry policy.",
+        "key_override": "This native transport has no automatic retry policy."
       }
     },
     "java": {
@@ -134,9 +495,23 @@
         "future_fields",
         "retry_503",
         "status_400",
-        "invalid_json"
+        "invalid_json",
+        "create_retry",
+        "patch_retry",
+        "unsafe_post",
+        "unsafe_patch",
+        "key_override",
+        "key_empty",
+        "key_blank",
+        "key_fresh",
+        "page_short",
+        "serialize_controls"
       ],
-      "verification": "Harness implemented; native execution is required in CI. Not verified locally."
+      "verification": "Harness implemented; native execution is required in CI. Not verified locally.",
+      "unsupported": {
+        "strict_missing": "Native model decoding is permissive; this harness has no strict structural response validation.",
+        "strict_wrong": "Native model decoding is permissive; this harness has no strict structural response validation."
+      }
     },
     "csharp": {
       "supported": [
@@ -144,9 +519,22 @@
         "future_fields",
         "retry_503",
         "status_400",
-        "invalid_json"
+        "invalid_json",
+        "create_retry",
+        "patch_retry",
+        "unsafe_post",
+        "unsafe_patch",
+        "key_override",
+        "key_empty",
+        "key_blank",
+        "key_fresh",
+        "page_short",
+        "strict_missing",
+        "strict_wrong",
+        "serialize_controls"
       ],
-      "verification": "Harness implemented; native execution is required in CI. Not verified locally."
+      "verification": "Harness implemented; native execution is required in CI. Not verified locally.",
+      "unsupported": {}
     },
     "php": {
       "supported": [
@@ -154,9 +542,23 @@
         "future_fields",
         "retry_503",
         "status_400",
-        "invalid_json"
+        "invalid_json",
+        "create_retry",
+        "patch_retry",
+        "unsafe_post",
+        "unsafe_patch",
+        "key_override",
+        "key_empty",
+        "key_blank",
+        "key_fresh",
+        "page_short",
+        "serialize_controls"
       ],
-      "verification": "Harness implemented; native execution is required in CI. Not verified locally."
+      "verification": "Harness implemented; native execution is required in CI. Not verified locally.",
+      "unsupported": {
+        "strict_missing": "Native model decoding is permissive; this harness has no strict structural response validation.",
+        "strict_wrong": "Native model decoding is permissive; this harness has no strict structural response validation."
+      }
     },
     "elixir": {
       "supported": [
@@ -164,9 +566,23 @@
         "future_fields",
         "retry_503",
         "status_400",
-        "invalid_json"
+        "invalid_json",
+        "create_retry",
+        "patch_retry",
+        "unsafe_post",
+        "unsafe_patch",
+        "key_override",
+        "key_empty",
+        "key_blank",
+        "key_fresh",
+        "page_short",
+        "serialize_controls"
       ],
-      "verification": "Harness implemented; native execution is required in CI. Not verified locally."
+      "verification": "Harness implemented; native execution is required in CI. Not verified locally.",
+      "unsupported": {
+        "strict_missing": "Native model decoding is permissive; this harness has no strict structural response validation.",
+        "strict_wrong": "Native model decoding is permissive; this harness has no strict structural response validation."
+      }
     }
   }
 }

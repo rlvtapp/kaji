@@ -1,4 +1,4 @@
-//! Export a single neutral wire fixture for the standalone native conformance runner.
+//! Export a neutral multioperation wire fixture for the native conformance runner.
 mod support;
 use kaji::{generate_with_security_catalog, prelude::*};
 use kaji_core::{SecurityRequirement, SecurityScheme, SecuritySchemeCatalog, SecuritySchemeKind};
@@ -55,7 +55,92 @@ fn export_runtime_contract_fixture() {
         "x-kaji-idempotency".into(),
         serde_json::json!({"header":"X-Once", "auto_generate":true}),
     );
-    api.operations.push(creating);
+    let mut patching = creating.clone();
+    patching.id = "patchContact".into();
+    patching.method = kaji_core::HttpMethod::Patch;
+    let mut unsafe_creating = creating.clone();
+    unsafe_creating.id = "unsafeCreateContact".into();
+    unsafe_creating.path = "/unsafe".into();
+    unsafe_creating.annotations.clear();
+    let mut unsafe_patching = unsafe_creating.clone();
+    unsafe_patching.id = "unsafePatchContact".into();
+    unsafe_patching.method = kaji_core::HttpMethod::Patch;
+    api.operations
+        .extend([creating, patching, unsafe_creating, unsafe_patching]);
+    let mut nullable_note = kaji_core::SchemaValue::new(kaji_core::SchemaKind::String);
+    nullable_note.nullable = true;
+    api.schemas.push(kaji_core::Schema::new(
+        "WireInput",
+        kaji_core::SchemaValue::new(kaji_core::SchemaKind::Object {
+            fields: vec![
+                kaji_core::Field {
+                    name: "enabled".into(),
+                    value: kaji_core::SchemaValue::new(kaji_core::SchemaKind::Boolean),
+                    required: true,
+                    annotations: Default::default(),
+                },
+                kaji_core::Field {
+                    name: "count".into(),
+                    value: kaji_core::SchemaValue::new(kaji_core::SchemaKind::Integer),
+                    required: true,
+                    annotations: Default::default(),
+                },
+                kaji_core::Field {
+                    name: "note".into(),
+                    value: nullable_note,
+                    required: true,
+                    annotations: Default::default(),
+                },
+                kaji_core::Field {
+                    name: "missing".into(),
+                    value: kaji_core::SchemaValue::new(kaji_core::SchemaKind::String),
+                    required: false,
+                    annotations: Default::default(),
+                },
+            ],
+            additional_properties: kaji_core::AdditionalProperties::Forbidden,
+        }),
+    ));
+    let mut echo = api.operations[0].clone();
+    echo.id = "echoWire".into();
+    echo.method = kaji_core::HttpMethod::Post;
+    echo.path = "/wire/{key}".into();
+    echo.parameters = vec![];
+    for (name, location, kind, required) in [
+        ("key", "path", kaji_core::SchemaKind::String, true),
+        ("text", "query", kaji_core::SchemaKind::String, false),
+        ("flag", "query", kaji_core::SchemaKind::Boolean, false),
+        ("count", "query", kaji_core::SchemaKind::Integer, false),
+        (
+            "tags",
+            "query",
+            kaji_core::SchemaKind::Array {
+                items: Box::new(kaji_core::SchemaValue::new(kaji_core::SchemaKind::String)),
+            },
+            false,
+        ),
+        ("X-Label", "header", kaji_core::SchemaKind::String, false),
+    ] {
+        echo.parameters.push(kaji_core::OperationParameter {
+            name: name.into(),
+            location: location.into(),
+            required,
+            schema: Some(kaji_core::SchemaValue::new(kind)),
+            description: None,
+            annotations: Default::default(),
+        });
+    }
+    echo.request_body = Some(kaji_core::OperationRequestBody {
+        required: true,
+        media_types: vec![kaji_core::OperationMediaType {
+            content_type: "application/json".into(),
+            schema: Some(kaji_core::SchemaValue::reference(
+                "#/components/schemas/WireInput",
+            )),
+        }],
+        description: None,
+    });
+    api.operations.push(echo);
     let catalog = SecuritySchemeCatalog {
         schemes: vec![SecurityScheme {
             name: "Bearer".into(),
