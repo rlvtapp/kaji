@@ -84,6 +84,10 @@ struct SidecarOperation {
     #[serde(default)]
     request_examples: Vec<SidecarExample>,
     #[serde(default)]
+    servers: Vec<Value>,
+    #[serde(default)]
+    tags: Vec<String>,
+    #[serde(default)]
     security_requirements: Vec<SidecarSecurityRequirement>,
 }
 
@@ -100,6 +104,8 @@ struct SidecarBody {
 struct SidecarResponse {
     code: String,
     #[serde(default)]
+    example_json: Option<String>,
+    #[serde(default)]
     description: Option<String>,
     #[serde(default)]
     content_type: Option<String>,
@@ -110,6 +116,10 @@ struct SidecarResponse {
 #[derive(Debug, Deserialize)]
 struct SidecarParameter {
     name: String,
+    #[serde(default)]
+    allow_reserved: Option<bool>,
+    #[serde(default)]
+    example: Option<Value>,
     #[serde(rename = "in")]
     location: String,
     #[serde(default)]
@@ -260,6 +270,22 @@ pub fn load_operations(output_dir: &Path, name: String, version: String) -> Resu
         let mut annotations = document.extensions;
         add_optional_annotation(&mut annotations, "summary", document.summary);
         add_optional_annotation(&mut annotations, "description", document.description);
+        if !document.servers.is_empty() {
+            annotations.insert(
+                "kaji.openapi.servers".into(),
+                serde_json::to_value(&document.servers)?,
+            );
+        }
+        if !document.tags.is_empty() {
+            annotations.insert("tags".into(), serde_json::to_value(&document.tags)?);
+        }
+        let response_examples = document.responses.iter().filter_map(|response| response.example_json.as_ref().map(|example| serde_json::json!({"status":response.code, "content_type":response.content_type, "example_json":example, "label":response.description}))).collect::<Vec<_>>();
+        if !response_examples.is_empty() {
+            annotations.insert(
+                "kaji.docs.response_examples".into(),
+                serde_json::to_value(response_examples)?,
+            );
+        }
         if document.deprecated {
             annotations.insert("deprecated".into(), Value::Bool(true));
         }
@@ -302,6 +328,12 @@ pub fn load_operations(output_dir: &Path, name: String, version: String) -> Resu
                     add_optional_annotation(&mut annotations, "style", parameter.style);
                     if let Some(explode) = parameter.explode {
                         annotations.insert("explode".into(), Value::Bool(explode));
+                    }
+                    if let Some(value) = parameter.allow_reserved {
+                        annotations.insert("allowReserved".into(), Value::Bool(value));
+                    }
+                    if let Some(value) = parameter.example {
+                        annotations.insert("example".into(), value);
                     }
                     OperationParameter {
                         name: parameter.name,
@@ -961,7 +993,10 @@ mod tests {
                 {"label":"Request application/json: minimal", "content_type":"application/json", "example_json":"{\"name\":\"widget\"}"},
                 {"label":"Request application/json: complete", "content_type":"application/json", "example_json":"{\"name\":\"widget\",\"enabled\":true}"}
               ],
-              "responses":[{"code":"201"}]
+              "servers":[{"url":"https://{region}.example.test","variables":[{"name":"region","default":"eu"}]}],
+              "tags":["Widgets"],
+              "parameters":[{"name":"q","in":"query","allow_reserved":true,"example":"name=value"}],
+              "responses":[{"code":"201","content_type":"application/json","example_json":"{\"id\":\"w1\"}"}]
             }"##,
         )
         .unwrap();
@@ -972,6 +1007,22 @@ mod tests {
             .get("kaji.docs.request_examples")
             .and_then(Value::as_array)
             .unwrap();
+        let operation = &api.operations[0];
+        assert_eq!(
+            operation.annotations["kaji.openapi.servers"][0]["variables"][0]["default"],
+            "eu"
+        );
+        assert_eq!(operation.annotations["tags"][0], "Widgets");
+        assert_eq!(operation.parameters[0].annotations["allowReserved"], true);
+        assert_eq!(operation.parameters[0].annotations["example"], "name=value");
+        assert_eq!(
+            operation.annotations["kaji.docs.response_examples"][0]["status"],
+            "201"
+        );
+        assert_eq!(
+            operation.annotations["kaji.docs.response_examples"][0]["example_json"],
+            r#"{"id":"w1"}"#
+        );
         assert_eq!(examples.len(), 2);
         assert_eq!(examples[0]["label"], "Request application/json: minimal");
         assert_eq!(examples[0]["content_type"], "application/json");

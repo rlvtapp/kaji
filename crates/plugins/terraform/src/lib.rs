@@ -1,13 +1,24 @@
 //! Terraform Plugin Framework provider generation.
 //!
-//! OpenAPI describes HTTP operations, not Terraform lifecycle semantics. A
-//! caller must therefore map every resource to explicit CRUD operation IDs.
-//! Kaji validates those IDs and generates a working JSON-body resource rather
-//! than guessing a lifecycle from paths or HTTP verbs alone.
+//! `provider()` consumes a validated typed entity catalog, inferred conservatively
+//! from conventional CRUD paths or supplied explicit bindings. The initial v1
+//! supports root scalar objects and a single string identity. `entities()` exposes
+//! the same catalog independently for custom consumers and renderers.
+//!
+//! `sdk().resource(...)` remains the legacy raw JSON-body prototype; its state
+//! representation is not migrated implicitly to the typed provider.
 
 use anyhow::{Result, bail};
 use kaji_core::{Api, GeneratedFile, GeneratedTree, HttpMethod, Operation};
 
+pub mod plan;
+mod provider;
+mod typed_render;
+pub use plan::{
+    AttributePlan, AuthenticationPlan, EntityCatalog, PlanDiagnostic, ResourceBinding,
+    ResourcePlan, ScalarType, analyze, analyze_with_security,
+};
+pub use provider::{Entities, Provider, entities, provider};
 mod package;
 pub use package::{PackageExt, Sdk, Settings, Terraform, TerraformResource, package, sdk};
 

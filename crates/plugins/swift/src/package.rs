@@ -14,6 +14,12 @@ impl Language for Swift {
     const NAME: &'static str = "swift";
     type Settings = Settings;
     type Workspace = ();
+    fn bundle_middleware(
+        tree: &mut kaji_core::GeneratedTree,
+        middleware: &[kaji_core::customization::BundledMiddleware],
+    ) -> Result<()> {
+        crate::bundled::bundle(tree, middleware)
+    }
 }
 
 pub fn package(dir: impl Into<String>) -> Package<Swift> {

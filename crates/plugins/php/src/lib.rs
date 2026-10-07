@@ -126,8 +126,32 @@ fn readme(api: &Api, namespace: &str, style: SdkClientStyle) -> String {
             "```php\n$client = new Client($httpClient, 'https://api.example.com', getenv('API_KEY'));\n$contact = $client->contacts()->get($id);\n```"
         }
     };
+    let middleware = r#"## Runtime customization
+
+Wrap the injected PSR-18 client to apply customer request and response policy:
+
+```php
+$policyClient = new class($httpClient) implements \Psr\Http\Client\ClientInterface {
+    public function __construct(private \Psr\Http\Client\ClientInterface $next) {}
+    public function sendRequest(\Psr\Http\Message\RequestInterface $request): \Psr\Http\Message\ResponseInterface {
+        $request = $request->withHeader('X-Customer', 'customer-a');
+        $response = $this->next->sendRequest($request);
+        return $response->withHeader('X-Customer-Policy', 'applied');
+    }
+};
+$client = new Client($policyClient, 'https://api.example.com', getenv('API_KEY'));
+```
+
+PSR-7 `withUri`, `withMethod` and `withBody` create replacement requests; return a
+replacement response to rewrite its status/body or short circuit with a cached
+PSR-7 response. Catch transport exceptions when translating customer errors,
+preserving the PSR-18 exception interfaces for transport failures. Observer
+callbacks do not return replacement messages. The decorator runs for each SDK
+transport attempt, including retries. Preserve stream positions or replace the
+stream when reading bodies; live SSE behavior depends on the chosen PSR-18 client.
+"#;
     format!(
-        "# {} PHP SDK\n\nGenerated PHP 8.2+ SDK. See [STYLE_GUIDE.md](STYLE_GUIDE.md) for the selected public API.\n\n```php\nuse {namespace}\\Client;\n```\n\n{usage}\n",
+        "# {} PHP SDK\n\nGenerated PHP 8.2+ SDK. See [STYLE_GUIDE.md](STYLE_GUIDE.md) for the selected public API.\n\n```php\nuse {namespace}\\Client;\n```\n\n{usage}\n\n{middleware}",
         api.name
     )
 }
@@ -220,27 +244,48 @@ fn render_object_model(
     namespace: &str,
     named_types: &NamedTypes,
 ) -> String {
+    let open = !matches!(additional_properties, AdditionalProperties::Forbidden);
+    let mut extra_name = "additionalProperties".to_owned();
+    while fields
+        .iter()
+        .any(|field| property_name(&field.name) == extra_name)
+    {
+        extra_name.push('_');
+    }
+    let mut presence_name = "kajiPresentFields".to_owned();
+    while fields
+        .iter()
+        .any(|field| property_name(&field.name) == presence_name)
+        || presence_name == extra_name
+    {
+        presence_name.push('_');
+    }
     let mut output = format!(
-        "<?php\n\ndeclare(strict_types=1);\n\nnamespace {namespace}\\Models;\n\nuse JsonSerializable;\n\n{NOTICE}\nfinal class {name} implements JsonSerializable\n{{\n    public function __construct(\n"
+        "<?php\n\ndeclare(strict_types=1);\n\nnamespace {namespace}\\Models;\n\nuse JsonSerializable;\n\n{NOTICE}\nfinal class {name} implements JsonSerializable\n{{\n    private ?array ${presence_name} = null;\n\n    public function __construct(\n"
     );
     for field in fields {
         let field_name = property_name(&field.name);
-        let type_name = php_type(&field.value, named_types);
-        let type_name = nullable_type(&type_name, field.value.nullable || !field.required);
+        let type_name = nullable_type(
+            &php_type(&field.value, named_types),
+            field.value.nullable || !field.required,
+        );
         let default = if field.required { "" } else { " = null" };
         let _ = writeln!(
             output,
             "        public readonly {type_name} ${field_name}{default},"
         );
     }
-    if let AdditionalProperties::Schema { value } = additional_properties {
-        let type_name = php_type(value, named_types);
+    if open {
+        let value_type = match additional_properties {
+            AdditionalProperties::Schema { value } => php_type(value, named_types),
+            _ => "mixed".into(),
+        };
         let _ = writeln!(
             output,
-            "        public readonly array $additionalProperties = [], // array<string, {type_name}>"
+            "        public readonly array ${extra_name} = [], // array<string, {value_type}>"
         );
     }
-    output.push_str("    ) {\n    }\n\n    /** @param array<string, mixed> $data */\n    public static function fromArray(array $data): self\n    {\n        return new self(\n");
+    output.push_str("    ) {\n    }\n\n    /** @param array<string, mixed> $data */\n    public static function fromArray(array $data): self\n    {\n        $instance = new self(\n");
     for field in fields {
         let field_name = property_name(&field.name);
         let source = format!("$data[{}]", php_string(&field.name));
@@ -258,23 +303,44 @@ fn render_object_model(
             let _ = writeln!(
                 output,
                 "            {field_name}: array_key_exists({}, $data) && $source !== null ? {value} : null,",
-                php_string(&field.name),
+                php_string(&field.name)
             );
         }
     }
-    if matches!(additional_properties, AdditionalProperties::Schema { .. }) {
-        output.push_str("            additionalProperties: $data,\n");
-    }
-    output.push_str("        );\n    }\n\n    /** @return array<string, mixed> */\n    public function jsonSerialize(): array\n    {\n        return array_filter([\n");
-    for field in fields {
+    let known = fields
+        .iter()
+        .map(|field| php_string(&field.name))
+        .collect::<Vec<_>>()
+        .join(", ");
+    if open {
         let _ = writeln!(
             output,
-            "            {} => $this->{},",
-            php_string(&field.name),
-            property_name(&field.name),
+            "            {extra_name}: array_diff_key($data, array_fill_keys([{known}], true)),"
         );
     }
-    output.push_str("        ], static fn (mixed $value): bool => $value !== null);\n    }\n}\n");
+    let _ = writeln!(
+        output,
+        "        );\n        $instance->{presence_name} = array_keys($data);\n        return $instance;\n    }}\n\n    public function jsonSerialize(): object\n    {{\n        $value = [];"
+    );
+    if open {
+        let _ = writeln!(
+            output,
+            "        $value = array_diff_key($this->{extra_name}, array_fill_keys([{known}], true));"
+        );
+    }
+    for field in fields {
+        let generated = property_name(&field.name);
+        let key = php_string(&field.name);
+        if field.required {
+            let _ = writeln!(output, "        $value[{key}] = $this->{generated};");
+        } else {
+            let _ = writeln!(
+                output,
+                "        if ($this->{generated} !== null || in_array({key}, $this->{presence_name} ?? [], true)) {{ $value[{key}] = $this->{generated}; }}"
+            );
+        }
+    }
+    output.push_str("        return (object) $value;\n    }\n}\n");
     output
 }
 
@@ -976,7 +1042,7 @@ fn render_url_paginator(
 }
 
 fn render_pagination_helper() -> &'static str {
-    "    /** Read Kaji's declared JSONPath subset (fields and array indexes). */\n    private static function kajiJsonPath(mixed $value, string $path): mixed\n    {\n        if (!str_starts_with($path, '$')) {\n            return null;\n        }\n        $current = $value instanceof \\JsonSerializable ? $value->jsonSerialize() : $value;\n        foreach (array_values(array_filter(explode('.', substr($path, 1)), static fn (string $segment): bool => $segment !== '')) as $segment) {\n            if (preg_match('/^([^\\[\\]]+)(?:\\[(-?\\d+)\\])?$/', $segment, $matches) !== 1) {\n                return null;\n            }\n            if ($current instanceof \\JsonSerializable) {\n                $current = $current->jsonSerialize();\n            } elseif (is_object($current)) {\n                $current = get_object_vars($current);\n            }\n            if (!is_array($current) || !array_key_exists($matches[1], $current)) {\n                return null;\n            }\n            $current = $current[$matches[1]];\n            if (isset($matches[2])) {\n                if (!is_array($current)) {\n                    return null;\n                }\n                $index = (int) $matches[2];\n                if ($index < 0) {\n                    $index += count($current);\n                }\n                if (!array_key_exists($index, $current)) {\n                    return null;\n                }\n                $current = $current[$index];\n            }\n        }\n        return $current;\n    }\n\n    /** Copy a generated JSON body while preserving its declared class. */\n    private static function kajiWithBodyValue(mixed $body, string $wireName, mixed $value): mixed\n    {\n        if (is_array($body)) {\n            $copy = $body;\n            $copy[$wireName] = $value;\n            return $copy;\n        }\n        if ($body instanceof \\JsonSerializable && method_exists($body::class, 'fromArray')) {\n            $data = $body->jsonSerialize();\n            if (!is_array($data)) {\n                throw new \\TypeError('body pagination requires an object JSON body');\n            }\n            $data[$wireName] = $value;\n            $class = $body::class;\n            return $class::fromArray($data);\n        }\n        throw new \\TypeError('body pagination requires a generated model or array JSON body');\n    }\n\n"
+    "    /** Read Kaji's declared JSONPath subset (fields and array indexes). */\n    private static function kajiJsonPath(mixed $value, string $path): mixed\n    {\n        if (!str_starts_with($path, '$')) {\n            return null;\n        }\n        $current = $value instanceof \\JsonSerializable ? $value->jsonSerialize() : $value;\n        foreach (array_values(array_filter(explode('.', substr($path, 1)), static fn (string $segment): bool => $segment !== '')) as $segment) {\n            if (preg_match('/^([^\\[\\]]+)(?:\\[(-?\\d+)\\])?$/', $segment, $matches) !== 1) {\n                return null;\n            }\n            if ($current instanceof \\JsonSerializable) {\n                $current = $current->jsonSerialize();\n            }\n            if (is_object($current)) {\n                $current = get_object_vars($current);\n            }\n            if (!is_array($current) || !array_key_exists($matches[1], $current)) {\n                return null;\n            }\n            $current = $current[$matches[1]];\n            if (isset($matches[2])) {\n                if (!is_array($current)) {\n                    return null;\n                }\n                $index = (int) $matches[2];\n                if ($index < 0) {\n                    $index += count($current);\n                }\n                if (!array_key_exists($index, $current)) {\n                    return null;\n                }\n                $current = $current[$index];\n            }\n        }\n        return $current;\n    }\n\n    /** Copy a generated JSON body while preserving its declared class. */\n    private static function kajiWithBodyValue(mixed $body, string $wireName, mixed $value): mixed\n    {\n        if (is_array($body)) {\n            $copy = $body;\n            $copy[$wireName] = $value;\n            return $copy;\n        }\n        if ($body instanceof \\JsonSerializable && method_exists($body::class, 'fromArray')) {\n            $data = $body->jsonSerialize();\n            if (is_object($data)) { $data = get_object_vars($data); }\n            if (!is_array($data)) {\n                throw new \\TypeError('body pagination requires an object JSON body');\n            }\n            $data[$wireName] = $value;\n            $class = $body::class;\n            return $class::fromArray($data);\n        }\n        throw new \\TypeError('body pagination requires a generated model or array JSON body');\n    }\n\n"
 }
 
 fn operation_is_binary_response(operation: &Operation) -> bool {
@@ -1612,6 +1678,34 @@ mod tests {
     }
 
     #[test]
+    fn open_models_preserve_unknown_properties_at_original_keys() {
+        let schema = Schema::new(
+            "Future",
+            SchemaValue::new(SchemaKind::Object {
+                fields: vec![kaji_core::Field {
+                    name: "additionalProperties".into(),
+                    value: SchemaValue::new(SchemaKind::String),
+                    required: false,
+                    annotations: Default::default(),
+                }],
+                additional_properties: AdditionalProperties::Any,
+            }),
+        );
+        let model = render_model(&schema, "Example", &Default::default());
+        assert!(model.contains("public readonly array $additionalProperties_"));
+        assert!(
+            model
+                .contains("array_diff_key($data, array_fill_keys(['additionalProperties'], true))")
+        );
+        assert!(model.contains("$instance->kajiPresentFields = array_keys($data)"));
+        assert!(model.contains("return (object) $value;"));
+        assert!(
+            model
+                .contains("in_array('additionalProperties', $this->kajiPresentFields ?? [], true)")
+        );
+    }
+
+    #[test]
     fn emits_a_psr18_php_package_with_typed_models_and_operations() {
         let tree = render_test_sdk(&api(), "sdks/php", Some("acme/pet-sdk")).unwrap();
         let composer = tree.get("sdks/php/composer.json").unwrap();
@@ -1998,3 +2092,5 @@ mod tests {
 
 mod package;
 pub use package::{PackageExt, Php, Sdk, Settings, package, sdk};
+
+mod bundled_middleware;

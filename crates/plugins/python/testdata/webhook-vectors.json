@@ -1,0 +1,14 @@
+{
+  "secret": "whsec_MDEyMzQ1Njc4OWFiY2RlZmdoaWprbG1u",
+  "raw_body": "{ \"data\": \"h\\u00e9llo\", \"value\": 1 }",
+  "headers": {
+    "webhook-id": "msg_test",
+    "webhook-timestamp": "1700000000",
+    "webhook-signature": "v1,ngcuVH7fbp2oRZsP2NHR5ipUCWyM9B2osQVfxhlUeAk="
+  },
+  "now": 1700000000,
+  "payload": {
+    "data": "h\u00e9llo",
+    "value": 1
+  }
+}

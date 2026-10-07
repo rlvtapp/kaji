@@ -1,5 +1,8 @@
 //! Rust SDK generation through typed packages and a Reqwest-backed client.
+mod bundled;
+pub mod composition;
 mod render;
+pub use composition::{client, models, operations, roundtrip_tests, transport};
 
 use anyhow::Result;
 use kaji_core::engine::{Language, Meta, Package, Plugin, PluginContext};
@@ -13,7 +16,16 @@ pub struct Settings {
 impl Language for Rust {
     const NAME: &'static str = "rust";
     type Settings = Settings;
-    type Workspace = ();
+    type Workspace = composition::Workspace;
+    fn bundle_middleware(
+        tree: &mut kaji_core::GeneratedTree,
+        middleware: &[kaji_core::customization::BundledMiddleware],
+    ) -> Result<()> {
+        crate::bundled::bundle(tree, middleware)
+    }
+    fn finalize(cx: &mut kaji_core::engine::FinalizeContext<'_, Self>) -> Result<()> {
+        composition::Workspace::finalize(cx)
+    }
 }
 pub fn package(dir: impl Into<String>) -> Package<Rust> {
     Package::new(dir)
@@ -63,6 +75,14 @@ impl Plugin<Rust> for Sdk {
     fn meta(&self) -> &Meta {
         &self.meta
     }
+    fn provides(&self) -> Vec<kaji_core::engine::Provision> {
+        vec![
+            kaji_core::engine::Provision::of::<composition::Models>(),
+            kaji_core::engine::Provision::of::<composition::Transport>(),
+            kaji_core::engine::Provision::of::<composition::Operations>(),
+            kaji_core::engine::Provision::of::<composition::Client>(),
+        ]
+    }
     fn generate(&self, cx: &mut PluginContext<'_, Rust>) -> Result<()> {
         let style = self
             .client_style
@@ -73,7 +93,27 @@ impl Plugin<Rust> for Sdk {
             client_style: style,
             operation_prefix: self.operation_prefix.clone(),
         };
-        cx.files.append(render::generate_sdk(cx.api, &options)?)?;
+        for (file, _) in render::generate_sdk(cx.api, &options)?.into_files() {
+            if !matches!(
+                file.path.to_str(),
+                Some("src/lib.rs" | "src/client/mod.rs" | "Cargo.toml")
+            ) {
+                cx.files.emit(file)?;
+            }
+        }
+        cx.workspace.models = true;
+        cx.workspace.operations = true;
+        cx.workspace.resources = style == SdkClientStyle::Namespaced;
+        cx.workspace.transport = Some(composition::default_transport());
+        cx.publish(composition::model_contract(cx.api))?;
+        cx.publish(composition::default_transport())?;
+        cx.publish(composition::operation_contract(
+            cx.api,
+            self.operation_prefix.clone(),
+        ))?;
+        cx.publish(composition::Client {
+            symbol: "crate::Client".into(),
+        })?;
         cx.files.emit(GeneratedFile::new(
             "STYLE_GUIDE.md",
             style_guide(cx.api, style),

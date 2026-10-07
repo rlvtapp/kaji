@@ -43,14 +43,22 @@ pub(super) fn generate_sdk(api: &Api, options: &RenderOptions) -> Result<Generat
     {
         tree.insert(file)?;
     }
+    tree.insert(GeneratedFile::new(
+        "src/transport.rs",
+        super::composition::DEFAULT_TRANSPORT,
+    )?)?;
     Ok(tree)
 }
 
 #[derive(Default)]
-struct RustModels;
+pub(crate) struct RustModels;
 
 impl RustModels {
-    fn generate(&self, api: &Api, _options: &RenderOptions) -> Result<Vec<GeneratedFile>> {
+    pub(crate) fn generate(
+        &self,
+        api: &Api,
+        _options: &RenderOptions,
+    ) -> Result<Vec<GeneratedFile>> {
         let mut files = Vec::with_capacity(api.schemas.len() + 64);
         let mut root_index = String::new();
         for (chunk_index, schemas) in api.schemas.chunks(MODELS_PER_FILE).enumerate() {
@@ -75,7 +83,7 @@ impl RustModels {
         }
         files.insert(
             0,
-            GeneratedFile::new("src/models/mod.rs", format!("{NOTICE}\n{root_index}"))?,
+            GeneratedFile::new("src/models/mod.rs", format!("{NOTICE}\n#[allow(dead_code)]\npub(crate) fn kaji_deserialize_optional_nullable<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error> where D: serde::Deserializer<'de>, T: serde::Deserialize<'de> {{ <Option<T> as serde::Deserialize>::deserialize(deserializer).map(Some) }}\n{root_index}"))?,
         );
         Ok(files)
     }
@@ -109,7 +117,7 @@ impl RustPackage {
 
 fn render_model(schema: &Schema) -> String {
     let mut output = format!(
-        "{NOTICE}\n\n#[allow(unused_imports)]\nuse crate::models::*;\nuse serde::{{Deserialize, Serialize}};\n\n"
+        "{NOTICE}\n\n#[allow(unused_imports)]\nuse crate::models::*;\n#[allow(unused_imports)]\nuse serde::{{Deserialize, Serialize}};\n\n"
     );
     render_schema(&mut output, schema);
     output
@@ -151,6 +159,9 @@ fn render_schema(output: &mut String, schema: &Schema) {
                 if !field.required {
                     output.push_str("    #[serde(skip_serializing_if = \"Option::is_none\")]\n");
                 }
+                if !field.required && (field.value.nullable || field.value.nullish) {
+                    output.push_str("    #[serde(default, deserialize_with = \"crate::models::kaji_deserialize_optional_nullable\")]\n");
+                }
                 let field_type = rust_type(&field.value);
                 let field_type = if field.required {
                     field_type
@@ -164,12 +175,18 @@ fn render_schema(output: &mut String, schema: &Schema) {
                     field_type
                 );
             }
-            if let AdditionalProperties::Schema { value } = additional_properties {
+            let extra_type = match additional_properties {
+                AdditionalProperties::Schema { value } => Some(rust_type(value)),
+                AdditionalProperties::Any | AdditionalProperties::Unspecified => {
+                    Some("serde_json::Value".into())
+                }
+                AdditionalProperties::Forbidden => None,
+            };
+            if let Some(extra_type) = extra_type {
                 output.push_str("    #[serde(flatten)]\n");
                 let _ = writeln!(
                     output,
-                    "    pub additional_properties: std::collections::BTreeMap<String, {}>,",
-                    rust_type(value)
+                    "    pub additional_properties: std::collections::BTreeMap<String, {extra_type}>,"
                 );
             }
             output.push_str("}\n");
@@ -209,7 +226,7 @@ fn rust_type(value: &SchemaValue) -> String {
             "serde_json::Value".into()
         }
     };
-    if value.nullable && base != "()" {
+    if (value.nullable || value.nullish) && base != "()" {
         format!("Option<{base}>")
     } else {
         base
@@ -233,13 +250,13 @@ fn render_client_files(api: &Api, config: &RenderOptions) -> Result<Vec<Generate
     Ok(files)
 }
 
-fn render_client_runtime(api: &Api, include_resources: bool) -> String {
+pub(crate) fn render_client_runtime(api: &Api, include_resources: bool) -> String {
     let has_pagination = api
         .operations
         .iter()
         .any(|operation| rust_pagination(operation).is_some());
     let mut output = format!(
-        "{NOTICE}\nuse reqwest::Method;\nuse serde::Serialize;\nuse crate::models::*;\n\n/// The raw HTTP response retained when a response cannot be decoded or is not declared by the OpenAPI document.\n#[derive(Debug)]\npub struct ApiResponse {{\n    pub status: reqwest::StatusCode,\n    pub headers: reqwest::header::HeaderMap,\n    pub body: Vec<u8>,\n}}\n\nimpl ApiResponse {{\n    pub fn text(&self) -> String {{ String::from_utf8_lossy(&self.body).into_owned() }}\n\n    pub fn json<T: serde::de::DeserializeOwned>(&self) -> Result<T, serde_json::Error> {{\n        serde_json::from_slice(&self.body)\n    }}\n}}\n\n#[derive(Clone)]\npub struct Client {{\n    base_url: String,\n    http: reqwest::Client,\n    bearer_token: Option<String>,\n}}\n\nfn kaji_query_value<T: Serialize>(value: &T) -> String {{\n    match serde_json::to_value(value).unwrap_or(serde_json::Value::Null) {{\n        serde_json::Value::String(value) => value,\n        serde_json::Value::Number(value) => value.to_string(),\n        serde_json::Value::Bool(value) => value.to_string(),\n        value => value.to_string(),\n    }}\n}}\n\nfn kaji_path_segment(value: &str) -> String {{\n    let mut encoded = String::new();\n    for byte in value.bytes() {{\n        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {{\n            encoded.push(byte as char);\n        }} else {{\n            use std::fmt::Write as _;\n            let _ = write!(encoded, \"%{{byte:02X}}\");\n        }}\n    }}\n    encoded\n}}\n\n"
+        "{NOTICE}\nuse reqwest::Method;\nuse serde::Serialize;\n#[allow(unused_imports)]\nuse crate::models::*;\n\n/// The raw HTTP response retained when a response cannot be decoded or is not declared by the OpenAPI document.\n#[derive(Debug)]\npub struct ApiResponse {{\n    pub status: reqwest::StatusCode,\n    pub headers: reqwest::header::HeaderMap,\n    pub body: Vec<u8>,\n}}\n\nimpl ApiResponse {{\n    pub fn text(&self) -> String {{ String::from_utf8_lossy(&self.body).into_owned() }}\n\n    pub fn json<T: serde::de::DeserializeOwned>(&self) -> Result<T, serde_json::Error> {{\n        serde_json::from_slice(&self.body)\n    }}\n}}\n\n#[derive(Clone)]\npub struct Client {{\n    base_url: String,\n    http: reqwest::Client,\n    bearer_token: Option<String>,\n}}\n\n#[allow(dead_code)]\nfn kaji_query_value<T: Serialize>(value: &T) -> String {{\n    match serde_json::to_value(value).unwrap_or(serde_json::Value::Null) {{\n        serde_json::Value::String(value) => value,\n        serde_json::Value::Number(value) => value.to_string(),\n        serde_json::Value::Bool(value) => value.to_string(),\n        value => value.to_string(),\n    }}\n}}\n\nfn kaji_path_segment(value: &str) -> String {{\n    let mut encoded = String::new();\n    for byte in value.bytes() {{\n        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {{\n            encoded.push(byte as char);\n        }} else {{\n            use std::fmt::Write as _;\n            let _ = write!(encoded, \"%{{byte:02X}}\");\n        }}\n    }}\n    encoded\n}}\n\n"
     );
     // Keep the base renderer compact while augmenting its generated runtime
     // with configuration that applies uniformly to every operation.
@@ -279,15 +296,26 @@ fn render_client_runtime(api: &Api, include_resources: bool) -> String {
         "    /// Replaces the conservative default retry policy. Set `max_attempts` to one to disable retries.\n    pub fn with_retry(mut self, retry: RetryConfig) -> Self {\n        self.retry = retry;\n        self\n    }\n\n    /// Adds package-level lifecycle hooks without changing generated operation signatures.\n    pub fn with_hooks(mut self, hooks: Arc<dyn ClientHooks>) -> Self {\n        self.hooks = Some(hooks);\n        self\n    }\n\n    fn kaji_before_request(&self, request: &RequestInfo) {\n        if let Some(hooks) = &self.hooks { hooks.before_request(request); }\n    }\n\n    fn kaji_after_response(&self, request: &RequestInfo, response: &reqwest::Response) {\n        if let Some(hooks) = &self.hooks {\n            hooks.after_response(&ResponseInfo { request: request.clone(), status: response.status(), headers: response.headers().clone() });\n        }\n    }\n\n    fn kaji_on_error(&self, request: &RequestInfo, error: &str) {\n        if let Some(hooks) = &self.hooks { hooks.on_error(request, error); }\n    }\n\n    fn kaji_retry_delay(&self, completed_attempts: usize, retry_after: Option<Duration>) -> Duration {\n        if let Some(retry_after) = retry_after { return retry_after.min(self.retry.max_delay); }\n        let factor = 1_u32 << completed_attempts.saturating_sub(1).min(16);\n        self.retry.initial_delay.saturating_mul(factor).min(self.retry.max_delay)\n    }\n\n    /// Configures a bearer token for operations that declare OpenAPI security.\n",
         1,
     );
-    output.push_str("}\n");
+    output.push_str("    /// Substitute the request executor without changing operation signatures.\n    pub fn with_transport(mut self, transport: Arc<dyn crate::transport::Transport>) -> Self { self.transport = transport; self }\n}\n");
+    output = output.replace(
+        "    http: reqwest::Client,",
+        "    http: reqwest::Client,\n    transport: Arc<dyn crate::transport::Transport>,",
+    );
+    output = output.replace("http: reqwest::Client::new(), bearer_token:", "http: reqwest::Client::new(), transport: Arc::new(crate::transport::DefaultTransport::default()), bearer_token:");
     output.push_str("\nmod operations;\npub use operations::*;\n");
     if include_resources {
         output.push_str("mod resources;\npub use resources::*;\n");
     }
-    output
+    output.replace(
+        "\nfn kaji_query_value",
+        "\n#[allow(dead_code)]\nfn kaji_query_value",
+    )
 }
 
-fn render_operation_files(api: &Api, config: &RenderOptions) -> Result<Vec<GeneratedFile>> {
+pub(crate) fn render_operation_files(
+    api: &Api,
+    config: &RenderOptions,
+) -> Result<Vec<GeneratedFile>> {
     let mut files = Vec::new();
     let mut module_index = String::new();
     for (index, operations) in api.operations.chunks(OPERATIONS_PER_FILE).enumerate() {
@@ -323,7 +351,10 @@ fn render_operation_files(api: &Api, config: &RenderOptions) -> Result<Vec<Gener
     Ok(files)
 }
 
-fn render_resource_files(api: &Api, options: &RenderOptions) -> Result<Vec<GeneratedFile>> {
+pub(crate) fn render_resource_files(
+    api: &Api,
+    options: &RenderOptions,
+) -> Result<Vec<GeneratedFile>> {
     let resources = resource_operations(api);
     let direct_methods = api
         .operations
@@ -476,7 +507,7 @@ fn render_operation(operation: &Operation, config: &RenderOptions) -> String {
         }
     }
     output.push_str(&format!(
-        "            let response = match request.send().await {{\n                Ok(response) => response,\n                Err(source) => {{\n                    if retry_allowed && attempt < max_attempts {{\n                        tokio::time::sleep(self.kaji_retry_delay(attempt, None)).await;\n                        continue;\n                    }}\n                    self.kaji_on_error(&request_info, &source.to_string());\n                    return Err({error}::Transport(source));\n                }}\n            }};\n            let status = response.status();\n            let retry_after = response.headers().get(reqwest::header::RETRY_AFTER).and_then(|value| value.to_str().ok()).and_then(|value| value.parse::<u64>().ok()).map(Duration::from_secs);\n            if retry_allowed && attempt < max_attempts && matches!(status.as_u16(), 408 | 429 | 500 | 502 | 503 | 504) {{\n                tokio::time::sleep(self.kaji_retry_delay(attempt, retry_after)).await;\n                continue;\n            }}\n            self.kaji_after_response(&request_info, &response);\n            if !status.is_success() {{\n                let headers = response.headers().clone();\n                let body = response.bytes().await.map_err({error}::Transport)?.to_vec();\n                self.kaji_on_error(&request_info, &format!(\"HTTP {{}}\", status));\n                return Err({});\n            }}\n",
+        "            let response = match self.transport.execute(request.build().map_err({error}::Transport)?).await {{\n                Ok(response) => response,\n                Err(source) => {{\n                    if retry_allowed && attempt < max_attempts {{\n                        tokio::time::sleep(self.kaji_retry_delay(attempt, None)).await;\n                        continue;\n                    }}\n                    self.kaji_on_error(&request_info, &source.to_string());\n                    return Err({error}::Transport(source));\n                }}\n            }};\n            let status = response.status();\n            let retry_after = response.headers().get(reqwest::header::RETRY_AFTER).and_then(|value| value.to_str().ok()).and_then(|value| value.parse::<u64>().ok()).map(Duration::from_secs);\n            if retry_allowed && attempt < max_attempts && matches!(status.as_u16(), 408 | 429 | 500 | 502 | 503 | 504) {{\n                tokio::time::sleep(self.kaji_retry_delay(attempt, retry_after)).await;\n                continue;\n            }}\n            self.kaji_after_response(&request_info, &response);\n            if !status.is_success() {{\n                let headers = response.headers().clone();\n                let body = response.bytes().await.map_err({error}::Transport)?.to_vec();\n                self.kaji_on_error(&request_info, &format!(\"HTTP {{}}\", status));\n                return Err({});\n            }}\n",
         render_error_response(operation, &error),
     ));
     match response_kind(operation) {
@@ -568,10 +599,37 @@ fn rust_pagination(operation: &Operation) -> Option<RustPagination> {
     let outputs = extension.get("outputs")?.as_object()?;
     match extension.get("type").and_then(Value::as_str) {
         Some("cursor") => {
+            let mut scalar_operation = operation.clone();
+            // This catalog-independent projection validates scalar cursor inputs
+            // and portable selectors; response references remain renderer-owned.
+            scalar_operation.responses.clear();
+            let plan = kaji_core::pagination::normalize_pagination(
+                &Api::default(),
+                &scalar_operation,
+                None,
+            )
+            .ok()
+            .flatten()?;
+            let selector = plan.continuation?;
+            let mut path = String::from("$");
+            for segment in selector.segments {
+                match segment {
+                    kaji_core::pagination::SelectorSegment::Field(name)
+                        if !name.contains(['.', '[', ']']) =>
+                    {
+                        path.push('.');
+                        path.push_str(&name);
+                    }
+                    kaji_core::pagination::SelectorSegment::Index(index) => {
+                        path.push_str(&format!("[{index}]"))
+                    }
+                    _ => return None,
+                }
+            }
             let field = rust_cursor_parameter_field(operation, inputs, "cursor")?;
             Some(RustPagination::Cursor {
                 field,
-                next_cursor_path: outputs.get("nextCursor")?.as_str()?.to_owned(),
+                next_cursor_path: path,
             })
         }
         Some("offsetLimit") => {
@@ -1056,7 +1114,7 @@ fn render_header_use(output: &mut String, parameter: &OperationParameter) {
 }
 
 fn render_lib() -> &'static str {
-    "// Generated by Kaji Codegen. Do not edit.\n\npub mod client;\npub mod models;\n\npub use client::*;\npub use models::*;\n"
+    "// Generated by Kaji Codegen. Do not edit.\n\npub mod client;\npub mod models;\npub mod transport;\n\npub use client::*;\n#[allow(unused_imports)]\npub use models::*;\n"
 }
 
 fn resource_client_enabled(options: &RenderOptions) -> bool {
@@ -1176,7 +1234,7 @@ fn resource_method_name(direct: &str, resource: &str) -> String {
         .into()
 }
 
-fn render_readme(api: &Api, crate_name: &str, config: &RenderOptions) -> String {
+pub(crate) fn render_readme(api: &Api, crate_name: &str, config: &RenderOptions) -> String {
     let crate_import = crate_name.replace('-', "_");
     let call = api
         .operations
@@ -1224,13 +1282,37 @@ fn render_readme(api: &Api, crate_name: &str, config: &RenderOptions) -> String 
     } else {
         "direct-method"
     };
-    format!(
+    let mut output = format!(
         "# {} Rust SDK\n\nGenerated by Kaji with the **{surface}** client surface.\n\n```sh\ncargo add {crate_name}\n```\n\nUse it from an async context:\n\n```rust\nuse {crate_import}::*;\n\nlet client = Client::new(\"https://api.example.com\");\n{call}\n```\n\nSee [STYLE_GUIDE.md](STYLE_GUIDE.md) for the public surface.\n",
         api.name
-    )
+    );
+    output.push_str(&r#"
+## Customer middleware
+
+```rust
+use std::sync::Arc;
+use MODULE::{Client, transport::{DefaultTransport, Middleware, MiddlewareTransport, Transport, TransportFuture}};
+struct CustomerHeader;
+impl Middleware for CustomerHeader {
+    fn handle<'a>(&'a self, mut request: reqwest::Request, next: &'a dyn Transport) -> TransportFuture<'a> {
+        Box::pin(async move {
+            request.headers_mut().insert("x-customer", "example".parse().unwrap());
+            let mut response = next.execute(request).await?;
+            response.headers_mut().insert("x-observed", "yes".parse().unwrap());
+            Ok(response)
+        })
+    }
+}
+let transport = MiddlewareTransport::new(CustomerHeader, DefaultTransport::default());
+let client = Client::new("https://api.example.com").with_transport(Arc::new(transport));
+```
+
+Nest wrappers: outer layers see requests first and responses last. A layer may recover a transport error or return a synthetic response without calling `next`. Middleware runs once per transport attempt inside SDK retries; avoid independently replaying unsafe requests. HTTP status/decode errors are classified afterwards. The request/response/error ABI remains reqwest; custom generator transport modules must provide their own middleware types. Observational `ClientHooks` run separately. SSE responses pass through this boundary when opened, not per decoded event.
+"#.replace("MODULE", &crate_import));
+    output
 }
 
-fn render_cargo_toml(crate_name: &str, version: &str) -> String {
+pub(crate) fn render_cargo_toml(crate_name: &str, version: &str) -> String {
     let version = cargo_package_version(version);
     format!(
         "[package]\nname = {:?}\nversion = {:?}\nedition = \"2024\"\ndescription = \"Generated API client\"\n\n[dependencies]\nfutures-util = \"0.3\"\nreqwest = {{ version = \"0.12\", features = [\"json\"] }}\nserde = {{ version = \"1\", features = [\"derive\"] }}\nserde_json = \"1\"\ntokio = {{ version = \"1\", features = [\"time\"] }}\n",
@@ -1269,7 +1351,7 @@ fn request_body_type(operation: &Operation) -> Option<String> {
     })
 }
 
-fn type_name(name: &str) -> String {
+pub(crate) fn type_name(name: &str) -> String {
     let mut output = String::new();
     let mut uppercase = true;
     for character in name.chars() {
@@ -1291,7 +1373,7 @@ fn type_name(name: &str) -> String {
     }
 }
 
-fn rust_field_name(name: &str) -> String {
+pub(crate) fn rust_field_name(name: &str) -> String {
     let mut output = String::new();
     let mut previous_is_lower = false;
     for character in name.chars() {
@@ -1315,7 +1397,7 @@ fn rust_field_name(name: &str) -> String {
     }
 }
 
-fn kebab_case(name: &str) -> String {
+pub(crate) fn kebab_case(name: &str) -> String {
     rust_field_name(name).replace('_', "-")
 }
 

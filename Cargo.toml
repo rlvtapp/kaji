@@ -13,6 +13,7 @@ members = [
     "crates/plugins/php",
     "crates/plugins/symfony",
     "crates/plugins/terraform",
+    "crates/plugins/postman",
     "crates/plugins/java",
     "crates/plugins/csharp",
     "crates/plugins/dotnet",
@@ -23,7 +24,7 @@ members = [
 default-members = ["crates/kaji"]
 
 [workspace.package]
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/rlvtapp/Kaji"

@@ -12,6 +12,12 @@ impl Language for Java {
     const NAME: &'static str = "java";
     type Settings = Settings;
     type Workspace = ();
+    fn bundle_middleware(
+        tree: &mut kaji_core::GeneratedTree,
+        middleware: &[kaji_core::customization::BundledMiddleware],
+    ) -> Result<()> {
+        crate::bundled_middleware::bundle(tree, middleware)
+    }
 }
 pub fn package(dir: impl Into<String>) -> Package<Java> {
     Package::new(dir)
@@ -28,14 +34,22 @@ impl PackageExt for Package<Java> {
 pub struct Sdk {
     meta: Meta,
     client_style: Option<SdkClientStyle>,
+    open_enums: bool,
 }
 pub fn sdk() -> Sdk {
     Sdk {
         meta: Meta::new(),
         client_style: None,
+        open_enums: false,
     }
 }
 impl Sdk {
+    /// Preserve future wire enum values using extensible value classes.
+    /// Known constants remain available; Java enum switches require the default policy.
+    pub fn open_enums(mut self, enabled: bool) -> Self {
+        self.open_enums = enabled;
+        self
+    }
     pub fn flat(mut self) -> Self {
         self.client_style = Some(SdkClientStyle::Flat);
         self
@@ -53,13 +67,14 @@ impl Plugin<Java> for Sdk {
         &self.meta
     }
     fn generate(&self, cx: &mut PluginContext<'_, Java>) -> Result<()> {
-        cx.files.append(crate::render_sdk(
+        cx.files.append(crate::render_sdk_with_policy(
             cx.api,
             ".",
             cx.settings.package_name.as_deref(),
             self.client_style
                 .or(cx.common.client_style)
                 .unwrap_or(SdkClientStyle::Namespaced),
+            self.open_enums,
         )?)
     }
 }

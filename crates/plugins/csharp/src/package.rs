@@ -18,11 +18,23 @@ impl Language for CSharp {
     const NAME: &'static str = "csharp";
     type Settings = Settings;
     type Workspace = ();
+    fn bundle_middleware(
+        tree: &mut kaji_core::GeneratedTree,
+        middleware: &[kaji_core::customization::BundledMiddleware],
+    ) -> Result<()> {
+        crate::bundled_middleware::bundle(tree, middleware)
+    }
 }
 impl Language for DotNet {
     const NAME: &'static str = "dotnet";
     type Settings = Settings;
     type Workspace = ();
+    fn bundle_middleware(
+        tree: &mut kaji_core::GeneratedTree,
+        middleware: &[kaji_core::customization::BundledMiddleware],
+    ) -> Result<()> {
+        crate::bundled_middleware::bundle(tree, middleware)
+    }
 }
 pub fn package(dir: impl Into<String>) -> Package<CSharp> {
     Package::new(dir)

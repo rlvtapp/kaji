@@ -5,6 +5,7 @@
 //! typed structs for component models, and explicit `{:ok, value}` / `{:error,
 //! reason}` results for every operation.
 
+mod bundled;
 use std::{collections::BTreeMap, fmt::Write};
 
 use anyhow::{Result, bail};
@@ -240,14 +241,17 @@ fn render_client(module: &str) -> String {
   defstruct base_url: nil, api_key: nil, api_key_header: "authorization", api_key_prefix: "Bearer",
             headers: [], finch: __KAJI_MODULE__.Finch, timeout: 30_000,
             max_retries: 2, retry_initial_delay_ms: 250, retry_max_delay_ms: 8_000,
-            before_request: nil, after_response: nil, on_error: nil
+            before_request: nil, after_response: nil, on_error: nil,
+            transport: nil, middleware: [], stream_transport: nil
 
   @type t :: %__MODULE__{
     base_url: String.t(), api_key: String.t() | nil, api_key_header: String.t(),
     api_key_prefix: String.t() | nil, headers: [{String.t(), String.t()}], finch: atom(),
     timeout: timeout(), max_retries: non_neg_integer(), retry_initial_delay_ms: non_neg_integer(),
     retry_max_delay_ms: non_neg_integer(), before_request: (map() -> any()) | nil,
-    after_response: (map() -> any()) | nil, on_error: (term() -> any()) | nil
+    after_response: (map() -> any()) | nil, on_error: (term() -> any()) | nil,
+    transport: (Finch.Request.t(), keyword() -> term()) | nil,
+    middleware: [function()], stream_transport: function() | nil
   }
 
   @doc "Creates a reusable client. max_retries: 2 yields Kaji's safe three-attempt policy."
@@ -267,7 +271,9 @@ fn render_client(module: &str) -> String {
           retry_max_delay_ms: non_negative(Keyword.get(options, :retry_max_delay_ms, 8_000), 8_000),
           before_request: Map.get(hooks, :before_request, Keyword.get(options, :before_request)),
           after_response: Map.get(hooks, :after_response, Keyword.get(options, :after_response)),
-          on_error: Map.get(hooks, :on_error, Keyword.get(options, :on_error))
+          on_error: Map.get(hooks, :on_error, Keyword.get(options, :on_error)),
+          transport: Keyword.get(options, :transport), middleware: Keyword.get(options, :middleware, []),
+          stream_transport: Keyword.get(options, :stream_transport)
         }}
       _ -> {:error, :base_url_required}
     end
@@ -329,12 +335,14 @@ fn render_client(module: &str) -> String {
 
   defp start_sse_request(client, request, parent, ref) do
     {:ok, task} = Task.start(fn ->
-      result =
-        Finch.stream(request, client.finch, nil, fn
+      callback = fn
           {:status, status}, acc -> send(parent, {ref, :status, status}); acc
           {:headers, headers}, acc -> send(parent, {ref, :headers, headers}); acc
           {:data, data}, acc -> send(parent, {ref, :data, data}); acc
-        end, receive_timeout: client.timeout)
+        end
+      result = if is_function(client.stream_transport, 4),
+          do: client.stream_transport.(request, [receive_timeout: client.timeout], nil, callback),
+          else: Finch.stream(request, client.finch, nil, callback, receive_timeout: client.timeout)
       send(parent, {ref, :done, result})
     end)
     %{ref: ref, task: task, client: client, status: nil, headers: [], buffer: "", done: false}
@@ -390,9 +398,25 @@ fn render_client(module: &str) -> String {
     if payload == "", do: nil, else: {:ok, case JSON.decode(payload) do {:ok, value} -> value; _ -> payload end}
   end
 
+  # Each middleware receives a fully encoded Finch request and a continuation.
+  # First configured layer is outermost; it may transform, recover, or short-circuit.
+  # This runs once per retry attempt. Streaming uses stream_transport separately.
+  defp execute_transport(client, request) do
+    options = [receive_timeout: client.timeout]
+    terminal = fn request ->
+      if is_function(client.transport, 2),
+        do: client.transport.(request, options),
+        else: Finch.request(request, client.finch, options)
+    end
+    chain = Enum.reduce(Enum.reverse(client.middleware), terminal, fn layer, next ->
+      fn request -> layer.(request, next) end
+    end)
+    chain.(request)
+  end
+
   defp do_request(client, method, url, headers, body, body_kind, response_kind, error_types, context, attempt) do
     request = Finch.build(method, url, headers, encode_body(body, body_kind))
-    case Finch.request(request, client.finch, receive_timeout: client.timeout) do
+    case execute_transport(client, request) do
       {:ok, %Finch.Response{status: status, headers: response_headers} = response} ->
         if retryable?(method, headers) and transient_status?(status) and attempt < client.max_retries do
           retry_delay(client, attempt, response_headers)
@@ -1162,10 +1186,30 @@ fn render_readme(api: &Api, package: &str, module: &str, client_style: SdkClient
         SdkClientStyle::Flat => "flat",
         SdkClientStyle::Namespaced => "namespaced",
     };
-    format!(
+    let mut output = format!(
         "# {package}\n\nGenerated Elixir SDK for {}. This release selected the **{style}** client style.\n\n```elixir\n{{:ok, client}} = {module}.client(base_url: \"https://api.example.com\", api_key: System.get_env(\"API_KEY\"))\n```\n\n## Flat client\n\n```elixir\n{{:ok, result}} = {module}.API.{operation}(client)\n```\n\n## Namespaced client\n\n```elixir\n{{:ok, result}} = {module}.Resources.{resource}.{operation}(client)\n```\n\nThe namespaced example applies to packages generated with `SdkClientStyle::Namespaced`; direct `{module}.API` functions remain available in that mode. The client uses Finch, returns `{{:ok, value}}` on successful HTTP responses, and returns `{{:error, reason}}` for transport or non-2xx API errors. See [STYLE_GUIDE.md](STYLE_GUIDE.md) for selection guidance.\n",
         api.name,
-    )
+    );
+    output.push_str(&r#"
+## Customer middleware
+
+```elixir
+customer_header = fn request, next ->
+  request = %{request | headers: [{"x-customer", "example"} | request.headers]}
+  case next.(request) do
+    {:ok, response} -> {:ok, response} # inspect or replace a Finch.Response
+    {:error, reason} -> {:error, reason} # inspect, recover, or propagate
+  end
+end
+{:ok, client} = MODULE.client(
+  base_url: "https://api.example.com", middleware: [customer_header])
+```
+
+The first middleware is outermost; requests run forward and responses return backward. Layers receive encoded `Finch.Request` values and can return `{:ok, %Finch.Response{}}` without invoking `next`. Optional `transport: fn request, options -> ... end` replaces execution; the default uses the configured Finch pool. Middleware executes once per SDK retry attempt, so avoid independently replaying unsafe requests. Status/decoding classification happens afterwards; lifecycle callbacks are separate notifications.
+
+SSE uses an independent `stream_transport: fn request, options, accumulator, callback -> ... end` returning Finch-compatible stream results and delivering `{:status, code}`, `{:headers, headers}`, and `{:data, binary}` through `callback`. Buffered middleware does not process SSE frames. Decorate that callback to transform events, retaining cancellation/task lifetime behavior.
+"#.replace("MODULE", module));
+    output
 }
 
 fn render_style_guide(api: &Api, module: &str, client_style: SdkClientStyle) -> String {
@@ -1623,6 +1667,104 @@ mod tests {
         assert!(client.contains("defp decode_sse_data"));
         assert!(client.contains("defp parse_retry_after_http_date"));
         assert!(mix.contains("extra_applications: [:logger, :inets]"));
+    }
+    #[test]
+    fn emits_composable_customer_transport() {
+        let client = render_client("Probe");
+        assert!(client.contains("transport: Keyword.get(options, :transport)"));
+        assert!(client.contains("Enum.reduce(Enum.reverse(client.middleware), terminal"));
+        assert!(client.contains("layer.(request, next)"));
+        assert!(client.contains("case execute_transport(client, request) do"));
+        assert!(client.contains(
+            "client.stream_transport.(request, [receive_timeout: client.timeout], nil, callback)"
+        ));
+    }
+
+    #[test]
+    #[ignore = "requires an Elixir toolchain; dependency-free transport probe"]
+    fn elixir_customer_middleware_executes() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("client.ex"), render_client("Probe")).unwrap();
+        std::fs::write(root.path().join("probe.exs"), r#"
+defmodule Finch.Request do
+  defstruct [:method, :url, :body, headers: []]
+  @type t :: %__MODULE__{}
+end
+defmodule Finch.Response do
+  defstruct status: 200, headers: [], body: ""
+end
+defmodule Finch do
+  def build(method, url, headers, body), do: struct(Finch.Request, method: method, url: url, headers: headers, body: body)
+  def request(_, _, _), do: raise("default transport unexpectedly called")
+  def stream(_, _, _, _, _), do: raise("default stream unexpectedly called")
+end
+defmodule Probe.ApiError do
+  defexception [:status, :body, :headers]
+end
+defmodule Probe.JSON do
+  def decode(value), do: {:ok, value}
+  def to_wire(value), do: value
+end
+Code.compile_file("client.ex")
+ExUnit.start()
+defmodule TransportProbe do
+  use ExUnit.Case
+  test "request mutation, error recovery, response transformation and ordering" do
+    terminal = fn request, options ->
+      assert options[:receive_timeout] == 30_000
+      assert {"x-customer", "yes"} in request.headers
+      send(self(), :terminal)
+      {:error, :expected}
+    end
+    inner = fn request, next ->
+      send(self(), :inner_request)
+      request = %{request | headers: [{"x-customer", "yes"} | request.headers]}
+      assert {:error, :expected} = next.(request)
+      send(self(), :inner_error)
+      {:ok, struct(Finch.Response, body: "recovered")}
+    end
+    outer = fn request, next ->
+      send(self(), :outer_request)
+      {:ok, response} = next.(request)
+      send(self(), :outer_response)
+      {:ok, %{response | body: "transformed"}}
+    end
+    {:ok, client} = Probe.Client.new(base_url: "https://unused.example", transport: terminal, middleware: [outer, inner], max_retries: 0)
+    assert {:ok, "transformed"} = Probe.Client.request(client, :get, "/label", [], [], nil, :json, :text)
+    for event <- [:outer_request, :inner_request, :terminal, :inner_error, :outer_response], do: assert_receive(^event)
+    shortcut = fn _, _ -> {:ok, struct(Finch.Response, body: "cached")} end
+    {:ok, client} = Probe.Client.new(base_url: "https://unused.example", transport: terminal, middleware: [shortcut])
+    assert {:ok, "cached"} = Probe.Client.request(client, :get, "/label", [], [], nil, :json, :text)
+    refute_receive(:terminal)
+  end
+  test "transport errors reach customer hook" do
+    {:ok, client} = Probe.Client.new(base_url: "https://unused.example", transport: fn _, _ -> {:error, :expected} end, max_retries: 0, on_error: fn reason -> send(self(), {:observed, reason}) end)
+    assert {:error, :expected} = Probe.Client.request(client, :get, "/label")
+    assert_receive({:observed, :expected})
+  end
+  test "stream transport can synthesize streaming responses" do
+    stream = fn _, _, acc, callback ->
+      acc = callback.({:status, 200}, acc)
+      acc = callback.({:data, "data: hello\n\n"}, acc)
+      {:ok, acc}
+    end
+    {:ok, client} = Probe.Client.new(base_url: "https://unused.example", stream_transport: stream)
+    {:ok, events} = Probe.Client.event_stream(client, :get, "/events")
+    assert Enum.to_list(events) == [{:ok, "hello"}]
+  end
+end
+"#).unwrap();
+        let output = std::process::Command::new("elixir")
+            .arg("probe.exs")
+            .current_dir(root.path())
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 }
 

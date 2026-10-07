@@ -5,68 +5,111 @@
   "description": "Configuration for Kaji's multi-language OpenAPI SDK generator.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["openapi", "output", "packages"],
+  "required": [
+    "openapi",
+    "output",
+    "packages"
+  ],
   "properties": {
     "$schema": {
       "type": "string",
       "description": "JSON Schema location used by editors for completion and validation."
     },
-    "openapi": { "$ref": "#/$defs/openapi" },
+    "openapi": {
+      "$ref": "#/$defs/openapi"
+    },
     "output": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["path"],
+      "required": [
+        "path"
+      ],
       "properties": {
-        "path": { "type": "string", "minLength": 1, "description": "Generated release root, relative to this config file." }
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Generated release root, relative to this config file."
+        }
       }
     },
     "defaults": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "client_style": { "$ref": "#/$defs/clientStyle" }
+        "client_style": {
+          "$ref": "#/$defs/clientStyle"
+        }
       }
     },
     "packages": {
       "type": "array",
       "minItems": 1,
-      "items": { "$ref": "#/$defs/package" }
+      "items": {
+        "$ref": "#/$defs/package"
+      }
     }
   },
   "$defs": {
     "clientStyle": {
       "type": "string",
-      "enum": ["namespaced", "flat"],
+      "enum": [
+        "namespaced",
+        "flat"
+      ],
       "default": "namespaced",
       "description": "Namespaced resource client or direct operation methods."
     },
     "secret": {
       "description": "Literal value, environment-variable reference, or named Kaji auth profile. Prefer an environment or profile reference for credentials.",
       "oneOf": [
-        { "type": "string" },
         {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["env"],
-          "properties": { "env": { "type": "string", "minLength": 1 } }
+          "type": "string"
         },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["profile"],
-          "properties": { "profile": { "type": "string", "minLength": 1 } }
+          "required": [
+            "env"
+          ],
+          "properties": {
+            "env": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "profile"
+          ],
+          "properties": {
+            "profile": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
         }
       ]
     },
     "remoteInput": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["url"],
+      "required": [
+        "url"
+      ],
       "properties": {
-        "url": { "type": "string", "format": "uri", "description": "Remote OpenAPI URL." },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Remote OpenAPI URL."
+        },
         "headers": {
           "type": "object",
-          "additionalProperties": { "$ref": "#/$defs/secret" },
+          "additionalProperties": {
+            "$ref": "#/$defs/secret"
+          },
           "description": "Headers sent while downloading the OpenAPI document."
         },
         "auth": {
@@ -74,20 +117,37 @@
             {
               "type": "object",
               "additionalProperties": false,
-              "required": ["type", "username", "password"],
+              "required": [
+                "type",
+                "username",
+                "password"
+              ],
               "properties": {
-                "type": { "const": "basic" },
-                "username": { "$ref": "#/$defs/secret" },
-                "password": { "$ref": "#/$defs/secret" }
+                "type": {
+                  "const": "basic"
+                },
+                "username": {
+                  "$ref": "#/$defs/secret"
+                },
+                "password": {
+                  "$ref": "#/$defs/secret"
+                }
               }
             },
             {
               "type": "object",
               "additionalProperties": false,
-              "required": ["type", "token"],
+              "required": [
+                "type",
+                "token"
+              ],
               "properties": {
-                "type": { "const": "bearer" },
-                "token": { "$ref": "#/$defs/secret" }
+                "type": {
+                  "const": "bearer"
+                },
+                "token": {
+                  "$ref": "#/$defs/secret"
+                }
               }
             }
           ]
@@ -101,19 +161,57 @@
         "input": {
           "description": "Local OpenAPI YAML/JSON file or a remote OpenAPI request.",
           "oneOf": [
-            { "type": "string", "minLength": 1 },
-            { "$ref": "#/$defs/remoteInput" }
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "$ref": "#/$defs/remoteInput"
+            }
           ]
         },
-        "artifacts": { "type": "string", "minLength": 1, "description": "Existing Kaji compiler artifact directory." },
-        "name": { "type": "string", "default": "API" },
-        "version": { "type": "string", "default": "0.1.0" },
-        "compiler": { "type": "string", "description": "Optional replacement kaji-openapi executable." },
-        "paths": { "$ref": "#/$defs/pathSelection" }
+        "artifacts": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Existing Kaji compiler artifact directory."
+        },
+        "name": {
+          "type": "string",
+          "default": "API"
+        },
+        "version": {
+          "type": "string",
+          "default": "0.1.0"
+        },
+        "compiler": {
+          "type": "string",
+          "description": "Optional replacement kaji-openapi executable."
+        },
+        "paths": {
+          "$ref": "#/$defs/pathSelection"
+        }
       },
       "oneOf": [
-        { "required": ["input"], "not": { "required": ["artifacts"] } },
-        { "required": ["artifacts"], "not": { "required": ["input"] } }
+        {
+          "required": [
+            "input"
+          ],
+          "not": {
+            "required": [
+              "artifacts"
+            ]
+          }
+        },
+        {
+          "required": [
+            "artifacts"
+          ],
+          "not": {
+            "required": [
+              "input"
+            ]
+          }
+        }
       ]
     },
     "pathSelection": {
@@ -123,12 +221,18 @@
       "properties": {
         "include": {
           "type": "array",
-          "items": { "type": "string", "pattern": "^/" },
+          "items": {
+            "type": "string",
+            "pattern": "^/"
+          },
           "description": "Only generate operations whose OpenAPI path matches one of these patterns. Empty means every path."
         },
         "exclude": {
           "type": "array",
-          "items": { "type": "string", "pattern": "^/" },
+          "items": {
+            "type": "string",
+            "pattern": "^/"
+          },
           "description": "Never generate operations whose OpenAPI path matches one of these patterns."
         }
       }
@@ -136,119 +240,814 @@
     "package": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["language", "path", "plugins"],
+      "required": [
+        "language",
+        "path",
+        "plugins"
+      ],
       "properties": {
         "language": {
           "type": "string",
-          "enum": ["typescript", "typescript-cli", "rust", "rust-cli", "go", "python", "php", "symfony", "java", "csharp", "dotnet", "elixir", "ruby", "swift", "mock", "artifacts"]
+          "enum": [
+            "typescript",
+            "typescript-cli",
+            "rust",
+            "rust-cli",
+            "go",
+            "python",
+            "php",
+            "symfony",
+            "java",
+            "csharp",
+            "dotnet",
+            "elixir",
+            "ruby",
+            "swift",
+            "mock",
+            "artifacts",
+            "postman",
+            "terraform"
+          ]
         },
-        "path": { "type": "string", "minLength": 1, "description": "Safe path below output.path." },
-        "name": { "type": "string", "minLength": 1, "description": "Generated package identity." },
-        "client_style": { "$ref": "#/$defs/clientStyle" },
-        "plugins": { "type": "array", "items": { "$ref": "#/$defs/plugin" } }
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Safe path below output.path."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Generated package identity."
+        },
+        "client_style": {
+          "$ref": "#/$defs/clientStyle"
+        },
+        "plugins": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/plugin"
+          }
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Independent SDK version. Release metadata may seed this from the last published package."
+        },
+        "release": {
+          "$ref": "#/$defs/packageMetadata"
+        },
+        "customizations": {
+          "type": "array",
+          "description": "SDK-author source overlays applied after generation, scoped to this package. Sources are relative to the config file.",
+          "items": {
+            "$ref": "#/$defs/codeCustomization"
+          }
+        },
+        "middleware": {
+          "type": "array",
+          "description": "Author-supplied runtime middleware bundled and enabled by default in this SDK package.",
+          "items": {
+            "$ref": "#/$defs/bundledMiddleware"
+          }
+        }
       }
     },
     "plugin": {
       "anyOf": [
-        { "$ref": "#/$defs/sdkPlugin" },
-        { "$ref": "#/$defs/typescriptCliPlugin" },
-        { "$ref": "#/$defs/rustCliPlugin" },
-        { "$ref": "#/$defs/typescriptArtifactPlugin" },
-        { "$ref": "#/$defs/redocPlugin" },
-        { "$ref": "#/$defs/mcpPlugin" },
-        { "$ref": "#/$defs/mockPlugin" }
+        {
+          "$ref": "#/$defs/sdkPlugin"
+        },
+        {
+          "$ref": "#/$defs/typescriptCliPlugin"
+        },
+        {
+          "$ref": "#/$defs/rustCliPlugin"
+        },
+        {
+          "$ref": "#/$defs/typescriptArtifactPlugin"
+        },
+        {
+          "$ref": "#/$defs/redocPlugin"
+        },
+        {
+          "$ref": "#/$defs/mcpPlugin"
+        },
+        {
+          "$ref": "#/$defs/mockPlugin"
+        },
+        {
+          "$ref": "#/$defs/typescriptProviderPlugin"
+        },
+        {
+          "$ref": "#/$defs/pythonConsumerPlugin"
+        },
+        {
+          "$ref": "#/$defs/postmanPlugin"
+        },
+        {
+          "$ref": "#/$defs/terraformPlugin"
+        }
       ]
     },
     "sdkPlugin": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "properties": {
-        "name": { "const": "sdk" },
-        "transport": { "type": "string", "enum": ["fetch", "axios"], "default": "fetch" },
-        "surface": { "type": "string", "enum": ["client", "raw"], "default": "client" },
-        "client_name": { "type": "string", "minLength": 1 },
-        "group_by_tag": { "type": "boolean", "default": true },
-        "throw_on_error": { "type": "boolean", "default": true },
-        "jobs": { "type": "integer", "minimum": 1, "description": "Go generation worker count." }
-        ,"sdk_package": { "type": "string", "minLength": 1, "description": "Composer package identity of the PHP SDK wrapped by a Symfony package." }
+        "name": {
+          "const": "sdk"
+        },
+        "transport": {
+          "type": "string",
+          "enum": [
+            "fetch",
+            "axios"
+          ],
+          "default": "fetch"
+        },
+        "surface": {
+          "type": "string",
+          "enum": [
+            "client",
+            "raw"
+          ],
+          "default": "client"
+        },
+        "client_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "group_by_tag": {
+          "type": "boolean",
+          "default": true
+        },
+        "throw_on_error": {
+          "type": "boolean",
+          "default": true
+        },
+        "jobs": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Go generation worker count."
+        },
+        "sdk_package": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Composer package identity of the PHP SDK wrapped by a Symfony package."
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique provider or consumer instance name."
+        },
+        "uses": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "models": {
+              "type": "string",
+              "minLength": 1
+            },
+            "transport": {
+              "type": "string",
+              "minLength": 1
+            },
+            "operations": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "description": "Select a named provider; unbound roles require one unambiguous compatible provider."
+        },
+        "integer_as_string": {
+          "type": "boolean"
+        },
+        "int64": {
+          "type": "string",
+          "enum": [
+            "number",
+            "string",
+            "bigint"
+          ],
+          "default": "number"
+        },
+        "async_client": {
+          "type": "boolean",
+          "description": "Generate an optional httpx async Python client."
+        },
+        "open_enums": {
+          "type": "boolean",
+          "description": "Generate forward-compatible Java enum value classes."
+        }
       }
     },
     "typescriptArtifactPlugin": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "properties": {
-        "name": { "type": "string", "enum": ["zod", "tanstack-react-query", "tanstack-vue-query", "swr", "faker", "msw", "cypress"] },
-        "output": { "type": "string", "minLength": 1 },
-        "clients_import": { "type": "string", "minLength": 1 },
-        "group_by_tag": { "type": "boolean", "default": true }
+        "name": {
+          "type": "string",
+          "enum": [
+            "zod",
+            "tanstack-react-query",
+            "tanstack-vue-query",
+            "swr",
+            "faker",
+            "msw",
+            "cypress"
+          ]
+        },
+        "output": {
+          "type": "string",
+          "minLength": 1
+        },
+        "clients_import": {
+          "type": "string",
+          "minLength": 1
+        },
+        "group_by_tag": {
+          "type": "boolean",
+          "default": true
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique provider or consumer instance name."
+        },
+        "uses": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "models": {
+              "type": "string",
+              "minLength": 1
+            },
+            "transport": {
+              "type": "string",
+              "minLength": 1
+            },
+            "operations": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "description": "Select a named provider; unbound roles require one unambiguous compatible provider."
+        }
       }
     },
     "typescriptCliPlugin": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "properties": {
-        "name": { "const": "cli" },
-        "command_name": { "type": "string", "minLength": 1, "description": "Executable command name. Defaults to the API name." },
-        "base_url": { "type": "string", "format": "uri", "description": "Default API origin. Users can override it with --base-url or the generated environment variable." },
-        "oauth": { "$ref": "#/$defs/cliOAuth" }
+        "name": {
+          "const": "cli"
+        },
+        "command_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Executable command name. Defaults to the API name."
+        },
+        "base_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Default API origin. Users can override it with --base-url or the generated environment variable."
+        },
+        "oauth": {
+          "$ref": "#/$defs/cliOAuth"
+        }
       }
     },
     "rustCliPlugin": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "properties": {
-        "name": { "const": "cli" },
-        "command_name": { "type": "string", "minLength": 1, "description": "Executable command name. Defaults to the API name." },
-        "base_url": { "type": "string", "format": "uri", "description": "Default API origin. Users can override it with --base-url or the generated environment variable." }
+        "name": {
+          "const": "cli"
+        },
+        "command_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Executable command name. Defaults to the API name."
+        },
+        "base_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Default API origin. Users can override it with --base-url or the generated environment variable."
+        }
       }
     },
     "cliOAuth": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["client_id"],
+      "required": [
+        "client_id"
+      ],
       "properties": {
-        "client_id": { "type": "string", "minLength": 1, "description": "Public OAuth client identifier registered for this CLI." },
-        "security_scheme": { "type": "string", "minLength": 1, "description": "OpenAPI OAuth security scheme used by access tokens." },
-        "scopes": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
-        "preferred_flow": { "type": "string", "enum": ["device", "browser"], "default": "device" },
-        "authorization_url": { "type": "string", "format": "uri", "description": "Overrides the OpenAPI authorizationCode flow URL." },
-        "device_authorization_url": { "type": "string", "format": "uri", "description": "RFC 8628 device authorization endpoint." },
-        "token_url": { "type": "string", "format": "uri", "description": "Overrides the OpenAPI OAuth token URL." },
-        "redirect_uri": { "type": "string", "format": "uri", "description": "Registered loopback callback for PKCE browser login." }
+        "client_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Public OAuth client identifier registered for this CLI."
+        },
+        "security_scheme": {
+          "type": "string",
+          "minLength": 1,
+          "description": "OpenAPI OAuth security scheme used by access tokens."
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "preferred_flow": {
+          "type": "string",
+          "enum": [
+            "device",
+            "browser"
+          ],
+          "default": "device"
+        },
+        "authorization_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Overrides the OpenAPI authorizationCode flow URL."
+        },
+        "device_authorization_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "RFC 8628 device authorization endpoint."
+        },
+        "token_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Overrides the OpenAPI OAuth token URL."
+        },
+        "redirect_uri": {
+          "type": "string",
+          "format": "uri",
+          "description": "Registered loopback callback for PKCE browser login."
+        }
       }
     },
     "redocPlugin": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "properties": {
-        "name": { "const": "redoc" },
-        "output": { "type": "string", "minLength": 1 },
-        "openapi_spec": { "type": "string", "minLength": 1 },
-        "title": { "type": "string", "minLength": 1 }
+        "name": {
+          "const": "redoc"
+        },
+        "output": {
+          "type": "string",
+          "minLength": 1
+        },
+        "openapi_spec": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "mcpPlugin": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "properties": {
-        "name": { "const": "mcp" },
-        "output": { "type": "string", "minLength": 1 }
+        "name": {
+          "const": "mcp"
+        },
+        "output": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "mockPlugin": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "properties": {
-        "name": { "const": "server" },
-        "image": { "type": "string", "minLength": 1 },
-        "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+        "name": {
+          "const": "server"
+        },
+        "image": {
+          "type": "string",
+          "minLength": 1
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        }
+      }
+    },
+    "typescriptProviderPlugin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "enum": [
+            "models",
+            "transport",
+            "operations",
+            "client"
+          ]
+        },
+        "output": {
+          "type": "string",
+          "minLength": 1
+        },
+        "transport": {
+          "enum": [
+            "fetch",
+            "axios"
+          ]
+        },
+        "client_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "throw_on_error": {
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique provider or consumer instance name."
+        },
+        "uses": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "models": {
+              "type": "string",
+              "minLength": 1
+            },
+            "transport": {
+              "type": "string",
+              "minLength": 1
+            },
+            "operations": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "description": "Select a named provider; unbound roles require one unambiguous compatible provider."
+        },
+        "integer_as_string": {
+          "type": "boolean"
+        },
+        "int64": {
+          "type": "string",
+          "enum": [
+            "number",
+            "string",
+            "bigint"
+          ],
+          "default": "number"
+        }
+      }
+    },
+    "pythonConsumerPlugin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "enum": [
+            "webhooks",
+            "roundtrips"
+          ]
+        }
+      }
+    },
+    "packageCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "program"
+      ],
+      "properties": {
+        "program": {
+          "type": "string",
+          "minLength": 1
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "packageMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": 1,
+          "default": 1
+        },
+        "name": {
+          "type": "string"
+        },
+        "language": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "build": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/packageCommand"
+          }
+        },
+        "test": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/packageCommand"
+          }
+        },
+        "capabilities": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "publisher": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "registry",
+            "release_type"
+          ],
+          "properties": {
+            "registry": {
+              "type": "string",
+              "minLength": 1
+            },
+            "release_type": {
+              "type": "string",
+              "minLength": 1
+            },
+            "commands": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/packageCommand"
+              }
+            },
+            "extra_files": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "description": "Omit commands for standard npm/pypi/crates.io/go trusted publishing; custom registries require commands."
+        }
+      }
+    },
+    "codeCustomization": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode",
+            "path",
+            "source"
+          ],
+          "properties": {
+            "mode": {
+              "const": "add"
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "description": "File path relative to this package."
+            },
+            "source": {
+              "type": "string",
+              "minLength": 1,
+              "description": "UTF-8 source file relative to the Kaji config."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode",
+            "path",
+            "source"
+          ],
+          "properties": {
+            "mode": {
+              "const": "replace"
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "description": "File path relative to this package."
+            },
+            "source": {
+              "type": "string",
+              "minLength": 1,
+              "description": "UTF-8 source file relative to the Kaji config."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode",
+            "path",
+            "source",
+            "find"
+          ],
+          "properties": {
+            "mode": {
+              "const": "patch"
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "description": "File path relative to this package."
+            },
+            "source": {
+              "type": "string",
+              "minLength": 1,
+              "description": "UTF-8 source file relative to the Kaji config."
+            },
+            "find": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Exact text that must occur once in the generated file."
+            }
+          }
+        }
+      ]
+    },
+    "bundledMiddleware": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "path",
+        "symbol"
+      ],
+      "properties": {
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "description": "UTF-8 middleware source relative to the Kaji config."
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Destination module/file relative to this SDK package; must match native compiled source layout."
+        },
+        "symbol": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "description": "Middleware function, factory, or class according to this language ABI."
+        },
+        "async_symbol": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "description": "Optional Python async middleware function, required when bundling middleware in async output."
+        }
+      }
+    },
+    "postmanPlugin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "enum": [
+            "collection",
+            "environment"
+          ]
+        },
+        "output": {
+          "type": "string",
+          "minLength": 1
+        },
+        "strict": {
+          "type": "boolean",
+          "default": true
+        },
+        "group_by_tag": {
+          "type": "boolean",
+          "default": true
+        },
+        "base_url": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "terraformResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "create",
+        "read",
+        "delete"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "create": {
+          "type": "string",
+          "minLength": 1
+        },
+        "read": {
+          "type": "string",
+          "minLength": 1
+        },
+        "update": {
+          "type": "string",
+          "minLength": 1
+        },
+        "delete": {
+          "type": "string",
+          "minLength": 1
+        },
+        "id_parameter": {
+          "type": "string",
+          "minLength": 1
+        },
+        "id_field": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "terraformPlugin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "const": "provider"
+        },
+        "infer": {
+          "type": "boolean",
+          "default": true
+        },
+        "module": {
+          "type": "string",
+          "minLength": 1
+        },
+        "provider_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "resources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/terraformResource"
+          }
+        }
       }
     }
   }

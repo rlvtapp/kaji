@@ -176,8 +176,16 @@ fn render_schema(output: &mut String, schema: &Schema) {
                 );
             }
             if !matches!(additional_properties, AdditionalProperties::Forbidden) {
-                output.push_str(
-                    "    [JsonExtensionData]\n    public Dictionary<string, JsonElement>? AdditionalProperties { get; init; }\n",
+                let mut property = "AdditionalProperties".to_owned();
+                while fields
+                    .iter()
+                    .any(|field| pascal_case(&field.name) == property)
+                {
+                    property.push('_');
+                }
+                let _ = writeln!(
+                    output,
+                    "    [JsonExtensionData]\n    public Dictionary<string, JsonElement>? {property} {{ get; init; }}"
                 );
             }
             output.push_str("}\n");
@@ -969,8 +977,39 @@ fn render_readme(
         .first()
         .cloned()
         .unwrap_or_else(|| "Default".into());
+    let middleware = r#"## Runtime customization
+
+Inject an `HttpClient` with a customer `DelegatingHandler`:
+
+```csharp
+sealed class CustomerPolicy : DelegatingHandler
+{
+    protected override async Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        request.Headers.TryAddWithoutValidation("X-Customer", "customer-a");
+        var response = await base.SendAsync(request, cancellationToken);
+        response.Headers.TryAddWithoutValidation("X-Customer-Policy", "applied");
+        return response;
+    }
+}
+
+// Inside application setup:
+var handler = new CustomerPolicy { InnerHandler = new HttpClientHandler() };
+var httpClient = new HttpClient(handler);
+// Pass httpClient to the KajiClient constructor shown above.
+```
+
+The handler can replace request URI, method and content before forwarding;
+replace response status/content after forwarding; catch and translate transport
+errors; or return a synthetic response without calling `base.SendAsync`. Preserve
+cancellation and dispose any discarded response/content. Observer hooks do not
+return replacement messages. The handler sees each transport attempt, including
+SDK retries. Keep rewrites repeatable and preserve stream ownership when handling
+streaming responses. Reuse the configured client for the application's lifetime.
+"#;
     format!(
-        "# {package}\n\nGenerated .NET 8 client for {}. This release selected the **{style}** client style.\n\n```csharp\nusing {namespace};\n\nvar client = new KajiClient(httpClient, new KajiClientOptions\n{{\n    BaseUrl = \"https://api.example.com\",\n    ApiKey = Environment.GetEnvironmentVariable(\"API_KEY\"),\n}});\n```\n\n## Flat client\n\n```csharp\nawait client.{operation}Async(/* typed arguments */);\n```\n\n## Namespaced client\n\n```csharp\nawait client.{resource}.{operation}Async(/* typed arguments */);\n```\n\nThe namespaced example applies to packages generated with `SdkClientStyle::Namespaced`; direct `KajiClient` methods remain available in that mode. See [STYLE_GUIDE.md](STYLE_GUIDE.md) for selection guidance.\n",
+        "# {package}\n\nGenerated .NET 8 client for {}. This release selected the **{style}** client style.\n\n```csharp\nusing {namespace};\n\nvar client = new KajiClient(httpClient, new KajiClientOptions\n{{\n    BaseUrl = \"https://api.example.com\",\n    ApiKey = Environment.GetEnvironmentVariable(\"API_KEY\"),\n}});\n```\n\n## Flat client\n\n```csharp\nawait client.{operation}Async(/* typed arguments */);\n```\n\n## Namespaced client\n\n```csharp\nawait client.{resource}.{operation}Async(/* typed arguments */);\n```\n\nThe namespaced example applies to packages generated with `SdkClientStyle::Namespaced`; direct `KajiClient` methods remain available in that mode. See [STYLE_GUIDE.md](STYLE_GUIDE.md) for selection guidance.\n\n{middleware}",
         api.name,
     )
 }
@@ -1460,3 +1499,5 @@ mod tests {
 mod package;
 pub use package::DotNet;
 pub use package::{CSharp, PackageExt, Sdk, Settings, dotnet_package, package, sdk};
+
+mod bundled_middleware;

@@ -156,6 +156,14 @@ pub trait Language: Send + Sync + Sized + 'static {
     fn finalize(_cx: &mut FinalizeContext<'_, Self>) -> Result<()> {
         Ok(())
     }
+    /// Bundle SDK-author runtime middleware and register it in generated clients.
+    /// Called with package-relative output after finalization and post plugins.
+    fn bundle_middleware(
+        _tree: &mut GeneratedTree,
+        _middleware: &[crate::customization::BundledMiddleware],
+    ) -> Result<()> {
+        bail!("{} does not support bundled runtime middleware", Self::NAME)
+    }
 }
 
 /// A plugin's point in the package generation lifecycle.
@@ -271,19 +279,24 @@ impl Emitter<'_> {
         } else {
             self.tree.insert(file)?;
         }
+        self.tree.set_owner(&path, self.owner.clone())?;
         self.owners.insert(path, self.owner.clone());
         Ok(())
     }
     pub fn append(&mut self, tree: GeneratedTree) -> Result<()> {
-        for (file, custom) in tree.into_files() {
+        for (file, custom, owner) in tree.into_owned_files() {
+            let path = file.path.clone();
             self.insert(file, custom)?;
+            if let Some(owner) = owner {
+                self.tree.set_owner(path, owner)?;
+            }
         }
         Ok(())
     }
 
     /// Adapts a renderer with its own output prefix while retaining create-once files.
     pub fn append_from(&mut self, tree: GeneratedTree, prefix: &Path) -> Result<()> {
-        for (file, custom) in tree.into_files() {
+        for (file, custom, owner) in tree.into_owned_files() {
             let relative = file.path.strip_prefix(prefix).with_context(|| {
                 format!(
                     "renderer output {} is outside {}",
@@ -291,7 +304,11 @@ impl Emitter<'_> {
                     prefix.display()
                 )
             })?;
-            self.insert(GeneratedFile::new(relative, file.contents)?, custom)?;
+            let relative = relative.to_owned();
+            self.insert(GeneratedFile::new(&relative, file.contents)?, custom)?;
+            if let Some(owner) = owner {
+                self.tree.set_owner(relative, owner)?;
+            }
         }
         Ok(())
     }
@@ -336,6 +353,8 @@ pub struct Package<L: Language> {
     settings: L::Settings,
     common: Common,
     plugins: Vec<Box<dyn Plugin<L>>>,
+    customizations: Vec<crate::customization::CodeCustomization>,
+    middleware: Vec<crate::customization::BundledMiddleware>,
 }
 
 impl<L: Language> Package<L> {
@@ -345,10 +364,22 @@ impl<L: Language> Package<L> {
             settings: Default::default(),
             common: Default::default(),
             plugins: vec![],
+            customizations: vec![],
+            middleware: vec![],
         }
     }
     pub fn with(mut self, plugin: impl Plugin<L>) -> Self {
         self.plugins.push(Box::new(plugin));
+        self
+    }
+    /// Apply an explicit SDK-author source overlay after all plugins/finalizers.
+    pub fn customize(mut self, code: crate::customization::CodeCustomization) -> Self {
+        self.customizations.push(code);
+        self
+    }
+    /// Ship SDK-author runtime middleware enabled by default in this package.
+    pub fn middleware(mut self, middleware: crate::customization::BundledMiddleware) -> Self {
+        self.middleware.push(middleware);
         self
     }
     pub fn common(mut self, common: Common) -> Self {
@@ -383,6 +414,17 @@ impl<L: Language> Package<L> {
 
     fn resolve(&self) -> Result<Plan> {
         checked_path(Path::new(&self.dir))?;
+        let mut middleware_paths = BTreeSet::new();
+        for middleware in &self.middleware {
+            middleware.validate()?;
+            if !middleware_paths.insert(checked_path(&middleware.path)?) {
+                bail!(
+                    "duplicate bundled middleware path in {}: {}",
+                    self.dir,
+                    middleware.path.display()
+                );
+            }
+        }
         let mut instances = BTreeMap::new();
         let mut providers: HashMap<TypeId, Vec<usize>> = HashMap::new();
         let mut phases = Vec::new();
@@ -585,14 +627,41 @@ impl<L: Language> Package<L> {
                 })?;
             }
         }
+        if !self.middleware.is_empty() {
+            let mut staged = tree.clone();
+            let middleware = self
+                .middleware
+                .iter()
+                .map(|item| {
+                    let mut item = item.clone();
+                    item.path = checked_path(&item.path)?;
+                    Ok(item)
+                })
+                .collect::<Result<Vec<_>>>()?;
+            L::bundle_middleware(&mut staged, &middleware).with_context(|| {
+                format!("bundle runtime middleware for {} ({})", self.dir, L::NAME)
+            })?;
+            for item in &middleware {
+                staged.set_owner(
+                    &item.path,
+                    format!("bundled-middleware:{}", item.path.display()),
+                )?;
+            }
+            tree = staged;
+        }
+        crate::customization::apply_code_customizations(&mut tree, &self.customizations)?;
         let mut output = GeneratedTree::default();
         let dir = checked_path(Path::new(&self.dir))?;
-        for (file, custom) in tree.into_files() {
+        for (file, custom, owner) in tree.into_owned_files() {
             let file = GeneratedFile::new(dir.join(file.path), file.contents)?;
+            let path = file.path.clone();
             if custom {
                 output.insert_custom(file)?;
             } else {
                 output.insert(file)?;
+            }
+            if let Some(owner) = owner {
+                output.set_owner(path, format!("{}::{owner}", self.dir))?;
             }
         }
         Ok(output)

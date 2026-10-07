@@ -313,6 +313,7 @@ func collectPathItemOperations(
 				Hidden:               extensionBool(op.Extensions, "x-hidden"),
 				SecurityRequirements: securityRequirements,
 				Servers:              serverDocs,
+				Tags:                 op.Tags,
 				Parameters:           parameters,
 				RequestBody:          requestBody,
 				Responses:            responses,
@@ -442,12 +443,21 @@ func convertParameterList(params []*v3.Parameter) ([]ParameterDoc, error) {
 
 func convertParameter(param *v3.Parameter) (ParameterDoc, error) {
 	doc := ParameterDoc{
-		Name:        param.Name,
-		In:          param.In,
-		Description: param.Description,
-		Style:       param.Style,
-		Explode:     param.Explode,
-		Required:    false,
+		Name:          param.Name,
+		In:            param.In,
+		Description:   param.Description,
+		Style:         param.Style,
+		AllowReserved: param.AllowReserved,
+		Explode:       param.Explode,
+		Required:      false,
+	}
+
+	if param.Example != nil {
+		value, err := yamlNodeToInterface(param.Example)
+		if err != nil {
+			return doc, err
+		}
+		doc.Example = value
 	}
 
 	if param.Required != nil {

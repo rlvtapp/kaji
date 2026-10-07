@@ -454,6 +454,15 @@ fn js_string(value: &str) -> String {
 pub struct TypeScriptZod;
 
 impl TypeScriptZod {
+    pub(crate) fn generate_with_models(
+        &self,
+        api: &Api,
+        config: &ArtifactOptions,
+        options: &crate::ModelOptions,
+    ) -> Result<Vec<GeneratedFile>> {
+        self.generate(&crate::json::artifact_api(api, options), config)
+    }
+
     pub fn generate(&self, api: &Api, config: &ArtifactOptions) -> Result<Vec<GeneratedFile>> {
         let mut output = format!("{NOTICE}\nimport {{ z }} from 'zod';\n\n");
         for schema in &api.schemas {
@@ -641,6 +650,15 @@ impl TypeScriptSwr {
 pub struct TypeScriptFaker;
 
 impl TypeScriptFaker {
+    pub(crate) fn generate_with_models(
+        &self,
+        api: &Api,
+        config: &ArtifactOptions,
+        options: &crate::ModelOptions,
+    ) -> Result<Vec<GeneratedFile>> {
+        self.generate(&crate::json::artifact_api(api, options), config)
+    }
+
     pub fn generate(&self, api: &Api, config: &ArtifactOptions) -> Result<Vec<GeneratedFile>> {
         let mut output = format!(
             "{NOTICE}\nimport {{ faker }} from '@faker-js/faker';\n{}
@@ -791,12 +809,42 @@ fn extra_output_path(config: &ArtifactOptions, default_directory: &str, file: &s
     }
 }
 
+fn artifact_zod_literal(literal: &Value, schema: &SchemaValue) -> Option<String> {
+    if matches!(literal, Value::Array(_) | Value::Object(_)) {
+        return None;
+    }
+    artifact_literal(literal, schema).map(|literal| format!("z.literal({literal})"))
+}
+
+fn artifact_literal(literal: &Value, schema: &SchemaValue) -> Option<String> {
+    if literal.is_number() {
+        match schema
+            .extensions
+            .get("x-kaji-integer")
+            .and_then(Value::as_str)
+        {
+            Some("bigint") => return Some(format!("{literal}n")),
+            Some("string") => return Some(js_string(&literal.to_string())),
+            _ => {}
+        }
+    }
+    ts_literal(literal)
+}
+
 fn render_zod(value: &SchemaValue) -> String {
     let primitive = match &value.kind {
         SchemaKind::Any => "z.unknown()".to_owned(),
         SchemaKind::Null => "z.null()".to_owned(),
         SchemaKind::Boolean => "z.boolean()".to_owned(),
-        SchemaKind::Integer => "z.number().int()".to_owned(),
+        SchemaKind::Integer => match value
+            .extensions
+            .get("x-kaji-integer")
+            .and_then(Value::as_str)
+        {
+            Some("bigint") => "z.bigint()".into(),
+            Some("string") => "z.string().regex(/^-?(?:0|[1-9]\\d*)$/)".into(),
+            _ => "z.number().int()".into(),
+        },
         SchemaKind::Number => "z.number()".to_owned(),
         SchemaKind::String => "z.string()".to_owned(),
         SchemaKind::Array { items } => format!("z.array({})", render_zod(items)),
@@ -854,13 +902,17 @@ fn render_zod(value: &SchemaValue) -> String {
         },
         SchemaKind::Not { .. } => "z.unknown()".to_owned(),
     };
-    let constrained = if let Some(constant) = value.const_value.as_ref().and_then(zod_literal) {
+    let constrained = if let Some(constant) = value
+        .const_value
+        .as_ref()
+        .and_then(|literal| artifact_zod_literal(literal, value))
+    {
         constant
     } else if !value.enum_values.is_empty() {
         let values = value
             .enum_values
             .iter()
-            .filter_map(zod_literal)
+            .filter_map(|literal| artifact_zod_literal(literal, value))
             .collect::<Vec<_>>();
         if values.len() == 1 {
             values[0].clone()
@@ -883,18 +935,6 @@ fn render_zod(value: &SchemaValue) -> String {
         format!("{constrained}.optional()")
     } else {
         constrained
-    }
-}
-
-fn zod_literal(value: &Value) -> Option<String> {
-    // `z.literal` accepts JSON scalar values, but not JSON arrays or objects.
-    // Retain the structural schema for composite const/enum values instead of
-    // emitting TypeScript that Zod 4 rejects at runtime.
-    match value {
-        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {
-            ts_literal(value).map(|literal| format!("z.literal({literal})"))
-        }
-        Value::Array(_) | Value::Object(_) => None,
     }
 }
 
@@ -954,14 +994,18 @@ fn render_hooks(api: &Api, options: &ArtifactOptions, framework: &str, swr: bool
 }
 
 fn render_faker(value: &SchemaValue) -> String {
-    if let Some(constant) = value.const_value.as_ref().and_then(ts_literal) {
+    if let Some(constant) = value
+        .const_value
+        .as_ref()
+        .and_then(|literal| artifact_literal(literal, value))
+    {
         return constant;
     }
     if !value.enum_values.is_empty() {
         let values = value
             .enum_values
             .iter()
-            .filter_map(ts_literal)
+            .filter_map(|literal| artifact_literal(literal, value))
             .collect::<Vec<_>>();
         if !values.is_empty() {
             return format!("faker.helpers.arrayElement([{}])", values.join(", "));
@@ -973,7 +1017,15 @@ fn render_faker(value: &SchemaValue) -> String {
         }
         SchemaKind::Null => "null".to_owned(),
         SchemaKind::Boolean => "faker.datatype.boolean()".to_owned(),
-        SchemaKind::Integer => "faker.number.int()".to_owned(),
+        SchemaKind::Integer => match value
+            .extensions
+            .get("x-kaji-integer")
+            .and_then(Value::as_str)
+        {
+            Some("bigint") => "BigInt(faker.number.int())".into(),
+            Some("string") => "String(faker.number.int())".into(),
+            _ => "faker.number.int()".into(),
+        },
         SchemaKind::Number => "faker.number.float()".to_owned(),
         SchemaKind::String => "faker.string.alpha({ length: 12 })".to_owned(),
         SchemaKind::Array { items } => {

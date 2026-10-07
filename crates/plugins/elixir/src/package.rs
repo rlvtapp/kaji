@@ -12,6 +12,12 @@ impl Language for Elixir {
     const NAME: &'static str = "elixir";
     type Settings = Settings;
     type Workspace = ();
+    fn bundle_middleware(
+        tree: &mut kaji_core::GeneratedTree,
+        middleware: &[kaji_core::customization::BundledMiddleware],
+    ) -> Result<()> {
+        crate::bundled::bundle(tree, middleware)
+    }
 }
 pub fn package(dir: impl Into<String>) -> Package<Elixir> {
     Package::new(dir)

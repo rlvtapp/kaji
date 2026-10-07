@@ -5,6 +5,7 @@
 //! works in server-side Swift as well as Apple application targets without
 //! making an SDK consumer adopt a dependency graph chosen by the generator.
 
+mod bundled;
 mod package;
 pub use package::{PackageExt, Settings, Swift, package, sdk};
 
@@ -128,10 +129,34 @@ fn readme(api: &Api, package: &str, module: &str, style: SdkClientStyle) -> Stri
             "Operations are available directly on `KajiClient`; resource facades are also generated for navigation."
         }
     };
-    format!(
+    let mut output = format!(
         "# {package}\n\nGenerated Swift SDK for {}. {style_note}\n\n```swift\nimport {module}\n\nlet client = KajiClient(options: .init(baseURL: URL(string: \"https://api.example.com\")!))\n{call}\n```\n\nUse Swift Package Manager to add this directory as a local package or publish it to a source-control repository.\n",
         api.name
-    )
+    );
+    output.push_str(&r#"
+## Customer middleware
+
+```swift
+import Foundation
+import MODULE
+let transport = KajiMiddlewareTransport(inner: KajiURLSessionTransport()) { request, next in
+    var request = request
+    request.setValue("example", forHTTPHeaderField: "X-Customer")
+    do {
+        let (data, response) = try await next(request)
+        // Inspect or replace data/response before normal SDK decoding.
+        return (data, response)
+    } catch {
+        // Inspect, recover with a synthetic response, or propagate.
+        throw error
+    }
+}
+let client = KajiClient(options: .init(baseURL: URL(string: "https://api.example.com")!), transport: transport)
+```
+
+Nest wrappers for composition; outer layers see requests first and responses last. Implement `KajiTransport` directly to substitute execution, or return a response without calling `next`. Existing `session:` initialization remains supported. Middleware wraps the buffered transport; it does not add streaming or automatic retries. Errors from HTTP status validation and decoding occur after middleware. Captures must satisfy Swift `Sendable` rules. Lifecycle hooks remain separate notifications.
+"#.replace("MODULE", module));
+    output
 }
 
 fn style_guide(api: &Api, module: &str, style: SdkClientStyle) -> String {
@@ -149,14 +174,46 @@ fn style_guide(api: &Api, module: &str, style: SdkClientStyle) -> String {
 
 fn json_value() -> String {
     format!(
-        "{NOTICE}\nimport Foundation\n\n/// A lossless JSON value used for unconstrained OpenAPI schemas.\npublic enum JSONValue: Codable, Sendable, Equatable {{\n    case null\n    case bool(Bool)\n    case number(Double)\n    case string(String)\n    case array([JSONValue])\n    case object([String: JSONValue])\n\n    public init(from decoder: Decoder) throws {{\n        let container = try decoder.singleValueContainer()\n        if container.decodeNil() {{ self = .null }}\n        else if let value = try? container.decode(Bool.self) {{ self = .bool(value) }}\n        else if let value = try? container.decode(Double.self) {{ self = .number(value) }}\n        else if let value = try? container.decode(String.self) {{ self = .string(value) }}\n        else if let value = try? container.decode([JSONValue].self) {{ self = .array(value) }}\n        else {{ self = .object(try container.decode([String: JSONValue].self)) }}\n    }}\n\n    public func encode(to encoder: Encoder) throws {{\n        var container = encoder.singleValueContainer()\n        switch self {{\n        case .null: try container.encodeNil()\n        case .bool(let value): try container.encode(value)\n        case .number(let value): try container.encode(value)\n        case .string(let value): try container.encode(value)\n        case .array(let value): try container.encode(value)\n        case .object(let value): try container.encode(value)\n        }}\n    }}\n}}\n"
+        "{NOTICE}\nimport Foundation\n\n/// A JSON value used for unconstrained OpenAPI schemas.\npublic enum JSONValue: Codable, Sendable, Equatable {{\n    case null\n    case bool(Bool)\n    case integer(Int64)\n    case unsignedInteger(UInt64)\n    case number(Double)\n    case string(String)\n    case array([JSONValue])\n    case object([String: JSONValue])\n\n    public init(from decoder: Decoder) throws {{\n        let container = try decoder.singleValueContainer()\n        if container.decodeNil() {{ self = .null }}\n        else if let value = try? container.decode(Bool.self) {{ self = .bool(value) }}\n        else if let value = try? container.decode(Int64.self) {{ self = .integer(value) }}\n        else if let value = try? container.decode(UInt64.self) {{ self = .unsignedInteger(value) }}\n        else if let value = try? container.decode(Double.self) {{ self = .number(value) }}\n        else if let value = try? container.decode(String.self) {{ self = .string(value) }}\n        else if let value = try? container.decode([JSONValue].self) {{ self = .array(value) }}\n        else {{ self = .object(try container.decode([String: JSONValue].self)) }}\n    }}\n\n    public func encode(to encoder: Encoder) throws {{\n        var container = encoder.singleValueContainer()\n        switch self {{\n        case .null: try container.encodeNil()\n        case .bool(let value): try container.encode(value)\n        case .integer(let value): try container.encode(value)\n        case .unsignedInteger(let value): try container.encode(value)\n        case .number(let value): try container.encode(value)\n        case .string(let value): try container.encode(value)\n        case .array(let value): try container.encode(value)\n        case .object(let value): try container.encode(value)\n        }}\n    }}\n}}\n\ninternal struct KajiCodingKey: CodingKey {{\n    let stringValue: String\n    let intValue: Int? = nil\n    init(_ value: String) {{ self.stringValue = value }}\n    init?(stringValue: String) {{ self.stringValue = stringValue }}\n    init?(intValue: Int) {{ return nil }}\n}}\n"
     )
 }
 
 fn client_runtime() -> String {
-    format!(
+    let runtime = format!(
         "{NOTICE}\nimport Foundation\n#if canImport(FoundationNetworking)\nimport FoundationNetworking\n#endif\n\npublic struct KajiClientOptions: Sendable {{\n    public var baseURL: URL\n    public var headers: [String: String]\n    public var timeout: TimeInterval\n\n    public init(baseURL: URL, headers: [String: String] = [:], timeout: TimeInterval = 30) {{\n        self.baseURL = baseURL\n        self.headers = headers\n        self.timeout = timeout\n    }}\n}}\n\npublic enum KajiAPIError: Error, Sendable {{\n    case invalidURL(String)\n    case invalidResponse\n    case status(code: Int, body: Data)\n}}\n\n/// Receives lifecycle notifications without requiring a logging framework.\npublic protocol KajiClientHook: Sendable {{\n    func willSend(_ request: URLRequest)\n    func didReceive(_ response: HTTPURLResponse, body: Data)\n}}\n\npublic final class KajiClient: @unchecked Sendable {{\n    private let options: KajiClientOptions\n    private let session: URLSession\n    private let hooks: [any KajiClientHook]\n    private let encoder = JSONEncoder()\n    private let decoder = JSONDecoder()\n\n    public init(options: KajiClientOptions, session: URLSession = .shared, hooks: [any KajiClientHook] = []) {{\n        self.options = options\n        self.session = session\n        self.hooks = hooks\n    }}\n\n    internal func makeRequest(method: String, path: String, query: [URLQueryItem] = []) throws -> URLRequest {{\n        guard var components = URLComponents(url: options.baseURL.appendingPathComponent(path.trimmingCharacters(in: CharacterSet(charactersIn: \"/\"))), resolvingAgainstBaseURL: false) else {{\n            throw KajiAPIError.invalidURL(path)\n        }}\n        components.queryItems = query.isEmpty ? nil : query\n        guard let url = components.url else {{ throw KajiAPIError.invalidURL(path) }}\n        var request = URLRequest(url: url, timeoutInterval: options.timeout)\n        request.httpMethod = method\n        request.setValue(\"application/json\", forHTTPHeaderField: \"Accept\")\n        for (name, value) in options.headers {{ request.setValue(value, forHTTPHeaderField: name) }}\n        return request\n    }}\n\n    internal func send<T: Decodable>(_ request: URLRequest, as type: T.Type) async throws -> T {{\n        hooks.forEach {{ $0.willSend(request) }}\n        let (data, response) = try await session.data(for: request)\n        guard let http = response as? HTTPURLResponse else {{ throw KajiAPIError.invalidResponse }}\n        hooks.forEach {{ $0.didReceive(http, body: data) }}\n        guard (200..<300).contains(http.statusCode) else {{ throw KajiAPIError.status(code: http.statusCode, body: data) }}\n        return try decoder.decode(T.self, from: data)\n    }}\n\n    internal func sendVoid(_ request: URLRequest) async throws {{\n        hooks.forEach {{ $0.willSend(request) }}\n        let (data, response) = try await session.data(for: request)\n        guard let http = response as? HTTPURLResponse else {{ throw KajiAPIError.invalidResponse }}\n        hooks.forEach {{ $0.didReceive(http, body: data) }}\n        guard (200..<300).contains(http.statusCode) else {{ throw KajiAPIError.status(code: http.statusCode, body: data) }}\n    }}\n\n    internal func encode<T: Encodable>(_ body: T) throws -> Data {{ try encoder.encode(body) }}\n}}\n\nextension String {{\n    var kajiPathComponent: String {{ addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? self }}\n}}\n"
-    )
+    );
+    runtime.replace("public final class KajiClient: @unchecked Sendable {", r#"
+/// Replace execution or compose middleware around the Foundation transport.
+public protocol KajiTransport: Sendable {
+    func execute(_ request: URLRequest) async throws -> (Data, URLResponse)
+}
+public struct KajiURLSessionTransport: KajiTransport {
+    private let session: URLSession
+    public init(session: URLSession = .shared) { self.session = session }
+    public func execute(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        try await session.data(for: request)
+    }
+}
+public typealias KajiNext = @Sendable (URLRequest) async throws -> (Data, URLResponse)
+public typealias KajiMiddleware = @Sendable (URLRequest, KajiNext) async throws -> (Data, URLResponse)
+/// Outer middleware runs first on requests and last on responses.
+public struct KajiMiddlewareTransport: KajiTransport {
+    private let inner: any KajiTransport
+    private let middleware: KajiMiddleware
+    public init(inner: any KajiTransport, middleware: @escaping KajiMiddleware) {
+        self.inner = inner; self.middleware = middleware
+    }
+    public func execute(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        try await middleware(request, { request in try await inner.execute(request) })
+    }
+}
+public final class KajiClient: @unchecked Sendable {"#)
+    .replace("    private let hooks: [any KajiClientHook]", "    private let transport: any KajiTransport\n    private let hooks: [any KajiClientHook]")
+    .replace("hooks: [any KajiClientHook] = [])", "hooks: [any KajiClientHook] = [], transport: (any KajiTransport)? = nil)")
+    .replace("        self.options = options\n        self.session = session", "        self.options = options\n        self.session = session\n        self.transport = transport ?? KajiURLSessionTransport(session: session)")
+    .replace("try await session.data(for: request)", "try await transport.execute(request)")
+    // Preserve the default adapter's direct Foundation execution.
+    .replace("        try await transport.execute(request)\n    }\n}\npublic typealias", "        try await session.data(for: request)\n    }\n}\npublic typealias")
 }
 
 fn render_model(schema: &Schema) -> String {
@@ -177,39 +234,125 @@ fn render_model(schema: &Schema) -> String {
 }
 
 fn render_object(name: &str, fields: &[Field], additional: &AdditionalProperties) -> String {
-    let mut output =
-        format!("{NOTICE}\nimport Foundation\n\npublic struct {name}: Codable, Sendable {{\n");
+    let open = !matches!(additional, AdditionalProperties::Forbidden);
+    let mut extra = "additionalProperties".to_owned();
+    while fields
+        .iter()
+        .any(|field| identifier(&field.name).trim_matches('`') == extra)
+    {
+        extra.push('_');
+    }
+    let mut present = "_kajiPresentFields".to_owned();
+    while fields
+        .iter()
+        .any(|field| identifier(&field.name).trim_matches('`') == present)
+        || present == extra
+    {
+        present.push('_');
+    }
+    let extra_type = match additional {
+        AdditionalProperties::Schema { value } => swift_type(value, false),
+        _ => "JSONValue".into(),
+    };
+    let mut output = format!(
+        "{NOTICE}\nimport Foundation\n\npublic struct {name}: Codable, Sendable {{\n    private var {present}: Set<String> = []\n"
+    );
     for field in fields {
-        let field_name = identifier(&field.name);
-        let ty = swift_type(&field.value, !field.required);
-        let _ = writeln!(output, "    public var {field_name}: {ty}");
-    }
-    if !matches!(additional, AdditionalProperties::Forbidden) {
-        output.push_str("    /// OpenAPI permits additional properties; unknown fields are retained by the server but are not modeled by this strongly typed value.\n");
-    }
-    output.push_str("\n    public init(");
-    for (index, field) in fields.iter().enumerate() {
-        let separator = if index + 1 == fields.len() { "" } else { "," };
-        let default_value = if field.required { "" } else { " = nil" };
         let _ = writeln!(
             output,
-            "        {}: {}{default_value}{separator}",
+            "    public var {}: {}",
             identifier(&field.name),
             swift_type(&field.value, !field.required)
         );
     }
-    output.push_str("    ) {\n");
-    for field in fields {
-        let name = identifier(&field.name);
-        let _ = writeln!(output, "        self.{name} = {name}");
+    if open {
+        let _ = writeln!(output, "    public var {extra}: [String: {extra_type}]");
     }
-    output.push_str("    }\n\n    enum CodingKeys: String, CodingKey {\n");
+    let mut args = fields
+        .iter()
+        .map(|field| {
+            format!(
+                "{}: {}{}",
+                identifier(&field.name),
+                swift_type(&field.value, !field.required),
+                if field.required { "" } else { " = nil" }
+            )
+        })
+        .collect::<Vec<_>>();
+    if open {
+        args.push(format!("{extra}: [String: {extra_type}] = [:]"));
+    }
+    let _ = writeln!(output, "\n    public init({}) {{", args.join(", "));
     for field in fields {
         let generated = identifier(&field.name);
-        if generated == field.name {
-            let _ = writeln!(output, "        case {generated}");
+        let _ = writeln!(output, "        self.{generated} = {generated}");
+    }
+    if open {
+        let _ = writeln!(output, "        self.{extra} = {extra}");
+    }
+    output.push_str("    }\n\n    public init(from decoder: Decoder) throws {\n        let container = try decoder.container(keyedBy: KajiCodingKey.self)\n");
+    let _ = writeln!(
+        output,
+        "        self.{present} = Set(container.allKeys.map(\\.stringValue))"
+    );
+    for field in fields {
+        let generated = identifier(&field.name);
+        let key = format!("KajiCodingKey({:?})", field.name);
+        let ty = swift_type(&field.value, !field.required);
+        let base = ty.strip_suffix('?').unwrap_or(&ty);
+        if field.required && ty.ends_with('?') {
+            let _ = writeln!(
+                output,
+                "        guard container.contains({key}) else {{ throw DecodingError.keyNotFound({key}, .init(codingPath: decoder.codingPath, debugDescription: \"Missing required property\")) }}"
+            );
+        }
+        let decode = if ty.ends_with('?') {
+            "decodeIfPresent"
         } else {
-            let _ = writeln!(output, "        case {generated} = {:?}", field.name);
+            "decode"
+        };
+        let _ = writeln!(
+            output,
+            "        self.{generated} = try container.{decode}({base}.self, forKey: {key})"
+        );
+    }
+    let known = fields
+        .iter()
+        .map(|field| format!("{:?}", field.name))
+        .collect::<Vec<_>>()
+        .join(", ");
+    if open {
+        let _ = writeln!(
+            output,
+            "        self.{extra} = [:]\n        let known: Set<String> = [{known}]\n        for key in container.allKeys where !known.contains(key.stringValue) {{\n            self.{extra}.updateValue(try container.decode({extra_type}.self, forKey: key), forKey: key.stringValue)\n        }}"
+        );
+    }
+    output.push_str("    }\n\n    public func encode(to encoder: Encoder) throws {\n        var container = encoder.container(keyedBy: KajiCodingKey.self)\n");
+    if open {
+        let _ = writeln!(
+            output,
+            "        let known: Set<String> = [{known}]\n        for (key, value) in {extra} where !known.contains(key) {{ try container.encode(value, forKey: KajiCodingKey(key)) }}"
+        );
+    }
+    for field in fields {
+        let generated = identifier(&field.name);
+        let key = format!("KajiCodingKey({:?})", field.name);
+        let ty = swift_type(&field.value, !field.required);
+        if ty.ends_with('?') {
+            let condition = if field.required {
+                "true".to_owned()
+            } else {
+                format!("{present}.contains({:?})", field.name)
+            };
+            let _ = writeln!(
+                output,
+                "        if let value = {generated} {{ try container.encode(value, forKey: {key}) }} else if {condition} {{ try container.encodeNil(forKey: {key}) }}"
+            );
+        } else {
+            let _ = writeln!(
+                output,
+                "        try container.encode({generated}, forKey: {key})"
+            );
         }
     }
     output.push_str("    }\n}\n");
@@ -637,6 +780,96 @@ mod tests {
     use kaji_core::{HttpMethod, OperationParameter, OperationRequestBody, OperationResponse};
 
     #[test]
+    #[ignore = "requires a Swift toolchain"]
+    fn swift_models_round_trip_unknown_null_and_wide_integer_values() {
+        use std::process::Command;
+        let mut nullable = SchemaValue::new(SchemaKind::String);
+        nullable.nullable = true;
+        let schema = Schema::new(
+            "OpenModel",
+            SchemaValue::new(SchemaKind::Object {
+                fields: vec![
+                    Field {
+                        name: "id".into(),
+                        value: SchemaValue::new(SchemaKind::String),
+                        required: true,
+                        annotations: Default::default(),
+                    },
+                    Field {
+                        name: "optional".into(),
+                        value: nullable,
+                        required: false,
+                        annotations: Default::default(),
+                    },
+                ],
+                additional_properties: AdditionalProperties::Any,
+            }),
+        );
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("JSONValue.swift"), json_value()).unwrap();
+        std::fs::write(root.path().join("OpenModel.swift"), render_model(&schema)).unwrap();
+        let mut nullable_extra = SchemaValue::new(SchemaKind::String);
+        nullable_extra.nullable = true;
+        let typed = Schema::new(
+            "TypedExtras",
+            SchemaValue::new(SchemaKind::Object {
+                fields: vec![],
+                additional_properties: AdditionalProperties::Schema {
+                    value: Box::new(nullable_extra),
+                },
+            }),
+        );
+        std::fs::write(root.path().join("TypedExtras.swift"), render_model(&typed)).unwrap();
+        let script = r##"import Foundation
+let inputs = [#"{"id":"one","optional":null,"future":{"nested":true},"wide":9007199254740993}"#, #"{"id":"two","extra":null}"#]
+for input in inputs {
+    let data = input.data(using: .utf8)!
+    let model = try JSONDecoder().decode(OpenModel.self, from: data)
+    let encoded = try JSONEncoder().encode(model)
+    let before = try JSONSerialization.jsonObject(with: data) as! NSDictionary
+    let after = try JSONSerialization.jsonObject(with: encoded) as! NSDictionary
+    precondition(before == after)
+    if input.contains("wide") { precondition(String(data: encoded, encoding: .utf8)!.contains("9007199254740993")) }
+}
+let typedInput = #"{"nullable":null,"text":"hello"}"#.data(using: .utf8)!
+let typed = try JSONDecoder().decode(TypedExtras.self, from: typedInput)
+let typedEncoded = try JSONEncoder().encode(typed)
+let typedBefore = try JSONSerialization.jsonObject(with: typedInput) as! NSDictionary
+let typedAfter = try JSONSerialization.jsonObject(with: typedEncoded) as! NSDictionary
+precondition(typedBefore == typedAfter)
+let constructed = OpenModel(id: "three")
+let value = try JSONSerialization.jsonObject(with: JSONEncoder().encode(constructed)) as! NSDictionary
+precondition(value["optional"] == nil)
+"##;
+        std::fs::write(root.path().join("main.swift"), script).unwrap();
+        let output = Command::new("swiftc")
+            .args([
+                "-module-cache-path",
+                "cache",
+                "JSONValue.swift",
+                "OpenModel.swift",
+                "TypedExtras.swift",
+                "main.swift",
+                "-o",
+                "probe",
+            ])
+            .current_dir(root.path())
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let output = Command::new(root.path().join("probe")).output().unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
     fn renders_a_swift_package_with_models_operations_and_resources() {
         let api = Api {
             name: "Pet Store".into(),
@@ -747,6 +980,92 @@ mod tests {
         let output = Command::new("swift")
             .args(["build", "--disable-sandbox"])
             .current_dir(directory.path().join("sdk"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    #[test]
+    #[ignore = "requires a Swift toolchain; execute during native runtime verification"]
+    fn swift_transport_middleware_executes_without_network() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("Client.swift"), client_runtime()).unwrap();
+        std::fs::write(root.path().join("Probe.swift"), r#"import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+actor Events {
+    var values: [String] = []
+    func add(_ value: String) { values.append(value) }
+    func snapshot() -> [String] { values }
+}
+enum Failure: Error { case expected }
+struct Terminal: KajiTransport {
+    let events: Events
+    func execute(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        precondition(request.value(forHTTPHeaderField: "X-Customer") == "yes")
+        await events.add("terminal")
+        throw Failure.expected
+    }
+}
+@main struct Probe {
+    static func main() async throws {
+        let events = Events()
+        let recovery = KajiMiddlewareTransport(inner: Terminal(events: events)) { request, next in
+            var request = request
+            request.setValue("yes", forHTTPHeaderField: "X-Customer")
+            await events.add("inner:request")
+            do { return try await next(request) } catch {
+                await events.add("inner:error")
+                return (Data("\"recovered\"".utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: [:])!)
+            }
+        }
+        let outer = KajiMiddlewareTransport(inner: recovery) { request, next in
+            await events.add("outer:request")
+            let result = try await next(request)
+            await events.add("outer:response")
+            return (Data("\"transformed\"".utf8), result.1)
+        }
+        let client = KajiClient(options: .init(baseURL: URL(string: "https://unused.example")!), transport: outer)
+        let request = try client.makeRequest(method: "GET", path: "/label")
+        let value = try await client.send(request, as: String.self)
+        precondition(value == "transformed")
+        let order = await events.snapshot()
+        precondition(order == ["outer:request", "inner:request", "terminal", "inner:error", "outer:response"])
+        let shortcut = KajiMiddlewareTransport(inner: Terminal(events: events)) { request, _ in
+            (Data("\"cached\"".utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: [:])!)
+        }
+        let cached = KajiClient(options: .init(baseURL: URL(string: "https://unused.example")!), transport: shortcut)
+        let cachedValue = try await cached.send(request, as: String.self)
+        precondition(cachedValue == "cached")
+        let after = await events.snapshot(); precondition(after == order)
+    }
+}
+"#).unwrap();
+        let output = std::process::Command::new("swiftc")
+            .args([
+                "-swift-version",
+                "6",
+                "-warnings-as-errors",
+                "-module-cache-path",
+                "cache",
+                "Client.swift",
+                "Probe.swift",
+                "-o",
+                "probe",
+            ])
+            .current_dir(root.path())
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let output = std::process::Command::new(root.path().join("probe"))
             .output()
             .unwrap();
         assert!(

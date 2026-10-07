@@ -61,6 +61,10 @@ pub struct Workspace {
     symbols: BTreeMap<(PathBuf, String), String>,
     package_files: BTreeMap<PathBuf, String>,
     dependencies: BTreeMap<String, String>,
+    exports: std::collections::BTreeSet<String>,
+    namespace_exports: BTreeMap<String, String>,
+    dev_dependencies: BTreeMap<String, String>,
+    peer_dependencies: BTreeMap<String, String>,
 }
 impl Workspace {
     pub fn declare(&mut self, module: impl AsRef<Path>, name: &str, owner: &str) -> Result<Symbol> {
@@ -100,7 +104,57 @@ impl Workspace {
         Ok(())
     }
 
+    pub fn dev_dependency(
+        &mut self,
+        name: impl Into<String>,
+        range: impl Into<String>,
+    ) -> Result<()> {
+        register_dependency(&mut self.dev_dependencies, name.into(), range.into())
+    }
+    pub fn peer_dependency(
+        &mut self,
+        name: impl Into<String>,
+        range: impl Into<String>,
+    ) -> Result<()> {
+        register_dependency(&mut self.peer_dependencies, name.into(), range.into())
+    }
+
+    /// Adds a public module to the package barrel before finalization.
+    pub fn export(&mut self, module: impl AsRef<Path>) -> Result<()> {
+        let path = GeneratedFile::new(module, "")?.path;
+        self.exports
+            .insert(path.to_string_lossy().replace('\\', "/"));
+        Ok(())
+    }
+
+    pub fn export_namespace(&mut self, module: impl AsRef<Path>, name: &str) -> Result<()> {
+        anyhow::ensure!(
+            !name.is_empty()
+                && name
+                    .chars()
+                    .enumerate()
+                    .all(|(index, c)| c.is_ascii_alphabetic()
+                        || c == '_'
+                        || c == '$'
+                        || (index > 0 && c.is_ascii_digit())),
+            "invalid TypeScript export namespace {name}"
+        );
+        let path = GeneratedFile::new(module, "")?.path;
+        let module = path.to_string_lossy().replace('\\', "/");
+        if let Some(previous) = self.namespace_exports.get(name) {
+            anyhow::ensure!(
+                previous == &module,
+                "TypeScript export namespace {name} is owned by both {previous} and {module}; select different namespaces"
+            );
+        }
+        self.namespace_exports.insert(name.into(), module);
+        Ok(())
+    }
+
     pub(crate) fn package_file(&mut self, file: GeneratedFile) -> Result<()> {
+        if self.package_files.get(&file.path) == Some(&file.contents) {
+            return Ok(());
+        }
         if self.package_files.contains_key(&file.path) {
             bail!(
                 "multiple plugins own {}; put complete SDKs in separate packages",
@@ -114,25 +168,61 @@ impl Workspace {
 
 pub(crate) fn finalize(cx: &mut FinalizeContext<'_, TypeScript>) -> Result<()> {
     let mut files = std::mem::take(&mut cx.workspace.package_files);
-    if !cx.workspace.dependencies.is_empty() {
+    for (field, declarations) in [
+        ("dependencies", &cx.workspace.dependencies),
+        ("devDependencies", &cx.workspace.dev_dependencies),
+        ("peerDependencies", &cx.workspace.peer_dependencies),
+    ] {
+        if declarations.is_empty() {
+            continue;
+        }
         let manifest = files.get_mut(Path::new("package.json")).ok_or_else(|| {
             anyhow::anyhow!("npm dependencies require a package manifest provider")
         })?;
         let mut value: serde_json::Value = serde_json::from_str(manifest)?;
-        for (name, range) in &cx.workspace.dependencies {
-            for field in ["dependencies", "devDependencies", "peerDependencies"] {
-                if let Some(previous) = value[field][name].as_str() {
+        for (name, range) in declarations {
+            for existing_field in ["dependencies", "devDependencies", "peerDependencies"] {
+                if let Some(previous) = value[existing_field][name].as_str() {
                     if previous != range {
                         bail!("conflicting npm dependency {name}: {previous} versus {range}");
                     }
                 }
             }
-            value["dependencies"][name] = serde_json::Value::String(range.clone());
+            value[field][name] = serde_json::Value::String(range.clone());
         }
         *manifest = format!("{}\n", serde_json::to_string_pretty(&value)?);
+    }
+    if !cx.workspace.exports.is_empty() || !cx.workspace.namespace_exports.is_empty() {
+        let barrel = files.entry(PathBuf::from("index.ts")).or_default();
+        for (name, module) in &cx.workspace.namespace_exports {
+            barrel.push_str(&format!(
+                "export * as {name} from {};\n",
+                serde_json::to_string(&format!("./{module}"))?
+            ));
+        }
+        for module in &cx.workspace.exports {
+            barrel.push_str(&format!(
+                "export * from {};\n",
+                serde_json::to_string(&format!("./{module}"))?
+            ));
+        }
     }
     for (path, contents) in files {
         cx.files.emit(GeneratedFile::new(path, contents)?)?;
     }
+    Ok(())
+}
+
+fn register_dependency(
+    declarations: &mut BTreeMap<String, String>,
+    name: String,
+    range: String,
+) -> Result<()> {
+    if let Some(previous) = declarations.get(&name) {
+        if previous != &range {
+            bail!("conflicting npm dependency {name}: {previous} versus {range}");
+        }
+    }
+    declarations.insert(name, range);
     Ok(())
 }

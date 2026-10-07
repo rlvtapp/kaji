@@ -97,6 +97,7 @@ fn generate_typescript_sdk(
         model: profile.model_options.clone(),
     };
     let client_options = ClientRenderOptions {
+        model_options: Some(profile.model_options.clone()),
         output_dir: clients_dir,
         runtime_dir: ".kaji".into(),
         throw_on_error: profile.throw_on_error,
@@ -191,6 +192,7 @@ fn kaji_barrels(
     if let Some(client_name) = client_name {
         output.push_str(&format!("export {{ {client_name} }} from './client'\n"));
     }
+    output.push_str("export { createClient } from './.kaji/client'\nexport type { ClientConfig, ClientInstance, ClientMiddleware, MiddlewareNext, MiddlewareResponse } from './.kaji/client'\n");
     output.push_str("export * from './models'\nexport * from './clients'\n");
     files.push(("index.ts".into(), output));
 
@@ -333,7 +335,7 @@ fn render_client_barrel_chunks(
     Ok(names)
 }
 
-fn kaji_sdk_client(
+pub(crate) fn kaji_sdk_client(
     api: &Api,
     class_name: &str,
     group_by_tag: bool,
@@ -352,7 +354,7 @@ fn kaji_sdk_client(
     }
 }
 
-fn kaji_flat_sdk_client(
+pub(crate) fn kaji_flat_sdk_client(
     api: &Api,
     class_name: &str,
     group_by_tag: bool,
@@ -945,7 +947,7 @@ fn pagination_helpers() -> &'static str {
     "\nconst kajiJsonPath = (value: unknown, path: string): unknown => {\n  if (!path.startsWith('$')) return undefined\n  let current: unknown = value\n  for (const segment of path.slice(1).split('.').filter(Boolean)) {\n    const match = /^([^[]+)(?:\\[(-?\\d+)\\])?$/.exec(segment)\n    if (!match || current === null || typeof current !== 'object') return undefined\n    current = (current as Record<string, unknown>)[match[1]]\n    if (match[2] !== undefined) {\n      if (!Array.isArray(current)) return undefined\n      const index = Number(match[2])\n      current = current[index < 0 ? current.length + index : index]\n    }\n  }\n  return current\n}\nconst kajiPaginationUrl = (response: unknown, path: string): string | undefined => {\n  const value = kajiJsonPath(response, path)\n  return typeof value === 'string' && value.trim() ? value : undefined\n}\nconst kajiOptionValue = (options: unknown, location: string, name: string): unknown => {\n  const current = (options ?? {}) as Record<string, unknown>\n  const section = current[location] as Record<string, unknown> | undefined\n  return section?.[name]\n}\nconst kajiWithValue = (options: unknown, location: string, name: string, value: unknown): Record<string, unknown> => {\n  const current = (options ?? {}) as Record<string, unknown>\n  const section = (current[location] ?? {}) as Record<string, unknown>\n  return { ...current, [location]: { ...section, [name]: value }\n}\n// `bodyPath` is an explicit RFC 6901 JSON Pointer. This helper creates new\n// objects/arrays only along that declared path; it never mutates caller input\n// and refuses to invent a missing array shape.\nconst kajiJsonPointer = (path: string): string[] | undefined => {\n  if (!path.startsWith('/') || path.includes('//')) return undefined\n  return path.slice(1).split('/').map((part) => part.split('~1').join('/').split('~0').join('~'))\n}\nconst kajiBodyValue = (options: unknown, path: string): unknown => {\n  const current = (options ?? {}) as Record<string, unknown>\n  const pointer = kajiJsonPointer(path)\n  if (!pointer) return undefined\n  let value: unknown = current.body\n  for (const key of pointer) {\n    if (value === null || typeof value !== 'object') return undefined\n    value = Array.isArray(value) ? value[Number(key)] : (value as Record<string, unknown>)[key]\n  }\n  return value\n}\nconst kajiWithBodyValue = (options: unknown, path: string, value: unknown): Record<string, unknown> | undefined => {\n  const current = (options ?? {}) as Record<string, unknown>\n  const pointer = kajiJsonPointer(path)\n  if (!pointer || pointer.length === 0) return undefined\n  const update = (node: unknown, index: number): unknown | undefined => {\n    const key = pointer[index]\n    if (Array.isArray(node)) {\n      if (!/^\\d+$/.test(key)) return undefined\n      const position = Number(key)\n      if (!Number.isSafeInteger(position) || position < 0 || position >= node.length) return undefined\n      const copy = node.slice()\n      const next = index + 1 === pointer.length ? value : update(node[position], index + 1)\n      if (next === undefined) return undefined\n      copy[position] = next\n      return copy\n    }\n    if (node !== null && typeof node === 'object') {\n      const record = node as Record<string, unknown>\n      const next = index + 1 === pointer.length ? value : update(record[key] ?? {}, index + 1)\n      if (next === undefined) return undefined\n      return { ...record, [key]: next }\n    }\n    // An absent optional object can be created, but scalar and array shapes\n    // remain unrepresentable without a schema-directed declaration.\n    if (node === undefined || node === null) return update({}, index)\n    return undefined\n  }\n  const body = update(current.body ?? {}, 0)\n  return body === undefined ? undefined : { ...current, body }\n}\n"
 }
 
-fn sdk_client_name(api_name: &str) -> String {
+pub(crate) fn sdk_client_name(api_name: &str) -> String {
     let name = pascal_identifier(api_name);
     let name = name
         .get(..name.len().saturating_sub(3))
@@ -977,7 +979,11 @@ fn operation_tag_directory_if_present(operation: &Operation) -> Option<String> {
         .filter(|tag| !tag.is_empty())
 }
 
-fn kaji_package(api: &Api, transport: SdkTransport, name: Option<&str>) -> Result<String> {
+pub(crate) fn kaji_package(
+    api: &Api,
+    transport: SdkTransport,
+    name: Option<&str>,
+) -> Result<String> {
     let package_name = name
         .map(str::to_owned)
         .unwrap_or_else(|| kaji_package_name(api, transport));
@@ -1061,8 +1067,11 @@ fn kaji_readme(api: &Api, profile: &SdkConfig) -> String {
     } else {
         "// This package was generated with the raw surface; import the direct operation functions from the package entrypoint.".into()
     };
+    let middleware = format!(
+        "## Runtime middleware\n\nFetch and Axios clients accept `middleware` in their configuration.\n\n```ts\nimport {{ createClient, type ClientMiddleware }} from {package_name:?};\n\nconst customerPolicy: ClientMiddleware = async (request, next) => {{\n  try {{\n    return await next({{ ...request, query: {{ ...request.query, tenant: 'customer-a' }} }});\n  }} catch (cause) {{\n    throw new Error('Customer API request failed', {{ cause }});\n  }}\n}};\nconst transport = createClient({{ middleware: [customerPolicy] }});\n// Pass the same middleware config to the generated SDK constructor.\n```\n\nThe first middleware is outermost. Call `next(updatedRequest)` at most once; request changes apply before serialization and authentication. Replace the returned response envelope to rewrite data, or return an envelope without calling `next` to short circuit. A short circuit bypasses remaining middleware, transport hooks and validation. Middleware runs once per logical call; built-in retries remain inside `next`. Existing hooks keep their transport timing. Ordinary responses contain `status`, `contentType`, `data` and `headers`. Preserve native Fetch `Response` objects for streams, and Axios stream envelopes with a readable `data` stream.\n"
+    );
     format!(
-        "# {} TypeScript SDK\n\nGenerated by Kaji.\n\n```sh\nnpm install {package_name}\n```\n\n```ts\n{client}\n```\n\nSee [STYLE_GUIDE.md](STYLE_GUIDE.md) for the selected client surface.\n",
+        "# {} TypeScript SDK\n\nGenerated by Kaji.\n\n```sh\nnpm install {package_name}\n```\n\n```ts\n{client}\n```\n\nSee [STYLE_GUIDE.md](STYLE_GUIDE.md) for the selected client surface.\n\n{middleware}",
         api.name
     )
 }
@@ -1099,12 +1108,12 @@ fn package_version(version: &str) -> String {
     "0.1.0".to_owned()
 }
 
-fn kaji_runtime(
+pub(crate) fn kaji_runtime(
     transport: SdkTransport,
     security_schemes: Option<&SecuritySchemeCatalog>,
 ) -> String {
     let security_types = render_security_types(security_schemes);
-    match transport {
+    let runtime = match transport {
         SdkTransport::Fetch => {
             format!(
                 "{}\n{}",
@@ -1117,7 +1126,7 @@ export interface Codec { encode?: (value: unknown) => BodyInit | undefined; deco
 export interface StandardSchema { readonly ['~standard']?: { readonly validate: (value: unknown) => { value?: unknown; issues?: readonly unknown[] } | Promise<{ value?: unknown; issues?: readonly unknown[] }> } }
 export type Validator = StandardSchema | ((value: unknown) => void | Promise<void>)
 export interface ClientValidation { request?: Validator; response?: Validator }
-export interface ClientConfig { baseUrl?: string; apiKey?: string; apiKeyHeader?: string; apiKeyPrefix?: string; auth?: SecurityCredentials; headers?: HeadersInit; fetch?: typeof globalThis.fetch; retry?: RetryConfig | false; hooks?: ClientHooks; codecs?: Record<string, Codec>; validation?: ClientValidation; multipartEncoder?: MultipartEncoder }
+export interface ClientConfig { baseUrl?: string; apiKey?: string; apiKeyHeader?: string; apiKeyPrefix?: string; auth?: SecurityCredentials; headers?: HeadersInit; fetch?: typeof globalThis.fetch; retry?: RetryConfig | false; middleware?: readonly ClientMiddleware[]; hooks?: ClientHooks; codecs?: Record<string, Codec>; validation?: ClientValidation; multipartEncoder?: MultipartEncoder }
 export type ParameterStyle = { style?: 'simple' | 'label' | 'matrix' | 'form' | 'spaceDelimited' | 'pipeDelimited' | 'deepObject'; explode?: boolean }
 export type ParameterStyles = Partial<Record<'path' | 'query' | 'header' | 'cookie', Record<string, ParameterStyle>>>
 export type FormPartHeader = { required?: boolean; style?: ParameterStyle['style']; explode?: boolean; allowReserved?: boolean; schema_definition?: unknown; example_json?: string }
@@ -1262,7 +1271,7 @@ const retryDelay = async (attempt: number, retry: RetryConfig, retryAfter?: stri
   const delay = Math.min(retryAfterMs ?? exponential, retry.maxDelayMs ?? 8_000)
   await new Promise<void>((resolve) => setTimeout(resolve, delay))
 }
-export const createClient = (config: ClientConfig = {}): ClientInstance => async ({ method, url, body, path, query, headers, cookies, throwOnError: _throwOnError, security, contentType, responseType, styles, formEncodings, formHeaders, validation, paginationUrl }) => {
+const createTransport = (config: ClientConfig = {}): ClientInstance => async ({ method, url, body, path, query, headers, cookies, throwOnError: _throwOnError, security, contentType, responseType, styles, formEncodings, formHeaders, validation, paginationUrl }) => {
   const mergedHeaders = new Headers(config.headers)
   if (config.apiKey) mergedHeaders.set(config.apiKeyHeader ?? 'authorization', `${config.apiKeyPrefix ?? 'Bearer '}${config.apiKey}`)
   new Headers(headers as HeadersInit).forEach((value, key) => mergedHeaders.set(key, value))
@@ -1325,6 +1334,28 @@ export const toEventStream = async <T>(response: Promise<unknown>): Promise<Even
     }
   })()
 }
+/** Middleware runs once per logical request, around transport retries and legacy hooks. */
+export type MiddlewareNext = (request: RequestConfig) => Promise<unknown>
+export type ClientMiddleware = (request: RequestConfig, next: MiddlewareNext) => Promise<unknown>
+/** Ordinary responses use this envelope; Fetch streaming requests return a native Response. */
+export interface MiddlewareResponse { status: number; contentType: string; data: unknown; headers: Headers | Record<string, unknown> }
+export const createClient = (config: ClientConfig = {}): ClientInstance => {
+  const transport = createTransport(config)
+  const middleware = [...(config.middleware ?? [])]
+  return (request) => {
+    const dispatch = (index: number, current: RequestConfig): Promise<unknown> => {
+      const handler = middleware[index]
+      if (!handler) return transport(current)
+      let called = false
+      return Promise.resolve().then(() => handler(current, (updated) => {
+        if (called) return Promise.reject(new TypeError('Middleware next may only be called once'))
+        called = true
+        return dispatch(index + 1, updated)
+      }))
+    }
+    return dispatch(0, { ...request, path: request.path ? { ...request.path } : undefined, query: request.query ? { ...request.query } : undefined, headers: (request.headers instanceof Headers ? new Headers(request.headers) : Array.isArray(request.headers) ? request.headers.map(([name, value]) => [name, value]) : request.headers ? { ...request.headers } : undefined) as RequestConfig['headers'], cookies: request.cookies ? { ...request.cookies } : undefined })
+  }
+}
 export const client = createClient()
 export const resolveResponse = <T extends { status: number; data: unknown }, ThrowOnError extends boolean>(promise: Promise<T>, throwOnError: ThrowOnError): Promise<ResponseResult<T, ThrowOnError>> => (throwOnError ? promise.then((result) => result.data) : promise) as Promise<ResponseResult<T, ThrowOnError>>
 "#
@@ -1343,7 +1374,7 @@ export interface Codec { encode?: (value: unknown) => unknown; decode?: (value: 
 export interface StandardSchema { readonly ['~standard']?: { readonly validate: (value: unknown) => { value?: unknown; issues?: readonly unknown[] } | Promise<{ value?: unknown; issues?: readonly unknown[] }> } }
 export type Validator = StandardSchema | ((value: unknown) => void | Promise<void>)
 export interface ClientValidation { request?: Validator; response?: Validator }
-export interface ClientConfig { baseUrl?: string; apiKey?: string; apiKeyHeader?: string; apiKeyPrefix?: string; auth?: SecurityCredentials; headers?: Record<string, string>; client?: AxiosInstance; retry?: RetryConfig | false; hooks?: ClientHooks; codecs?: Record<string, Codec>; validation?: ClientValidation; multipartEncoder?: MultipartEncoder }
+export interface ClientConfig { baseUrl?: string; apiKey?: string; apiKeyHeader?: string; apiKeyPrefix?: string; auth?: SecurityCredentials; headers?: Record<string, string>; client?: AxiosInstance; retry?: RetryConfig | false; middleware?: readonly ClientMiddleware[]; hooks?: ClientHooks; codecs?: Record<string, Codec>; validation?: ClientValidation; multipartEncoder?: MultipartEncoder }
 export type ParameterStyle = { style?: 'simple' | 'label' | 'matrix' | 'form' | 'spaceDelimited' | 'pipeDelimited' | 'deepObject'; explode?: boolean }
 export type ParameterStyles = Partial<Record<'path' | 'query' | 'header' | 'cookie', Record<string, ParameterStyle>>>
 export type FormPartHeader = { required?: boolean; style?: ParameterStyle['style']; explode?: boolean; allowReserved?: boolean; schema_definition?: unknown; example_json?: string }
@@ -1461,7 +1492,7 @@ const retryDelay = async (attempt: number, retry: RetryConfig, retryAfter?: stri
   const delay = Math.min(retryAfterMs ?? exponential, retry.maxDelayMs ?? 8_000)
   await new Promise<void>((resolve) => setTimeout(resolve, delay))
 }
-export const createClient = (config: ClientConfig = {}): ClientInstance => {
+const createTransport = (config: ClientConfig = {}): ClientInstance => {
   const headers = { ...config.headers }
   if (config.apiKey) headers[config.apiKeyHeader ?? 'authorization'] = `${config.apiKeyPrefix ?? 'Bearer '}${config.apiKey}`
   const instance = config.client ?? axios.create({ baseURL: config.baseUrl, headers })
@@ -1534,12 +1565,51 @@ export const toEventStream = async <T>(response: Promise<unknown>): Promise<Even
     }
   })()
 }
+/** Middleware runs once per logical request, around transport retries and legacy hooks. */
+export type MiddlewareNext = (request: RequestConfig) => Promise<unknown>
+export type ClientMiddleware = (request: RequestConfig, next: MiddlewareNext) => Promise<unknown>
+/** Ordinary responses use this envelope; Fetch streaming requests return a native Response. */
+export interface MiddlewareResponse { status: number; contentType: string; data: unknown; headers: Headers | Record<string, unknown> }
+export const createClient = (config: ClientConfig = {}): ClientInstance => {
+  const transport = createTransport(config)
+  const middleware = [...(config.middleware ?? [])]
+  return (request) => {
+    const dispatch = (index: number, current: RequestConfig): Promise<unknown> => {
+      const handler = middleware[index]
+      if (!handler) return transport(current)
+      let called = false
+      return Promise.resolve().then(() => handler(current, (updated) => {
+        if (called) return Promise.reject(new TypeError('Middleware next may only be called once'))
+        called = true
+        return dispatch(index + 1, updated)
+      }))
+    }
+    return dispatch(0, { ...request, path: request.path ? { ...request.path } : undefined, query: request.query ? { ...request.query } : undefined, headers: (request.headers instanceof Headers ? new Headers(request.headers) : Array.isArray(request.headers) ? request.headers.map(([name, value]) => [name, value]) : request.headers ? { ...request.headers } : undefined) as RequestConfig['headers'], cookies: request.cookies ? { ...request.cookies } : undefined })
+  }
+}
 export const client = createClient()
 export const resolveResponse = <T extends { status: number; data: unknown }, ThrowOnError extends boolean>(promise: Promise<T>, throwOnError: ThrowOnError): Promise<ResponseResult<T, ThrowOnError>> => (throwOnError ? promise.then((result) => result.data) : promise) as Promise<ResponseResult<T, ThrowOnError>>
 "#
             )
         }
-    }
+    };
+    let runtime = runtime.replace("paginationUrl?: string }", "paginationUrl?: string; jsonPlan?: JsonPlan }")
+        .replace("validation, paginationUrl })", "validation, paginationUrl, jsonPlan })")
+        .replace("formHeaders, config.multipartEncoder)", "formHeaders, config.multipartEncoder, jsonPlan)")
+        .replace("multipartEncoder?: MultipartEncoder) =>", "multipartEncoder?: MultipartEncoder, jsonPlan?: JsonPlan) =>")
+        .replace("return JSON.stringify(body)", "return jsonPlan ? stringifyJson(body, requestJsonShape(jsonPlan, mediaType), jsonPlan.refs) : JSON.stringify(body)")
+        .replace("const responseBody = async (response: Response, codecs?: Record<string, Codec>)", "const responseBody = async (response: Response, codecs?: Record<string, Codec>, jsonPlan?: JsonPlan)")
+        .replace("return response.json()", "return jsonPlan ? parseJson(await response.text(), responseJsonShape(jsonPlan, response.status, contentType), jsonPlan.refs) : response.json()")
+        .replace("responseBody(response.clone(), config.codecs)", "responseBody(response.clone(), config.codecs, jsonPlan)")
+        .replace("  return body\n}", "  return jsonPlan && (mediaType.includes('json') || mediaType.endsWith('+json')) ? stringifyJson(body, requestJsonShape(jsonPlan, mediaType), jsonPlan.refs) : body\n}")
+        .replace("responseType === 'stream' ? 'stream' : undefined", "responseType === 'stream' ? 'stream' : jsonPlan ? 'text' : undefined")
+        .replace("validateStatus: () => true })", "validateStatus: () => true, ...(jsonPlan && responseType !== 'stream' ? { transformResponse: [(value: unknown) => value] } : {}) })")
+        .replace("?? response.data", "?? (jsonPlan && typeof response.data === 'string' && (mediaType.includes('json') || mediaType.includes('+json')) ? parseJson(response.data, responseJsonShape(jsonPlan, response.status, mediaType), jsonPlan.refs) : response.data)")
+        .replace("(response: Promise<unknown>): Promise<EventStreamResult<T>>", "(response: Promise<unknown>, jsonPlan?: JsonPlan): Promise<EventStreamResult<T>>")
+        .replace("const stream = raw instanceof Response ? raw.body : raw as ReadableStream<Uint8Array> | null", "const stream = raw instanceof Response ? raw.body : (raw && typeof raw === 'object' && 'data' in raw ? raw.data : raw) as ReadableStream<Uint8Array> | null")
+        .replace("await validate(validation?.response ?? config.validation?.response, data)", "if (responseType !== 'stream') await validate(validation?.response ?? config.validation?.response, data)")
+        .replace("yield JSON.parse(data) as T", "yield (jsonPlan ? parseJson(data, responseJsonShape(jsonPlan, eventStreamStatus(raw), 'text/event-stream'), jsonPlan.refs) : JSON.parse(data)) as T");
+    format!("{}\n{}", runtime, crate::json::RUNTIME)
 }
 
 fn render_security_types(security_schemes: Option<&SecuritySchemeCatalog>) -> String {

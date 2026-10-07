@@ -15,6 +15,7 @@ const ESLINT_HEADER: &str = "/* eslint-disable no-alert, no-console */\n\n";
 /// Per-operation rendering options used by the typed SDK generator.
 pub(crate) struct ClientRenderOptions {
     pub output_dir: String,
+    pub model_options: Option<crate::ModelOptions>,
     pub throw_on_error: bool,
     pub group_by_tag: bool,
     pub group_default_directory: bool,
@@ -71,14 +72,22 @@ pub(crate) fn generate_operations(
                     None => format!("{output_dir}/{module}.ts"),
                 }
             };
-            GeneratedFile::new(
-                path,
-                rewrite_import_paths(
-                    render_operation(operation, throw_on_error, security_schemes),
-                    operation,
-                    config,
-                ),
-            )
+            let mut source = render_operation(operation, throw_on_error, security_schemes);
+            if let Some(plan) = config
+                .model_options
+                .as_ref()
+                .and_then(|options| crate::json::operation_plan(api, operation, options))
+            {
+                let plan = serde_json::to_string(&plan)?;
+                source = source.replace(
+                    "      ...config,",
+                    &format!("      jsonPlan: {plan},\n      ...config,"),
+                );
+                if is_event_stream(operation) {
+                    source = source.replace("    }),\n  )", &format!("    }}),\n    {plan},\n  )"));
+                }
+            }
+            GeneratedFile::new(path, rewrite_import_paths(source, operation, config))
         })
         .collect()
 }

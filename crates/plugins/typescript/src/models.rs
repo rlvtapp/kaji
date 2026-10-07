@@ -3,7 +3,7 @@
 //! The structured target keeps model and operation type files separate so SDK
 //! packages remain easy to navigate as an OpenAPI contract grows.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
 use anyhow::Result;
@@ -36,6 +36,24 @@ impl ModelRenderer {
         api: &Api,
         config: &ModelRenderOptions,
     ) -> Result<Vec<GeneratedFile>> {
+        let type_names = api
+            .schemas
+            .iter()
+            .map(|schema| (schema.name.clone(), model_type_name(schema, &config.model)))
+            .collect::<BTreeMap<_, _>>();
+        let mut prepared = api.clone();
+        crate::json::visit_api(&mut prepared, &mut |value| {
+            if let Some(name) = value
+                .kind
+                .reference_name()
+                .and_then(|name| type_names.get(name))
+            {
+                value
+                    .extensions
+                    .insert("x-kaji-type-name".into(), Value::String(name.clone()));
+            }
+        });
+        let api = &prepared;
         let output_dir = config.output_dir.trim_matches('/');
         let schema_output_dir = config
             .schema_output_dir
@@ -60,7 +78,8 @@ impl ModelRenderer {
             let mut references = BTreeSet::new();
             collect_references(&schema.value, &mut references);
             references.remove(&schema.name);
-            let notice = reference_notice(&notice, &path, schema_output_dir, &references)?;
+            let notice =
+                reference_notice(&notice, &path, schema_output_dir, &references, &type_names)?;
             GeneratedFile::new(
                 path,
                 render_schema(&schema.name, &schema.value, options, &notice),
@@ -101,7 +120,8 @@ impl ModelRenderer {
             {
                 collect_references(schema, &mut references);
             }
-            let notice = reference_notice(&notice, &path, schema_output_dir, &references)?;
+            let notice =
+                reference_notice(&notice, &path, schema_output_dir, &references, &type_names)?;
             GeneratedFile::new(path, render_operation(operation, options, &notice))
         });
 
@@ -144,12 +164,16 @@ fn reference_notice(
     path: &str,
     directory: &str,
     references: &BTreeSet<String>,
+    type_names: &BTreeMap<String, String>,
 ) -> Result<String> {
     let mut output = notice.to_owned();
     for reference in references {
         let symbol = crate::Symbol {
             module: std::path::Path::new(directory).join(schema_file_identifier(reference)),
-            name: type_identifier(reference),
+            name: type_names
+                .get(reference)
+                .cloned()
+                .unwrap_or_else(|| type_identifier(reference)),
         };
         writeln!(
             output,
@@ -187,6 +211,7 @@ pub struct ModelOptions {
     pub enum_const_casing: EnumConstCasing,
     pub enum_type_suffix: String,
     pub integer_as_string: bool,
+    pub int64_type: Int64Type,
     pub remove_optional_properties: bool,
 }
 
@@ -201,9 +226,19 @@ impl Default for ModelOptions {
             enum_const_casing: EnumConstCasing::CamelCase,
             enum_type_suffix: "Key".into(),
             integer_as_string: false,
+            int64_type: Int64Type::Number,
             remove_optional_properties: false,
         }
     }
+}
+
+/// Representation of OpenAPI integer schemas with format `int64`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Int64Type {
+    #[default]
+    Number,
+    String,
+    BigInt,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -265,6 +300,49 @@ fn generated_notice(api: &Api) -> String {
 
 fn render_schema(name: &str, value: &SchemaValue, options: &ModelOptions, notice: &str) -> String {
     let identifier = type_identifier(name);
+    if !value.enum_values.is_empty()
+        && crate::json::representation(value, options) != Int64Type::Number
+    {
+        let literals = value
+            .enum_values
+            .iter()
+            .map(|v| integer_literal(v, value, options))
+            .collect::<Vec<_>>();
+        if options.enum_type == EnumType::Literal {
+            return format!(
+                "{notice}export type {identifier} = {}\n",
+                literals.join(" | ")
+            );
+        }
+        let value_name = if options.enum_type == EnumType::AsConst
+            && options.enum_const_casing == EnumConstCasing::CamelCase
+        {
+            lower_camel_identifier(&identifier)
+        } else {
+            identifier.clone()
+        };
+        let type_name = if options.enum_type == EnumType::AsConst {
+            format!("{identifier}{}", options.enum_type_suffix)
+        } else {
+            identifier.clone()
+        };
+        let members = value
+            .enum_values
+            .iter()
+            .zip(literals)
+            .enumerate()
+            .map(|(i, (value, literal))| {
+                format!(
+                    "  {}: {literal},",
+                    enum_member_name(&identifier, value, i, options.enum_key_casing)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        return format!(
+            "{notice}export const {value_name} = {{\n{members}\n}} as const\nexport type {type_name} = (typeof {value_name})[keyof typeof {value_name}]\n"
+        );
+    }
     if !value.enum_values.is_empty() {
         return match options.enum_type {
             EnumType::Literal => format!(
@@ -723,6 +801,11 @@ fn render_operation(operation: &Operation, options: &ModelOptions, notice: &str)
         .map(|response| response.name.as_str())
         .collect::<Vec<_>>()
         .join(" | ");
+    let response = if response.is_empty() {
+        "never"
+    } else {
+        &response
+    };
     source.push_str(&format!("export type {identifier}Response = {response}\n"));
     source
 }
@@ -748,11 +831,15 @@ fn collect_inline_enums(
         && let Some(name) = inline_enum_name(value)
         && names.insert(name.into())
     {
-        let declaration = match options.enum_type {
-            EnumType::Literal => String::new(),
-            EnumType::AsConst => render_as_const_enum(name, &value.enum_values, options, ""),
-            EnumType::Enum => render_named_enum(name, &value.enum_values, options, ""),
-            EnumType::ConstEnum => render_const_enum(name, &value.enum_values, options, ""),
+        let declaration = if crate::json::representation(value, options) != Int64Type::Number {
+            render_schema(name, value, options, "")
+        } else {
+            match options.enum_type {
+                EnumType::Literal => String::new(),
+                EnumType::AsConst => render_as_const_enum(name, &value.enum_values, options, ""),
+                EnumType::Enum => render_named_enum(name, &value.enum_values, options, ""),
+                EnumType::ConstEnum => render_const_enum(name, &value.enum_values, options, ""),
+            }
         };
         if !declaration.is_empty() {
             declarations.push(declaration);
@@ -861,22 +948,31 @@ fn optional_marker(required: bool, optional_type: OptionalType) -> &'static str 
 
 fn render_value(value: &SchemaValue, options: &ModelOptions) -> String {
     let body = if let Some(constant) = value.const_value.as_ref() {
-        kaji_literal(constant)
+        integer_literal(constant, value, options)
     } else {
         match &value.kind {
             SchemaKind::Any | SchemaKind::Not { .. } => "unknown".into(),
             SchemaKind::Null => "null".into(),
             SchemaKind::Boolean => "boolean".into(),
-            SchemaKind::Integer if options.integer_as_string => "string".into(),
-            SchemaKind::Integer | SchemaKind::Number => "number".into(),
+            SchemaKind::Integer => match crate::json::representation(value, options) {
+                Int64Type::Number => "number".into(),
+                Int64Type::String => "string".into(),
+                Int64Type::BigInt => "bigint".into(),
+            },
+            SchemaKind::Number => "number".into(),
             SchemaKind::String => "string".into(),
             SchemaKind::Array { items } => match options.array_type {
                 ArrayType::Array => format!("{}[]", render_value(items, options)),
                 ArrayType::Generic => format!("Array<{}>", render_value(items, options)),
             },
-            SchemaKind::Reference { reference } => {
-                type_identifier(reference.rsplit('/').next().unwrap_or(reference))
-            }
+            SchemaKind::Reference { reference } => value
+                .extensions
+                .get("x-kaji-type-name")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+                .unwrap_or_else(|| {
+                    type_identifier(reference.rsplit('/').next().unwrap_or(reference))
+                }),
             SchemaKind::OneOf { variants } | SchemaKind::AnyOf { variants } => variants
                 .iter()
                 .map(|variant| render_value(variant, options))
@@ -901,7 +997,7 @@ fn render_value(value: &SchemaValue, options: &ModelOptions) -> String {
                 EnumType::Literal => value
                     .enum_values
                     .iter()
-                    .map(kaji_literal)
+                    .map(|literal| integer_literal(literal, value, options))
                     .collect::<Vec<_>>()
                     .join(" | "),
             }
@@ -909,7 +1005,7 @@ fn render_value(value: &SchemaValue, options: &ModelOptions) -> String {
             value
                 .enum_values
                 .iter()
-                .map(kaji_literal)
+                .map(|literal| integer_literal(literal, value, options))
                 .collect::<Vec<_>>()
                 .join(" | ")
         }
@@ -921,6 +1017,26 @@ fn render_value(value: &SchemaValue, options: &ModelOptions) -> String {
     } else {
         body
     }
+}
+
+pub(crate) fn model_type_name(schema: &kaji_core::Schema, options: &ModelOptions) -> String {
+    let name = type_identifier(&schema.name);
+    if !schema.value.enum_values.is_empty() && options.enum_type == EnumType::AsConst {
+        format!("{name}{}", options.enum_type_suffix)
+    } else {
+        name
+    }
+}
+
+fn integer_literal(literal: &Value, schema: &SchemaValue, options: &ModelOptions) -> String {
+    if literal.is_number() {
+        match crate::json::representation(schema, options) {
+            Int64Type::String => return kaji_literal(&Value::String(literal.to_string())),
+            Int64Type::BigInt => return format!("{literal}n"),
+            Int64Type::Number => {}
+        }
+    }
+    kaji_literal(literal)
 }
 
 fn kaji_literal(value: &Value) -> String {
@@ -949,7 +1065,7 @@ fn property_name(value: &str) -> String {
 /// `communications.participant` and `meeting.participant`). Keep every segment
 /// in the filename so independently declared schemas never overwrite each
 /// other in a large contract.
-fn schema_file_identifier(value: &str) -> String {
+pub(crate) fn schema_file_identifier(value: &str) -> String {
     let identifier = type_identifier(value);
     const MAX_PREFIX_CHARS: usize = 96;
     if identifier.chars().count() <= MAX_PREFIX_CHARS {

@@ -1,15 +1,16 @@
 package main
 
 type OperationDoc struct {
-	Kind        string `json:"kind,omitempty"`
-	Name        string `json:"name,omitempty"`
-	OperationID string `json:"operation_id,omitempty"`
-	Path        string `json:"path"`
-	Method      string `json:"method"`
-	Summary     string `json:"summary,omitempty"`
-	Description string `json:"description,omitempty"`
-	Deprecated  bool   `json:"deprecated,omitempty"`
-	Hidden      bool   `json:"hidden,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
+	Kind        string   `json:"kind,omitempty"`
+	Name        string   `json:"name,omitempty"`
+	OperationID string   `json:"operation_id,omitempty"`
+	Path        string   `json:"path"`
+	Method      string   `json:"method"`
+	Summary     string   `json:"summary,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Deprecated  bool     `json:"deprecated,omitempty"`
+	Hidden      bool     `json:"hidden,omitempty"`
 	// SecurityRequirements is the lossless OpenAPI security shape: each entry
 	// is an alternative and the named schemes inside it are required together.
 	SecurityRequirements []SecurityRequirementDoc `json:"security_requirements,omitempty"`
@@ -41,21 +42,21 @@ type MediaTypeDoc struct {
 // and urlencoded request bodies. It deliberately contains only transport
 // behavior; property schemas remain in MediaTypeDoc.SchemaDefinition.
 type FormEncodingDoc struct {
-	ContentType   string `json:"contentType,omitempty"`
+	ContentType   string                   `json:"contentType,omitempty"`
 	Headers       map[string]FormHeaderDoc `json:"headers,omitempty"`
-	Style         string `json:"style,omitempty"`
-	Explode       *bool  `json:"explode,omitempty"`
-	AllowReserved bool   `json:"allowReserved,omitempty"`
+	Style         string                   `json:"style,omitempty"`
+	Explode       *bool                    `json:"explode,omitempty"`
+	AllowReserved bool                     `json:"allowReserved,omitempty"`
 }
 
 // FormHeaderDoc retains the Header Object attached to one multipart part.
 // Runtime-specific renderers can expose its schema without reparsing OpenAPI.
 type FormHeaderDoc struct {
-	Required         bool `json:"required,omitempty"`
+	Required         bool   `json:"required,omitempty"`
 	Style            string `json:"style,omitempty"`
-	Explode          bool `json:"explode,omitempty"`
-	AllowReserved    bool `json:"allowReserved,omitempty"`
-	SchemaDefinition any `json:"schema_definition,omitempty"`
+	Explode          bool   `json:"explode,omitempty"`
+	AllowReserved    bool   `json:"allowReserved,omitempty"`
+	SchemaDefinition any    `json:"schema_definition,omitempty"`
 	ExampleJSON      string `json:"example_json,omitempty"`
 }
 
@@ -67,13 +68,15 @@ type SecurityRequirementDoc struct {
 }
 
 type ParameterDoc struct {
-	Name        string `json:"name"`
-	In          string `json:"in"`
-	Required    bool   `json:"required"`
-	Description string `json:"description,omitempty"`
-	Style       string `json:"style,omitempty"`
-	Explode     *bool  `json:"explode,omitempty"`
-	Schema      any    `json:"schema,omitempty"`
+	AllowReserved bool   `json:"allow_reserved,omitempty"`
+	Example       any    `json:"example,omitempty"`
+	Name          string `json:"name"`
+	In            string `json:"in"`
+	Required      bool   `json:"required"`
+	Description   string `json:"description,omitempty"`
+	Style         string `json:"style,omitempty"`
+	Explode       *bool  `json:"explode,omitempty"`
+	Schema        any    `json:"schema,omitempty"`
 }
 
 type ResponseDoc struct {

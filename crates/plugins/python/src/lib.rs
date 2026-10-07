@@ -81,6 +81,10 @@ fn render_sdk(
         format!("{root}/src/{module}/runtime.py"),
         render_runtime(api),
     )?)?;
+    tree.insert(GeneratedFile::new(
+        format!("{root}/src/{module}/oauth.py"),
+        include_str!("oauth.py"),
+    )?)?;
     for (index, operations) in api.operations.chunks(100).enumerate() {
         tree.insert(GeneratedFile::new(
             format!("{root}/src/{module}/operations_{index:03}.py"),
@@ -129,6 +133,10 @@ fn render_sdk(
         format!("{root}/README.md"),
         render_readme(api, &distribution, &module, client_style),
     )?)?;
+    tree.insert(GeneratedFile::new(
+        format!("{root}/api.md"),
+        render_api_reference(api),
+    )?)?;
     if client_style == SdkClientStyle::Namespaced {
         tree.insert(GeneratedFile::new(
             format!("{root}/STYLE_GUIDE.md"),
@@ -136,6 +144,117 @@ fn render_sdk(
         )?)?;
     }
     Ok(tree)
+}
+
+/// Add native async operations while sharing the exact synchronous model package.
+fn render_sdk_with_async(
+    api: &Api,
+    output_dir: &str,
+    package_name: Option<&str>,
+    style: SdkClientStyle,
+    enabled: bool,
+) -> Result<GeneratedTree> {
+    let mut tree = render_sdk(api, output_dir, package_name, style)?;
+    if !enabled {
+        return Ok(tree);
+    }
+    let root = output_dir.trim_matches('/');
+    let distribution = package_name
+        .map(str::to_owned)
+        .unwrap_or_else(|| format!("{}-sdk", kebab_case(&api.name)));
+    let module = python_module_name(&distribution);
+    let prefix = format!("{root}/src/{module}/");
+    let mut files = Vec::new();
+    for (path, contents) in tree.iter() {
+        let path = path.to_string_lossy();
+        let Some(relative) = path.strip_prefix(&prefix) else {
+            continue;
+        };
+        if relative.starts_with("operations_") {
+            files.push((
+                format!("{prefix}async_{relative}"),
+                async_operation_source(contents),
+            ));
+        } else if let Some(resource) = relative.strip_prefix("resources/") {
+            files.push((
+                format!("{prefix}async_resources/{resource}"),
+                async_resource_source(contents),
+            ));
+        }
+    }
+    for (path, contents) in files {
+        tree.insert(GeneratedFile::new(path, contents)?)?;
+    }
+    tree.insert(GeneratedFile::new(
+        format!("{prefix}async_runtime.py"),
+        include_str!("async_runtime.py"),
+    )?)?;
+    let facade = render_client_facade(api, style)
+        .replace(
+            "from .runtime import BaseClient",
+            "from .async_runtime import AsyncBaseClient",
+        )
+        .replace("from .operations_", "from .async_operations_")
+        .replace("from .resources.", "from .async_resources.")
+        .replace("class Client(", "class AsyncClient(")
+        .replace(", BaseClient)", ", AsyncBaseClient)")
+        .replace(
+            "class AsyncClient(BaseClient)",
+            "class AsyncClient(AsyncBaseClient)",
+        );
+    tree.insert(GeneratedFile::new(
+        format!("{prefix}async_client.py"),
+        facade,
+    )?)?;
+    let init_path = format!("{prefix}__init__.py");
+    let init = format!(
+        "{}\nfrom .async_client import AsyncClient\n",
+        tree.get(&init_path).unwrap()
+    );
+    tree.replace(GeneratedFile::new(init_path, init)?)?;
+    let manifest_path = format!("{root}/pyproject.toml");
+    let manifest = format!(
+        "{}\n[project.optional-dependencies]\nasync = [\"httpx>=0.27,<1\"]\n",
+        tree.get(&manifest_path).unwrap()
+    );
+    tree.replace(GeneratedFile::new(manifest_path, manifest)?)?;
+    Ok(tree)
+}
+
+// These transformations apply only to Kaji's own generated operation grammar.
+// Models, wire codecs, signatures and pagination declarations remain shared.
+fn async_operation_source(source: &str) -> String {
+    source
+        .replace("Any, Iterator, cast", "Any, AsyncIterator, cast")
+        .replace("Iterator[", "AsyncIterator[")
+        .replace("    def ", "    async def ")
+        .replace("result = self._request(", "result = await self._request(")
+        .replace(
+            "result = self._event_stream(",
+            "result = await self._event_stream(",
+        )
+        .replace("response = self.", "response = await self.")
+}
+fn async_resource_source(source: &str) -> String {
+    let source = source
+        .replace("Any, Iterator", "Any, AsyncIterator")
+        .replace("Iterator[", "AsyncIterator[");
+    let mut output = String::new();
+    for line in source.lines() {
+        let line = if line.starts_with("    def ")
+            && !line.contains("__init__")
+            && !line.contains("_pages(")
+        {
+            line.replacen("    def ", "    async def ", 1)
+        } else if line.contains("return self._client.") && !line.contains("_pages(") {
+            line.replacen("return self._client.", "return await self._client.", 1)
+        } else {
+            line.to_owned()
+        };
+        output.push_str(&line);
+        output.push('\n');
+    }
+    output
 }
 
 fn render_pyproject(package_name: &str, version: &str) -> String {
@@ -149,7 +268,7 @@ fn render_pyproject(package_name: &str, version: &str) -> String {
 
 fn render_models_init(api: &Api) -> String {
     let mut output = format!(
-        "{NOTICE}\nfrom __future__ import annotations\n\nfrom dataclasses import fields as _fields, is_dataclass as _is_dataclass\nfrom typing import Any as _Any\n\n\ndef _to_wire(value: _Any) -> _Any:\n    \"\"\"Convert generated dataclasses into JSON-compatible values.\"\"\"\n    if _is_dataclass(value) and not isinstance(value, type):\n        return {{item.metadata.get(\"wire_name\", item.name): _to_wire(getattr(value, item.name)) for item in _fields(value) if getattr(value, item.name) is not None}}\n    if isinstance(value, list):\n        return [_to_wire(item) for item in value]\n    if isinstance(value, dict):\n        return {{key: _to_wire(item) for key, item in value.items()}}\n    return value\n\n"
+        "{NOTICE}\nfrom __future__ import annotations\n\nfrom dataclasses import MISSING as _MISSING, fields as _fields, is_dataclass as _is_dataclass\nfrom typing import Any as _Any\n\n\ndef _to_wire(value: _Any) -> _Any:\n    \"\"\"Convert generated dataclasses into JSON-compatible values.\"\"\"\n    if _is_dataclass(value) and not isinstance(value, type):\n        result = {{}}\n        present = next((getattr(value, item.name) for item in _fields(value) if item.metadata.get(\"present_fields\")), None)\n        for item in _fields(value):\n            current = getattr(value, item.name)\n            if item.metadata.get(\"additional_properties\"):\n                result.update(_to_wire(current))\n        for item in _fields(value):\n            current = getattr(value, item.name)\n            if not item.metadata.get(\"internal\") and not item.metadata.get(\"additional_properties\") and (current is not None or (present is not None and item.metadata.get(\"wire_name\", item.name) in present) or (item.default is _MISSING and item.default_factory is _MISSING)):\n                result[item.metadata.get(\"wire_name\", item.name)] = _to_wire(current)\n        return result\n    if isinstance(value, list):\n        return [_to_wire(item) for item in value]\n    if isinstance(value, dict):\n        return {{key: _to_wire(item) for key, item in value.items()}}\n    return value\n\n"
     );
     for index in 0..api.schemas.len().div_ceil(100) {
         let _ = writeln!(output, "from .chunks.exports_{index:03} import *");
@@ -200,6 +319,21 @@ fn render_schema(output: &mut String, schema: &Schema) {
             fields,
             additional_properties,
         } => {
+            let mut additional_field = "additional_properties".to_owned();
+            while fields
+                .iter()
+                .any(|item| python_identifier(&item.name) == additional_field)
+            {
+                additional_field.insert(0, '_');
+            }
+            let mut present_field = "_kaji_present_fields".to_owned();
+            while fields
+                .iter()
+                .any(|item| python_identifier(&item.name) == present_field)
+                || present_field == additional_field
+            {
+                present_field.insert(0, '_');
+            }
             output.push_str("@dataclass\n");
             let _ = writeln!(output, "class {name}:");
             // Required fields must precede fields with defaults in a dataclass.
@@ -228,24 +362,31 @@ fn render_schema(output: &mut String, schema: &Schema) {
                     }
                 }
             }
-            if let AdditionalProperties::Schema { value } = additional_properties {
+            if !matches!(additional_properties, AdditionalProperties::Forbidden) {
+                let additional_type = match additional_properties {
+                    AdditionalProperties::Schema { value } => python_type(value),
+                    _ => "Any".to_owned(),
+                };
                 let _ = writeln!(
                     output,
-                    "    additional_properties: dict[str, {}] = field(default_factory=dict)",
-                    python_type(value)
+                    "    {additional_field}: dict[str, {}] = field(default_factory=dict, metadata={{\"additional_properties\": True}})",
+                    additional_type
                 );
             }
+            let _ = writeln!(
+                output,
+                "    {present_field}: frozenset[str] | None = field(default=None, init=False, repr=False, compare=False, metadata={{\"internal\": True, \"present_fields\": True}})"
+            );
             output.push_str("\n    @classmethod\n");
             let _ = writeln!(
                 output,
                 "    def from_dict(cls, value: dict[str, Any]) -> \"{name}\":"
             );
-            if fields.is_empty()
-                && !matches!(additional_properties, AdditionalProperties::Schema { .. })
+            if fields.is_empty() && matches!(additional_properties, AdditionalProperties::Forbidden)
             {
                 output.push_str("        return cls()\n");
             } else {
-                output.push_str("        return cls(\n");
+                output.push_str("        instance = cls(\n");
                 for item in fields {
                     let field_name = python_identifier(&item.name);
                     let accessor = if item.required {
@@ -255,10 +396,21 @@ fn render_schema(output: &mut String, schema: &Schema) {
                     };
                     let _ = writeln!(output, "            {field_name}={accessor},");
                 }
-                if matches!(additional_properties, AdditionalProperties::Schema { .. }) {
-                    output.push_str("            additional_properties={},\n");
+                if !matches!(additional_properties, AdditionalProperties::Forbidden) {
+                    let declared = fields
+                        .iter()
+                        .map(|item| format!("{:?}", item.name))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    let _ = writeln!(
+                        output,
+                        "            {additional_field}={{key: item for key, item in value.items() if key not in [{declared}]}},"
+                    );
                 }
-                output.push_str("        )\n");
+                let _ = writeln!(
+                    output,
+                    "        )\n        instance.{present_field} = frozenset(value)\n        return instance"
+                );
             }
         }
         _ if !schema.value.enum_values.is_empty() => {
@@ -348,7 +500,13 @@ def _kaji_with_body_value(body: Any, wire_name: str, value: Any) -> Any:
     if is_dataclass(body) and not isinstance(body, type):
         for item in fields(body):
             if item.metadata.get("wire_name", item.name) == wire_name:
-                return replace(body, **{{item.name: value}})
+                result = replace(body, **{{item.name: value}})
+                for internal in fields(body):
+                    if internal.metadata.get("present_fields"):
+                        previous = getattr(body, internal.name)
+                        if previous is not None:
+                            setattr(result, internal.name, previous | {{wire_name}})
+                return result
         raise TypeError(f"request body has no declared {{wire_name!r}} field")
     if isinstance(body, dict):
         return {{**body, wire_name: value}}
@@ -364,11 +522,13 @@ class BaseClient:
         *,
         api_key: str | None = None,
         bearer_token: str | None = None,
+        token_provider: Callable[[str | None], str] | None = None,
         headers: dict[str, str] | None = None,
         timeout: float = 30.0,
         max_retries: int = 2,
         retry_initial_delay: float = 0.25,
         retry_max_delay: float = 8.0,
+        middleware: tuple[Callable[..., Any], ...] = (),
         before_request: Callable[[dict[str, Any]], None] | None = None,
         after_response: Callable[[dict[str, Any]], None] | None = None,
         on_error: Callable[[Exception, dict[str, Any]], None] | None = None,
@@ -376,11 +536,13 @@ class BaseClient:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.bearer_token = bearer_token
+        self.token_provider = token_provider
         self.headers = headers or {{}}
         self.timeout = timeout
         self.max_retries = max(0, max_retries)
         self.retry_initial_delay = max(0.0, retry_initial_delay)
         self.retry_max_delay = max(0.0, retry_max_delay)
+        self.middleware = tuple(middleware)
         self.before_request = before_request
         self.after_response = after_response
         self.on_error = on_error
@@ -410,9 +572,13 @@ class BaseClient:
                 raise ValueError("pagination URL must remain on the configured API origin")
             url = candidate.geturl()
         request_headers = {{"Accept": "application/json", **self.headers, **(headers or {{}})}}
-        if self.bearer_token:
+        managed_auth = self.token_provider is not None and not self.bearer_token and not any(name.lower() == "authorization" for name in request_headers)
+        auth_token = self.token_provider(None) if managed_auth else None
+        if auth_token:
+            request_headers["Authorization"] = f"Bearer {{auth_token}}"
+        elif self.bearer_token and not any(name.lower() == "authorization" for name in request_headers):
             request_headers.setdefault("Authorization", f"Bearer {{self.bearer_token}}")
-        elif self.api_key:
+        elif self.api_key and not any(name.lower() == "authorization" for name in request_headers):
             request_headers.setdefault("Authorization", f"Bearer {{self.api_key}}")
         data = None
         if body is not None:
@@ -431,13 +597,14 @@ class BaseClient:
                 request_headers.setdefault("Content-Type", "application/json")
                 data = json.dumps(to_wire(body)).encode("utf-8")
         request_context = {{"method": method, "url": url, "query": query or {{}}, "headers": request_headers, "body": body}}
-        if self.before_request is not None:
-            self.before_request(request_context)
         can_retry = retryable and (method.upper() in {{"GET", "PUT", "PATCH", "DELETE"}} or (method.upper() == "POST" and any(name.lower() == "idempotency-key" for name in request_headers)))
-        for attempt in range(self.max_retries + 1):
+        auth_refreshed = False
+        for attempt in range(self.max_retries + (2 if managed_auth else 1)):
+            if self.before_request is not None:
+                self.before_request({{**request_context, "attempt": attempt}})
             request = Request(url, data=data, headers=request_headers, method=method)
             try:
-                with urlopen(request, timeout=self.timeout) as response:
+                with self._send(request) as response:
                     status_code = response.status
                     response_headers = dict(response.headers.items())
                     if can_retry and status_code in {{408, 429, 500, 502, 503, 504}} and attempt < self.max_retries:
@@ -451,10 +618,21 @@ class BaseClient:
                     content_type = response.headers.get_content_type()
                     return json.loads(raw) if content_type == "application/json" or content_type.endswith("+json") else raw
             except HTTPError as error:
-                if can_retry and error.code in {{408, 429, 500, 502, 503, 504}} and attempt < self.max_retries:
-                    self._retry_delay(attempt, error.headers.get("Retry-After"))
+                if error.code == 401 and managed_auth and not auth_refreshed:
+                    error.close()
+                    auth_token = self.token_provider(auth_token)
+                    request_headers["Authorization"] = f"Bearer {{auth_token}}"
+                    auth_refreshed = True
                     continue
-                raw = error.read()
+                if can_retry and error.code in {{408, 429, 500, 502, 503, 504}} and attempt < self.max_retries:
+                    retry_after = error.headers.get("Retry-After")
+                    error.close()
+                    self._retry_delay(attempt, retry_after)
+                    continue
+                try:
+                    raw = error.read()
+                finally:
+                    error.close()
                 try:
                     response_body = json.loads(raw) if raw else None
                 except json.JSONDecodeError:
@@ -474,6 +652,17 @@ class BaseClient:
                     self.on_error(error, request_context)
                 raise
         raise RuntimeError("Kaji retry loop completed without a response")
+
+    def _send(self, request: Request) -> Any:
+        """Run native transport middleware in declaration order for each attempt."""
+        def transport(request: Request) -> Any:
+            return urlopen(request, timeout=self.timeout)
+        handler = transport
+        for middleware in reversed(self.middleware):
+            following = handler
+            def handler(request: Request, middleware: Any = middleware, following: Any = following) -> Any:
+                return middleware(request, following)
+        return handler(request)
 
     def _retry_delay(self, attempt: int, retry_after: str | None = None) -> None:
         try:
@@ -507,9 +696,13 @@ class BaseClient:
             if encoded_query:
                 url = f"{{url}}?{{encoded_query}}"
         request_headers = {{"Accept": "text/event-stream", **self.headers, **(headers or {{}})}}
-        if self.bearer_token:
+        managed_auth = self.token_provider is not None and not self.bearer_token and not any(name.lower() == "authorization" for name in request_headers)
+        auth_token = self.token_provider(None) if managed_auth else None
+        if auth_token:
+            request_headers["Authorization"] = f"Bearer {{auth_token}}"
+        elif self.bearer_token and not any(name.lower() == "authorization" for name in request_headers):
             request_headers.setdefault("Authorization", f"Bearer {{self.bearer_token}}")
-        elif self.api_key:
+        elif self.api_key and not any(name.lower() == "authorization" for name in request_headers):
             request_headers.setdefault("Authorization", f"Bearer {{self.api_key}}")
         data = None
         if body is not None:
@@ -528,13 +721,14 @@ class BaseClient:
                 request_headers.setdefault("Content-Type", "application/json")
                 data = json.dumps(to_wire(body)).encode("utf-8")
         context = {{"method": method, "url": url, "query": query or {{}}, "headers": request_headers, "body": body}}
-        if self.before_request is not None:
-            self.before_request(context)
         can_retry = retryable and (method.upper() in {{"GET", "PUT", "PATCH", "DELETE"}} or (method.upper() == "POST" and any(name.lower() == "idempotency-key" for name in request_headers)))
-        for attempt in range(self.max_retries + 1):
+        auth_refreshed = False
+        for attempt in range(self.max_retries + (2 if managed_auth else 1)):
+            if self.before_request is not None:
+                self.before_request({{**context, "attempt": attempt}})
             request = Request(url, data=data, headers=request_headers, method=method)
             try:
-                response = urlopen(request, timeout=self.timeout)
+                response = self._send(request)
                 if self.after_response is not None:
                     self.after_response({{"request": context, "status_code": response.status, "headers": dict(response.headers.items()), "body": None}})
                 def events() -> Iterator[Any]:
@@ -562,10 +756,21 @@ class BaseClient:
                         response.close()
                 return events()
             except HTTPError as error:
-                if can_retry and error.code in {{408, 429, 500, 502, 503, 504}} and attempt < self.max_retries:
-                    self._retry_delay(attempt, error.headers.get("Retry-After"))
+                if error.code == 401 and managed_auth and not auth_refreshed:
+                    error.close()
+                    auth_token = self.token_provider(auth_token)
+                    request_headers["Authorization"] = f"Bearer {{auth_token}}"
+                    auth_refreshed = True
                     continue
-                raw = error.read()
+                if can_retry and error.code in {{408, 429, 500, 502, 503, 504}} and attempt < self.max_retries:
+                    retry_after = error.headers.get("Retry-After")
+                    error.close()
+                    self._retry_delay(attempt, retry_after)
+                    continue
+                try:
+                    raw = error.read()
+                finally:
+                    error.close()
                 try:
                     response_body = json.loads(raw) if raw else None
                 except json.JSONDecodeError:
@@ -1239,7 +1444,7 @@ fn render_init(api: &Api, client_style: SdkClientStyle) -> String {
         String::new()
     };
     format!(
-        "{NOTICE}\nfrom .client import Client\nfrom .runtime import {}\nfrom .models import *\n{resource_import}",
+        "{NOTICE}\nfrom .client import Client\nfrom .oauth import OAuthClientCredentials, AsyncOAuthClientCredentials\nfrom .runtime import {}\nfrom .models import *\n{resource_import}",
         client_imports.join(", "),
     )
 }
@@ -1250,10 +1455,47 @@ fn render_readme(
     module: &str,
     client_style: SdkClientStyle,
 ) -> String {
-    let usage = match client_style {
-        SdkClientStyle::Flat => "client.get_contact(contact_id=\"contact_123\")",
-        SdkClientStyle::Namespaced => "client.contacts.get(contact_id=\"contact_123\")",
-    };
+    let usage = api
+        .operations
+        .first()
+        .map(|operation| {
+            let name = python_identifier(&snake_case(&operation.id));
+            let mut arguments = operation
+                .parameters
+                .iter()
+                .filter(|item| item.required)
+                .map(|item| {
+                    let sample = item
+                        .schema
+                        .as_ref()
+                        .map(python_example)
+                        .unwrap_or_else(|| "None".into());
+                    format!("{}={sample}", python_identifier(&item.name))
+                })
+                .collect::<Vec<_>>();
+            if let Some(body) = &operation.request_body {
+                if body.required {
+                    let sample = body
+                        .media_types
+                        .first()
+                        .and_then(|media| media.schema.as_ref())
+                        .map(python_example)
+                        .unwrap_or_else(|| "{}".into());
+                    arguments.push(format!("body={sample}"));
+                }
+            }
+            let method = if client_style == SdkClientStyle::Namespaced {
+                let resource = resource_name(operation);
+                let resources = resource_operations(api);
+                let attribute = resource_attribute(&resource, &resources[&resource]);
+                let method = resource_method_name(&name, &attribute);
+                format!("{attribute}.{method}")
+            } else {
+                name
+            };
+            format!("client.{method}({})", arguments.join(", "))
+        })
+        .unwrap_or_else(|| "# This contract has no callable operations.".into());
     format!(
         "# {distribution}\n\nGenerated Python SDK for {}. This package uses the `{}` client style. Kaji can emit direct flat operations or resource namespaces; the direct methods remain available in either mode.\n\n```python\nfrom {module} import Client\n\nclient = Client(\"https://api.example.com\", api_key=\"…\")\n{}\n```\n",
         api.name,
@@ -1262,13 +1504,60 @@ fn render_readme(
             SdkClientStyle::Namespaced => "namespaced",
         },
         usage,
-    )
+    ) + include_str!("middleware_readme.md")
+}
+
+fn python_example(value: &SchemaValue) -> String {
+    if let Some(first) = value.enum_values.first() {
+        return python_literal(first);
+    }
+    match &value.kind {
+        SchemaKind::String => "\"example\"".into(),
+        SchemaKind::Integer => "1".into(),
+        SchemaKind::Number => "1.0".into(),
+        SchemaKind::Boolean => "True".into(),
+        SchemaKind::Array { .. } => "[]".into(),
+        SchemaKind::Object { .. } => "{}".into(),
+        _ => "...".into(),
+    }
+}
+
+fn render_api_reference(api: &Api) -> String {
+    let mut output = format!(
+        "# {} Python API reference\n\nDirect methods remain available on both flat and namespaced clients.\n\n",
+        api.name
+    );
+    for operation in &api.operations {
+        let name = python_identifier(&snake_case(&operation.id));
+        let (signature, _) = operation_signature(operation);
+        let _ = writeln!(
+            output,
+            "## `{name}`\n\n`{} {}`\n\n```python\nClient.{name}(self{signature}) -> {}\n```\n",
+            operation.method.as_str(),
+            operation.path,
+            response_type(operation)
+        );
+        for response in &operation.responses {
+            let _ = writeln!(
+                output,
+                "- Response `{}`: {}",
+                response.status,
+                response
+                    .description
+                    .as_deref()
+                    .unwrap_or("Declared API response")
+            );
+        }
+        output.push('\n');
+    }
+    output
 }
 
 fn render_style_guide(api: &Api, module: &str) -> String {
     format!(
-        "# {} Python SDK styles\n\nKaji supports two stable client surfaces:\n\n- `SdkClientStyle::Flat`: `client.get_contact(contact_id=...)`\n- `SdkClientStyle::Namespaced`: `client.contacts.get(contact_id=...)`\n\nThe namespaced attributes are initialized by `Client` and delegate to the same typed direct operations, so both styles can coexist during migration.\n\n```python\nfrom {module} import Client\n\nclient = Client(\"https://api.example.com\", api_key=\"…\")\ncontact = client.contacts.get(contact_id=\"contact_123\")\n```\n",
-        api.name
+        "# {} Python SDK styles\n\n`SdkClientStyle::Flat` exposes direct methods; `SdkClientStyle::Namespaced` adds resource facades. The namespaced attributes are initialized by `Client` and delegate to the same typed direct operations, so both styles can coexist during migration.\n\n{}",
+        api.name,
+        render_readme(api, module, module, SdkClientStyle::Namespaced)
     )
 }
 
@@ -1491,7 +1780,13 @@ fn response_object_model(api: &Api, operation: &Operation) -> Option<String> {
 fn python_literal(value: &serde_json::Value) -> String {
     match value {
         serde_json::Value::Null => "None".into(),
-        serde_json::Value::Bool(value) => value.to_string(),
+        serde_json::Value::Bool(value) => {
+            if *value {
+                "True".into()
+            } else {
+                "False".into()
+            }
+        }
         serde_json::Value::Number(value) => value.to_string(),
         serde_json::Value::String(value) => format!("{value:?}"),
         serde_json::Value::Array(values) => format!(
@@ -1792,6 +2087,347 @@ mod tests {
             .map(|(_, contents)| contents)
             .collect::<Vec<_>>()
             .join("\n")
+    }
+
+    #[test]
+    fn consumer_plugins_execute_roundtrip_fixtures_and_webhook_vectors() {
+        use kaji_core::engine::Packages;
+        let mut source = api();
+        if let SchemaKind::Object {
+            fields,
+            additional_properties,
+        } = &mut source.schemas[0].value.kind
+        {
+            fields[1].value.nullable = true;
+            fields.push(Field {
+                name: "additional_properties".into(),
+                value: SchemaValue::new(SchemaKind::String),
+                required: false,
+                annotations: Default::default(),
+            });
+            *additional_properties = AdditionalProperties::Any;
+        }
+        let sdk = crate::sdk();
+        let roundtrips = crate::roundtrips().models_from(&sdk);
+        let tree = Packages::new()
+            .package(
+                crate::package("sdk")
+                    .name("example-api-sdk")
+                    .with(roundtrips)
+                    .with(crate::webhooks())
+                    .with(sdk),
+            )
+            .generate(&source, None)
+            .unwrap();
+        let root = tempfile::tempdir().unwrap();
+        tree.write_to(root.path()).unwrap();
+        let status = Command::new("python3")
+            .arg(root.path().join("sdk/tests/test_model_roundtrips.py"))
+            .env("PYTHONPATH", root.path().join("sdk/src"))
+            .env("PYTHONDONTWRITEBYTECODE", "1")
+            .status()
+            .unwrap();
+        assert!(status.success());
+        std::fs::write(
+            root.path().join("vector.json"),
+            include_str!("../testdata/webhook-vectors.json"),
+        )
+        .unwrap();
+        let script = r#"import json, sys
+from example_api_sdk.webhooks import verify_webhook, WebhookVerificationError, verify_and_decode
+from example_api_sdk.models import Contact
+vector = json.load(open(sys.argv[1]))
+raw = vector['raw_body'].encode(); headers = vector['headers']; secret = vector['secret']; now = vector['now']
+assert verify_webhook(raw, headers, [secret], now=now) == vector['payload']
+rotated = {**headers, 'webhook-signature': 'v1,invalid v2,ignored '+headers['webhook-signature']}
+assert verify_webhook(raw, rotated, [secret], now=now) == vector['payload']
+for changed_body, changed_headers, changed_now in [(raw+b' ', headers, now), (raw, headers, now+301), (raw, headers, now-301), (raw, {**headers, 'webhook-id':'msg.evil'}, now), (raw, {**headers, 'webhook-signature':'v1,invalid'}, now)]:
+    try: verify_webhook(changed_body, changed_headers, [secret], now=changed_now)
+    except WebhookVerificationError: pass
+    else: raise AssertionError('invalid webhook accepted')
+"#;
+        let status = Command::new("python3")
+            .args(["-c", script])
+            .arg(root.path().join("vector.json"))
+            .env("PYTHONPATH", root.path().join("sdk/src"))
+            .env("PYTHONDONTWRITEBYTECODE", "1")
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+
+    #[test]
+    fn async_oauth_coordinates_refresh_and_bounds_repeated_401() {
+        let root = tempfile::tempdir().unwrap();
+        render_sdk_with_async(
+            &api(),
+            "sdk/python",
+            Some("example-api-sdk"),
+            SdkClientStyle::Flat,
+            true,
+        )
+        .unwrap()
+        .write_to(root.path())
+        .unwrap();
+        let script = r#"import asyncio
+from example_api_sdk import AsyncClient, AsyncOAuthClientCredentials, ApiError
+class TokenResponse:
+    def __init__(self, token): self.token = token
+    def raise_for_status(self): pass
+    def json(self): return {'access_token': self.token, 'expires_in': 3600}
+    async def aclose(self): pass
+class Issuer:
+    calls = 0
+    async def post(self, url, **options):
+        self.calls += 1; await asyncio.sleep(0.01); return TokenResponse('token'+str(self.calls))
+class Denied:
+    status_code = 401
+    headers = {'content-type': 'application/json'}
+    async def aread(self): return b'{}'
+    async def aclose(self): pass
+class Transport:
+    def __init__(self): self.tokens = []
+    def build_request(self, method, url, **options): return options
+    async def send(self, request, stream=False):
+        self.tokens.append(request['headers']['Authorization']); return Denied()
+async def main():
+    issuer = Issuer(); provider = AsyncOAuthClientCredentials('https://auth.example/token', 'id', 'secret', http_client=issuer)
+    assert set(await asyncio.gather(*[provider(None) for _ in range(8)])) == {'token1'}
+    assert issuer.calls == 1
+    assert set(await asyncio.gather(*[provider('token1') for _ in range(8)])) == {'token2'}
+    assert issuer.calls == 2
+    transport = Transport(); client = AsyncClient('https://example.com', token_provider=provider, http_client=transport, max_retries=10)
+    try: await client.health()
+    except ApiError as error: assert error.status_code == 401
+    else: raise AssertionError('repeated 401 accepted')
+    assert transport.tokens == ['Bearer token2', 'Bearer token3']
+    assert issuer.calls == 3
+asyncio.run(main())
+"#;
+        let status = Command::new("python3")
+            .args(["-c", script])
+            .env("PYTHONPATH", root.path().join("sdk/python/src"))
+            .env("PYTHONDONTWRITEBYTECODE", "1")
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+
+    #[test]
+    fn async_pagination_awaits_each_page_and_forwards_resource_iterator() {
+        let mut source = api();
+        source.operations[0].id = "listContacts".into();
+        source.operations[0].path = "/contacts".into();
+        source.operations[0].parameters = vec![OperationParameter {
+            name: "cursor".into(),
+            location: "query".into(),
+            required: false,
+            schema: Some(SchemaValue::new(SchemaKind::String)),
+            description: None,
+            annotations: Default::default(),
+        }];
+        source.operations[0].annotations.insert("x-kaji-pagination".into(), serde_json::json!({"type":"cursor", "inputs":[{"name":"cursor", "in":"parameters", "type":"cursor"}], "outputs":{"nextCursor":"$.next"}}));
+        if let SchemaKind::Object {
+            additional_properties,
+            ..
+        } = &mut source.schemas[0].value.kind
+        {
+            *additional_properties = AdditionalProperties::Any;
+        }
+        let root = tempfile::tempdir().unwrap();
+        render_sdk_with_async(
+            &source,
+            "sdk/python",
+            Some("example-api-sdk"),
+            SdkClientStyle::Namespaced,
+            true,
+        )
+        .unwrap()
+        .write_to(root.path())
+        .unwrap();
+        let script = r#"import asyncio, json
+from example_api_sdk import AsyncClient
+class Response:
+    status_code = 200
+    headers = {'content-type': 'application/json'}
+    def __init__(self, cursor): self.cursor = cursor
+    async def aread(self): return json.dumps({'id': self.cursor or 'first', 'next': 'last' if self.cursor is None else None}).encode()
+    async def aclose(self): pass
+class Transport:
+    def __init__(self): self.cursors = []
+    def build_request(self, method, url, **options): return options
+    async def send(self, request, stream=False):
+        cursor = request['params'].get('cursor'); self.cursors.append(cursor); return Response(cursor)
+async def main():
+    transport = Transport(); client = AsyncClient('https://example.com', http_client=transport)
+    pages = [page async for page in client.contacts.list_pages()]
+    assert [page.id for page in pages] == ['first', 'last']
+    assert transport.cursors == [None, 'last']
+asyncio.run(main())
+"#;
+        let status = Command::new("python3")
+            .args(["-c", script])
+            .env("PYTHONPATH", root.path().join("sdk/python/src"))
+            .env("PYTHONDONTWRITEBYTECODE", "1")
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+
+    #[test]
+    fn oauth_refresh_is_coordinated_and_401_replay_is_bounded() {
+        let root = tempfile::tempdir().unwrap();
+        render_test_sdk(&api(), "sdk/python", Some("example-api-sdk"))
+            .unwrap()
+            .write_to(root.path())
+            .unwrap();
+        let script = r#"import io, json, threading, time
+from concurrent.futures import ThreadPoolExecutor
+from urllib.error import HTTPError
+from example_api_sdk import Client, ApiError, OAuthClientCredentials
+import example_api_sdk.runtime as runtime
+class TokenResponse:
+    def __init__(self, token): self.token = token
+    def __enter__(self): return self
+    def __exit__(self, *args): pass
+    def read(self): return json.dumps({'access_token': self.token, 'expires_in': 3600, 'token_type': 'Bearer'}).encode()
+calls = []
+def issue(request, timeout):
+    calls.append(request); time.sleep(0.01); return TokenResponse('token' + str(len(calls)))
+provider = OAuthClientCredentials('https://auth.example/token', 'id', 'secret', scopes=['read'], opener=issue)
+with ThreadPoolExecutor(max_workers=8) as pool:
+    assert set(pool.map(lambda _: provider(None), range(8))) == {'token1'}
+assert len(calls) == 1
+with ThreadPoolExecutor(max_workers=8) as pool:
+    assert set(pool.map(lambda _: provider('token1'), range(8))) == {'token2'}
+assert len(calls) == 2
+assert b'grant_type=client_credentials' in calls[0].data and b'scope=read' in calls[0].data
+attempts = []
+def denied(request, timeout):
+    attempts.append(request.get_header('Authorization'))
+    raise HTTPError(request.full_url, 401, 'unauthorized', {}, io.BytesIO(b'{}'))
+runtime.urlopen = denied
+client = Client('https://api.example', token_provider=provider, max_retries=10)
+try: client.health()
+except ApiError as error: assert error.status_code == 401
+else: raise AssertionError('repeated 401 accepted')
+assert attempts == ['Bearer token2', 'Bearer token3']
+assert len(calls) == 3
+attempts.clear()
+client = Client('https://api.example', token_provider=provider, headers={'authorization': 'custom'})
+try: client.health()
+except ApiError: pass
+assert len(attempts) == 1 and len(calls) == 3
+"#;
+        let status = Command::new("python3")
+            .args(["-c", script])
+            .env("PYTHONPATH", root.path().join("sdk/python/src"))
+            .env("PYTHONDONTWRITEBYTECODE", "1")
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+
+    #[test]
+    fn native_async_client_shares_models_and_closes_streams() {
+        let root = tempfile::tempdir().unwrap();
+        let tree = render_sdk_with_async(
+            &api(),
+            "sdk/python",
+            Some("example-api-sdk"),
+            SdkClientStyle::Namespaced,
+            true,
+        )
+        .unwrap();
+        tree.write_to(root.path()).unwrap();
+        let script = r#"import asyncio, json
+from example_api_sdk import AsyncClient, Contact
+class Response:
+    status_code = 200
+    headers = {'content-type': 'application/json'}
+    closed = False
+    async def aread(self): return b'{"id":"123"}'
+    async def aclose(self): self.closed = True
+    async def aiter_lines(self):
+        yield 'data: {"ok":true}'
+        yield ''
+        await asyncio.sleep(100)
+class Transport:
+    def __init__(self): self.responses = []; self.active = 0; self.peak = 0
+    def build_request(self, method, url, **options): return (method, url, options)
+    async def send(self, request, stream=False):
+        self.active += 1; self.peak = max(self.peak, self.active)
+        await asyncio.sleep(0.01)
+        self.active -= 1
+        response = Response(); self.responses.append(response); return response
+async def main():
+    transport = Transport()
+    client = AsyncClient('https://example.com', http_client=transport)
+    results = await asyncio.gather(client.get_contact(contact_id='1'), client.contacts.get(contact_id='2'))
+    assert all(isinstance(item, Contact) for item in results)
+    assert transport.peak == 2
+    assert all(item.closed for item in transport.responses)
+    stream = await client._event_stream('GET', '/events')
+    assert await stream.__anext__() == {'ok': True}
+    await stream.aclose()
+    assert transport.responses[-1].closed
+    stream = await client._event_stream('GET', '/events')
+    await stream.__anext__()
+    task = asyncio.create_task(stream.__anext__())
+    await asyncio.sleep(0)
+    task.cancel()
+    try: await task
+    except asyncio.CancelledError: pass
+    assert transport.responses[-1].closed
+    try: await client._request('GET', '/', pagination_url='https://evil.example/path')
+    except ValueError: pass
+    else: raise AssertionError('cross-origin pagination accepted')
+asyncio.run(main())
+"#;
+        let status = Command::new("python3")
+            .args(["-c", script])
+            .env("PYTHONPATH", root.path().join("sdk/python/src"))
+            .env("PYTHONDONTWRITEBYTECODE", "1")
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+
+    #[test]
+    fn additional_properties_round_trip_at_original_wire_keys() {
+        let mut source = api();
+        source.schemas = vec![Schema::new(
+            "OpenModel",
+            SchemaValue::new(SchemaKind::Object {
+                fields: vec![Field {
+                    name: "display-name".into(),
+                    value: SchemaValue::new(SchemaKind::String),
+                    required: true,
+                    annotations: Default::default(),
+                }],
+                additional_properties: AdditionalProperties::Any,
+            }),
+        )];
+        let root = tempfile::tempdir().unwrap();
+        render_test_sdk(&source, "sdk/python", Some("example-api-sdk"))
+            .unwrap()
+            .write_to(root.path())
+            .unwrap();
+        let script = r#"from example_api_sdk.models import OpenModel, _to_wire
+wire = {"display-name": "Alice", "future": {"nested": [1, None, "x"]}, "additional_properties": 7}
+model = OpenModel.from_dict(wire)
+assert model.additional_properties == {"future": {"nested": [1, None, "x"]}, "additional_properties": 7}
+assert _to_wire(model) == wire
+model.additional_properties["display-name"] = "override"
+assert _to_wire(model)["display-name"] == "Alice"
+"#;
+        let status = Command::new("python3")
+            .args(["-c", script])
+            .env("PYTHONPATH", root.path().join("sdk/python/src"))
+            .env("PYTHONDONTWRITEBYTECODE", "1")
+            .status()
+            .unwrap();
+        assert!(status.success());
     }
 
     #[test]
@@ -2297,7 +2933,183 @@ mod tests {
         let omitted = render_test_sdk(&source, "sdk", Some("example-api-sdk")).unwrap();
         assert!(!rendered_python(&omitted).contains("def search_contacts_pages"));
     }
+    #[test]
+    fn native_middleware_rewrites_recovers_and_short_circuits_sync_and_async() {
+        let documentation = render_readme(
+            &api(),
+            "example-api-sdk",
+            "example_api_sdk",
+            SdkClientStyle::Flat,
+        );
+        assert!(documentation.contains("middleware=(add_header,)"));
+        assert!(documentation.contains("async_middleware=(add_async_header,)"));
+        let root = tempfile::tempdir().unwrap();
+        render_sdk_with_async(
+            &api(),
+            "sdk/python",
+            Some("example-api-sdk"),
+            SdkClientStyle::Flat,
+            true,
+        )
+        .unwrap()
+        .write_to(root.path())
+        .unwrap();
+        let script = r#"import asyncio
+from email.message import Message
+from urllib.error import URLError
+from example_api_sdk.runtime import BaseClient
+from example_api_sdk.async_runtime import AsyncBaseClient
+import example_api_sdk.runtime as runtime
+class Response:
+    status = 200
+    def __init__(self):
+        self.headers = Message(); self.headers['Content-Type'] = 'application/json'; self.closed = False
+    def read(self): return b'{"rewritten": true}'
+    def __enter__(self): return self
+    def __exit__(self, *args): self.closed = True
+order = []
+def failing(request, **kwargs):
+    assert request.get_header('X-custom') == 'yes'
+    raise URLError('offline')
+runtime.urlopen = failing
+def outer(request, following):
+    order.append('outer-before'); request.add_header('X-Custom', 'yes')
+    response = following(request); order.append('outer-after'); return response
+def recovery(request, following):
+    order.append('inner')
+    try: return following(request)
+    except URLError: return Response()
+client = BaseClient('https://example.test', middleware=(outer, recovery))
+assert client._request('GET', '/') == {'rewritten': True}
+assert order == ['outer-before', 'inner', 'outer-after']
+response = Response()
+assert BaseClient('https://example.test', middleware=(lambda request, following: response,))._request('GET', '/') == {'rewritten': True}
+assert response.closed
+class AsyncResponse:
+    status_code = 200
+    headers = {'content-type': 'application/json'}
+    closed = False
+    async def aread(self): return b'{"async": true}'
+    async def aclose(self): self.closed = True
+class Transport:
+    def build_request(self, method, url, **options): return options
+    async def send(self, request, **options):
+        assert request['headers']['X-Custom'] == 'yes'
+        raise ValueError('offline')
+async def main():
+    seen = []; result = AsyncResponse()
+    async def first(request, following):
+        seen.append('before'); request['headers']['X-Custom'] = 'yes'
+        value = await following(request); seen.append('after'); return value
+    async def recover(request, following):
+        try: return await following(request)
+        except ValueError: return result
+    client = AsyncBaseClient('https://example.test', http_client=Transport(), async_middleware=(first, recover))
+    assert await client._request('GET', '/') == {'async': True}
+    assert seen == ['before', 'after'] and result.closed
+    async def cancelled(request, following): raise asyncio.CancelledError()
+    client = AsyncBaseClient('https://example.test', http_client=Transport(), async_middleware=(cancelled,))
+    try: await client._request('GET', '/')
+    except asyncio.CancelledError: pass
+    else: raise AssertionError('cancellation swallowed')
+asyncio.run(main())
+"#;
+        assert!(
+            Command::new("python3")
+                .args(["-c", script])
+                .env("PYTHONPATH", root.path().join("sdk/python/src"))
+                .env("PYTHONDONTWRITEBYTECODE", "1")
+                .status()
+                .unwrap()
+                .success()
+        );
+    }
+    #[test]
+    fn author_bundled_middleware_is_registered_without_customer_configuration() {
+        use kaji_core::{customization::BundledMiddleware, engine::Packages};
+        let middleware = BundledMiddleware { path: "src/example_api_sdk/customer.py".into(), contents: "def add_header(request, next):\n    request.add_header('X-Bundled', 'yes')\n    return next(request)\nasync def add_async_header(request, next):\n    request['headers']['X-Bundled'] = 'async'\n    return await next(request)\n".into(), symbol: "add_header".into(), async_symbol: Some("add_async_header".into()) };
+        let tree = Packages::new()
+            .package(
+                crate::package("sdk")
+                    .name("example-api-sdk")
+                    .with(crate::sdk().async_client(true))
+                    .middleware(middleware.clone()),
+            )
+            .generate(&api(), None)
+            .unwrap();
+        let root = tempfile::tempdir().unwrap();
+        tree.write_to(root.path()).unwrap();
+        let script = r#"import asyncio
+from email.message import Message
+from example_api_sdk import Client, AsyncClient
+import example_api_sdk.runtime as runtime
+class Response:
+    status = 200
+    def __init__(self): self.headers = Message(); self.headers['Content-Type'] = 'application/json'
+    def read(self): return b'{}'
+    def __enter__(self): return self
+    def __exit__(self, *args): pass
+def send(request, **kwargs):
+    assert request.get_header('X-bundled') == 'yes'
+    return Response()
+runtime.urlopen = send
+assert Client('https://example.test')._request('GET', '/') == {}
+class AsyncResponse:
+    status_code = 200
+    headers = {'content-type': 'application/json'}
+    async def aread(self): return b'{}'
+    async def aclose(self): pass
+class Transport:
+    def build_request(self, method, url, **options): return options
+    async def send(self, request, **options):
+        assert request['headers']['X-Bundled'] == 'async'
+        return AsyncResponse()
+async def main():
+    client = AsyncClient('https://example.test', http_client=Transport())
+    assert await client._request('GET', '/') == {}
+asyncio.run(main())
+"#;
+        assert!(
+            Command::new("python3")
+                .args(["-c", script])
+                .env("PYTHONPATH", root.path().join("sdk/src"))
+                .env("PYTHONDONTWRITEBYTECODE", "1")
+                .status()
+                .unwrap()
+                .success()
+        );
+        let mut invalid = middleware.clone();
+        invalid.async_symbol = None;
+        assert!(
+            Packages::new()
+                .package(
+                    crate::package("sdk")
+                        .name("example-api-sdk")
+                        .with(crate::sdk().async_client(true))
+                        .middleware(invalid)
+                )
+                .generate(&api(), None)
+                .is_err()
+        );
+        let mut collision = middleware;
+        collision.path = "src/example_api_sdk/runtime.py".into();
+        assert!(
+            Packages::new()
+                .package(
+                    crate::package("sdk")
+                        .name("example-api-sdk")
+                        .with(crate::sdk())
+                        .middleware(collision)
+                )
+                .generate(&api(), None)
+                .is_err()
+        );
+    }
 }
 
+mod bundled_middleware;
 mod package;
-pub use package::{PackageExt, Python, Sdk, Settings, package, sdk};
+pub use package::{
+    PackageExt, Python, PythonModels, Roundtrips, Sdk, Settings, Webhooks, package, roundtrips,
+    sdk, webhooks,
+};

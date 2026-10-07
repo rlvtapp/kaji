@@ -190,7 +190,7 @@ func (client *Client) doWithRetry(request *http.Request, destination any) error 
 				*bytesDestination = body
 				return nil
 			}
-			if textDestination, ok := destination.(*string); ok {
+			if textDestination, ok := destination.(*string); ok && !strings.Contains(response.Header.Get("Content-Type"), "json") {
 				body, err := io.ReadAll(response.Body)
 				if err != nil { result := fmt.Errorf("kaji: read text response: %w", err); client.onError(requestInfo, result); return result }
 				*textDestination = string(body)

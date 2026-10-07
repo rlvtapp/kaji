@@ -87,3 +87,27 @@ for {
     use(page)
 }
 ```
+
+### Customer transport middleware
+
+`ClientConfig.Middleware` accepts `[]KajiMiddleware`. Each entry wraps a `KajiHTTPClient`; `KajiHTTPClientFunc` adapts ordinary functions to its `Do` interface. The first configured middleware is outermost, and the chain executes for each HTTP attempt, including retries, pagination and SSE establishment. Existing `HTTPClient` injection and telemetry hooks remain available.
+
+```go
+middleware := func(next KajiHTTPClient) KajiHTTPClient {
+    return KajiHTTPClientFunc(func(request *http.Request) (*http.Response, error) {
+        rewritten := request.Clone(request.Context())
+        rewritten.Header.Set("X-Customer", "acme")
+        return next.Do(rewritten)
+    })
+}
+client, err := NewClient(ClientConfig{
+    BaseURL: "https://api.example.com",
+    Middleware: []KajiMiddleware{middleware},
+})
+```
+
+Middleware can rewrite requests/responses, recover or replace errors, or return a response without calling the wrapped client. Keep the request context for cancellation and follow `net/http` response-body ownership conventions: close discarded response bodies yourself; the SDK closes returned bodies after consuming them. Wrappers must support concurrent use. Nil middleware or a nil returned transport fails construction. Middleware sees native requests, including authentication headers.
+
+### Bundle author middleware during generation
+
+The package builder's `.middleware(BundledMiddleware { path, contents, symbol, async_symbol: None })` ships and registers an author-supplied native Go wrapper automatically. Use a `.go` file beside the generated client, declaring the same package, and a symbol with the `KajiMiddleware` function ABI. Consumers need no `ClientConfig.Middleware` registration. Bundled defaults run before optional customer wrappers in configuration order. Source filenames/build constraints must not restrict compilation to a platform. Colliding paths, foreign package declarations and transports lacking the native registration boundary fail generation.

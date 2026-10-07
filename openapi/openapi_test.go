@@ -648,3 +648,29 @@ paths:
 		t.Fatalf("part header was not preserved: %#v", header)
 	}
 }
+
+func TestParameterExportPreservesDeclaredExampleAndReservedEncoding(t *testing.T) {
+	const source = `openapi: 3.1.0
+info: {title: Parameter export, version: 1.0.0}
+paths:
+  /widgets:
+    get:
+      parameters:
+        - name: filter
+          in: query
+          allowReserved: true
+          example: name=value
+          schema: {type: string}
+      responses:
+        '200': {description: OK}
+`
+	spec := loadSampleSpec(t, source)
+	_, operation := getOperation(t, spec, "get")
+	doc, err := convertParameter(operation.Parameters[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !doc.AllowReserved || doc.Example != "name=value" {
+		t.Fatalf("parameter contract lost: %#v", doc)
+	}
+}

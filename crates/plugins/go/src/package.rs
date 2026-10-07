@@ -11,7 +11,16 @@ pub struct Settings {
 impl Language for Go {
     const NAME: &'static str = "go";
     type Settings = Settings;
-    type Workspace = ();
+    type Workspace = crate::providers::Workspace;
+    fn bundle_middleware(
+        tree: &mut kaji_core::GeneratedTree,
+        middleware: &[kaji_core::customization::BundledMiddleware],
+    ) -> Result<()> {
+        crate::bundled_middleware::bundle(tree, middleware)
+    }
+    fn finalize(cx: &mut kaji_core::engine::FinalizeContext<'_, Self>) -> Result<()> {
+        crate::providers::Workspace::finalize(cx)
+    }
 }
 pub fn package(dir: impl Into<String>) -> Package<Go> {
     Package::new(dir)
@@ -59,7 +68,21 @@ impl Plugin<Go> for Sdk {
     fn meta(&self) -> &Meta {
         &self.meta
     }
+    fn provides(&self) -> Vec<kaji_core::engine::Provision> {
+        vec![
+            kaji_core::engine::Provision::of::<crate::providers::Models>(),
+            kaji_core::engine::Provision::of::<crate::providers::Transport>(),
+            kaji_core::engine::Provision::of::<crate::providers::Operations>(),
+            kaji_core::engine::Provision::of::<crate::providers::Client>(),
+        ]
+    }
     fn generate(&self, cx: &mut PluginContext<'_, Go>) -> Result<()> {
+        cx.publish(crate::providers::model_contract(cx.api))?;
+        cx.publish(crate::providers::default_transport())?;
+        cx.publish(crate::providers::operation_contract(cx.api))?;
+        cx.publish(crate::providers::Client {
+            symbol: "Client".into(),
+        })?;
         cx.files.append(crate::render_sdk(
             cx.api,
             ".",

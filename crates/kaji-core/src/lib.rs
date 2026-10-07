@@ -2,12 +2,16 @@
 
 pub mod adapter;
 pub mod ast;
+pub mod customization;
 pub mod engine;
 pub mod files;
 pub mod filters;
 pub mod httpmock;
 pub mod manifest;
 pub mod mocking;
+pub mod pagination;
+pub mod release;
+pub mod samples;
 pub mod semantics;
 pub mod style;
 
@@ -18,7 +22,7 @@ pub use ast::{
     SchemaKind, SchemaValue, SecurityRequirement, SecurityScheme, SecuritySchemeCatalog,
     SecuritySchemeKind,
 };
-pub use files::{GeneratedFile, GeneratedTree};
+pub use files::{GeneratedFile, GeneratedTree, OutputChanges};
 pub use filters::{
     OperationContext, OperationFilter, OperationSelection, OverrideFilter, OverrideRule,
     OverrideRules, wildcard_matches,

@@ -38,11 +38,22 @@ fn render_test_sdk(
 /// Generates a Java 17+ SDK with either the original direct-operation client
 /// or a resource-namespaced facade. In namespaced mode the direct operations
 /// remain available as direct entry points.
+#[cfg(test)]
 fn render_sdk(
     api: &Api,
     output_dir: &str,
     package_name: Option<&str>,
     style: SdkClientStyle,
+) -> Result<GeneratedTree> {
+    render_sdk_with_policy(api, output_dir, package_name, style, false)
+}
+
+fn render_sdk_with_policy(
+    api: &Api,
+    output_dir: &str,
+    package_name: Option<&str>,
+    style: SdkClientStyle,
+    open_enums: bool,
 ) -> Result<GeneratedTree> {
     let root = normalized_output_dir(output_dir)?;
     let package = package_name
@@ -119,7 +130,7 @@ fn render_sdk(
                 "src/main/java/{package_path}/model/{}.java",
                 type_name(&schema.name)
             ),
-            render_model(schema, &package),
+            render_model(schema, &package, open_enums),
         )?;
     }
     insert(
@@ -206,8 +217,31 @@ fn readme(api: &Api, package: &str, artifact: &str, style: SdkClientStyle) -> St
         SdkClientStyle::Flat => "client.getContact(new Client.GetContactRequest(id));",
         SdkClientStyle::Namespaced => "client.contacts().get(new Client.GetContactRequest(id));",
     };
+    let middleware = r#"## Runtime customization
+
+Supply a customer-owned `java.net.http.HttpClient` in `ClientConfig`:
+
+```java
+var config = new ClientConfig(
+    "https://api.example.com", System.getenv("API_KEY"),
+    "Authorization", "Bearer", java.util.Map.of(), customerHttpClient,
+    java.time.Duration.ofSeconds(30), RetryConfig.defaults(), null);
+var client = new Client(config);
+```
+
+`customerHttpClient` can be a delegating `HttpClient` subclass. Implement its
+abstract methods, forward client configuration and both `sendAsync` overloads,
+and wrap `send(request, bodyHandler)` (the path used by this SDK). Rebuild an
+immutable request with `HttpRequest.newBuilder(request, (name, value) -> true)`
+to change headers, method, URI or body before forwarding. Return a replacement
+`HttpResponse<T>` to rewrite a response or short circuit, preserving the supplied
+body handler's `T` representation. Catch and translate transport failures while
+preserving interruption. Observer hooks do not return replacement requests or
+responses. The decorator sees each transport attempt, including SDK retries;
+keep rewrites repeatable and avoid consuming streaming bodies during inspection.
+"#;
     format!(
-        "# {artifact}\n\nGenerated Java 17+ SDK for {}. See [STYLE_GUIDE.md](STYLE_GUIDE.md) for the selected public API.\n\n```java\nimport {package}.Client;\nimport {package}.ClientConfig;\n\nvar client = new Client(new ClientConfig(\"https://api.example.com\", System.getenv(\"API_KEY\")));\n{call}\n```\n\nThe package supports both Gradle (`build.gradle`) and Maven (`pom.xml`).\n",
+        "# {artifact}\n\nGenerated Java 17+ SDK for {}. See [STYLE_GUIDE.md](STYLE_GUIDE.md) for the selected public API.\n\n```java\nimport {package}.Client;\nimport {package}.ClientConfig;\n\nvar client = new Client(new ClientConfig(\"https://api.example.com\", System.getenv(\"API_KEY\")));\n{call}\n```\n\nThe package supports both Gradle (`build.gradle`) and Maven (`pom.xml`).\n\n{middleware}",
         api.name
     )
 }
@@ -251,14 +285,20 @@ fn client_hooks(package: &str) -> String {
     )
 }
 
-fn render_model(schema: &Schema, package: &str) -> String {
+fn render_model(schema: &Schema, package: &str, open_enums: bool) -> String {
     let name = type_name(&schema.name);
     match &schema.value.kind {
         SchemaKind::Object {
             fields,
             additional_properties,
         } => render_object_model(&name, fields, additional_properties, package),
-        _ if !schema.value.enum_values.is_empty() => render_enum(&name, &schema.value, package),
+        _ if !schema.value.enum_values.is_empty() => {
+            if open_enums {
+                render_open_enum(&name, &schema.value, package)
+            } else {
+                render_enum(&name, &schema.value, package)
+            }
+        }
         _ => render_value_model(&name, &schema.value, package),
     }
 }
@@ -269,26 +309,74 @@ fn render_object_model(
     additional_properties: &AdditionalProperties,
     package: &str,
 ) -> String {
+    let open = !matches!(additional_properties, AdditionalProperties::Forbidden);
     let mut output = format!(
-        "package {package}.model;\n\nimport com.fasterxml.jackson.annotation.JsonIgnoreProperties;\nimport com.fasterxml.jackson.annotation.JsonProperty;\nimport com.fasterxml.jackson.databind.JsonNode;\nimport java.util.List;\nimport java.util.Map;\n\n{NOTICE}\n@JsonIgnoreProperties(ignoreUnknown = true)\npublic record {name}(\n"
+        "package {package}.model;\n\nimport com.fasterxml.jackson.annotation.JsonAnyGetter;\nimport com.fasterxml.jackson.annotation.JsonAnySetter;\nimport com.fasterxml.jackson.annotation.JsonIgnoreProperties;\nimport com.fasterxml.jackson.annotation.JsonProperty;\nimport com.fasterxml.jackson.databind.JsonNode;\nimport java.util.Collections;\nimport java.util.LinkedHashMap;\nimport java.util.List;\nimport java.util.Map;\n\n{NOTICE}\n"
     );
-    let mut components = Vec::new();
-    for field in fields {
-        components.push(format!(
-            "        @JsonProperty({:?}) {} {}",
-            field.name,
-            java_type(&field.value),
-            field_name(&field.name)
-        ));
+    if !open {
+        output.push_str("@JsonIgnoreProperties(ignoreUnknown = true)\n");
     }
-    if let AdditionalProperties::Schema { value } = additional_properties {
+    let _ = writeln!(output, "public record {name}(");
+    let mut components = fields
+        .iter()
+        .map(|field| {
+            format!(
+                "        @JsonProperty({:?}) {} {}",
+                field.name,
+                java_type(&field.value),
+                field_name(&field.name)
+            )
+        })
+        .collect::<Vec<_>>();
+    let mut extra_name = "additionalProperties".to_owned();
+    while fields
+        .iter()
+        .any(|field| field_name(&field.name) == extra_name)
+    {
+        extra_name.push('_');
+    }
+    if open {
+        let value_type = match additional_properties {
+            AdditionalProperties::Schema { value } => java_type(value),
+            _ => "Object".into(),
+        };
         components.push(format!(
-            "        @JsonProperty(\"additionalProperties\") Map<String, {}> additionalProperties",
-            java_type(value)
+            "        @JsonAnyGetter @JsonAnySetter Map<String, {value_type}> {extra_name}"
         ));
     }
     output.push_str(&components.join(",\n"));
-    output.push_str("\n) {}\n");
+    if open {
+        let _ = writeln!(
+            output,
+            "\n) {{\n    public {name} {{\n        {extra_name} = {extra_name} == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>({extra_name}));"
+        );
+        for field in fields {
+            let _ = writeln!(
+                output,
+                "        if ({extra_name}.containsKey({:?})) throw new IllegalArgumentException(\"additional property shadows declared field\");",
+                field.name
+            );
+        }
+        output.push_str("    }\n");
+        // Preserve the prior convenience constructor for previously untyped open objects.
+        if !matches!(additional_properties, AdditionalProperties::Schema { .. }) {
+            let args = fields
+                .iter()
+                .map(|field| format!("{} {}", java_type(&field.value), field_name(&field.name)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let values = fields
+                .iter()
+                .map(|field| field_name(&field.name))
+                .chain(std::iter::once("Map.of()".into()))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let _ = writeln!(output, "    public {name}({args}) {{ this({values}); }}");
+        }
+        output.push_str("}\n");
+    } else {
+        output.push_str("\n) {}\n");
+    }
     output
 }
 
@@ -313,6 +401,50 @@ fn render_enum(name: &str, value: &SchemaValue, package: &str) -> String {
     output.push_str("\n    @JsonValue\n    public String value() { return value; }\n\n    @JsonCreator\n    public static ");
     let _ = writeln!(output, "{name} fromValue(String value) {{");
     output.push_str("        for (var candidate : values()) {\n            if (candidate.value.equals(value)) return candidate;\n        }\n        throw new IllegalArgumentException(\"Unknown enum value: \" + value);\n    }\n}\n");
+    output
+}
+
+fn render_open_enum(name: &str, value: &SchemaValue, package: &str) -> String {
+    let mut output = format!(
+        "package {package}.model;\n\nimport com.fasterxml.jackson.annotation.JsonCreator;\nimport com.fasterxml.jackson.annotation.JsonValue;\nimport java.util.Objects;\n\n{NOTICE}/** Extensible wire value; unknown response values are preserved. */\npublic final class {name} {{\n"
+    );
+    let mut constants = Vec::new();
+    for (index, item) in value.enum_values.iter().enumerate() {
+        let raw = item
+            .as_str()
+            .map(str::to_owned)
+            .unwrap_or_else(|| item.to_string());
+        let constant = enum_name(&raw, index);
+        let _ = writeln!(
+            output,
+            "    public static final {name} {constant} = new {name}({raw:?});"
+        );
+        constants.push(constant);
+    }
+    let _ = writeln!(
+        output,
+        "\n    private final String value;\n    private {name}(String value) {{ this.value = Objects.requireNonNull(value); }}"
+    );
+    output.push_str("\n    @JsonValue\n    public String value() { return value; }\n");
+    let _ = writeln!(
+        output,
+        "    public static {name}[] values() {{ return new {name}[] {{ {} }}; }}",
+        constants.join(", ")
+    );
+    let _ = writeln!(
+        output,
+        "\n    @JsonCreator\n    public static {name} fromValue(String value) {{"
+    );
+    output.push_str("        for (var candidate : values()) {\n            if (candidate.value.equals(value)) return candidate;\n        }\n");
+    let _ = writeln!(output, "        return new {name}(value);\n    }}");
+    let _ = writeln!(
+        output,
+        "\n    /** Reject values not declared by the API when strict request validation is desired. */\n    public static {name} fromKnownValue(String value) {{\n        for (var candidate : values()) {{\n            if (candidate.value.equals(value)) return candidate;\n        }}\n        throw new IllegalArgumentException(\"Unknown enum value: \" + value);\n    }}"
+    );
+    let _ = writeln!(
+        output,
+        "\n    public boolean isKnown() {{\n        for (var candidate : values()) if (candidate.value.equals(value)) return true;\n        return false;\n    }}\n    @Override public boolean equals(Object other) {{ return other instanceof {name} candidate && value.equals(candidate.value); }}\n    @Override public int hashCode() {{ return value.hashCode(); }}\n    @Override public String toString() {{ return value; }}\n}}"
+    );
     output
 }
 
@@ -1597,7 +1729,7 @@ mod tests {
         SchemaValue,
     };
 
-    use super::{render_sdk, render_test_sdk};
+    use super::{render_sdk, render_sdk_with_policy, render_test_sdk};
     use kaji_core::SdkClientStyle;
 
     fn string() -> SchemaValue {
@@ -1696,6 +1828,72 @@ mod tests {
             .map(|(_, contents)| contents)
             .collect::<Vec<_>>()
             .join("\n")
+    }
+
+    #[test]
+    fn open_object_records_flatten_typed_unknown_properties() {
+        let mut source = contact_api();
+        source.schemas.push(Schema::new(
+            "Future",
+            SchemaValue::new(SchemaKind::Object {
+                fields: vec![Field {
+                    name: "additionalProperties".into(),
+                    value: string(),
+                    required: false,
+                    annotations: Default::default(),
+                }],
+                additional_properties: AdditionalProperties::Schema {
+                    value: Box::new(string()),
+                },
+            }),
+        ));
+        let tree = render_test_sdk(&source, "java", Some("io.example")).unwrap();
+        let model = tree
+            .get("java/src/main/java/io/example/model/Future.java")
+            .unwrap();
+        assert!(
+            model.contains(
+                "@JsonAnyGetter @JsonAnySetter Map<String, String> additionalProperties_"
+            )
+        );
+        assert!(!model.contains("@JsonIgnoreProperties(ignoreUnknown = true)"));
+        assert!(
+            model.contains(
+                "Collections.unmodifiableMap(new LinkedHashMap<>(additionalProperties_))"
+            )
+        );
+        assert!(model.contains("additionalProperties_.containsKey(\"additionalProperties\")"));
+        assert!(
+            tree.get("java/src/main/java/io/example/model/Contact.java")
+                .unwrap()
+                .contains("@JsonIgnoreProperties(ignoreUnknown = true)")
+        );
+    }
+
+    #[test]
+    fn open_enums_are_opt_in_and_preserve_unknown_wire_values() {
+        let mut source = contact_api();
+        let mut value = SchemaValue::new(SchemaKind::String);
+        value.enum_values = vec![serde_json::json!("active"), serde_json::json!("paused")];
+        source.schemas.push(Schema::new("Status", value));
+        let closed = render_sdk(&source, "java", Some("io.example"), SdkClientStyle::Flat).unwrap();
+        let open = render_sdk_with_policy(
+            &source,
+            "java",
+            Some("io.example"),
+            SdkClientStyle::Flat,
+            true,
+        )
+        .unwrap();
+        let path = "java/src/main/java/io/example/model/Status.java";
+        assert!(closed.get(path).unwrap().contains("public enum Status"));
+        let model = open.get(path).unwrap();
+        assert!(model.contains("public final class Status"));
+        assert!(model.contains("public static final Status ACTIVE"));
+        assert!(model.contains("return new Status(value);"));
+        assert!(model.contains("@JsonValue"));
+        assert!(model.contains("fromKnownValue"));
+        assert!(model.contains("value.equals(candidate.value)"));
     }
 
     #[test]
@@ -2157,3 +2355,5 @@ mod tests {
 
 mod package;
 pub use package::{Java, PackageExt, Sdk, Settings, package, sdk};
+
+mod bundled_middleware;

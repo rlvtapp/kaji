@@ -10,3 +10,11 @@ profile, or set `"language": "swift"` with the `sdk` plugin in `kaji.json`.
 Every operation is an `async throws` method. The namespaced client style adds
 resource facades while retaining direct `KajiClient` methods, so switching the
 style is additive for generated consumers.
+
+Generated object models preserve unknown keys when additional properties are
+allowed and track explicit null separately from omitted optional fields.
+Closed models do not retain unknown keys. Extra properties use the declared
+value type, or `JSONValue` for unconstrained schemas. `JSONValue` decodes signed
+and unsigned 64-bit integers before floating-point values, preserving integer
+values above JavaScript's safe integer range. Arbitrary-precision JSON numbers
+are not supported.

@@ -12,6 +12,12 @@ impl Language for Php {
     const NAME: &'static str = "php";
     type Settings = Settings;
     type Workspace = ();
+    fn bundle_middleware(
+        tree: &mut kaji_core::GeneratedTree,
+        middleware: &[kaji_core::customization::BundledMiddleware],
+    ) -> Result<()> {
+        crate::bundled_middleware::bundle(tree, middleware)
+    }
 }
 pub fn package(dir: impl Into<String>) -> Package<Php> {
     Package::new(dir)

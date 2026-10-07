@@ -30,9 +30,9 @@ pub(super) fn generate(
         render_operation(&mut body, operation);
         render_cursor_pager(&mut body, api, operation);
         if cursor_pagination(api, operation).is_none() {
-            render_offset_pager(&mut body, operation);
+            render_offset_pager(&mut body, api, operation);
         }
-        render_url_pager(&mut body, operation);
+        render_url_pager(&mut body, api, operation);
         body = body.replace("client.do(request,", "client.doWithRetry(request,");
         emit(
             tree,
@@ -138,7 +138,7 @@ fn filename(kind: &str, name: &str) -> String {
     format!("{kind}_{}_{hash:016x}.go", &stem[..stem.len().min(100)])
 }
 
-fn emit(
+pub(super) fn emit(
     tree: &mut GeneratedTree,
     directory: &str,
     name: &str,

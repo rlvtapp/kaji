@@ -37,7 +37,15 @@ impl GeneratedFile {
 pub struct GeneratedTree {
     files: BTreeMap<PathBuf, String>,
     preserve_existing: BTreeSet<PathBuf>,
+    owners: BTreeMap<PathBuf, String>,
 }
+
+type OutputPlan = (
+    OutputChanges,
+    BTreeMap<PathBuf, String>,
+    Ownership,
+    Vec<PathBuf>,
+);
 
 impl GeneratedTree {
     pub fn insert(&mut self, file: GeneratedFile) -> Result<()> {
@@ -95,103 +103,295 @@ impl GeneratedTree {
     /// Moves file contents and create-once metadata without copying the entire
     /// generated SDK between composition layers.
     pub fn into_files(self) -> impl Iterator<Item = (GeneratedFile, bool)> {
+        self.into_owned_files()
+            .map(|(file, custom, _)| (file, custom))
+    }
+
+    pub fn into_owned_files(self) -> impl Iterator<Item = (GeneratedFile, bool, Option<String>)> {
         let Self {
             files,
             preserve_existing,
+            mut owners,
         } = self;
         files.into_iter().map(move |(path, contents)| {
             let custom = preserve_existing.contains(&path);
-            (GeneratedFile { path, contents }, custom)
+            let owner = owners.remove(&path);
+            (GeneratedFile { path, contents }, custom, owner)
         })
     }
 
-    /// Merges a separately generated package tree, retaining the same
-    /// collision protections as individual file insertion. SDK profile
-    /// orchestrators use this to compose language-specific generators into a
-    /// single validated release tree.
+    /// Assign a persistent package/plugin identity, never a process-local ID.
+    pub fn set_owner(&mut self, path: impl AsRef<Path>, owner: impl Into<String>) -> Result<()> {
+        if !self.files.contains_key(path.as_ref()) {
+            bail!("cannot assign ownership to missing generated file");
+        }
+        let owner = owner.into();
+        if owner.trim().is_empty() {
+            bail!("generated owner cannot be empty");
+        }
+        self.owners.insert(path.as_ref().to_path_buf(), owner);
+        Ok(())
+    }
+
     pub fn append(&mut self, other: GeneratedTree) -> Result<()> {
-        let GeneratedTree {
-            files,
-            preserve_existing,
-        } = other;
-        for (path, contents) in files {
-            let file = GeneratedFile::new(&path, contents)?;
-            if preserve_existing.contains(&path) {
+        for (file, custom, owner) in other.into_owned_files() {
+            let path = file.path.clone();
+            if custom {
                 self.insert_custom(file)?;
             } else {
                 self.insert(file)?;
             }
+            if let Some(owner) = owner {
+                self.set_owner(path, owner)?;
+            }
         }
         Ok(())
     }
 
-    /// Materializes this validated tree beneath `root` without permitting
-    /// symlink traversal outside the requested output directory.
-    pub fn write_to(&self, root: impl AsRef<Path>) -> Result<()> {
-        fs::create_dir_all(root.as_ref())?;
-        let root = fs::canonicalize(root.as_ref())?;
+    /// Compare the complete generated output without modifying its destination.
+    pub fn check(&self, root: impl AsRef<Path>) -> Result<OutputChanges> {
+        Ok(self.plan(root.as_ref(), false)?.0)
+    }
 
-        // Validate each containing directory once before materializing files.
-        // Large OpenAPI documents commonly produce tens of thousands of files;
-        // canonicalizing the same directory for every file made that safe path
-        // check dominate generation time. `GeneratedFile` has already rejected
-        // absolute and parent-directory paths, and checking every unique parent
-        // still prevents a generated path from traversing a pre-existing link.
-        let parents = self
-            .files
-            .keys()
-            .map(|relative| relative.parent().map(Path::to_path_buf).unwrap_or_default())
-            .collect::<BTreeSet<_>>();
-        for relative_parent in parents {
-            let parent = root.join(relative_parent);
-            fs::create_dir_all(&parent)?;
-            let canonical_parent = fs::canonicalize(&parent)?;
-            if !canonical_parent.starts_with(&root) {
-                bail!("generated path escapes its output directory");
-            }
-        }
-        // Resolve every existing npm manifest before writing any generated file.
-        // Invalid user JSON must fail generation rather than be overwritten.
-        let mut manifests = BTreeMap::new();
-        for (relative, contents) in &self.files {
-            if relative
-                .file_name()
-                .is_some_and(|name| name == "package.json")
-                && !self.preserve_existing.contains(relative)
-            {
-                let destination = root.join(relative);
-                if fs::symlink_metadata(&destination)
-                    .map(|metadata| metadata.file_type().is_symlink())
-                    .unwrap_or(false)
-                {
-                    bail!("refusing to read generated output through a symlink");
-                }
-                if destination.exists() {
-                    let existing = fs::read_to_string(&destination)?;
-                    let merged = merge_npm_manifest(&existing, contents)
-                        .with_context(|| format!("cannot merge {}", destination.display()))?;
-                    manifests.insert(relative.clone(), merged);
-                }
-            }
-        }
-        for (relative, contents) in &self.files {
-            let contents = manifests.get(relative).unwrap_or(contents);
+    /// Validate all changes before writing. Only previously owned, unchanged
+    /// files may be removed; create-once files remain user-owned.
+    pub fn write_to(&self, root: impl AsRef<Path>) -> Result<()> {
+        let root = root.as_ref();
+        let (_, output, manifest, removed) = self.plan(root, true)?;
+        fs::create_dir_all(root)?;
+        for (relative, contents) in output {
             let destination = root.join(relative);
-            if fs::symlink_metadata(&destination)
-                .map(|metadata| metadata.file_type().is_symlink())
-                .unwrap_or(false)
-            {
-                bail!("refusing to overwrite generated output through a symlink");
+            fs::create_dir_all(destination.parent().context("missing output parent")?)?;
+            fs::write(&destination, contents)?;
+        }
+        for relative in removed {
+            fs::remove_file(root.join(relative))?;
+        }
+        let destination = root.join(OWNERSHIP_PATH);
+        fs::create_dir_all(destination.parent().unwrap())?;
+        fs::write(destination, serde_json::to_string_pretty(&manifest)? + "\n")?;
+        Ok(())
+    }
+
+    fn plan(&self, root: &Path, enforce_edits: bool) -> Result<OutputPlan> {
+        safe_path(root, Path::new(OWNERSHIP_PATH))?;
+        let manifest_path = root.join(OWNERSHIP_PATH);
+        let previous: Ownership = if manifest_path.exists() {
+            serde_json::from_str(&fs::read_to_string(&manifest_path)?)
+                .context("invalid Kaji ownership manifest")?
+        } else {
+            Ownership::default()
+        };
+        if previous.version != 1 {
+            bail!("unsupported Kaji ownership manifest version");
+        }
+        for path in previous.files.keys() {
+            GeneratedFile::new(path, "")?;
+            if path == Path::new(OWNERSHIP_PATH) {
+                bail!("ownership manifest cannot own itself");
             }
-            if self.preserve_existing.contains(relative) && destination.exists() {
+            safe_path(root, path)?;
+        }
+        let mut changes = OutputChanges::default();
+        let mut output = BTreeMap::new();
+        let mut manifest = Ownership::default();
+        let mut removed = Vec::new();
+        for (path, generated) in &self.files {
+            GeneratedFile::new(path, "")?;
+            if path == Path::new(OWNERSHIP_PATH) {
+                bail!("reserved Kaji ownership path");
+            }
+            safe_path(root, path)?;
+            let existing = if root.join(path).exists() {
+                Some(fs::read_to_string(root.join(path))?)
+            } else {
+                None
+            };
+            if self.preserve_existing.contains(path) && existing.is_some() {
                 continue;
             }
-            fs::write(&destination, contents).with_context(|| {
-                format!("cannot write generated file {}", destination.display())
-            })?;
+            let npm = path.file_name().is_some_and(|name| name == "package.json")
+                && !path.components().any(|part| part.as_os_str() == ".kaji");
+            let contents = if npm {
+                match &existing {
+                    Some(existing) => merge_npm_manifest(existing, generated)?,
+                    None => generated.clone(),
+                }
+            } else {
+                generated.clone()
+            };
+            if let Some(existing) = &existing {
+                if !npm {
+                    if let Some(owned) = previous.files.get(path) {
+                        if enforce_edits
+                            && existing != &contents
+                            && digest(existing) != owned.sha256
+                            && !equal_package_metadata(path, existing, &contents)
+                        {
+                            bail!(
+                                "locally modified generated file {}; preserve or restore it before regeneration",
+                                path.display()
+                            );
+                        }
+                    } else if existing != generated && !legacy_generated(existing, path) {
+                        bail!("refusing to overwrite unowned file {}", path.display());
+                    }
+                }
+                if existing != &contents {
+                    changes.modified.push(path.clone());
+                }
+            } else {
+                changes.added.push(path.clone());
+            }
+            manifest.files.insert(
+                path.clone(),
+                OwnedFile {
+                    owner: self.owners.get(path).cloned().unwrap_or_else(|| {
+                        format!(
+                            "kaji:{}",
+                            path.components()
+                                .next()
+                                .unwrap()
+                                .as_os_str()
+                                .to_string_lossy()
+                        )
+                    }),
+                    sha256: digest(&contents),
+                    create_once: self.preserve_existing.contains(path),
+                },
+            );
+            output.insert(path.clone(), contents);
         }
-        Ok(())
+        for (path, owned) in &previous.files {
+            if self.files.contains_key(path)
+                || owned.create_once
+                || (path.file_name().is_some_and(|name| name == "package.json")
+                    && !path.components().any(|part| part.as_os_str() == ".kaji"))
+            {
+                continue;
+            }
+            if root.join(path).exists() {
+                let existing = fs::read_to_string(root.join(path))?;
+                if enforce_edits && digest(&existing) != owned.sha256 {
+                    bail!(
+                        "refusing to remove locally modified generated file {}",
+                        path.display()
+                    );
+                }
+                changes.removed.push(path.clone());
+                removed.push(path.clone());
+            }
+        }
+        Ok((changes, output, manifest, removed))
     }
+}
+
+fn equal_package_metadata(path: &Path, existing: &str, generated: &str) -> bool {
+    path.ends_with(".kaji/package.json")
+        && matches!(
+            (serde_json::from_str::<serde_json::Value>(existing), serde_json::from_str::<serde_json::Value>(generated)),
+            (Ok(existing), Ok(generated)) if existing == generated
+        )
+}
+
+pub const OWNERSHIP_PATH: &str = ".kaji/ownership.json";
+
+#[derive(Clone, Debug, Default, serde::Serialize, PartialEq, Eq)]
+pub struct OutputChanges {
+    pub added: Vec<PathBuf>,
+    pub modified: Vec<PathBuf>,
+    pub removed: Vec<PathBuf>,
+}
+impl OutputChanges {
+    pub fn is_empty(&self) -> bool {
+        self.added.is_empty() && self.modified.is_empty() && self.removed.is_empty()
+    }
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Ownership {
+    version: u8,
+    files: BTreeMap<PathBuf, OwnedFile>,
+}
+impl Default for Ownership {
+    fn default() -> Self {
+        Self {
+            version: 1,
+            files: BTreeMap::new(),
+        }
+    }
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OwnedFile {
+    owner: String,
+    sha256: String,
+    #[serde(default)]
+    create_once: bool,
+}
+fn digest(value: &str) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(value.as_bytes())
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+fn legacy_generated(contents: &str, path: &Path) -> bool {
+    // Explicit generator markers allow conservative adoption of legacy output.
+    contents
+        .lines()
+        .take(8)
+        .any(|line| line.to_ascii_lowercase().contains("generated by kaji"))
+        || path == Path::new(".kaji/generation.lock.json")
+}
+fn safe_path(root: &Path, relative: &Path) -> Result<()> {
+    // Reject links even when they point inside the root; never follow them while
+    // checking, creating directories, reading, writing, or removing output.
+    // macOS exposes temporary storage through /var and /tmp aliases. Permit
+    // those system aliases, but reject user-controlled links above a missing root.
+    let mut ancestor = PathBuf::new();
+    for component in root.components() {
+        ancestor.push(component.as_os_str());
+        if fs::symlink_metadata(&ancestor).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
+            let system_alias = cfg!(target_os = "macos")
+                && matches!(ancestor.to_str(), Some("/var" | "/tmp" | "/etc"))
+                && fs::read_link(&ancestor).is_ok_and(|target| {
+                    matches!(
+                        target.to_str(),
+                        Some(
+                            "private/var"
+                                | "private/tmp"
+                                | "private/etc"
+                                | "/private/var"
+                                | "/private/tmp"
+                                | "/private/etc"
+                        )
+                    )
+                });
+            if !system_alias {
+                bail!(
+                    "refusing symlink ancestor of output root {}",
+                    ancestor.display()
+                );
+            }
+        }
+    }
+    if fs::symlink_metadata(root).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
+        bail!("refusing symlink output root {}", root.display());
+    }
+    let mut current = root.to_path_buf();
+    for part in relative.components() {
+        current.push(part.as_os_str());
+        if let Ok(metadata) = fs::symlink_metadata(&current) {
+            if metadata.file_type().is_symlink() {
+                bail!(
+                    "refusing generated output through symlink {}",
+                    current.display()
+                );
+            }
+        }
+    }
+    Ok(())
 }
 
 /// User-owned values win, while missing generated requirements are appended.
@@ -284,6 +484,88 @@ mod tests {
     use std::fs;
 
     use super::{GeneratedFile, GeneratedTree};
+
+    #[test]
+    fn ownership_checks_drift_removes_stale_files_and_preserves_custom() {
+        let root = tempfile::tempdir().unwrap();
+        let mut first = GeneratedTree::default();
+        first
+            .insert(GeneratedFile::new("old.ts", "old").unwrap())
+            .unwrap();
+        first
+            .insert_custom(GeneratedFile::new("custom.ts", "starter").unwrap())
+            .unwrap();
+        first.write_to(root.path()).unwrap();
+        fs::write(root.path().join("custom.ts"), "user").unwrap();
+        let mut next = GeneratedTree::default();
+        next.insert(GeneratedFile::new("new.ts", "new").unwrap())
+            .unwrap();
+        let changes = next.check(root.path()).unwrap();
+        assert_eq!(changes.added, vec![std::path::PathBuf::from("new.ts")]);
+        assert_eq!(changes.removed, vec![std::path::PathBuf::from("old.ts")]);
+        assert!(!root.path().join("new.ts").exists());
+        next.write_to(root.path()).unwrap();
+        assert!(!root.path().join("old.ts").exists());
+        assert_eq!(
+            fs::read_to_string(root.path().join("custom.ts")).unwrap(),
+            "user"
+        );
+        assert!(next.check(root.path()).unwrap().is_empty());
+        fs::write(root.path().join("new.ts"), "local edit").unwrap();
+        assert!(next.write_to(root.path()).is_err());
+    }
+
+    #[test]
+    fn check_refuses_unowned_collisions_and_malicious_manifest_without_writes() {
+        let root = tempfile::tempdir().unwrap();
+        fs::write(root.path().join("handwritten.ts"), "handwritten").unwrap();
+        let mut tree = GeneratedTree::default();
+        tree.insert(GeneratedFile::new("handwritten.ts", "generated").unwrap())
+            .unwrap();
+        assert!(tree.check(root.path()).is_err());
+        fs::create_dir(root.path().join(".kaji")).unwrap();
+        fs::write(
+            root.path().join(super::OWNERSHIP_PATH),
+            r#"{"version":1,"files":{"../outside":{"owner":"x","sha256":"x"}}}"#,
+        )
+        .unwrap();
+        assert!(tree.check(root.path()).is_err());
+        assert_eq!(
+            fs::read_to_string(root.path().join("handwritten.ts")).unwrap(),
+            "handwritten"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn check_and_write_reject_symlinks_without_touching_targets() {
+        use std::os::unix::fs::symlink;
+        let root = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        symlink(outside.path(), root.path().join("linked")).unwrap();
+        let mut tree = GeneratedTree::default();
+        tree.insert(GeneratedFile::new("linked/a.ts", "generated").unwrap())
+            .unwrap();
+        assert!(tree.check(root.path()).is_err());
+        assert!(tree.write_to(root.path()).is_err());
+        assert!(!outside.path().join("a.ts").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn missing_root_under_symlink_ancestor_is_rejected() {
+        use std::os::unix::fs::symlink;
+        let root = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        symlink(outside.path(), root.path().join("linked")).unwrap();
+        let mut tree = GeneratedTree::default();
+        tree.insert(GeneratedFile::new("file.ts", "code").unwrap())
+            .unwrap();
+        let missing_root = root.path().join("linked/missing/output");
+        assert!(tree.check(&missing_root).is_err());
+        assert!(tree.write_to(&missing_root).is_err());
+        assert!(!outside.path().join("missing").exists());
+    }
 
     #[test]
     fn npm_manifest_preserves_custom_settings_and_dependency_categories() {

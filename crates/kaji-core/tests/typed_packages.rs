@@ -498,3 +498,57 @@ fn post_plugin_output_conflicts_keep_original_owners() {
         "{err}"
     );
 }
+
+#[test]
+fn author_code_customization_runs_after_language_finalization() {
+    use kaji_core::customization::CodeCustomization;
+    let tree = run(Package::new("sdk")
+        .with(Producer::new("generated"))
+        .customize(CodeCustomization::Replace {
+            path: "order.txt".into(),
+            contents: "author".into(),
+        })
+        .customize(CodeCustomization::Add {
+            path: "helper.txt".into(),
+            contents: "helper".into(),
+        }))
+    .unwrap();
+    assert_eq!(tree.get("sdk/order.txt"), Some("author"));
+    assert_eq!(tree.get("sdk/helper.txt"), Some("helper"));
+}
+
+#[test]
+fn invalid_bundled_middleware_is_validated_before_plugins_execute() {
+    use kaji_core::customization::BundledMiddleware;
+    let producer = Producer::new("unused");
+    let runs = producer.runs.clone();
+    let entry = BundledMiddleware {
+        path: "policy.txt".into(),
+        contents: "policy".into(),
+        symbol: "policy".into(),
+        async_symbol: None,
+    };
+    let package = Package::new("sdk")
+        .with(producer)
+        .middleware(entry.clone())
+        .middleware(BundledMiddleware {
+            path: "./policy.txt".into(),
+            ..entry
+        });
+    assert!(error(package).contains("duplicate bundled middleware path"));
+    assert_eq!(runs.load(Ordering::Relaxed), 0);
+    let package = Package::<TestLanguage>::new("sdk").middleware(BundledMiddleware {
+        path: "../escape".into(),
+        contents: "".into(),
+        symbol: "policy".into(),
+        async_symbol: None,
+    });
+    assert!(error(package).contains("cannot escape"));
+    let package = Package::<TestLanguage>::new("sdk").middleware(BundledMiddleware {
+        path: "policy.txt".into(),
+        contents: "".into(),
+        symbol: "policy".into(),
+        async_symbol: None,
+    });
+    assert!(error(package).contains("does not support bundled runtime middleware"));
+}

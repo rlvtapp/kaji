@@ -48,3 +48,22 @@ Declared `text/event-stream` operations return the untouched PSR-7
 not require every implementation to expose a live network stream. Applications
 that need live SSE should select a stream-capable PSR-18 client and own event
 decoding plus `Last-Event-ID`/reconnection policy.
+
+Object models retain allowed unknown keys in the additional-properties map,
+exclude declared fields from that map, and serialize extras at original wire
+keys. Decoded models distinguish omitted optional fields from explicit nulls.
+Empty object models serialize as `{}`. The synthetic extra map is renamed if
+an API property would collide with its generated name. Unknown JSON object/array
+identity is still limited by associative-array decoding in the PHP runtime.
+
+SDK authors can bundle customer middleware through `Package::middleware` or
+`kaji.config.json` `middleware` entries with `source`, `path`, and `symbol`.
+Use a `.php` path under `src` and a class in the generated namespace with
+`public static function wrap(\Psr\Http\Client\ClientInterface $next): \Psr\Http\Client\ClientInterface`.
+The source is required and the returned PSR-18 decorator is enabled automatically
+in the generated constructor; SDK callers do not configure middleware. The first
+configured factory is outermost. Preserve PSR-18 exceptions and PSR-7 stream
+positions; SDK retries call the decorated transport for each attempt.
+`async_symbol` and alternate signatures are rejected. Sources are generator-owned,
+collisions fail and regeneration updates them. Configure middleware on the base
+PHP SDK package when using a Symfony integration package.

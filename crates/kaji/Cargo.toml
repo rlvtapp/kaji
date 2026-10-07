@@ -27,6 +27,9 @@ kaji-plugin-elixir = { path = "../plugins/elixir" }
 kaji-plugin-ruby = { path = "../plugins/ruby" }
 kaji-plugin-swift = { path = "../plugins/swift" }
 
+kaji-plugin-terraform = { path = "../plugins/terraform" }
+kaji-plugin-postman = { path = "../plugins/postman" }
+
 [dev-dependencies]
 serde_json = "1.0.138"
 tempfile = "3.27.0"

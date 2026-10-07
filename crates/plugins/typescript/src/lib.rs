@@ -1,11 +1,15 @@
 //! TypeScript renderers and package configuration live outside neutral core.
+mod bundled_middleware;
 mod clients;
+pub mod composition;
+mod json;
 mod models;
 mod render;
 mod sdk;
 mod workspace;
 pub use models::{
-    ArrayType, EnumConstCasing, EnumKeyCasing, EnumType, ModelOptions, OptionalType, Syntax,
+    ArrayType, EnumConstCasing, EnumKeyCasing, EnumType, Int64Type, ModelOptions, OptionalType,
+    Syntax,
 };
 pub use workspace::{Symbol, TsTypes, Workspace};
 
@@ -38,6 +42,12 @@ impl Language for TypeScript {
     fn finalize(cx: &mut FinalizeContext<'_, Self>) -> Result<()> {
         workspace::finalize(cx)
     }
+    fn bundle_middleware(
+        tree: &mut kaji_core::GeneratedTree,
+        middleware: &[kaji_core::customization::BundledMiddleware],
+    ) -> Result<()> {
+        bundled_middleware::bundle(tree, middleware)
+    }
 }
 pub fn package(dir: impl Into<String>) -> Package<TypeScript> {
     Package::new(dir)
@@ -66,6 +76,10 @@ pub fn sdk() -> Sdk {
     }
 }
 impl Sdk {
+    pub fn label(mut self, label: impl Into<String>) -> Self {
+        self.meta = self.meta.label(label);
+        self
+    }
     pub fn fetch(mut self) -> Self {
         self.options.transport = SdkTransport::Fetch;
         self
@@ -104,12 +118,30 @@ impl Sdk {
         self
     }
 }
+impl Sdk {
+    pub fn operations_handle(&self) -> Handle<composition::Operations> {
+        self.meta.handle()
+    }
+    pub fn models_handle(&self) -> Handle<composition::Models> {
+        self.meta.handle()
+    }
+    pub fn transport_handle(&self) -> Handle<composition::Transport> {
+        self.meta.handle()
+    }
+}
 impl Plugin<TypeScript> for Sdk {
     fn kind(&self) -> &'static str {
         "typescript-sdk"
     }
     fn meta(&self) -> &Meta {
         &self.meta
+    }
+    fn provides(&self) -> Vec<Provision> {
+        vec![
+            Provision::of::<composition::Models>(),
+            Provision::of::<composition::Transport>(),
+            Provision::of::<composition::Operations>(),
+        ]
     }
     fn generate(&self, cx: &mut PluginContext<'_, TypeScript>) -> Result<()> {
         let mut options = self.options.clone();
@@ -136,6 +168,73 @@ impl Plugin<TypeScript> for Sdk {
                 cx.files.emit(file)?;
             }
         }
+        let mut schemas = std::collections::BTreeMap::new();
+        let mut operation_modules = std::collections::BTreeMap::new();
+        let mut functions = std::collections::BTreeMap::new();
+        let schema_files = cx
+            .api
+            .schemas
+            .iter()
+            .map(|schema| (models::schema_file_identifier(&schema.name), schema))
+            .collect::<std::collections::BTreeMap<_, _>>();
+        let operation_types = cx
+            .api
+            .operations
+            .iter()
+            .map(|operation| {
+                (
+                    models::operation_model_file_identifier(&operation.id),
+                    operation,
+                )
+            })
+            .collect::<std::collections::BTreeMap<_, _>>();
+        let operation_files = cx
+            .api
+            .operations
+            .iter()
+            .map(|operation| (clients::operation_file_identifier(&operation.id), operation))
+            .collect::<std::collections::BTreeMap<_, _>>();
+        for (path, _) in tree.iter() {
+            let relative = path.strip_prefix("__package")?;
+            let stem = relative.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+            if relative.starts_with("models") {
+                if let Some(schema) = schema_files.get(stem) {
+                    schemas.insert(
+                        schema.name.clone(),
+                        cx.workspace.declare(
+                            relative.with_extension(""),
+                            &models::model_type_name(schema, &options.model_options),
+                            self.kind(),
+                        )?,
+                    );
+                }
+                if let Some(operation) = operation_types.get(stem) {
+                    operation_modules.insert(operation.id.clone(), relative.with_extension(""));
+                }
+            }
+            if relative.starts_with("clients") {
+                if let Some(operation) = operation_files.get(stem) {
+                    functions.insert(
+                        operation.id.clone(),
+                        cx.workspace.declare(
+                            relative.with_extension(""),
+                            &sdk::lower_camel_identifier(&operation.id),
+                            self.kind(),
+                        )?,
+                    );
+                }
+            }
+        }
+        cx.publish(composition::Models {
+            schemas,
+            operation_modules,
+            options: options.model_options.clone(),
+        })?;
+        cx.publish(composition::Transport {
+            module: ".kaji/client".into(),
+            lossless_json: true,
+        })?;
+        cx.publish(composition::Operations { functions })?;
         cx.files.emit(GeneratedFile::new(
             "STYLE_GUIDE.md",
             style_guide(cx.api, &options),
@@ -540,3 +639,6 @@ console.log(rawData, fullData, errorOrSuccess, incorrect);
         std::fs::remove_dir_all(&directory).unwrap();
     }
 }
+
+#[cfg(test)]
+mod middleware_tests;
