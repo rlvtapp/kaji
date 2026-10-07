@@ -1,0 +1,61 @@
+name: Kaji release PR
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: kaji-release-please
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      HAS_RELEASE_TOKEN: ${{ secrets.SDK_GITHUB_TOKEN != '' }}
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    outputs:
+      created: ${{ steps.release.outputs.release_created }}
+      tag: ${{ steps.release.outputs.tag_name }}
+      default-token: ${{ steps.app.outputs.token == '' && secrets.SDK_GITHUB_TOKEN == '' }}
+    steps:
+      - name: Mint release App token
+        id: app
+        if: vars.SDK_APP_CLIENT_ID != ''
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.SDK_APP_CLIENT_ID }}
+          private-key: ${{ secrets.SDK_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+      - uses: googleapis/release-please-action@v5
+        id: release
+        with:
+          token: ${{ steps.app.outputs.token || secrets.SDK_GITHUB_TOKEN || github.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+      - name: Run CI for a release PR created with the default token
+        if: steps.release.outputs.pr != '' && steps.app.outputs.token == '' && env.HAS_RELEASE_TOKEN != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_PR: ${{ steps.release.outputs.pr }}
+        run: |
+          branch=$(node -e 'process.stdout.write(JSON.parse(process.env.RELEASE_PR).headBranchName)')
+          gh workflow run ci.yml --ref "$branch"
+  publish-dispatch:
+    needs: release
+    if: needs.release.outputs.created == 'true' && needs.release.outputs.default-token == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch native publication at the immutable release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.release.outputs.tag }}
+        run: gh workflow run npm-publish.yml --ref "$RELEASE_TAG"

@@ -38,7 +38,7 @@ root = Path(__file__).parent
 
 setup(
     name="kaji-cli",
-    version="0.4.0",
+    version="0.5.0",  # x-release-please-version
     description="Native Kaji OpenAPI SDK generator for Python environments",
     long_description=(root / "README.md").read_text(encoding="utf-8"),
     long_description_content_type="text/markdown",

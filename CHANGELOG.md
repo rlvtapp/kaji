@@ -2,6 +2,60 @@
 
 ## Unreleased
 
+## 0.5.0 — 2026-10-07
+
+### Added
+
+- Ownership-aware regeneration and check mode with stale generated-file cleanup,
+  customer edit protection, preserved create-once files, and npm manifest merging.
+- SDK author customization through bundled runtime HTTP middleware across native
+  targets, package source overlays, explicit replacement, and guarded patches.
+  Bundled middleware registers by default without SDK consumer configuration.
+- Named typed plugin contracts and provider composition for TypeScript and native
+  Rust/Go, with independent model, transport, operation, and client providers.
+- Package delivery metadata, independent SDK versions, API diff release sizing,
+  destination-owned version preservation, and safe generated SDK pull requests.
+- SDK automation commands for scaffolding, synchronization, checks, publishing,
+  releases, remote status, spec relay, and reviewable destination setup installation.
+- One repository per language using `--repository-pattern 'OWNER/api-{lang}'`,
+  isolated generation jobs, destination-scoped authentication, and editable action
+  sources for each repository's checks and release workflow.
+- Release Please and immutable-tag publishing workflows, supported registry OIDC
+  integrations, GitHub App manifests, and a self-hosted OIDC token broker.
+- Editable GitHub Actions for SDK checks, publishing, and spec synchronization.
+  Spec relay uses review PRs and protects manual changes and source provenance.
+- Postman Collection 2.1 generation with request/response examples, parameter and
+  media mappings, authentication variants, stable IDs, secret redaction, and
+  create-once environment templates. Includes official-schema validation action.
+- Typed Terraform Plugin Framework provider generation with explicit or inferred
+  CRUD bindings, scalar state/schema mapping, import, authentication, safe HTTP
+  transport, lifecycle handling, diagnostics, and generated native transport tests.
+- Shared pagination plans and SDK fixture infrastructure; initial Go integration.
+- SDK author guides and examples covering generation, customization, publishing,
+  GitHub automation, per-language repositories, Postman, and Terraform.
+
+### Changed
+
+- TypeScript preserves wide integers with string/bigint support. Model handling
+  improves unknown fields and nullable values; Java supports open enums.
+- Python SDKs gain async/httpx support, OAuth client credentials, and webhook HMAC.
+- OpenAPI artifacts preserve additional server, tag, parameter, response-example,
+  and encoding metadata for artifact generators.
+- CI validates Postman collections and generated Terraform providers alongside
+  SDK and compiler checks. Root release metadata is synchronized across Rust,
+  npm distribution packages, and Python.
+
+### Scope and verification
+
+- Postman workspace synchronization and publication are not included.
+- Typed Terraform currently supports flat scalar resources; nested schemas, data
+  sources, composite IDs, asynchronous polling, state upgrades, and registry
+  publishing remain future work. The legacy raw-JSON Terraform API remains.
+- Terraform lifecycle tests run against the native Go Plugin Framework; Terraform
+  CLI apply is not yet covered. Some native SDK probes require external toolchains.
+- Workflow scaffolding and setup PR support do not create GitHub repositories,
+  install Apps, or configure registry trust automatically.
+
 ## 0.4.0 — 2026-10-05
 
 ### Added

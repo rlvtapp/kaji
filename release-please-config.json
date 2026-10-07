@@ -1,0 +1,53 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "packages": {
+    ".": {
+      "release-type": "rust",
+      "include-component-in-tag": false,
+      "include-v-in-tag": true,
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": true,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "packages/cli/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/npm/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/npm/package.json",
+          "jsonpath": "$.dependencies[\"@relevate/kaji\"]"
+        },
+        {
+          "type": "generic",
+          "path": "packages/python/setup.py"
+        },
+        {
+          "type": "json",
+          "path": "packages/cli/package.json",
+          "jsonpath": "$.optionalDependencies[\"@relevate/kaji-darwin-arm64\"]"
+        },
+        {
+          "type": "json",
+          "path": "packages/cli/package.json",
+          "jsonpath": "$.optionalDependencies[\"@relevate/kaji-darwin-x64\"]"
+        },
+        {
+          "type": "json",
+          "path": "packages/cli/package.json",
+          "jsonpath": "$.optionalDependencies[\"@relevate/kaji-linux-x64-gnu\"]"
+        },
+        {
+          "type": "json",
+          "path": "packages/cli/package.json",
+          "jsonpath": "$.optionalDependencies[\"@relevate/kaji-win32-x64-msvc\"]"
+        }
+      ]
+    }
+  }
+}
