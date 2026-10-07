@@ -309,6 +309,11 @@
           "items": {
             "$ref": "#/$defs/bundledMiddleware"
           }
+        },
+        "api_reference": {
+          "type": "boolean",
+          "default": false,
+          "description": "Emit an operation-derived API_REFERENCE.md through the typed API reference plugin."
         }
       }
     },
@@ -743,7 +748,8 @@
         "name": {
           "enum": [
             "webhooks",
-            "roundtrips"
+            "roundtrips",
+            "operation-tests"
           ]
         }
       }
@@ -1047,6 +1053,11 @@
           "items": {
             "$ref": "#/$defs/terraformResource"
           }
+        },
+        "data_sources": {
+          "type": "boolean",
+          "default": false,
+          "description": "Generate typed single-entity Terraform data sources from validated resource read plans."
         }
       }
     }

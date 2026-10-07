@@ -25,6 +25,7 @@ mod credentials;
 mod mcp;
 mod registry;
 mod sdk_automation;
+mod sdk_doctor;
 mod sdk_install;
 mod sdk_status;
 
@@ -46,7 +47,7 @@ Usage:
   kaji discover <query> [--limit <count>] [--format human|json]
   kaji download <api-id> --output <openapi-file> [--version <version>]
   kaji languages
-  kaji sdk <init|sync|app|list|run|diff|pr|releases|connect|install|status> ...
+  kaji sdk <init|sync|app|list|run|diff|pr|releases|connect|install|status|doctor|inspect> ...
   kaji --version
 
 Config commands:
@@ -709,6 +710,8 @@ struct PackageConfig {
     release: Option<kaji_core::release::PackageMetadata>,
     client_style: Option<String>,
     #[serde(default)]
+    api_reference: bool,
+    #[serde(default)]
     plugins: Vec<PluginConfig>,
     #[serde(default)]
     customizations: Vec<CodeCustomizationConfig>,
@@ -819,6 +822,7 @@ struct PluginConfig {
     sdk_package: Option<String>,
     strict: Option<bool>,
     infer: Option<bool>,
+    data_sources: Option<bool>,
     module: Option<String>,
     provider_name: Option<String>,
     #[serde(default)]
@@ -2011,6 +2015,11 @@ fn with_configured_middleware<L: kaji_core::engine::Language>(
     builder: Package<L>,
     package: &PackageConfig,
 ) -> Package<L> {
+    let builder = if package.api_reference {
+        builder.with(kaji_core::api_reference::<L>())
+    } else {
+        builder
+    };
     package
         .resolved_middleware
         .iter()
@@ -2168,7 +2177,10 @@ fn config_profiles(
                 ))
             }
             "python" => {
-                has_only_known_plugins(package, &["sdk", "webhooks", "roundtrips"])?;
+                has_only_known_plugins(
+                    package,
+                    &["sdk", "webhooks", "roundtrips", "operation-tests"],
+                )?;
                 let package_builder =
                     python::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
@@ -2184,6 +2196,9 @@ fn config_profiles(
                         "webhooks" => package_builder = package_builder.with(python::webhooks()),
                         "roundtrips" => {
                             package_builder = package_builder.with(python::roundtrips())
+                        }
+                        "operation-tests" => {
+                            package_builder = package_builder.with(python::operation_tests())
                         }
                         _ => {}
                     }
@@ -2369,7 +2384,9 @@ fn config_profiles(
                 if let Some(name) = plugin.provider_name.as_ref().or(package.name.as_ref()) {
                     builder = builder.provider_name(name);
                 }
-                let mut provider = terraform::provider().infer(plugin.infer.unwrap_or(true));
+                let mut provider = terraform::provider()
+                    .infer(plugin.infer.unwrap_or(true))
+                    .data_sources(plugin.data_sources.unwrap_or(false));
                 for resource in &plugin.resources {
                     provider = provider.resource(resource.clone());
                 }
@@ -4743,6 +4760,170 @@ mod tests {
             tree.get("./cli/src/runtime.ts")
                 .unwrap()
                 .contains("browserLogin")
+        );
+    }
+    #[test]
+    fn combined_optional_reference_smoke_and_data_source_consumers_generate() {
+        use kaji_core::{
+            AdditionalProperties, Field, HttpMethod, Operation, OperationParameter,
+            OperationRequestBody, OperationResponse, SchemaKind, SchemaValue,
+        };
+        let string = || SchemaValue::new(SchemaKind::String);
+        let object = |identity: bool| {
+            SchemaValue::new(SchemaKind::Object {
+                fields: if identity {
+                    vec![
+                        Field {
+                            name: "id".into(),
+                            value: {
+                                let mut value = string();
+                                value.read_only = true;
+                                value
+                            },
+                            required: true,
+                            annotations: Default::default(),
+                        },
+                        Field {
+                            name: "name".into(),
+                            value: string(),
+                            required: true,
+                            annotations: Default::default(),
+                        },
+                    ]
+                } else {
+                    vec![Field {
+                        name: "name".into(),
+                        value: string(),
+                        required: true,
+                        annotations: Default::default(),
+                    }]
+                },
+                additional_properties: AdditionalProperties::Forbidden,
+            })
+        };
+        let parameter = OperationParameter {
+            name: "id".into(),
+            location: "path".into(),
+            required: true,
+            schema: Some(string()),
+            description: None,
+            annotations: Default::default(),
+        };
+        let mut api = Api {
+            name: "Combined".into(),
+            version: "1.0.0".into(),
+            ..Default::default()
+        };
+        api.operations = vec![
+            Operation {
+                id: "createItem".into(),
+                method: HttpMethod::Post,
+                path: "/items".into(),
+                request_body: Some(OperationRequestBody::json(object(false), true)),
+                responses: vec![OperationResponse::json("201", object(true))],
+                ..Default::default()
+            },
+            Operation {
+                id: "getItem".into(),
+                method: HttpMethod::Get,
+                path: "/items/{id}".into(),
+                parameters: vec![parameter.clone()],
+                responses: vec![OperationResponse::json("200", object(true))],
+                ..Default::default()
+            },
+            Operation {
+                id: "updateItem".into(),
+                method: HttpMethod::Put,
+                path: "/items/{id}".into(),
+                parameters: vec![parameter.clone()],
+                request_body: Some(OperationRequestBody::json(object(false), true)),
+                responses: vec![OperationResponse::json("200", object(true))],
+                ..Default::default()
+            },
+            Operation {
+                id: "deleteItem".into(),
+                method: HttpMethod::Delete,
+                path: "/items/{id}".into(),
+                parameters: vec![parameter],
+                responses: vec![OperationResponse {
+                    status: "204".into(),
+                    description: None,
+                    media_types: vec![],
+                }],
+                ..Default::default()
+            },
+        ];
+        let configured = combined_optional_packages();
+        let packages: Vec<PackageConfig> = serde_json::from_value(configured.clone()).unwrap();
+        let tree = kaji::generate(
+            &api,
+            config_profiles(SdkClientStyle::Namespaced, &packages).unwrap(),
+        )
+        .unwrap();
+        for path in [
+            "./python/API_REFERENCE.md",
+            "./python/tests/test_operations.py",
+            "./python/.kaji/operation-test-diagnostics.json",
+            "./terraform/API_REFERENCE.md",
+            "./terraform/internal/provider/data_source_item.go",
+        ] {
+            assert!(tree.get(path).is_some(), "missing {path}");
+        }
+        let mut defaults = configured;
+        for package in defaults.as_array_mut().unwrap() {
+            package.as_object_mut().unwrap().remove("api_reference");
+        }
+        defaults[0]["plugins"] = serde_json::json!([{"name":"sdk"}]);
+        defaults[1]["plugins"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("data_sources");
+        let packages: Vec<PackageConfig> = serde_json::from_value(defaults).unwrap();
+        let tree = kaji::generate(
+            &api,
+            config_profiles(SdkClientStyle::Flat, &packages).unwrap(),
+        )
+        .unwrap();
+        for path in [
+            "./python/API_REFERENCE.md",
+            "./python/tests/test_operations.py",
+            "./terraform/API_REFERENCE.md",
+            "./terraform/internal/provider/data_source_item.go",
+        ] {
+            assert!(tree.get(path).is_none(), "unexpected default output {path}");
+        }
+    }
+
+    fn combined_optional_packages() -> serde_json::Value {
+        serde_json::json!([
+          {"language":"python","path":"python","api_reference":true,"plugins":[{"name":"sdk"},{"name":"operation-tests"}]},
+          {"language":"terraform","path":"terraform","api_reference":true,"plugins":[{"name":"provider","data_sources":true,"infer":false,"resources":[{"name":"item","create":"createItem","read":"getItem","update":"updateItem","delete":"deleteItem","id_parameter":"id","id_field":"id"}]}]}
+        ])
+    }
+    #[test]
+    #[ignore = "requires Python jsonschema; set KAJI_TEST_PYTHON and PYTHONPATH"]
+    fn combined_optional_recipe_validates_actual_json_schema() {
+        let config = serde_json::json!({"openapi":{"input":"api.yaml"},"output":{"path":"generated"},"packages":combined_optional_packages()});
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("recipe.json");
+        std::fs::write(&path, serde_json::to_string(&config).unwrap()).unwrap();
+        let script = "import json,sys,jsonschema; schema=json.load(open(sys.argv[1])); config=json.load(open(sys.argv[2])); validator=jsonschema.Draft202012Validator(schema); validator.check_schema(schema); assert validator.is_valid(config); config['packages'][0]['api_reference']='yes'; assert not validator.is_valid(config); config['packages'][0]['api_reference']=True; config['packages'][1]['plugins'][0]['data_sources']='yes'; assert not validator.is_valid(config); config['packages'][1]['plugins'][0]['data_sources']=True; config['packages'][0]['plugins'][1]['name']='unsupported-operation-tests'; assert not validator.is_valid(config)";
+        let output = std::process::Command::new(
+            std::env::var("KAJI_TEST_PYTHON").unwrap_or_else(|_| "python3".into()),
+        )
+        .args(["-c", script])
+        .arg(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../schemas/v1/kaji.schema.json"
+        ))
+        .arg(path)
+        .output()
+        .unwrap();
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
         );
     }
 }

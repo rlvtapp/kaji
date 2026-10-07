@@ -1,0 +1,110 @@
+# Install manually as .github/workflows/kaji-delivery-test.yml.
+# Configure required reviewers on the kaji-delivery-test environment FIRST.
+name: Disposable SDK delivery verification
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options: [preview, open_pr]
+        default: preview
+      source_repository:
+        description: Allowlisted disposable source OWNER/REPO
+        required: true
+      destination_repository:
+        description: Allowlisted disposable SDK OWNER/REPO
+        required: true
+      source_tag:
+        description: Existing immutable source tag (never a branch)
+        required: true
+      kaji_version:
+        description: Exact released Kaji version containing these commands
+        required: true
+      config:
+        default: kaji.json
+      language:
+        default: typescript
+      registry:
+        type: choice
+        options: [npm, pypi, crates.io, go]
+      package_prefix:
+        description: Exact allowlisted disposable registry package prefix
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: kaji-disposable-delivery-${{ inputs.destination_repository }}-${{ inputs.language }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    environment: kaji-delivery-test
+    env:
+      SOURCE_REPOSITORY: ${{ inputs.source_repository }}
+      DESTINATION_REPOSITORY: ${{ inputs.destination_repository }}
+      SOURCE_TAG: ${{ inputs.source_tag }}
+      KAJI_VERSION: ${{ inputs.kaji_version }}
+      SDK_CONFIG: ${{ inputs.config }}
+      SDK_LANGUAGE: ${{ inputs.language }}
+      TEST_REGISTRY: ${{ inputs.registry }}
+      TEST_PACKAGE_PREFIX: ${{ inputs.package_prefix }}
+      DELIVERY_MODE: ${{ inputs.mode }}
+      ALLOWED_REPOSITORIES: ${{ vars.KAJI_DELIVERY_TEST_REPOSITORIES }}
+      ALLOWED_PACKAGE_PREFIXES: ${{ vars.KAJI_DELIVERY_TEST_PACKAGE_PREFIXES }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: harness
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate explicit allowlists and preview plan
+        run: node harness/packages/sdk-delivery-test/validate.mjs
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.source_repository }}
+          ref: refs/tags/${{ inputs.source_tag }}
+          token: ${{ secrets.KAJI_TEST_SOURCE_READ_TOKEN }}
+          persist-credentials: false
+          path: source
+      - name: Verify immutable tag checkout
+        working-directory: source
+        run: |
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/$SOURCE_TAG^{commit}")"
+          test -z "$(git status --porcelain)"
+      - name: Install exact launcher
+        run: npm install --global "@relevate/kaji@$KAJI_VERSION"
+      - name: Validate recipe before generating in a disposable copy
+        run: |
+          cp -R source probe
+          node harness/packages/sdk-delivery-test/validate.mjs --recipe --check-only
+      - name: Generate and verify drift
+        working-directory: probe
+        run: |
+          kaji generate --config "$SDK_CONFIG"
+          kaji generate --config "$SDK_CONFIG" --check
+      - name: Validate disposable package identities and run native metadata checks
+        id: packages
+        run: node harness/packages/sdk-delivery-test/validate.mjs --recipe
+      - name: Inspect and review delivery scaffold
+        working-directory: probe
+        env:
+          SDK_ROOT: ${{ steps.packages.outputs.root }}
+        run: |
+          kaji sdk inspect --root "$SDK_ROOT"
+          kaji sdk doctor --root "$SDK_ROOT"
+          kaji sdk init --root "$SDK_ROOT" --config "$SDK_CONFIG" --repository "$DESTINATION_REPOSITORY" --dry-run
+          kaji sdk pr --config "$SDK_CONFIG" --repository "$DESTINATION_REPOSITORY" --language "$SDK_LANGUAGE" --bump patch --dry-run
+      - name: Open isolated SDK PR after environment approval
+        if: inputs.mode == 'open_pr'
+        working-directory: source
+        env:
+          GH_TOKEN: ${{ secrets.KAJI_TEST_SDK_WRITE_TOKEN }}
+        run: |
+          kaji sdk pr --config "$SDK_CONFIG" --repository "$DESTINATION_REPOSITORY" --language "$SDK_LANGUAGE" --branch "codex/kaji-delivery-test-$SDK_LANGUAGE" --bump patch
+      - name: Normal release review remains required
+        run: |
+          echo 'Preview never writes remotely. open_pr creates only an SDK PR.'
+          echo 'Review and merge SDK PR, then normal Release Please PR in the disposable SDK repo.'
+          echo 'Registry publication runs only in that repo using its reviewed delivery workflow and test package trust.'

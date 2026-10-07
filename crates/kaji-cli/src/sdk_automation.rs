@@ -70,6 +70,9 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Options> {
         "app" => (&["--name", "--url", "--output"], &["--public", "--dry-run"]),
         "releases" => (&["--output", "--path", "--tag"], &["--github-output"]),
         "list" => (&["--root"], &["--json", "--github-output"]),
+        "doctor" => (&["--root", "--repository"], &["--json"]),
+        "inspect" => (&["--root"], &["--json"]),
+        "help" => (&[], &[]),
         "run" => (&["--root", "--package", "--phase"], &[]),
         "diff" => (&["--base", "--head", "--bump"], &["--json"]),
         "pr" => (
@@ -910,31 +913,223 @@ fn captured(cwd: &Path, program: &str, args: &[&str]) -> Result<String> {
 struct SpecDiff {
     bump: String,
     changelog: String,
+    entries: Vec<ApiChangeEntry>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+struct ApiChangeEntry {
+    id: String,
+    level: String,
+    method: Option<String>,
+    path: Option<String>,
+    operation_id: Option<String>,
+    description: String,
+    comment: Option<String>,
+    disclaimers: Vec<String>,
+}
+
+fn api_change_entries(value: &Value) -> Result<Vec<ApiChangeEntry>> {
+    let array = value
+        .as_array()
+        .context("oasdiff changelog JSON must be an array")?;
+    let mut entries = Vec::new();
+    for change in array {
+        let field = |key: &str| change.get(key).and_then(Value::as_str).map(str::to_owned);
+        let id = field("id").context("oasdiff change requires id")?;
+        let level = field("level").unwrap_or_else(|| {
+            change
+                .get("level")
+                .map(Value::to_string)
+                .unwrap_or_else(|| "unknown".into())
+        });
+        entries.push(ApiChangeEntry {
+            comment: field("comment"),
+            disclaimers: change
+                .get("disclaimers")
+                .and_then(Value::as_array)
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_owned)
+                        .collect()
+                })
+                .unwrap_or_default(),
+            description: field("text").unwrap_or_else(|| id.clone()),
+            id,
+            level,
+            method: field("operation"),
+            path: field("path"),
+            operation_id: field("operationId").or_else(|| field("operation_id")),
+        });
+    }
+    entries.sort();
+    entries.dedup();
+    Ok(entries)
+}
+
+fn api_change_markdown(entries: &[ApiChangeEntry]) -> String {
+    fn inline(value: &str) -> String {
+        release_note_text(value, 1_000)
+            .replace(['\n', '\r'], " ")
+            .replace('`', "'")
+            .replace(['<', '>'], "")
+    }
+    if entries.is_empty() {
+        return "No API changes reported.".into();
+    }
+    let mut output = String::from("### API changes\n\n");
+    for entry in entries {
+        let endpoint = match (&entry.method, &entry.path) {
+            (Some(method), Some(path)) => format!(" `{}`", inline(&format!("{method} {path}"))),
+            _ => String::new(),
+        };
+        output.push_str(&format!(
+            "- [{}]{} {} (`{}`)\n",
+            inline(&entry.level),
+            endpoint,
+            inline(&entry.description),
+            inline(&entry.id)
+        ));
+        if let Some(comment) = &entry.comment {
+            output.push_str(&format!("  {}\n", inline(comment)));
+        }
+        if !entry.disclaimers.is_empty() {
+            output.push_str(&format!(
+                "  Conditions: {}\n",
+                entry
+                    .disclaimers
+                    .iter()
+                    .map(|value| inline(value))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+    }
+    output
+}
+
+fn release_note_text(value: &str, limit: usize) -> String {
+    let mut text = value.split_whitespace().collect::<Vec<_>>().join(" ");
+    for marker in [
+        "BEGIN_NESTED_COMMIT",
+        "END_NESTED_COMMIT",
+        "BEGIN_COMMIT_OVERRIDE",
+        "END_COMMIT_OVERRIDE",
+    ] {
+        text = text.replace(marker, "[reserved-marker]");
+    }
+    // Release Please recognizes semantic footers inside bodies. Keep source
+    // descriptions as text, never version directives or breaking-change syntax.
+    for footer in ["release-as:", "breaking-change:", "breaking change:"] {
+        loop {
+            let lower = text.to_ascii_lowercase();
+            let Some(index) = lower.find(footer) else {
+                break;
+            };
+            text.replace_range(index..index + footer.len(), "[source-note]");
+        }
+    }
+    text.chars()
+        .filter(|character| !character.is_control())
+        .take(limit)
+        .collect()
+}
+
+fn release_commit_message(title: &str, diff: &SpecDiff) -> String {
+    let mut message = format!("{}\n", release_note_text(title, 200));
+    // Only the trusted outer title selects the release size. Nested API notes
+    // use fix even for breaking API changes so --bump remains authoritative.
+    let mut omitted = diff.entries.len() > 100;
+    for entry in diff.entries.iter().take(100) {
+        let previous = message.len();
+        let endpoint = match (&entry.method, &entry.path) {
+            (Some(method), Some(path)) => format!(
+                "{} {}: ",
+                release_note_text(method, 16),
+                release_note_text(path, 180)
+            ),
+            _ => String::new(),
+        };
+        message.push_str(&format!(
+            "\nBEGIN_NESTED_COMMIT\nfix(api): {endpoint}{} [{}; {}]\n",
+            release_note_text(&entry.description, 400),
+            release_note_text(&entry.id, 100),
+            release_note_text(&entry.level, 20)
+        ));
+        if let Some(comment) = &entry.comment {
+            message.push_str(&format!("\nContext: {}\n", release_note_text(comment, 500)));
+        }
+        if !entry.disclaimers.is_empty() {
+            message.push_str(&format!(
+                "Conditions: {}\n",
+                release_note_text(&entry.disclaimers.join(", "), 500)
+            ));
+        }
+        message.push_str("END_NESTED_COMMIT\n");
+        if message.len() > 20_000 {
+            message.truncate(previous);
+            omitted = true;
+            break;
+        }
+    }
+    if omitted {
+        message.push_str("\nAdditional API changes are available in the reviewed SDK diff.\n");
+    }
+    message
+}
+
+fn commit_from_file(checkout: &Path, message_path: &Path, message: &str) -> Result<()> {
+    fs::write(message_path, message)?;
+    captured(
+        checkout,
+        "git",
+        &[
+            "commit",
+            "--file",
+            message_path
+                .to_str()
+                .context("commit message path is not UTF8")?,
+        ],
+    )?;
+    Ok(())
 }
 
 fn spec_diff(base: &str, head: &str, override_bump: Option<&str>) -> Result<SpecDiff> {
+    spec_diff_using("oasdiff", base, head, override_bump)
+}
+
+fn spec_diff_using(
+    binary: &str,
+    base: &str,
+    head: &str,
+    override_bump: Option<&str>,
+) -> Result<SpecDiff> {
     if let Some(bump) = override_bump {
         ensure!(
             matches!(bump, "major" | "minor" | "patch"),
             "bump must be major, minor, or patch"
         );
     }
-    let breaking = Command::new("oasdiff").args(["breaking", "--fail-on", "ERR", base, head]).output().context("oasdiff is required for spec comparison; install it or specify --bump when opening a PR")?;
+    let breaking = Command::new(binary).args(["breaking", "--fail-on", "ERR", base, head]).output().context("oasdiff is required for spec comparison; install it or specify --bump when opening a PR")?;
     ensure!(
         matches!(breaking.status.code(), Some(0 | 1)),
         "oasdiff breaking failed: {}",
         String::from_utf8_lossy(&breaking.stderr)
     );
-    let changelog = Command::new("oasdiff")
-        .args(["changelog", "-f", "markdown", base, head])
+    let changelog = Command::new(binary)
+        .args(["changelog", "-f", "json", base, head])
         .output()?;
     ensure!(
         changelog.status.success(),
         "oasdiff changelog failed: {}",
         String::from_utf8_lossy(&changelog.stderr)
     );
-    let text = String::from_utf8(changelog.stdout)?;
-    let changed = Command::new("oasdiff")
+    let entries = api_change_entries(
+        &serde_json::from_slice(&changelog.stdout).context("invalid oasdiff changelog JSON")?,
+    )?;
+    let text = api_change_markdown(&entries);
+    let changed = Command::new(binary)
         .args(["changelog", "--fail-on", "INFO", base, head])
         .output()?;
     ensure!(
@@ -952,6 +1147,7 @@ fn spec_diff(base: &str, head: &str, override_bump: Option<&str>) -> Result<Spec
     Ok(SpecDiff {
         bump: bump.into(),
         changelog: text,
+        entries,
     })
 }
 
@@ -963,7 +1159,10 @@ fn recipe_diff(cwd: &Path, config: &str, recipe: &Value, options: &Options) -> R
         );
         return Ok(SpecDiff {
             bump: bump.clone(),
-            changelog: "Release size explicitly selected by the caller.".into(),
+            changelog:
+                "Release size explicitly selected by the caller; API comparison was not performed."
+                    .into(),
+            entries: Vec::new(),
         });
     }
     let input = recipe.pointer("/openapi/input").and_then(Value::as_str).context("automatic release sizing requires a local OpenAPI input; use --bump for artifact or authenticated URL inputs")?;
@@ -1722,7 +1921,12 @@ fn open_pr(options: &Options) -> Result<()> {
         "minor" => "feat(sdk): update generated SDKs",
         _ => "fix(sdk): update generated SDKs",
     };
-    captured(&checkout, "git", &["commit", "-m", title])?;
+    let commit_message = release_commit_message(title, &diff);
+    commit_from_file(
+        &checkout,
+        &temporary.path().join("commit.txt"),
+        &commit_message,
+    )?;
     configured_capture(
         &checkout,
         "git",
@@ -1732,12 +1936,13 @@ fn open_pr(options: &Options) -> Result<()> {
     let body = temporary.path().join("pr.md");
     let changelog = diff.changelog.chars().take(40_000).collect::<String>();
     let source_description = source_repo
-        .map(|repo| format!(" Source repository: `{repo}`."))
+        .map(|repo| format!(" Source repository: `{}`.", release_note_text(&repo, 200)))
         .unwrap_or_default();
+    let config_description = release_note_text(config, 500);
     fs::write(
         &body,
         format!(
-            "Regenerates SDK packages from `{config}`.{source_description}\n\nSuggested release: **{bump}**.\n\n{changelog}\n\nGenerated packages are built and tested by SDK CI.\n"
+            "Regenerates SDK packages from `{config_description}`.{source_description}\n\nSuggested release: **{bump}**.\n\n{changelog}\n\nGenerated packages are built and tested by SDK CI.\n\nBEGIN_COMMIT_OVERRIDE\n{commit_message}END_COMMIT_OVERRIDE\n"
         ),
     )?;
     let body = body.to_str().context("PR body path is not UTF8")?;
@@ -1787,6 +1992,22 @@ fn open_pr(options: &Options) -> Result<()> {
 
 pub fn run(options: Options) -> Result<()> {
     match options.command.as_str() {
+        "help" => println!(
+            "SDK author journey:\n  generate --config kaji.json\n  generate --config kaji.json --check\n  sdk doctor --root generated [--repository OWNER/REPO]\n  sdk inspect --root generated\n  sdk run --root generated --package PATH --phase build|test\n  sdk init --root generated --dry-run\n  sdk pr --config kaji.json --repository OWNER/REPO --dry-run\nDoctor and inspect are read-only. Inspect describes emitted ownership, not a plugin execution plan. Review scaffold before installing; releases require configured registry trust."
+        ),
+        "doctor" => println!(
+            "{}",
+            serde_json::to_string_pretty(&crate::sdk_doctor::doctor(
+                Path::new(options.value("--root", "generated")),
+                options.values.get("--repository").map(String::as_str)
+            )?)?
+        ),
+        "inspect" => println!(
+            "{}",
+            serde_json::to_string_pretty(&crate::sdk_doctor::inspect(Path::new(
+                options.value("--root", "generated")
+            ))?)?
+        ),
         "app" => {
             let contents = app_manifest(&options)?;
             if options.flag("--dry-run") {
@@ -2837,5 +3058,112 @@ mod tests {
         )
         .unwrap();
         assert_eq!(preserved.version, "3.2.1");
+    }
+    #[test]
+    fn api_release_notes_are_structured_deterministic_and_projected() {
+        let input = json!([
+            {"id":"endpoint-removed","level":"ERR","operation":"DELETE","path":"/notes/{id}","operationId":"deleteNote","text":"Operation removed","source":"PRIVATE","args":["SECRET"]},
+            {"id":"endpoint-added","level":"INFO","operation":"GET","path":"/notes","text":"Operation added"},
+            {"id":"endpoint-added","level":"INFO","operation":"GET","path":"/notes","text":"Operation added"}
+        ]);
+        let entries = api_change_entries(&input).unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].id, "endpoint-added");
+        let projected = serde_json::to_string(&entries).unwrap();
+        assert!(!projected.contains("PRIVATE") && !projected.contains("SECRET"));
+        assert!(api_change_markdown(&entries).contains("DELETE /notes/{id}"));
+        assert!(api_change_entries(&json!({})).is_err());
+        assert!(api_change_entries(&json!([{"text":"unknown"}])).is_err());
+    }
+    #[cfg(unix)]
+    #[test]
+    fn structured_diff_executes_mock_oasdiff_without_shell_or_path_changes() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = tempfile::tempdir().unwrap();
+        let binary = root.path().join("mock-oasdiff");
+        fs::write(&binary, r#"#!/bin/sh
+if [ "$1" = "breaking" ]; then exit 1; fi
+if [ "$3" = "json" ]; then
+  printf '%s' '[{"id":"endpoint-removed","level":3,"operation":"GET","path":"/old","operationId":"old","text":"Operation removed"}]'
+  exit 0
+fi
+exit 1
+"#).unwrap();
+        fs::set_permissions(&binary, fs::Permissions::from_mode(0o755)).unwrap();
+        let result = spec_diff_using(
+            binary.to_str().unwrap(),
+            "$(literal).json",
+            "new.json",
+            None,
+        )
+        .unwrap();
+        assert_eq!(result.bump, "major");
+        assert_eq!(result.entries[0].operation_id.as_deref(), Some("old"));
+        assert!(result.changelog.contains("GET /old"));
+        assert!(!root.path().join("literal").exists());
+    }
+    #[test]
+    fn nested_api_notes_preserve_selected_bump_and_remove_source_directives() {
+        let mut entries=api_change_entries(&json!([{"id":"removed","level":"ERR","operation":"GET","path":"/notes","text":"line one\nfeat!: INJECT\nBEGIN_NESTED_COMMIT Release-As: 99.0.0 END_COMMIT_OVERRIDE","comment":"BREAKING CHANGE: INJECT"}])).unwrap();
+        entries[0].disclaimers.push("END_NESTED_COMMIT".into());
+        let diff = SpecDiff {
+            bump: "patch".into(),
+            changelog: String::new(),
+            entries,
+        };
+        let message = release_commit_message("fix(sdk): update generated SDKs", &diff);
+        assert!(message.starts_with("fix(sdk): update generated SDKs\n"));
+        assert_eq!(message.matches("BEGIN_NESTED_COMMIT").count(), 1);
+        assert_eq!(message.matches("END_NESTED_COMMIT").count(), 1);
+        assert!(
+            !message.contains("END_COMMIT_OVERRIDE")
+                && !message.contains("Release-As:")
+                && !message.contains("BREAKING CHANGE:")
+        );
+        assert_eq!(
+            message
+                .lines()
+                .filter(|line| line.starts_with("fix(api):"))
+                .count(),
+            1
+        );
+        assert!(!message.lines().any(|line| line.starts_with("feat!")));
+        let markdown = api_change_markdown(&diff.entries);
+        assert!(
+            !markdown.contains("BEGIN_NESTED_COMMIT") && !markdown.contains("END_COMMIT_OVERRIDE")
+        );
+        let oversized=std::iter::repeat_with(|| api_change_entries(&json!([{"id":"large","level":"INFO","text":"x".repeat(10_000),"comment":"y".repeat(10_000)}])).unwrap().remove(0)).take(101).collect();
+        let bounded = release_commit_message(
+            "fix(sdk): update generated SDKs",
+            &SpecDiff {
+                bump: "patch".into(),
+                changelog: String::new(),
+                entries: oversized,
+            },
+        );
+        assert!(bounded.len() < 20_200);
+        assert_eq!(
+            bounded.matches("BEGIN_NESTED_COMMIT").count(),
+            bounded.matches("END_NESTED_COMMIT").count()
+        );
+
+        let root = tempfile::tempdir().unwrap();
+        git_init(root.path());
+        fs::write(root.path().join("sdk.txt"), "generated").unwrap();
+        captured(root.path(), "git", &["add", "sdk.txt"]).unwrap();
+        let temporary = tempfile::tempdir().unwrap();
+        commit_from_file(root.path(), &temporary.path().join("message.txt"), &message).unwrap();
+        assert_eq!(
+            captured(root.path(), "git", &["log", "-1", "--format=%B"])
+                .unwrap()
+                .trim(),
+            message.trim()
+        );
+        assert!(
+            captured(root.path(), "git", &["status", "--porcelain"])
+                .unwrap()
+                .trim()
+                .is_empty()
+        );
     }
 }
