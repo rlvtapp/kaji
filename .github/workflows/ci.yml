@@ -45,6 +45,7 @@ jobs:
           cargo fmt --all --check
           cargo clippy --workspace --all-targets -- -D warnings
           cargo test --workspace --locked
+          cargo test -p kaji-cli combined_optional_recipe_validates_actual_json_schema -- --ignored
       - name: Verify generated TypeScript middleware and response decoding
         run: |
           npm install --prefix "$RUNNER_TEMP/kaji-ts-runtime" --no-audit --no-fund typescript@5.9.3 axios@1.20.0
@@ -69,12 +70,15 @@ jobs:
           cargo test -p kaji-plugin-terraform generated_provider_executes_native_framework_lifecycle -- --ignored
           cargo test -p kaji-plugin-terraform generated_nested_provider_executes_native_framework_lifecycle -- --ignored
           cargo test -p kaji-plugin-terraform generated_composite_provider_executes_native_framework_lifecycle -- --ignored
+          cargo test -p kaji-plugin-terraform generated_polling_provider_executes_native_framework_lifecycle -- --ignored
       - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: '1.13.4'
           terraform_wrapper: false
       - name: Verify Terraform CLI lifecycle against a local mock API
-        run: cargo test -p kaji-plugin-terraform terraform_cli_local_mock_lifecycle -- --ignored
+        run: |
+          cargo test -p kaji-plugin-terraform terraform_cli_local_mock_lifecycle -- --ignored
+          cargo test -p kaji-plugin-terraform terraform_cli_polling_local_mock_lifecycle -- --ignored
       - name: Verify standalone typed plugin authoring example
         run: |
           cargo test --manifest-path examples/custom-plugin/Cargo.toml --locked
@@ -183,11 +187,11 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: runtime-contract-fixture
-          path: runtime-contract-fixture
+          path: ${{ runner.temp }}/runtime-contract-fixture
       - uses: actions/download-artifact@v8
         with:
           name: generated-sdk-fixture
-          path: generated-sdk-fixture
+          path: ${{ runner.temp }}/generated-sdk-fixture
       - uses: dtolnay/rust-toolchain@stable
         if: matrix.language == 'Rust'
       - name: Install explicit TypeScript compiler for the runtime probe
@@ -232,15 +236,15 @@ jobs:
       - uses: actions/download-artifact@v7
         with:
           name: public-contract-fixtures
-          path: public-contract-fixtures
+          path: ${{ runner.temp }}/public-contract-fixtures
       - name: Compile pinned public contracts with the native language toolchain
         env:
-          KAJI_PUBLIC_CONTRACT_ROOT: ${{ github.workspace }}/public-contract-fixtures
+          KAJI_PUBLIC_CONTRACT_ROOT: ${{ runner.temp }}/public-contract-fixtures
           CLANG_MODULE_CACHE_PATH: ${{ runner.temp }}/kaji-swift-cache/clang
           SWIFTPM_MODULECACHE_OVERRIDE: ${{ runner.temp }}/kaji-swift-cache/swiftpm
         run: bash scripts/test-public-contracts.sh check "${{ matrix.path }}"
       - name: Validate generated SDK
-        working-directory: generated-sdk-fixture/${{ matrix.path }}
+        working-directory: ${{ runner.temp }}/generated-sdk-fixture/${{ matrix.path }}
         env:
           CLANG_MODULE_CACHE_PATH: ${{ runner.temp }}/kaji-swift-cache/clang
           SWIFTPM_MODULECACHE_OVERRIDE: ${{ runner.temp }}/kaji-swift-cache/swiftpm
@@ -304,4 +308,4 @@ jobs:
           cargo test -p kaji-plugin-rust native_url_pages_preserve_origin_auth_and_raw_error_responses -- --ignored
           cargo test -p kaji-plugin-rust native_standard_webhook_vectors_execute -- --ignored
       - name: Execute generated public operations against shared runtime scenarios
-        run: node packages/runtime-contract/runner.mjs "${{ matrix.path }}" "$GITHUB_WORKSPACE/runtime-contract-fixture/sdk/${{ matrix.path }}"
+        run: node packages/runtime-contract/runner.mjs "${{ matrix.path }}" "$RUNNER_TEMP/runtime-contract-fixture/sdk/${{ matrix.path }}"

@@ -55,13 +55,13 @@ Configured values, computed response fields, identity and replacement decisions
 have distinct roles in the plan. Create/update must preserve known planned values;
 server normalization that would violate Terraform state consistency is reported.
 Read refreshes state and removes a resource on a missing-object response.
-Declared `202` or wildcard `2XX` lifecycle success is excluded; unexpected `202`
-responses fail without treating pending work as completed. Delete
+Declared `202` lifecycle success requires explicit polling; wildcard `2XX` is
+excluded. Without a configured waiter, unexpected `202` fails. Delete
 also treats an already-missing object as success. Error messages avoid dumping
 HTTP response bodies or credentials.
 
 Nullable values, unions, recursive shapes, unsupported constraints, differing nested
-read/write projections, write-only secrets, polling, independent/list data sources
+read/write projections, write-only secrets, independent/list data sources
 and advanced actions remain excluded. See the [Speakeasy comparison](terraform-speakeasy.md)
 for the supported subset and remaining work.
 
@@ -95,6 +95,43 @@ Framework upgrade callbacks preserve values and reject collisions or incompatibl
 state. These are root-field renames, not arbitrary type conversions. Test stored
 old state before releasing a changed provider; migrations are never inferred.
 
+## Wait for asynchronous lifecycle completion
+
+Explicit resource bindings can attach a waiter to create, update or delete:
+
+```json
+"polling": {
+  "create": {
+    "interval_ms": 2000,
+    "max_attempts": 120,
+    "timeout_ms": 300000,
+    "success": [{"status": 200}, {"pointer": "/status", "equals": "ready"}],
+    "failure": [{"status": 200}, {"pointer": "/status", "equals": "failed"}]
+  },
+  "delete": {"success": [{"status": 404}]}
+}
+```
+
+The existing authenticated read GET is the waiter; simple and composite IDs use
+normal path escaping. Each group is a conjunction evaluated against one response.
+Failure takes precedence. Body criteria use RFC 6901 JSON pointers and scalar
+JSON equality; missing fields differ from explicit null. Delete must confirm
+HTTP 404. Create/update cannot complete on a non-success response or HTTP 202.
+
+Defaults are no initial delay, a 1,000 ms interval, 60 attempts and a 120,000 ms
+timeout. `delay_ms` and `interval_ms` are bounded to 60,000 ms (interval at least
+one); attempts to 1–1,000 and timeout to 1–3,600,000 ms. The context deadline
+covers the mutation and waiter; cancellation interrupts requests and waits.
+The mutation runs once. An accepted create must return a usable identity; failed
+waiters retain recovery state. Delete retains managed state until absence is
+confirmed. API response bodies and credentials stay out of polling diagnostics.
+
+Declare HTTP 202 explicitly for an asynchronous mutation and configure polling
+for that lifecycle. Wildcard success declarations remain unsupported. Without
+polling, declared or unexpected 202 remains an error. Job URLs, arbitrary
+follow-up operations, regex expressions and multi-step mutation orchestration are
+outside this implementation. See the [Speakeasy comparison](terraform-speakeasy.md).
+
 ## Read existing objects through data sources
 
 Set `data_sources: true` on the `provider` plugin, or call native
@@ -111,7 +148,7 @@ The string `id` is required; supported nested and scalar response fields are com
 flags preserved. Reads use the declared GET operation, authentication and identity
 encoding. HTTP 404, malformed bodies and identity mismatches report diagnostics.
 Data sources never create/update/delete an object or remove managed resource
-state. Independent read-only endpoints, lists and polling remain unsupported. See HashiCorp's
+state. Independent read-only endpoints, lists and separate polling data sources remain unsupported. See HashiCorp's
 [data-source lifecycle](https://developer.hashicorp.com/terraform/plugin/framework/data-sources).
 
 Reserved root names such as `count`, `for_each` and `depends_on` are rejected by

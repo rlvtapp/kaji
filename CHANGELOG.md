@@ -6,6 +6,9 @@
 
 ### Added
 
+- Explicit Terraform lifecycle polling through validated read GET operations,
+  bounded scalar criteria, attempts/deadlines, cancellation and recoverable state.
+
 - Native-verified Java/C#/PHP/Elixir probes and pinned public contract checks.
   Fixed Java/C# inline response imports, Java presence constructors, Elixir string
   enum typespecs and generated Finch request assertions. Rust native tests now

@@ -232,3 +232,17 @@ toolchains. PHP and Elixir probes passed in disposable Linux containers. Two che
 contracts compile locally in Rust, TypeScript, Go, Python, Ruby and Swift. CI adds
 Java, C#, PHP and Elixir; both contracts also passed locally in those four targets.
 These checks never call production API endpoints.
+
+## Terraform lifecycle polling
+
+Native Framework tests passed for bounded read-GET create/update/delete waiters:
+pending-to-ready state, confirmed deletion, composite path escaping, conjunction
+criteria and failure precedence, attempts/deadlines/cancellation, recoverable
+accepted-create identity and retained state after failures. Tests also cover exact
+large numeric comparisons, missing versus null, duplicate/trailing JSON, response
+limits and credential/body redaction.
+
+A real Terraform 1.13.4 mock lifecycle passed validation, apply, no-change plan,
+update, no-change plan and destroy. It verified exactly one POST, PATCH and DELETE.
+These tests use deterministic local mocks; arbitrary job endpoints and multi-step
+mutation workflows are not implemented. CI selects both probes explicitly.

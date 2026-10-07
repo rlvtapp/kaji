@@ -119,7 +119,7 @@ Read [auxiliary generators](auxiliary-generators.md), [mocking](mocking.md),
 | Typed Terraform provider | Framework CRUD bindings, typed nested plan/state, single/composite import, authentication, drift and diagnostics | [Terraform](terraform-provider.md) |
 | Terraform data sources | Supported single-entity reads | [Terraform](terraform-provider.md) |
 | Terraform native verification | Framework object tests and real local CLI lifecycle against a mock | [Verification](verification.md) |
-| Advanced Terraform lifecycle | Nested objects/lists/maps, composite IDs and explicit root-rename upgrades; polling and general type migrations remain unsupported | [Provider boundaries](terraform-provider.md) |
+| Advanced Terraform lifecycle | Nested objects/lists/maps, composite IDs and explicit root-rename upgrades; bounded read-GET lifecycle polling; general type migrations remain unsupported | [Provider boundaries](terraform-provider.md) |
 | Terraform registry release | Opt-in editable GoReleaser/signing/workflow scaffold with explicit namespace; not activated or live-verified | [Terraform](terraform-provider.md) |
 
 ## GitHub delivery and publication
@@ -143,7 +143,7 @@ presence is not evidence that registry trust or live delivery works.
 
 ## Tests and confidence
 
-The current verification baseline includes 416 passing workspace tests, 163 native
+The current verification baseline includes 418 passing workspace tests, 163 native
 wire scenarios across all ten runtimes, 37 runner/delivery/sync tests and an
 installed TypeScript package consumer check. Ignored native probes need explicit
 toolchain execution; they are not passes. Counts describe the recorded baseline,

@@ -41,7 +41,7 @@ interpret arbitrary Speakeasy extensions as Kaji configuration.
 | Plan behavior | Known configured values must agree with final state; unsupported update inputs require replacement |
 | Generated docs/release sources | Editable examples and documentation; optional registry/signing scaffold; publication unverified |
 | Advanced validators/modifiers | No general Speakeasy-compatible extension or arbitrary executable annotation engine |
-| Polling/multiple lifecycle calls | No general asynchronous provisioning or multi-step lifecycle orchestration |
+| Polling/multiple lifecycle calls | Explicit read-GET waiters for create/update/delete, with bounded attempts/deadlines, cancellation and scalar criteria; no arbitrary follow-up operation or multi-step mutation orchestration |
 | Data transformations/hoisting | No general jq transformation or entity-hoisting engine |
 | Collection data sources/actions | Single-entity data sources only; independent collection data sources and advanced actions remain separate work |
 | Write-only arguments | No general Terraform write-only argument/change-trigger generation; `Sensitive` alone does not prevent persistence |
