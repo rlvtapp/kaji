@@ -131,3 +131,40 @@ Twilio, Linode and DigitalOcean. Full OpenAI native compilation also passed for
 TypeScript, Python, Ruby, Rust, Java and C#. This does not prove every wire behavior
 in those APIs. Other lanes are being hardened against these same contracts;
 unsupported constructs fail explicitly rather than silently dropping operations.
+
+## APIs.guru corpus
+
+`scripts/fixtures/guru-contracts.json` pins 32 specifications from distinct
+APIs.guru providers to one immutable repository revision, with byte sizes and
+SHA-256 checksums. The corpus totals about 109 MB; each contract exceeds 1 MB.
+It includes GitHub, Stripe, AWS EC2, Google Compute, Mailchimp, Zoom, DocuSign,
+Jira, Plaid, Box and other large APIs.
+
+```sh
+python3 scripts/guru-corpus.py --language go --output /tmp/kaji-guru-check
+# A smaller selection, or retain generated sources for debugging:
+python3 scripts/guru-corpus.py --language python --contracts github,stripe \
+  --output /tmp/kaji-guru-python --keep-generated
+```
+
+Build `target/debug/kaji` and `target/debug/kaji-openapi` first, or set
+`KAJI_BINARY` and `KAJI_OPENAPI_BIN`. The output must be a fresh directory.
+The runner verifies inputs, generates and checks each SDK separately, continues
+after failures and returns a failing exit code if any case fails. Reports include
+source digests, phase exit codes, timeouts, logs and generation metadata.
+Generated sources are temporary unless `--keep-generated` is supplied.
+
+The manual `guru-contracts.yml` workflow selects one language or all ten and
+uploads these diagnostics. It does not publish or call the upstream APIs. Native
+checks use the existing public-contract runner: compilation for compiled targets,
+Python import/bytecode checks, Ruby syntax/load checks and PHP syntax checks.
+These checks are not complete runtime conformance tests.
+
+The initial local Go baseline passed 25 of 32 contracts. Seven failures remain:
+Google Compute and DocuSign expose normalized model-name collisions; GS MTasks
+has a model named `Client` colliding with the runtime; HERE repeats operation
+identities; Codat and bunq hit YAML parsing failures; the catalog's DigitalOcean
+file references companion files missing from that catalog entry. The separate
+fully bundled official DigitalOcean fixture passes Go compilation. These corpus
+failures are retained and make a full corpus run fail; the workflow is evidence
+gathering infrastructure, not a claim that all contracts or languages pass.

@@ -6,6 +6,8 @@ Use the [full feature catalog](features.md) to compare SDK targets, runtime poli
 
 If you already received an SDK, start with [using generated SDKs](generated-sdks.md) and its package-local README. You do not need Kaji to use that package.
 
+Start an existing Stainless, Fern or Speakeasy project with the [migration guide](migration.md).
+
 ## SDK authors: from a contract to a released package
 
 Start with a local Swagger 2.0 or OpenAPI 3.0/3.1/3.2 document and a supported Kaji installation. Building the output also needs the target language's toolchain. Publishing later requires an SDK repository, registry identity, and configured authentication; generation itself does not create those accounts or publish anything.

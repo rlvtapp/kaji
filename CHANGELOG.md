@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Import Stainless, Fern and Speakeasy project settings through `kaji migrate`,
+  generate directly from supported vendor configurations, and normalize supported
+  vendor operation annotations with explicit manual-review diagnostics.
+- Add a pinned 32-provider APIs.guru corpus, per-phase failure reports, cleanup
+  regression tests and a manual native-language CI workflow. Initial Go baseline:
+  25 passing contracts and seven retained failures documented in the large-spec guide.
+
 ## 0.5.0 — 2026-10-08
 
 - Add optional Swift/PHP/Elixir OAuth providers and native call scopes, and

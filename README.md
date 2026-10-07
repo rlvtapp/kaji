@@ -24,6 +24,7 @@ tradeoffs.
 
 | Your goal | Start here | Kaji helps you |
 | --- | --- | --- |
+| Move from Stainless, Fern or Speakeasy | [Migration guide](docs/migration.md) | Reuse your project configuration and supported OpenAPI annotations. |
 | Generate my first SDK | [Quickstart](docs/cli/quickstart.md) | Turn an OpenAPI file into a package you can build and use. |
 | Ship SDKs to my customers | [SDK author guides](docs/README.md) | Generate, customize, check, and release packages. |
 | Bundle idempotency keys and safe mutation retries | [Idempotency guide](docs/guides/idempotency.md) | Configure supported endpoints through OpenAPI or `kaji.json`. |
