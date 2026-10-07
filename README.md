@@ -1,4 +1,4 @@
-# Kaji
+<h1><img src="docs/assets/banner.svg" alt="Kaji: change the contract once, every SDK, mock and doc follows" width="100%"></h1>
 
 Generate SDKs and API tools from one OpenAPI contract. Keep the source,
 customizations, checks, and releases under your control.
