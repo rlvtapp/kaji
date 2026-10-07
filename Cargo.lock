@@ -473,7 +473,7 @@ dependencies = [
 
 [[package]]
 name = "kaji"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "kaji-core",
@@ -514,7 +514,7 @@ dependencies = [
 
 [[package]]
 name = "kaji-core"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "serde",
@@ -525,7 +525,7 @@ dependencies = [
 
 [[package]]
 name = "kaji-plugin-csharp"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "kaji-core",
@@ -535,7 +535,7 @@ dependencies = [
 
 [[package]]
 name = "kaji-plugin-dotnet"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "kaji-core",
  "kaji-plugin-csharp",
@@ -543,7 +543,7 @@ dependencies = [
 
 [[package]]
 name = "kaji-plugin-elixir"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "kaji-core",
@@ -553,7 +553,7 @@ dependencies = [
 
 [[package]]
 name = "kaji-plugin-go"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "kaji-core",
@@ -563,7 +563,7 @@ dependencies = [
 
 [[package]]
 name = "kaji-plugin-java"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "kaji-core",
@@ -573,7 +573,7 @@ dependencies = [
 
 [[package]]
 name = "kaji-plugin-php"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "kaji-core",
@@ -583,7 +583,7 @@ dependencies = [
 
 [[package]]
 name = "kaji-plugin-postman"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "kaji-core",
@@ -595,7 +595,7 @@ dependencies = [
 
 [[package]]
 name = "kaji-plugin-python"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "kaji-core",
@@ -605,7 +605,7 @@ dependencies = [
 
 [[package]]
 name = "kaji-plugin-ruby"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "kaji-core",
@@ -634,7 +634,7 @@ dependencies = [
 
 [[package]]
 name = "kaji-plugin-swift"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "kaji-core",

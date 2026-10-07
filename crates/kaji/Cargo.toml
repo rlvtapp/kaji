@@ -1,6 +1,6 @@
 [package]
 name = "kaji"
-version = "0.4.0"
+version.workspace = true
 edition = "2024"
 description = "Multi-language OpenAPI SDK generation profiles"
 license.workspace = true
