@@ -2,12 +2,22 @@
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
   "packages": {
     ".": {
-      "release-type": "rust",
+      "release-type": "simple",
       "include-component-in-tag": false,
       "include-v-in-tag": true,
       "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": false,
       "extra-files": [
+        {
+          "type": "toml",
+          "path": "Cargo.toml",
+          "jsonpath": "$.workspace.package.version"
+        },
+        {
+          "type": "toml",
+          "path": "Cargo.lock",
+          "jsonpath": "$.package[?(@.name.value == \"kaji-core\" || @.name.value == \"kaji\" || @.name.value == \"kaji-cli\" || @.name.value == \"kaji-plugin-rust\" || @.name.value == \"kaji-plugin-typescript\" || @.name.value == \"kaji-plugin-typescript-cli\" || @.name.value == \"kaji-plugin-rust-cli\" || @.name.value == \"kaji-plugin-go\" || @.name.value == \"kaji-plugin-python\" || @.name.value == \"kaji-plugin-php\" || @.name.value == \"kaji-plugin-symfony\" || @.name.value == \"kaji-plugin-terraform\" || @.name.value == \"kaji-plugin-postman\" || @.name.value == \"kaji-plugin-java\" || @.name.value == \"kaji-plugin-csharp\" || @.name.value == \"kaji-plugin-dotnet\" || @.name.value == \"kaji-plugin-elixir\" || @.name.value == \"kaji-plugin-ruby\" || @.name.value == \"kaji-plugin-swift\")].version"
+        },
         {
           "type": "json",
           "path": "packages/cli/package.json",
@@ -47,7 +57,9 @@
           "path": "packages/cli/package.json",
           "jsonpath": "$.optionalDependencies[\"@relevate/kaji-win32-x64-msvc\"]"
         }
-      ]
+      ],
+      "version-file": "version.txt",
+      "package-name": "kaji"
     }
   }
 }

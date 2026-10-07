@@ -40,6 +40,13 @@ jobs:
           python -m unittest discover -s packages/postman-check/test -v
       - name: Test Python CLI launcher
         run: PYTHONPATH=packages/python/src python -m unittest discover -s packages/python/tests -v
+      - name: Test workspace release version updates
+        run: |
+          npm install --prefix "$RUNNER_TEMP/kaji-release-check" --ignore-scripts --no-audit --no-fund release-please@17.6.0
+          NODE_PATH="$RUNNER_TEMP/kaji-release-check/node_modules" node --test scripts/release-config.test.cjs
+      - name: Build OpenAPI compiler for CLI integration tests
+        working-directory: openapi
+        run: go build -o ../target/debug/kaji-openapi .
       - name: Verify Rust workspace
         run: |
           cargo fmt --all --check

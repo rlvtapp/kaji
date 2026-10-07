@@ -5,6 +5,24 @@ This guide is for SDK authors configuring the final registry step. Begin with
 configure GitHub authentication and create release tags. Publishing does not
 regenerate the SDK, create its tag, register an account or establish registry trust.
 
+## Kaji's own repository releases
+
+Kaji's root release workflow prepares Release Please pull requests on `main`.
+It uses the simple strategy and explicit TOML updates because member crates inherit
+`workspace.package.version`. `version.txt` tracks the source version; the release
+manifest tracks the last published version, currently `0.4.0`. Minor features bump
+the minor version before 1.0, so the pending feature release is `0.5.0`.
+
+`KAJI_RELEASE_ENABLED` must be set to `true` in repository variables before this
+workflow can create a GitHub release/tag. Leave it unset while release preparation
+is paused. Tag-triggered publication and manual publication remain deliberate
+release actions. The version-update regression test runs the pinned Release Please
+updaters against manifests and lockfiles without calling GitHub or publishing.
+
+The lockfile selector addresses Release Please's tagged TOML name values. When
+adding a workspace crate, update that selector; the regression test requires every
+member to change and every external dependency to remain unchanged.
+
 ## Decide which publisher owns the release
 
 The package's `.kaji/package.json` declares a publisher. Use `npm`, `pypi`,
