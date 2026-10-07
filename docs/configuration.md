@@ -270,4 +270,8 @@ so missing properties round-trip separately from explicit null. Required propert
 types stay unchanged; the generated `PRESENCE.md` describes native construction
 and inspection. Leave the option unset to preserve the existing public model API.
 The option is rejected on other languages. `"open_enums": true` also works for
-Java, C# and Swift and retains unknown enum strings.
+TypeScript, Python, Rust, Java, C# and Swift. It keeps known enum APIs while
+allowing future wire values; TypeScript enum styles can change to const value
+objects. Rust also supports `"open_unions": true` for raw unmatched union values.
+See [forward-compatible models](guides/forward-compatible-models.md) for native
+representations and migration considerations.

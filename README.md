@@ -191,6 +191,10 @@ and [Rust API CLI](docs/rust-cli.md) guides.
 - **API CLIs:** generate a publishable Node.js or native Rust executable from
   the same paths, parameters, request bodies, and security requirements.
 - **Fetch or Axios:** separate TypeScript packages with the same source contract.
+- **OpenAPI 3.2:** whole-query inputs, sequential JSON, ordered/nested multipart,
+  and typed metadata for plugins. See [the 3.2 guide](docs/guides/openapi32.md).
+- **Evolving APIs:** open enum policies, unknown-field preservation and explicit
+  null presence. See [model compatibility](docs/guides/forward-compatible-models.md).
 - **Large Go APIs:** split model/operation files and bounded rendering workers.
 - **Validation and frontend helpers:** add Zod, TanStack React/Vue Query, SWR,
   Faker, MSW, and Cypress beside a TypeScript package through `kaji.json`.

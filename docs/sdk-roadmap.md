@@ -73,9 +73,9 @@ from the existing raw-JSON prototype to typed lifecycle-aware providers. The
 [Postman plan](postman-generation-plan.md) describes a new collection output.
 Postman export/execution, reviewed remote collection updates and typed Terraform CRUD/single-entity data sources are available. See [Postman](postman.md) and [Terraform](terraform-provider.md); remote environment/workspace provisioning, advanced lifecycle and live registry verification remain roadmap work.
 
-1. Extend the existing native Java/PHP/C#/Elixir verification to more model cases.
-   Complete remaining nullable/presence and unknown-value handling; keep evidence
-   separate from generated-source checks.
+1. Broaden the verified model policies to more real public contracts. Open enum
+   options, decoded unknown fields and nullable presence now have native roundtrip
+   probes across targets; constructor helpers expose explicit null on dynamic models.
 2. Extend the explicitly unsupported pagination forms and bindings in the
    capability table where needed, and verify legacy continuation edge cases.
    Preserve native public APIs; different iteration interfaces are expected.
@@ -90,7 +90,8 @@ Postman export/execution, reviewed remote collection updates and typed Terraform
    published launcher availability. Add provenance/source snapshots for remote
    spec diffs and richer status reporting.
 6. Extend source ejection with optional template adapters only when demanded by
-   real custom plugins. Add unsupported OpenAPI 3.2 constructs beyond the tested ordinary/QUERY capability set. Bounded public-HTTPS
+   real custom plugins. Verify additional custom media codecs beyond the implemented
+   OpenAPI 3.2 whole-query, sequential JSON and ordered multipart transports. Bounded public-HTTPS
    reference resolution is available with closure provenance.
 
 Each stage requires generated consumer compilation and meaningful wire behavior
@@ -135,20 +136,20 @@ endpoints and type-conversion migrations remain future work.
 
 Source ejection now exports the actual rebuildable generator and plugin workspace;
 it does not introduce a runtime template override flag. OpenAPI 3.2 ordinary
-contracts, QUERY and custom additional operations are accepted, with unsupported
-querystring parameters and streaming/multipart additions diagnosed explicitly.
-Local reference closure hashing prevents stale compiler caches after child edits.
-Optional OAuth providers now cover TypeScript, Rust, Java and C# as well as the
-existing Go, Python and Ruby helpers.
+contracts, QUERY/custom methods, whole-query content, sequential item schemas and
+ordered/nested multipart encodings are accepted. Native transport plans retain
+encoding and MIME headers; custom formats retain documented codec boundaries.
+Local reference closure hashing and artifact revisions prevent stale compiler
+caches. Optional OAuth providers and native call scopes cover all ten targets.
 
 Six pinned official contracts and a manual ten-language matrix expose failures
 beyond the shared wire fixtures. Full Go SDKs compile for OpenAI, GitHub, Stripe,
 Twilio and Linode; this is not an all-language pass claim. See
 [large specifications](large-specs.md) for reproducible commands.
 
-Remaining parity work includes all OpenAPI 3.2 constructs, authenticated/private remote reference
+Remaining work includes custom-format codecs, authenticated/private remote reference
 fetching, broader unknown-union/model preservation,
-additional multipart shapes and broader runtime consistency. The live delivery trial remains
+additional automatic DTO-to-MIME mappings and broader public-contract coverage. The live delivery trial remains
 prepared-only at the user's request. These boundaries are tracked separately from
 implemented features; Kaji keeps its plugin architecture.
 
@@ -170,3 +171,12 @@ These additions preserve native driver interfaces and documented limits.
 OpenAPI 3.2 custom methods preserve their case and default to unsafe retry
 semantics; whole-query parameters, item schemas and positional multipart encoding
 remain unsupported rather than being silently discarded.
+
+
+The 3.2 compiler/runtime expansion adds typed recursive encoding metadata, whole-query
+and named JSON content parameters, buffered record-oriented JSON and ordered nested
+multipart in the native targets. `$self`, tag hierarchy, reusable media definitions,
+XML node metadata and device authorization endpoints are preserved. Multipart
+responses remain native buffered data for caller decoding. See the
+[OpenAPI 3.2 guide](guides/openapi32.md) and
+[model policy guide](guides/forward-compatible-models.md) for the concrete APIs.

@@ -11,7 +11,7 @@ cd openapi
 go run . --out ../.kaji/openapi ../openapi.yaml
 ```
 
-The final argument can be a Swagger 2.0 or OpenAPI 3.0/3.1 JSON or YAML file. `--out` is the
+The final argument can be a Swagger 2.0 or OpenAPI 3.0/3.1/3.2 JSON or YAML file. `--out` is the
 artifact directory consumed by `kaji::generate_openapi`.
 
 ```sh
@@ -32,6 +32,7 @@ code:
   operations/
   schemas.json
   security-schemes.json
+  api-metadata.json
 ```
 
 Kaji's Rust generators load these files into a target-neutral AST. That keeps
@@ -48,6 +49,8 @@ consume typed `request_body` and `responses`, rather than guessed type-name
 strings or a first-scheme authentication summary.
 
 The compiler test suite lives next to its source in `openapi/*_test.go`.
+See [the OpenAPI 3.2 SDK guide](guides/openapi32.md) for whole-query inputs,
+record-oriented JSON and ordered multipart builders.
 
 ## Large and recursive documents
 
@@ -66,12 +69,27 @@ webhook-only descriptions are accepted. SDK methods preserve QUERY on the wire,
 including its request body. `HEAD`, `OPTIONS` and `TRACE` are also retained.
 Custom `additionalOperations` are retained as case-sensitive HTTP tokens (1–256
 ASCII token bytes), with standard-method shadowing rejected. Custom methods default
-to unsafe retry semantics and retain native transport restrictions. `querystring`
-parameters, streaming `itemSchema` and multipart `prefixEncoding`/`itemEncoding`
-currently fail with a capability
-diagnostic before compiler artifacts are modified. Future versions also fail.
-This is bounded 3.2 support; changing a version string cannot remove unsupported
-semantics. See the [OpenAPI 3.2 specification](https://spec.openapis.org/oas/v3.2.0.html).
+to unsafe retry semantics and retain native transport restrictions.
+
+The compiler retains whole-query `querystring` parameters and their `content`,
+sequential media `itemSchema`, positional multipart `prefixEncoding`/`itemEncoding`,
+recursive Encoding Objects, device authorization URLs, tag hierarchy and `$self`.
+Reusable `components.mediaTypes` references and XML `nodeType` metadata are retained.
+The Rust boundary exposes typed content metadata in `kaji_core::openapi32`; sequential
+item schemas become array model schemas for buffered request/response APIs.
+
+The bundled libopenapi parser advertises 3.2 support. Kaji also reads resolved source
+nodes for positional encodings and the official `deviceAuthorization` flow where
+version 0.38.7's high-level models omit or misname fields. Compiler and native runtime
+tests cover these paths rather than inferring support from a version number.
+
+Sequential JSON is buffered and decoded record by record. Multipart requests use
+native or explicit ordered builders; custom media formats and multipart response
+interpretation still require a native codec or application decoding. Preserving an
+XML Schema annotation does not install an XML codec. Kaji is not a complete JSON
+Schema validator. Future OpenAPI minor versions and malformed conflicting encodings
+fail before artifacts are modified. See the
+[OpenAPI 3.2 specification](https://spec.openapis.org/oas/v3.2.1.html).
 
 Local referenced files contribute to the compiler cache digest and `source.json`
 manifest, so editing a child document invalidates the cache. Generation provenance
@@ -87,3 +105,8 @@ HTTP(S) origin to the compiler using the already-downloaded bytes. Relative remo
 references resolve from that URL; root authentication is not forwarded to children.
 External referenced documents still require public HTTPS. Standalone compiler
 users can pass `--source-url` with a downloaded local file themselves.
+
+An OpenAPI document's `$self` establishes its reference base and identity. The compiler
+resolves relative references against that URI, recognizes references back to the
+already-loaded document, and rejects duplicate identities, credentials and fragments
+in `$self`. Source closure hashing counts downloaded documents once.

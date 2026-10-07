@@ -13,7 +13,7 @@ guide before wiring the upload.
 | Rust | `MultipartBody::new()` with `add_text`, `add_file`, `add_json` and `add_part`; mixed JSON operations retain a multipart companion method |
 | Java | Generated multipart DTOs and file-part wrappers |
 | C# | Generated multipart DTOs and file-part wrappers |
-| Swift | Generated typed multipart inputs for supported closed named object roots |
+| Swift | Typed named inputs and generated ordered inputs for positional/nested encoding plans |
 | Ruby | `MultipartBody.new.add_text(...).add_file(...).add_json(...)` |
 | PHP | `new MultipartBody()` with `addText`, `addFile`, `addJson` and `addPart` |
 | Elixir | `MultipartBody.new()` piped through `add_text`, `add_file`, `add_json` and `add_part` |
@@ -37,7 +37,9 @@ usual method/idempotency rules still apply. See [retry safety](idempotency.md).
 ## Boundaries to verify
 
 Limits and supported shapes differ between languages. Swift currently requires
-supported closed named roots and rejects unsupported roots before writing files.
+supported closed named roots. Positional or nested encoding plans select a generated
+ordered upload input instead. See [OpenAPI 3.2](openapi32.md) for the native ordered
+builders across all targets.
 Java/C# typed inputs and explicit builders serve different APIs. Mixed JSON and
 multipart operations need the correct native representation; a plain JSON value
 is not automatically a multipart upload.
@@ -50,3 +52,10 @@ operation rather than these buffered builders.
 Native regression probes exercise binary and Unicode files, repeated fields,
 false/zero and JSON/null values, metadata guards, limits and retry bytes. Use your
 SDK's generated operation tests and a mock server to verify your actual wire shape.
+
+
+For `prefixEncoding`/`itemEncoding` contracts, the operation applies its compiled
+plan to ordered input parts. This includes nested multipart media types and part
+headers. Python exposes `MultipartBody.positional(...)` and `.with_headers(...)`;
+TypeScript takes an ordered body array. Other targets use their native ordered part
+builders. Multipart responses remain buffered native data for application decoding.

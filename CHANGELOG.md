@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-## 0.5.0 — 2026-10-07
+## 0.5.0 — 2026-10-08
 
 - Add optional Swift/PHP/Elixir OAuth providers and native call scopes, and
   buffered Ruby/PHP/Elixir multipart builders with native regression probes.
@@ -11,14 +11,28 @@
 - Add a sourced SDK-generator comparison and Kaji ownership/plugin positioning.
 - Rust generator API: `HttpMethod` now carries `Custom(String)` and is no longer
   `Copy`; clone stored values when needed, or borrow them for `as_str()`.
+  Manually constructed `OAuthFlow` values now include
+  `device_authorization_url: None` when the flow has no device endpoint.
 
 
 ### Added
 
+- OpenAPI 3.2 whole-query and ordinary parameter content serialization, buffered
+  JSON-sequence/NDJSON/JSONL requests and responses, ordered recursively nested
+  multipart plans, device authorization metadata, tag hierarchy and `$self` identity.
+  Typed content metadata remains available to custom generation plugins.
+- Compiler artifact revision cache invalidation, reusable media definitions and
+  source-node extraction covering fields omitted by the pinned parser models.
+- Opt-in TypeScript/Python/Rust open enum APIs, PHP known enum/scalar fallback,
+  schema-allowed unknown fields and native nested roundtrip probes across targets.
+- Explicit-null construction helpers for Python/Ruby/PHP/Elixir models; fixes for
+  renamed C# presence properties, Ruby `value` fields and unknown-property collisions.
+- Author guides for forward-compatible models and native OpenAPI 3.2 wire formats,
+  with native failure-path tests and CI execution of the new probes.
 - Rebuildable `kaji eject` source bundles with SHA-256 manifests, preserving the
   plugin architecture; an integration test edits a renderer, rebuilds and generates.
-- Bounded OpenAPI 3.2 support including QUERY, local reference closure hashing and
-  recursive schemas, with explicit diagnostics for unsupported new constructs.
+- OpenAPI QUERY/custom methods, local reference closure hashing and recursive schemas,
+  with diagnostics for malformed encodings and unsupported future document versions.
 - Optional TypeScript, Rust, Java and C# OAuth client-credentials providers with
   coordinated refresh, cancellation and bounded safe unauthorized replay.
 - Bounded multipart upload APIs in Go/Python/Rust/Swift, and richer Java/C# JSON,

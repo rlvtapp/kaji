@@ -28,7 +28,7 @@ supported. Version 0.5.0 is on the branch; use a source build until published.
 | Capability | Status and scope | Guide |
 | --- | --- | --- |
 | Swagger 2.0; OpenAPI 3.0/3.1 | Local JSON/YAML and downloaded contracts; normalization through the bundled Go compiler | [Compiler](openapi-compiler.md) |
-| OpenAPI 3.2 | Ordinary contracts, QUERY, custom HTTP operations, nullable bodies and webhook-only specs; remaining unsupported 3.2 additions fail before writes | [Compiler](openapi-compiler.md) |
+| OpenAPI 3.2 | QUERY/custom methods, whole-query content, sequential item schemas, positional/nested encoding plans, device authorization metadata, tag hierarchy and `$self`; native codecs have explicit format boundaries | [Compiler](openapi-compiler.md) |
 | External references, recursive schemas | Local files and bounded public-HTTPS references, with closure provenance; recursive native representation varies by target | [Shared fixtures](shared-sdk-fixtures.md) |
 | Operation parameters and body/response media | Path/query/header inputs, declared media, examples and security alternatives carried into the neutral model | [Architecture](architecture.md) |
 | Package-specific settings | Multiple packages/languages/providers; naming, client style, manifests, versions and plugins | [Configuration](configuration.md) |
@@ -81,7 +81,7 @@ and selector restrictions are in the [pagination guide](guides/pagination.md).
 | Structural response checks | Opt-in TypeScript, Go, Python and Ruby checks; native model decoders also reject some invalid shapes | Java/PHP/Elixir shared cases remain permissive |
 | Errors and raw results | Declared native errors and response envelopes where supported | Inspect each target's surface; raw response/stream ownership differs |
 | Streaming and file media | Selected SSE/binary forms; multipart upload APIs in all ten SDK targets | Buffered upload limits and shapes vary; Swift requires closed named roots. Ruby/PHP/Elixir expose explicit buffered part builders, with declared multipart media gating. Shared corpus is not exhaustive; see [uploads](guides/uploads.md) |
-| Forward-compatible models | Opt-in Java/C#/Swift open enums and Java/C# optional presence wrappers; transparent named scalar/union JSON; Rust opt-in unmatched union fallback; selected unknown-property and nullable handling; TypeScript int64 string/bigint options | Unknown enum/union roundtrip and omitted-vs-null behavior are not universal |
+| Forward-compatible models | Opt-in TS/Python/Rust/Java/C#/Swift open enums; native Go open string enums and PHP known-enum/scalar fallback; Java/C# optional presence wrappers; schema-allowed unknown-property bags and native roundtrip probes; Rust opt-in unmatched union fallback | Policies and public representations differ by target; see [model guide](guides/forward-compatible-models.md) |
 | Webhook verification | Opt-in verifiers in all ten SDKs: raw-body HMAC verification, timestamp checks and secret rotation | Native probes passed across ten languages; Swift Linux crypto unverified; HMAC v1, no durable replay store |
 
 Start from [generated SDKs](generated-sdks.md), then follow

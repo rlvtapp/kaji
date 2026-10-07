@@ -8,7 +8,7 @@ If you already received an SDK, start with [using generated SDKs](generated-sdks
 
 ## SDK authors: from a contract to a released package
 
-Start with a local Swagger 2.0 or OpenAPI 3.0/3.1 document and a supported Kaji installation. Building the output also needs the target language's toolchain. Publishing later requires an SDK repository, registry identity, and configured authentication; generation itself does not create those accounts or publish anything.
+Start with a local Swagger 2.0 or OpenAPI 3.0/3.1/3.2 document and a supported Kaji installation. Building the output also needs the target language's toolchain. Publishing later requires an SDK repository, registry identity, and configured authentication; generation itself does not create those accounts or publish anything.
 
 | Step | Read and do | What you have afterwards |
 | --- | --- | --- |
@@ -42,10 +42,12 @@ Native Rust plugins are composed through the library API. Installing an arbitrar
 | Per-call headers, timeouts and cancellation | [Request controls](guides/request-controls.md) |
 | OAuth providers and signed webhooks | [OAuth/webhooks](guides/oauth-webhooks.md) |
 | All CLI commands or typed settings | [CLI reference](cli.md), [configuration reference](configuration.md) |
+| OpenAPI 3.2 wire formats and metadata | [OpenAPI 3.2 guide](guides/openapi32.md) |
 | Large contracts and compiler artifacts | [Large specifications](large-specs.md), [OpenAPI compiler](openapi-compiler.md) |
 | Extra generated outputs | [Auxiliary generators](auxiliary-generators.md), [ReDoc/MCP artifacts](guides/artifacts.md) |
 | API command-line clients | [TypeScript API CLI](typescript-cli.md), [Rust API CLI](rust-cli.md) |
 | CI, App authentication, and broker setup | [CI integration](ci-integration.md), [GitHub App](github-app.md), [OIDC broker](github-app-broker.md) |
+| Future enum values, unknown fields and null presence | [Forward-compatible models](guides/forward-compatible-models.md) |
 | Native model fixtures | [Shared SDK fixtures](shared-sdk-fixtures.md) |
 | Product background and release changes | [Why Kaji](why-kaji.md), [0.4.0 release](releases/0.4.0.md), [0.3.0 release](releases/0.3.0.md) |
 
