@@ -1,0 +1,30 @@
+name: Kaji SDK installation token
+description: Exchange a trusted GitHub Actions OIDC token for a narrowly scoped SDK repository token.
+inputs:
+  broker-url:
+    description: HTTPS base URL of your configured Kaji GitHub App broker.
+    required: true
+  audience:
+    description: Exact OIDC audience configured by your broker.
+    required: false
+    default: kaji
+  repositories:
+    description: JSON array of allowed destination repositories, such as ["example/typescript-sdk"].
+    required: true
+outputs:
+  token:
+    description: Masked GitHub App installation token limited to the selected repositories.
+    value: ${{ steps.token.outputs.token }}
+  expires-at:
+    description: Installation token expiration timestamp.
+    value: ${{ steps.token.outputs.expires-at }}
+runs:
+  using: composite
+  steps:
+    - id: token
+      shell: bash
+      env:
+        KAJI_BROKER_URL: ${{ inputs.broker-url }}
+        KAJI_BROKER_AUDIENCE: ${{ inputs.audience }}
+        KAJI_BROKER_REPOSITORIES: ${{ inputs.repositories }}
+      run: node "$GITHUB_ACTION_PATH/client.mjs"

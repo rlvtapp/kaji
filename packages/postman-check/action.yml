@@ -1,0 +1,25 @@
+name: Kaji Postman collection checks
+description: Validate portable Postman exports without executing API requests.
+inputs:
+  collection:
+    description: Collection JSON path relative to the checkout.
+    required: true
+  environment:
+    description: Optional environment template JSON path relative to the checkout.
+    default: ''
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v7
+      with:
+        python-version: '3.12'
+    - name: Install pinned collection schema validator
+      shell: bash
+      run: python -m pip install --disable-pip-version-check 'jsonschema==4.23.0'
+    - name: Check collection and blank environment
+      shell: bash
+      env:
+        KAJI_ACTION_PATH: ${{ github.action_path }}
+        KAJI_COLLECTION: ${{ inputs.collection }}
+        KAJI_ENVIRONMENT: ${{ inputs.environment }}
+      run: python "$KAJI_ACTION_PATH/check.py"

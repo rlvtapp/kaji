@@ -1,0 +1,46 @@
+name: Sync OpenAPI source to SDK repository
+description: Copy a local OpenAPI spec into a reviewable destination pull request.
+inputs:
+  repository:
+    description: Destination SDK repository as owner/name.
+    required: true
+  source-path:
+    description: OpenAPI file relative to the checked-out source repository.
+    required: true
+  target-path:
+    description: Destination spec file relative to the SDK repository.
+    required: true
+  token:
+    description: Destination GitHub App installation or fine-grained token with contents and pull requests write.
+    required: true
+  branch:
+    description: Existing or new review branch; commits are preserved without force pushes.
+    default: codex/kaji-spec-sync
+  base:
+    description: Destination pull-request base branch.
+    default: main
+outputs:
+  pull-request-url:
+    description: Existing or created review pull request URL.
+    value: ${{ steps.sync.outputs.pull-request-url }}
+  changed:
+    description: Whether this run committed updated files.
+    value: ${{ steps.sync.outputs.changed }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v7
+      with:
+        node-version: '24'
+    - name: Sync specification through a pull request
+      id: sync
+      shell: bash
+      env:
+        KAJI_ACTION_PATH: ${{ github.action_path }}
+        KAJI_SPEC_REPOSITORY: ${{ inputs.repository }}
+        KAJI_SPEC_SOURCE: ${{ inputs.source-path }}
+        KAJI_SPEC_TARGET: ${{ inputs.target-path }}
+        KAJI_SPEC_TOKEN: ${{ inputs.token }}
+        KAJI_SPEC_BRANCH: ${{ inputs.branch }}
+        KAJI_SPEC_BASE: ${{ inputs.base }}
+      run: node "$KAJI_ACTION_PATH/sync.mjs"

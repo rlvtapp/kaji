@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "audience": "kaji",
+  "sources": [
+    {
+      "repository": "example/api",
+      "repository_id": "123456",
+      "repository_owner_id": "123",
+      "subjects": ["repo:example@123/api@123456:ref:refs/heads/main"],
+      "workflow_ref": "example/api/.github/workflows/kaji-sdk.yml@refs/heads/main",
+      "refs": ["refs/heads/main"],
+      "events": ["push", "workflow_dispatch"],
+      "runner_environment": "github-hosted",
+      "permissions": { "contents": "write", "pull_requests": "write" },
+      "targets": [
+        { "repository": "example/typescript-sdk", "repository_id": "234567", "installation_id": "345678" },
+        { "repository": "example/python-sdk", "repository_id": "234568", "installation_id": "345678" }
+      ]
+    }
+  ]
+}

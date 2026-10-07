@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
     branches: [main]
@@ -29,6 +30,12 @@ jobs:
           python-version: '3.12'
       - name: Test CI integration templates
         run: node --test packages/github-action/test/*.test.cjs packages/gitlab-ci/test/*.test.cjs
+      - name: Test editable SDK delivery and App broker sources
+        run: node --test packages/sdk-check/test/*.mjs packages/sdk-publish/test/*.mjs packages/github-app-broker/*.test.mjs packages/spec-sync/test/*.test.mjs
+      - name: Test portable collection checker
+        run: |
+          python -m pip install --disable-pip-version-check 'jsonschema==4.23.0'
+          python -m unittest discover -s packages/postman-check/test -v
       - name: Test Python CLI launcher
         run: PYTHONPATH=packages/python/src python -m unittest discover -s packages/python/tests -v
       - name: Verify Rust workspace
@@ -36,6 +43,10 @@ jobs:
           cargo fmt --all --check
           cargo clippy --workspace --all-targets -- -D warnings
           cargo test --workspace --locked
+      - name: Verify generated Postman exports against the official schema
+        run: cargo test -p kaji-plugin-postman validates_actual_official_draft04_schema -- --ignored
+      - name: Verify generated Terraform lifecycle with native Framework state
+        run: cargo test -p kaji-plugin-terraform generated_provider_executes_native_framework_lifecycle -- --ignored
       - name: Test embedded OpenAPI compiler
         working-directory: openapi
         run: go test ./...
@@ -45,6 +56,12 @@ jobs:
         run: |
           cargo build -p kaji-cli --locked
           (cd openapi && go build -o ../target/debug/kaji-openapi .)
+      - name: Verify portable API artifacts
+        run: |
+          target/debug/kaji generate --config examples/api-artifacts/kaji.json
+          KAJI_COLLECTION=examples/api-artifacts/generated/postman/widgets.postman_collection.json KAJI_ENVIRONMENT=examples/api-artifacts/generated/postman/widgets.postman_environment.json python packages/postman-check/check.py
+          (cd examples/api-artifacts/generated/terraform && go mod tidy && go test ./... && go build ./...)
+          target/debug/kaji generate --config examples/api-artifacts/kaji.json --check --format json
       - name: Verify release examples
         run: python scripts/check-release-examples.py
       - name: Generate cross-language SDK fixture once

@@ -1,0 +1,80 @@
+name: Kaji publish SDK
+description: Publish an explicitly selected SDK registry with trusted identity and verified retry handling.
+author: Relevate
+
+inputs:
+  registry:
+    description: Explicit package publisher registry (npm, pypi, crates.io, or go).
+    required: true
+  path:
+    description: Package directory containing .kaji/package.json, relative to the checkout.
+    required: true
+  tag:
+    description: Already checked out and pushed immutable release tag.
+    required: true
+  npm-tag:
+    description: npm distribution tag for a new release.
+    required: false
+    default: latest
+  dist-dir:
+    description: Built wheel/sdist directory relative to the Python package.
+    required: false
+    default: dist
+outputs:
+  name:
+    description: Native registry package name.
+    value: ${{ steps.prepare.outputs.name }}
+  version:
+    description: Verified manifest version.
+    value: ${{ steps.prepare.outputs.version }}
+  already-published:
+    description: Whether all selected artifacts were already published before this run.
+    value: ${{ steps.prepare.outputs.already-published }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v7
+      with:
+        node-version: '24'
+    - uses: actions/setup-python@v7
+      if: inputs.registry == 'pypi'
+      with:
+        python-version: '3.12'
+    - name: Validate release and compare built artifacts
+      id: prepare
+      shell: bash
+      env:
+        KAJI_ACTION_PATH: ${{ github.action_path }}
+        KAJI_PUBLISH_REGISTRY: ${{ inputs.registry }}
+        KAJI_PUBLISH_PATH: ${{ inputs.path }}
+        KAJI_PUBLISH_TAG: ${{ inputs.tag }}
+        KAJI_NPM_TAG: ${{ inputs.npm-tag }}
+        KAJI_DIST_DIR: ${{ inputs.dist-dir }}
+      run: node "$KAJI_ACTION_PATH/publish.mjs" prepare
+    - name: Exchange crates.io trusted publishing identity
+      id: crates-auth
+      if: inputs.registry == 'crates.io' && steps.prepare.outputs.already-published != 'true'
+      uses: rust-lang/crates-io-auth-action@v1
+    - name: Publish npm, Cargo, or index Go module
+      if: inputs.registry != 'pypi' && steps.prepare.outputs.already-published != 'true'
+      shell: bash
+      env:
+        KAJI_ACTION_PATH: ${{ github.action_path }}
+        KAJI_PUBLISH_STATE: ${{ steps.prepare.outputs.state }}
+        CARGO_REGISTRY_TOKEN: ${{ steps.crates-auth.outputs.token }}
+      run: node "$KAJI_ACTION_PATH/publish.mjs" publish
+    - name: Publish Python distributions with trusted identity
+      if: inputs.registry == 'pypi' && steps.prepare.outputs.already-published != 'true'
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        packages-dir: ${{ steps.prepare.outputs.packages-dir }}
+        skip-existing: 'true'
+        verbose: 'false'
+    - name: Confirm all Python distribution digests
+      if: inputs.registry == 'pypi' && steps.prepare.outputs.already-published != 'true'
+      shell: bash
+      env:
+        KAJI_ACTION_PATH: ${{ github.action_path }}
+        KAJI_PUBLISH_STATE: ${{ steps.prepare.outputs.state }}
+      run: node "$KAJI_ACTION_PATH/publish.mjs" confirm

@@ -8,14 +8,14 @@ use std::process::{Command, ExitCode, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, bail, ensure};
 use kaji::ts::artifacts::{
     ArtifactOptions, McpToolManifest, ReDoc, TypeScriptCypress, TypeScriptFaker, TypeScriptMsw,
     TypeScriptReactQuery, TypeScriptSwr, TypeScriptVueQuery, TypeScriptZod,
 };
 use kaji::{
-    SdkClientStyle, csharp, dotnet, elixir, go, java, mock, php, prelude::*, python, ruby, rust,
-    rust_cli, swift, symfony, ts, ts_cli,
+    SdkClientStyle, csharp, dotnet, elixir, go, java, mock, php, postman, prelude::*, python, ruby,
+    rust, rust_cli, swift, symfony, terraform, ts, ts_cli,
 };
 use kaji_core::{Api, GeneratedFile, GeneratedTree};
 use serde::{Deserialize, Serialize};
@@ -24,6 +24,9 @@ use sha2::{Digest, Sha256};
 mod credentials;
 mod mcp;
 mod registry;
+mod sdk_automation;
+mod sdk_install;
+mod sdk_status;
 
 const HELP: &str = "Kaji — native multi-language OpenAPI SDK generator
 
@@ -43,6 +46,7 @@ Usage:
   kaji discover <query> [--limit <count>] [--format human|json]
   kaji download <api-id> --output <openapi-file> [--version <version>]
   kaji languages
+  kaji sdk <init|sync|app|list|run|diff|pr|releases|connect|install|status> ...
   kaji --version
 
 Config commands:
@@ -51,7 +55,9 @@ Config commands:
       --config <file>                   Read a specific config file
       --color <mode>                    auto (default), always, or never
 
-Generate options (direct mode):
+Generate options (both modes):
+      --check                          Report drift without writing output
+      --format human|json              Change report format
   -o, --output <directory>             Output root (required)
   -l, --language <target,...>          Repeatable; use all for every SDK (required)
       --name <name>                   API name (default: API)
@@ -67,7 +73,7 @@ Generate options (direct mode):
       --exclude-path <pattern>        Omit matching OpenAPI paths; repeatable
   -h, --help                          Show help
 
-Targets: rust, rust-cli, typescript, typescript-cli, go, python, php, symfony, java, csharp, dotnet (legacy alias), elixir, ruby, swift
+Targets: postman, terraform, rust, rust-cli, typescript, typescript-cli, go, python, php, symfony, java, csharp, dotnet (legacy alias), elixir, ruby, swift
 
 MCP commands:
   mcp                                   Serve an OpenAPI document as MCP tools over stdio
@@ -112,7 +118,7 @@ Registry commands:
       --version <version>                Select a directory version explicitly
       --output <openapi-file>            Destination; must not already exist
 
-Each target is written to its own subdirectory. Generated files are overwritten;
+Each target is written to its own subdirectory. Owned generated files are updated;
 custom starter files and unrelated files are preserved. Generation accepts local files,
 HTTPS URLs, or a remote input object in config. The registry commands use APIs.guru.
 The npm distribution bundles both native executables; Rust and Go are not required.
@@ -133,6 +139,8 @@ const LANGUAGES: &[&str] = &[
     "elixir",
     "ruby",
     "swift",
+    "postman",
+    "terraform",
 ];
 
 // `all` intentionally remains the established shortcut for SDK packages. A
@@ -171,6 +179,8 @@ struct Generate {
     source_sha256: Option<String>,
     jobs: usize,
     color: ColorChoice,
+    check: bool,
+    json_changes: bool,
 }
 
 #[derive(Debug)]
@@ -695,15 +705,102 @@ struct PackageConfig {
     language: String,
     path: String,
     name: Option<String>,
+    version: Option<String>,
+    release: Option<kaji_core::release::PackageMetadata>,
     client_style: Option<String>,
     #[serde(default)]
     plugins: Vec<PluginConfig>,
+    #[serde(default)]
+    customizations: Vec<CodeCustomizationConfig>,
+    #[serde(skip)]
+    resolved_customizations: Vec<kaji_core::customization::CodeCustomization>,
+    #[serde(default)]
+    middleware: Vec<BundledMiddlewareConfig>,
+    #[serde(skip)]
+    resolved_middleware: Vec<kaji_core::customization::BundledMiddleware>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BundledMiddlewareConfig {
+    source: PathBuf,
+    path: PathBuf,
+    symbol: String,
+    async_symbol: Option<String>,
+}
+impl BundledMiddlewareConfig {
+    fn load(&self, base: &Path) -> Result<kaji_core::customization::BundledMiddleware> {
+        let source = config_path(base, self.source.clone());
+        let middleware = kaji_core::customization::BundledMiddleware {
+            path: self.path.clone(),
+            contents: std::fs::read_to_string(&source)
+                .with_context(|| format!("read bundled middleware source {}", source.display()))?,
+            symbol: self.symbol.clone(),
+            async_symbol: self.async_symbol.clone(),
+        };
+        middleware.validate()?;
+        Ok(middleware)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]
+enum CodeCustomizationConfig {
+    Add {
+        path: PathBuf,
+        source: PathBuf,
+    },
+    Replace {
+        path: PathBuf,
+        source: PathBuf,
+    },
+    Patch {
+        path: PathBuf,
+        find: String,
+        source: PathBuf,
+    },
+}
+impl CodeCustomizationConfig {
+    fn load(&self, base: &Path) -> Result<kaji_core::customization::CodeCustomization> {
+        use kaji_core::customization::CodeCustomization;
+        let (path, source) = match self {
+            Self::Add { path, source }
+            | Self::Replace { path, source }
+            | Self::Patch { path, source, .. } => (path, source),
+        };
+        GeneratedFile::new(path, "")?;
+        let source = config_path(base, source.clone());
+        let contents = std::fs::read_to_string(&source)
+            .with_context(|| format!("read customization source {}", source.display()))?;
+        Ok(match self {
+            Self::Add { .. } => CodeCustomization::Add {
+                path: path.clone(),
+                contents,
+            },
+            Self::Replace { .. } => CodeCustomization::Replace {
+                path: path.clone(),
+                contents,
+            },
+            Self::Patch { find, .. } => CodeCustomization::Patch {
+                path: path.clone(),
+                find: find.clone(),
+                replacement: contents,
+            },
+        })
+    }
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct PluginConfig {
     name: String,
+    id: Option<String>,
+    #[serde(default)]
+    uses: BTreeMap<String, String>,
+    integer_as_string: Option<bool>,
+    int64: Option<String>,
+    async_client: Option<bool>,
+    open_enums: Option<bool>,
     transport: Option<String>,
     surface: Option<String>,
     client_name: Option<String>,
@@ -720,6 +817,12 @@ struct PluginConfig {
     base_url: Option<String>,
     oauth: Option<CliOAuthConfig>,
     sdk_package: Option<String>,
+    strict: Option<bool>,
+    infer: Option<bool>,
+    module: Option<String>,
+    provider_name: Option<String>,
+    #[serde(default)]
+    resources: Vec<terraform::ResourceBinding>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -744,6 +847,7 @@ fn default_sdk_version() -> String {
 }
 
 enum Action {
+    Sdk(sdk_automation::Options),
     Help,
     Version,
     Languages,
@@ -821,6 +925,9 @@ fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Action> {
     if command == "init" {
         return parse_init(args);
     }
+    if command == "sdk" {
+        return sdk_automation::parse(args).map(Action::Sdk);
+    }
     if command == "mcp" {
         return parse_mcp(args);
     }
@@ -873,6 +980,8 @@ fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Action> {
         source_sha256: None,
         jobs: 0,
         color: ColorChoice::Auto,
+        check: false,
+        json_changes: false,
     };
     while let Some(argument) = args.next() {
         let text = argument.to_string_lossy();
@@ -890,6 +999,23 @@ fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Action> {
             continue;
         }
         let flag = text.as_ref();
+        if flag == "--check" {
+            options.check = true;
+            continue;
+        }
+        if flag == "--json" {
+            options.json_changes = true;
+            continue;
+        }
+        if flag == "--format" {
+            let value = args.next().context("--format requires human or json")?;
+            options.json_changes = match value.to_str() {
+                Some("json") => true,
+                Some("human") => false,
+                _ => bail!("--format requires human or json"),
+            };
+            continue;
+        }
         if !matches!(
             flag,
             "--output"
@@ -1531,6 +1657,12 @@ fn package_common(style: SdkClientStyle) -> Common {
     Common::default().client_style(style)
 }
 
+fn configured_common(style: SdkClientStyle, package: &PackageConfig) -> Common {
+    let mut common = package_common(style);
+    common.package_version = package.version.clone();
+    common
+}
+
 fn profiles(options: &Generate) -> Result<ProfileSet> {
     if let Some(packages) = &options.config_packages {
         return config_profiles(options.style, packages);
@@ -1553,6 +1685,14 @@ fn profiles(options: &Generate) -> Result<ProfileSet> {
             "elixir" => profiles.package(elixir::package("elixir").with(elixir::sdk())),
             "ruby" => profiles.package(ruby::package("ruby").with(ruby::sdk())),
             "swift" => profiles.package(swift::package("swift").with(swift::sdk())),
+            "postman" => profiles.package(
+                postman::package("postman")
+                    .with(postman::collection())
+                    .with(postman::environment()),
+            ),
+            "terraform" => {
+                profiles.package(terraform::package("terraform").with(terraform::provider()))
+            }
             "typescript" => {
                 let mut sdk = match options
                     .typescript_transport
@@ -1606,6 +1746,280 @@ fn has_only_known_plugins(package: &PackageConfig, allowed: &[&str]) -> Result<(
     Ok(())
 }
 
+fn has_typescript_provider(package: &PackageConfig) -> bool {
+    package.plugins.iter().any(|plugin| {
+        matches!(
+            plugin.name.as_str(),
+            "sdk" | "models" | "transport" | "operations" | "client"
+        )
+    })
+}
+
+fn typescript_models(plugin: &PluginConfig) -> Result<ts::ModelOptions> {
+    let int64_type = match plugin.int64.as_deref().unwrap_or("number") {
+        "number" => ts::Int64Type::Number,
+        "string" => ts::Int64Type::String,
+        "bigint" => ts::Int64Type::BigInt,
+        other => bail!("TypeScript int64 must be number, string, or bigint; got {other:?}"),
+    };
+    Ok(ts::ModelOptions {
+        integer_as_string: plugin.integer_as_string.unwrap_or(false),
+        int64_type,
+        ..Default::default()
+    })
+}
+
+fn typescript_profile(
+    package: &PackageConfig,
+    style: SdkClientStyle,
+) -> Result<Package<ts::TypeScript>> {
+    use ts::composition::{self, Models, Operations, Transport};
+    has_only_known_plugins(
+        package,
+        &[
+            "sdk",
+            "models",
+            "transport",
+            "operations",
+            "client",
+            "zod",
+            "tanstack-react-query",
+            "tanstack-vue-query",
+            "swr",
+            "faker",
+            "msw",
+            "cypress",
+        ],
+    )?;
+    if package.plugins.is_empty() {
+        bail!("TypeScript package must declare plugins");
+    }
+    let mut output = ts::package(&package.path).common(configured_common(style, package));
+    if let Some(name) = &package.name {
+        output = output.name(name);
+    }
+    if !has_typescript_provider(package) {
+        return Ok(output);
+    }
+    let mut models = BTreeMap::<String, Handle<Models>>::new();
+    let mut transports = BTreeMap::<String, Handle<Transport>>::new();
+    let mut operations = BTreeMap::<String, Handle<Operations>>::new();
+    let mut ids = BTreeSet::new();
+    let mut providers = Vec::new();
+    for plugin in &package.plugins {
+        let id = plugin.id.clone().unwrap_or_else(|| plugin.name.clone());
+        if !ids.insert(id.clone()) {
+            bail!("duplicate TypeScript plugin instance {id:?}; give each instance a unique id");
+        }
+        if plugin.name == "sdk" {
+            if package.plugins.iter().any(|p| {
+                matches!(
+                    p.name.as_str(),
+                    "models" | "transport" | "operations" | "client"
+                )
+            }) {
+                bail!("select either sdk convenience or explicit SDK providers in one package");
+            }
+            if !plugin.uses.is_empty() {
+                bail!("sdk convenience does not accept provider bindings; use explicit providers");
+            }
+            let mut sdk = match plugin.transport.as_deref().unwrap_or("fetch") {
+                "fetch" => ts::sdk().fetch(),
+                "axios" => ts::sdk().axios(),
+                other => bail!("unknown TypeScript transport {other:?}"),
+            }
+            .label(&id)
+            .model_options(typescript_models(plugin)?);
+            match plugin.surface.as_deref().unwrap_or("client") {
+                "raw" => sdk = sdk.raw(),
+                "client" => {}
+                other => bail!("unknown TypeScript surface {other:?}"),
+            }
+            if let Some(name) = &plugin.client_name {
+                sdk = sdk.client_name(name);
+            }
+            if let Some(group) = plugin.group_by_tag {
+                sdk = sdk.group_by_tag(group);
+            }
+            if let Some(throws) = plugin.throw_on_error {
+                sdk = sdk.throw_on_error(throws);
+            }
+            models.insert(id.clone(), sdk.meta().handle());
+            transports.insert(id.clone(), sdk.meta().handle());
+            operations.insert(id, sdk.meta().handle());
+            output = output.with(sdk);
+        } else if matches!(
+            plugin.name.as_str(),
+            "models" | "transport" | "operations" | "client"
+        ) {
+            let mut provider = match plugin.name.as_str() {
+                "models" => composition::models().model_options(typescript_models(plugin)?),
+                "transport" => match plugin.transport.as_deref().unwrap_or("fetch") {
+                    "fetch" => composition::transport(),
+                    "axios" => composition::transport().axios(),
+                    other => bail!("unknown TypeScript transport {other:?}"),
+                },
+                "operations" => composition::operations(),
+                "client" => composition::client(),
+                _ => unreachable!(),
+            }
+            .label(&id);
+            if let Some(module) = &plugin.output {
+                provider = provider.output(module.trim_end_matches(".ts"));
+            }
+            if let Some(name) = &plugin.client_name {
+                provider = provider.client_name(name);
+            }
+            if let Some(throws) = plugin.throw_on_error {
+                provider = provider.throw_on_error(throws);
+            }
+            if plugin.name == "client" && style == SdkClientStyle::Namespaced {
+                provider = provider.namespaced();
+            }
+            match plugin.name.as_str() {
+                "models" => {
+                    models.insert(id, provider.models_handle());
+                }
+                "transport" => {
+                    transports.insert(id, provider.transport_handle());
+                }
+                "operations" => {
+                    operations.insert(id, provider.operations_handle());
+                }
+                _ => {}
+            }
+            providers.push((plugin, provider));
+        }
+    }
+    for (plugin, mut provider) in providers {
+        for (role, id) in &plugin.uses {
+            let allowed = match plugin.name.as_str() {
+                "operations" => matches!(role.as_str(), "models" | "transport"),
+                "client" => matches!(role.as_str(), "models" | "transport" | "operations"),
+                _ => false,
+            };
+            ensure!(
+                allowed,
+                "{} provider does not accept uses.{role}",
+                plugin.name
+            );
+            provider = match role.as_str() {
+                "models" => provider.using_models(
+                    *models
+                        .get(id)
+                        .with_context(|| format!("no model provider {id:?}"))?,
+                ),
+                "transport" => provider.using_transport(
+                    *transports
+                        .get(id)
+                        .with_context(|| format!("no transport provider {id:?}"))?,
+                ),
+                "operations" => provider.using_operations(
+                    *operations
+                        .get(id)
+                        .with_context(|| format!("no operation provider {id:?}"))?,
+                ),
+                other => bail!("unknown provider binding {other:?}"),
+            };
+        }
+        output = output.with(provider);
+    }
+    for plugin in &package.plugins {
+        let id = plugin.id.as_deref().unwrap_or(&plugin.name);
+        let module = plugin.output.as_deref().map(|directory| {
+            let stem = match plugin.name.as_str() {
+                "tanstack-react-query" => "react-query",
+                "tanstack-vue-query" => "vue-query",
+                "cypress" => "api.cy",
+                other => other,
+            };
+            Path::new(directory)
+                .join(stem)
+                .to_string_lossy()
+                .into_owned()
+        });
+        if matches!(
+            plugin.name.as_str(),
+            "tanstack-react-query" | "tanstack-vue-query" | "swr"
+        ) {
+            if plugin.clients_import.is_some() {
+                bail!(
+                    "native query plugins resolve imports through providers; use uses.operations instead of clients_import"
+                );
+            }
+            let mut query = match plugin.name.as_str() {
+                "tanstack-react-query" => composition::react_query(),
+                "tanstack-vue-query" => composition::vue_query(),
+                _ => composition::swr(),
+            }
+            .label(id);
+            if let Some(module) = &module {
+                query = query.output(module);
+            }
+            for (role, id) in &plugin.uses {
+                if role != "operations" {
+                    bail!("query consumer only accepts uses.operations");
+                }
+                query = query.using_operations(
+                    *operations
+                        .get(id)
+                        .with_context(|| format!("no operation provider {id:?}"))?,
+                );
+            }
+            output = output.with(query);
+        } else if matches!(plugin.name.as_str(), "zod" | "faker" | "msw" | "cypress") {
+            let mut consumer = match plugin.name.as_str() {
+                "zod" => composition::zod(),
+                "faker" => composition::faker(),
+                "msw" => composition::msw(),
+                _ => composition::cypress(),
+            }
+            .label(id);
+            if plugin.name == "cypress" && module.is_none() {
+                consumer = consumer.output("api.cy");
+            }
+            if let Some(module) = &module {
+                consumer = consumer.output(module);
+            }
+            for (role, id) in &plugin.uses {
+                ensure!(
+                    role != "operations" || matches!(plugin.name.as_str(), "msw" | "cypress"),
+                    "{} consumer does not accept uses.operations",
+                    plugin.name
+                );
+                consumer = match role.as_str() {
+                    "models" => consumer.using_models(
+                        *models
+                            .get(id)
+                            .with_context(|| format!("no model provider {id:?}"))?,
+                    ),
+                    "operations" => consumer.using_operations(
+                        *operations
+                            .get(id)
+                            .with_context(|| format!("no operation provider {id:?}"))?,
+                    ),
+                    other => bail!("unknown auxiliary binding {other:?}"),
+                };
+            }
+            output = output.with(consumer);
+        }
+    }
+    Ok(output)
+}
+
+fn with_configured_middleware<L: kaji_core::engine::Language>(
+    builder: Package<L>,
+    package: &PackageConfig,
+) -> Package<L> {
+    package
+        .resolved_middleware
+        .iter()
+        .cloned()
+        .fold(builder, |builder, middleware| {
+            builder.middleware(middleware)
+        })
+}
+
 fn config_profiles(
     default_style: SdkClientStyle,
     packages: &[PackageConfig],
@@ -1615,80 +2029,15 @@ fn config_profiles(
     }
     let mut profiles = ProfileSet::new(".").common(Common::default().client_style(default_style));
     for package in packages {
-        let style = parse_style(package.client_style.as_deref())?;
+        let style = match package.client_style.as_deref() {
+            Some(style) => parse_style(Some(style))?,
+            None => default_style,
+        };
         profiles = match package.language.as_str() {
-            "typescript" => {
-                has_only_known_plugins(
-                    package,
-                    &[
-                        "sdk",
-                        "zod",
-                        "tanstack-react-query",
-                        "tanstack-vue-query",
-                        "swr",
-                        "faker",
-                        "msw",
-                        "cypress",
-                    ],
-                )?;
-                let sdk_plugins = package
-                    .plugins
-                    .iter()
-                    .filter(|plugin| plugin.name == "sdk")
-                    .collect::<Vec<_>>();
-                if sdk_plugins.len() > 1 {
-                    bail!("package {:?} declares sdk more than once", package.path);
-                }
-                if sdk_plugins.is_empty() {
-                    if package.plugins.is_empty() {
-                        bail!(
-                            "TypeScript package {:?} must declare at least one plugin",
-                            package.path
-                        );
-                    }
-                    // Auxiliary TypeScript artifacts can intentionally be emitted without
-                    // an SDK package. The empty typed package reserves the output root;
-                    // the artifact pass below supplies the actual files.
-                    let package_builder = ts::package(&package.path).common(package_common(style));
-                    let package_builder = if let Some(name) = &package.name {
-                        package_builder.name(name)
-                    } else {
-                        package_builder
-                    };
-                    profiles.package(package_builder)
-                } else {
-                    let plugin = sdk_plugins[0];
-                    let transport = plugin.transport.as_deref().unwrap_or("fetch");
-                    let mut sdk = match transport {
-                        "fetch" => ts::sdk().fetch(),
-                        "axios" => ts::sdk().axios(),
-                        other => bail!(
-                            "TypeScript sdk transport must be \"fetch\" or \"axios\", got {other:?}"
-                        ),
-                    };
-                    if plugin.surface.as_deref().unwrap_or("client") == "raw" {
-                        sdk = sdk.raw();
-                    } else if plugin.surface.as_deref().unwrap_or("client") != "client" {
-                        bail!("TypeScript sdk surface must be \"client\" or \"raw\"");
-                    }
-                    if let Some(name) = &plugin.client_name {
-                        sdk = sdk.client_name(name);
-                    }
-                    if let Some(group_by_tag) = plugin.group_by_tag {
-                        sdk = sdk.group_by_tag(group_by_tag);
-                    }
-                    if let Some(throw_on_error) = plugin.throw_on_error {
-                        sdk = sdk.throw_on_error(throw_on_error);
-                    }
-                    let package_builder = ts::package(&package.path).common(package_common(style));
-                    let package_builder = if let Some(name) = &package.name {
-                        package_builder.name(name)
-                    } else {
-                        package_builder
-                    };
-                    profiles.package(package_builder.with(sdk))
-                }
-            }
+            "typescript" => profiles.package(with_configured_middleware(
+                typescript_profile(package, style)?,
+                package,
+            )),
             "typescript-cli" => {
                 has_only_known_plugins(package, &["cli"])?;
                 let plugins = package
@@ -1741,13 +2090,17 @@ fn config_profiles(
                     }
                     generator = generator.oauth(settings);
                 }
-                let package_builder = ts_cli::package(&package.path).common(package_common(style));
+                let package_builder =
+                    ts_cli::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
                     package_builder.name(name)
                 } else {
                     package_builder
                 };
-                profiles.package(package_builder.with(generator))
+                profiles.package(with_configured_middleware(
+                    package_builder.with(generator),
+                    package,
+                ))
             }
             "rust-cli" => {
                 has_only_known_plugins(package, &["cli"])?;
@@ -1770,23 +2123,30 @@ fn config_profiles(
                     generator = generator.base_url(base_url);
                 }
                 let package_builder =
-                    rust_cli::package(&package.path).common(package_common(style));
+                    rust_cli::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
                     package_builder.name(name)
                 } else {
                     package_builder
                 };
-                profiles.package(package_builder.with(generator))
+                profiles.package(with_configured_middleware(
+                    package_builder.with(generator),
+                    package,
+                ))
             }
             "rust" => {
                 has_only_known_plugins(package, &["sdk"])?;
-                let package_builder = rust::package(&package.path).common(package_common(style));
+                let package_builder =
+                    rust::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
                     package_builder.name(name)
                 } else {
                     package_builder
                 };
-                profiles.package(package_builder.with(rust::sdk()))
+                profiles.package(with_configured_middleware(
+                    package_builder.with(rust::sdk()),
+                    package,
+                ))
             }
             "go" => {
                 has_only_known_plugins(package, &["sdk"])?;
@@ -1795,38 +2155,60 @@ fn config_profiles(
                 if let Some(jobs) = plugin.jobs {
                     sdk = sdk.jobs(jobs);
                 }
-                let package_builder = go::package(&package.path).common(package_common(style));
+                let package_builder =
+                    go::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
                     package_builder.name(name)
                 } else {
                     package_builder
                 };
-                profiles.package(package_builder.with(sdk))
+                profiles.package(with_configured_middleware(
+                    package_builder.with(sdk),
+                    package,
+                ))
             }
             "python" => {
-                has_only_known_plugins(package, &["sdk"])?;
-                let package_builder = python::package(&package.path).common(package_common(style));
+                has_only_known_plugins(package, &["sdk", "webhooks", "roundtrips"])?;
+                let package_builder =
+                    python::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
                     package_builder.name(name)
                 } else {
                     package_builder
                 };
-                profiles.package(package_builder.with(python::sdk()))
+                let plugin = sdk_plugin(package)?;
+                let mut package_builder = package_builder
+                    .with(python::sdk().async_client(plugin.async_client.unwrap_or(false)));
+                for consumer in &package.plugins {
+                    match consumer.name.as_str() {
+                        "webhooks" => package_builder = package_builder.with(python::webhooks()),
+                        "roundtrips" => {
+                            package_builder = package_builder.with(python::roundtrips())
+                        }
+                        _ => {}
+                    }
+                }
+                profiles.package(with_configured_middleware(package_builder, package))
             }
             "php" => {
                 has_only_known_plugins(package, &["sdk"])?;
-                let package_builder = php::package(&package.path).common(package_common(style));
+                let package_builder =
+                    php::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
                     package_builder.name(name)
                 } else {
                     package_builder
                 };
-                profiles.package(package_builder.with(php::sdk()))
+                profiles.package(with_configured_middleware(
+                    package_builder.with(php::sdk()),
+                    package,
+                ))
             }
             "symfony" => {
                 has_only_known_plugins(package, &["sdk"])?;
                 let plugin = sdk_plugin(package)?;
-                let package_builder = symfony::package(&package.path).common(package_common(style));
+                let package_builder =
+                    symfony::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
                     package_builder.name(name)
                 } else {
@@ -1837,57 +2219,161 @@ fn config_profiles(
                 } else {
                     package_builder
                 };
-                profiles.package(package_builder.with(symfony::sdk()))
+                profiles.package(with_configured_middleware(
+                    package_builder.with(symfony::sdk()),
+                    package,
+                ))
             }
             "java" => {
                 has_only_known_plugins(package, &["sdk"])?;
-                let package_builder = java::package(&package.path).common(package_common(style));
+                let package_builder =
+                    java::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
                     package_builder.name(name)
                 } else {
                     package_builder
                 };
-                profiles.package(package_builder.with(java::sdk()))
+                let plugin = sdk_plugin(package)?;
+                profiles.package(with_configured_middleware(
+                    package_builder
+                        .with(java::sdk().open_enums(plugin.open_enums.unwrap_or(false))),
+                    package,
+                ))
             }
             "csharp" | "dotnet" => {
                 has_only_known_plugins(package, &["sdk"])?;
-                let package_builder = csharp::package(&package.path).common(package_common(style));
+                let package_builder =
+                    csharp::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
                     package_builder.name(name)
                 } else {
                     package_builder
                 };
-                profiles.package(package_builder.with(csharp::sdk()))
+                profiles.package(with_configured_middleware(
+                    package_builder.with(csharp::sdk()),
+                    package,
+                ))
             }
             "elixir" => {
                 has_only_known_plugins(package, &["sdk"])?;
-                let package_builder = elixir::package(&package.path).common(package_common(style));
+                let package_builder =
+                    elixir::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
                     package_builder.name(name)
                 } else {
                     package_builder
                 };
-                profiles.package(package_builder.with(elixir::sdk()))
+                profiles.package(with_configured_middleware(
+                    package_builder.with(elixir::sdk()),
+                    package,
+                ))
             }
             "ruby" => {
                 has_only_known_plugins(package, &["sdk"])?;
-                let package_builder = ruby::package(&package.path).common(package_common(style));
+                let package_builder =
+                    ruby::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
                     package_builder.name(name)
                 } else {
                     package_builder
                 };
-                profiles.package(package_builder.with(ruby::sdk()))
+                profiles.package(with_configured_middleware(
+                    package_builder.with(ruby::sdk()),
+                    package,
+                ))
             }
             "swift" => {
                 has_only_known_plugins(package, &["sdk"])?;
-                let package_builder = swift::package(&package.path).common(package_common(style));
+                let package_builder =
+                    swift::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
                     package_builder.name(name)
                 } else {
                     package_builder
                 };
-                profiles.package(package_builder.with(swift::sdk()))
+                profiles.package(with_configured_middleware(
+                    package_builder.with(swift::sdk()),
+                    package,
+                ))
+            }
+            "postman" => {
+                has_only_known_plugins(package, &["collection", "environment"])?;
+                let mut builder =
+                    postman::package(&package.path).common(configured_common(style, package));
+                if let Some(name) = &package.name {
+                    builder = builder.name(name);
+                }
+                ensure!(
+                    package
+                        .plugins
+                        .iter()
+                        .filter(|plugin| plugin.name == "collection")
+                        .count()
+                        == 1,
+                    "postman package requires exactly one collection plugin"
+                );
+                ensure!(
+                    package
+                        .plugins
+                        .iter()
+                        .filter(|plugin| plugin.name == "environment")
+                        .count()
+                        <= 1,
+                    "postman package accepts one environment plugin"
+                );
+                for plugin in &package.plugins {
+                    ensure!(
+                        plugin.id.is_none() && plugin.uses.is_empty(),
+                        "Postman recipe handles are not exposed yet; use the native plugin API"
+                    );
+                    if plugin.name == "collection" {
+                        let mut collection = postman::collection()
+                            .strict(plugin.strict.unwrap_or(true))
+                            .group_by_tag(plugin.group_by_tag.unwrap_or(true));
+                        if let Some(output) = &plugin.output {
+                            collection = collection.output(output);
+                        }
+                        if let Some(base_url) = &plugin.base_url {
+                            builder = builder.base_url(base_url);
+                        }
+                        builder = builder.with(collection);
+                    } else {
+                        let mut environment = postman::environment();
+                        if let Some(output) = &plugin.output {
+                            environment = environment.output(output);
+                        }
+                        builder = builder.with(environment);
+                    }
+                }
+                profiles.package(with_configured_middleware(builder, package))
+            }
+            "terraform" => {
+                has_only_known_plugins(package, &["provider"])?;
+                let plugins = package
+                    .plugins
+                    .iter()
+                    .filter(|plugin| plugin.name == "provider")
+                    .collect::<Vec<_>>();
+                let [plugin] = plugins.as_slice() else {
+                    bail!("terraform package requires exactly one provider plugin")
+                };
+                ensure!(
+                    plugin.id.is_none() && plugin.uses.is_empty(),
+                    "Terraform recipe handles are not exposed yet; use the native plugin API"
+                );
+                let mut builder =
+                    terraform::package(&package.path).common(configured_common(style, package));
+                if let Some(module) = &plugin.module {
+                    builder = builder.module(module);
+                }
+                if let Some(name) = plugin.provider_name.as_ref().or(package.name.as_ref()) {
+                    builder = builder.provider_name(name);
+                }
+                let mut provider = terraform::provider().infer(plugin.infer.unwrap_or(true));
+                for resource in &plugin.resources {
+                    provider = provider.resource(resource.clone());
+                }
+                profiles.package(with_configured_middleware(builder.with(provider), package))
             }
             "mock" => {
                 has_only_known_plugins(package, &["server"])?;
@@ -1909,7 +2395,10 @@ fn config_profiles(
                 if let Some(port) = server.port {
                     server_builder = server_builder.port(port);
                 }
-                profiles.package(mock::package(&package.path).with(server_builder))
+                profiles.package(with_configured_middleware(
+                    mock::package(&package.path).with(server_builder),
+                    package,
+                ))
             }
             "artifacts" => {
                 has_only_known_plugins(package, &["redoc", "mcp"])?;
@@ -1921,10 +2410,11 @@ fn config_profiles(
                 }
                 // This package is a typed output-root reservation. ReDoc and MCP files
                 // are added by the artifact pass after SDK packages are composed.
-                profiles.package(ts::package(&package.path).common(package_common(style)))
+                profiles
+                    .package(ts::package(&package.path).common(configured_common(style, package)))
             }
             other => bail!(
-                "unknown config language {other:?}; use typescript, typescript-cli, rust, rust-cli, go, python, php, symfony, java, csharp, dotnet (legacy alias), elixir, ruby, swift, mock, or artifacts"
+                "unknown config language {other:?}; use typescript, typescript-cli, rust, rust-cli, go, python, php, symfony, java, csharp, dotnet (legacy alias), elixir, ruby, swift, postman, terraform, mock, or artifacts"
             ),
         };
     }
@@ -1947,12 +2437,17 @@ fn resolve_config_input(base: &Path, input: OpenApiInput) -> OpenApiInput {
     }
 }
 
-fn generate_from_config(path: &Path, color: ColorChoice) -> Result<()> {
+fn generate_from_config(
+    path: &Path,
+    color: ColorChoice,
+    check: bool,
+    json_changes: bool,
+) -> Result<()> {
     let path = std::fs::canonicalize(path)
         .with_context(|| format!("cannot read Kaji config {}", path.display()))?;
     let source = std::fs::read_to_string(&path)
         .with_context(|| format!("read Kaji config {}", path.display()))?;
-    let config: ProjectConfig = serde_json::from_str(&source)
+    let mut config: ProjectConfig = serde_json::from_str(&source)
         .with_context(|| format!("parse Kaji JSON config {}", path.display()))?;
     let base = path.parent().expect("config path has parent");
     if config.output.path.as_os_str().is_empty() {
@@ -1965,6 +2460,40 @@ fn generate_from_config(path: &Path, color: ColorChoice) -> Result<()> {
     }
     validate_path_selection(&config.openapi.paths)?;
     let style = parse_style(config.defaults.client_style.as_deref())?;
+    let output = config_path(base, config.output.path.clone());
+    for package in &mut config.packages {
+        GeneratedFile::new(&package.path, "")?;
+        package.resolved_customizations = package
+            .customizations
+            .iter()
+            .map(|code| code.load(base))
+            .collect::<Result<Vec<_>>>()?;
+        package.resolved_middleware = package
+            .middleware
+            .iter()
+            .map(|middleware| middleware.load(base))
+            .collect::<Result<Vec<_>>>()?;
+        if package.release.is_some() && package.version.is_none() {
+            let metadata_path = output
+                .join(&package.path)
+                .join(kaji_core::release::PACKAGE_METADATA_PATH);
+            if metadata_path.exists() {
+                let canonical_root = std::fs::canonicalize(&output)?;
+                let canonical_metadata = std::fs::canonicalize(&metadata_path)?;
+                if !canonical_metadata.starts_with(&canonical_root) {
+                    bail!("release metadata escapes output root");
+                }
+                let previous: kaji_core::release::PackageMetadata =
+                    serde_json::from_slice(&std::fs::read(&metadata_path)?)?;
+                previous.validate()?;
+                package.version = Some(previous.version);
+            } else if let Some(release) = &package.release {
+                if !release.version.is_empty() {
+                    package.version = Some(release.version.clone());
+                }
+            }
+        }
+    }
     let options = Generate {
         source: config
             .openapi
@@ -1993,6 +2522,8 @@ fn generate_from_config(path: &Path, color: ColorChoice) -> Result<()> {
         source_sha256: None,
         jobs: 0,
         color,
+        check,
+        json_changes,
     };
     generate(options)
 }
@@ -2086,6 +2617,12 @@ fn append_config_artifacts(
     packages: &[PackageConfig],
 ) -> Result<()> {
     for package in packages {
+        if package.language == "typescript" && has_typescript_provider(package) {
+            continue;
+        }
+        if package.language != "typescript" && package.language != "artifacts" {
+            continue;
+        }
         for plugin in &package.plugins {
             if plugin.name == "sdk" || plugin.name == "server" || plugin.name == "cli" {
                 continue;
@@ -2136,6 +2673,14 @@ fn add_typescript_artifact_dependencies(
 ) -> Result<()> {
     for package in packages {
         if package.language != "typescript" {
+            continue;
+        }
+        if package.plugins.iter().any(|plugin| {
+            matches!(
+                plugin.name.as_str(),
+                "sdk" | "models" | "transport" | "operations" | "client"
+            )
+        }) {
             continue;
         }
         let dependencies = package
@@ -2210,7 +2755,7 @@ fn add_typescript_artifact_dependencies(
 
 fn generate(mut options: Generate) -> Result<()> {
     if let Some(config) = &options.config {
-        return generate_from_config(config, options.color);
+        return generate_from_config(config, options.color, options.check, options.json_changes);
     }
     let reporter = Reporter::new(options.color);
     reporter.started();
@@ -2280,11 +2825,63 @@ fn write_sdk(artifacts: &Path, options: &Generate, reporter: &Reporter) -> Resul
     if let Some(packages) = &options.config_packages {
         append_config_artifacts(&api, &mut tree, packages)?;
         add_typescript_artifact_dependencies(&mut tree, packages)?;
+        for package in packages {
+            if let Some(configured) = &package.release {
+                let mut metadata = configured.clone();
+                metadata.language = package.language.clone();
+                if metadata.name.is_empty() {
+                    metadata.name = package.name.clone().unwrap_or_else(|| package.path.clone());
+                }
+                metadata.version = package
+                    .version
+                    .clone()
+                    .unwrap_or_else(|| options.version.clone());
+                let path = Path::new(&package.path).join(kaji_core::release::PACKAGE_METADATA_PATH);
+                tree.insert(GeneratedFile::new(&path, metadata.to_json()?)?)?;
+                tree.set_owner(&path, format!("package-metadata:{}", package.path))?;
+            }
+        }
+        let customizations = packages
+            .iter()
+            .flat_map(|package| {
+                package
+                    .resolved_customizations
+                    .iter()
+                    .map(|code| code.prefixed(Path::new(&package.path)))
+            })
+            .collect::<Vec<_>>();
+        kaji_core::customization::apply_code_customizations(&mut tree, &customizations)?;
     }
     reporter.generated(options, started.elapsed());
     let started = Instant::now();
+    tree.insert(GeneratedFile::new(
+        GENERATION_LOCK_PATH,
+        generation_lock(artifacts, options, &api)?,
+    )?)?;
+    let changes = tree.check(&options.output)?;
+    if options.json_changes {
+        println!("{}", serde_json::to_string(&changes)?);
+    } else if options.check {
+        for path in &changes.added {
+            println!("added {}", path.display());
+        }
+        for path in &changes.modified {
+            println!("modified {}", path.display());
+        }
+        for path in &changes.removed {
+            println!("removed {}", path.display());
+        }
+        if changes.is_empty() {
+            println!("Generated output is up to date.");
+        }
+    }
+    if options.check {
+        if !changes.is_empty() {
+            bail!("generated output has drift");
+        }
+        return Ok(());
+    }
     tree.write_to(&options.output)?;
-    write_generation_lock(&options.output, artifacts, options, &api)?;
     reporter.phase("Writing files", started.elapsed());
     reporter.completed(
         configured_plugin_count(options),
@@ -2384,12 +2981,7 @@ struct GenerationSettingsLock {
     compiler: Option<String>,
 }
 
-fn write_generation_lock(
-    output: &Path,
-    artifacts: &Path,
-    options: &Generate,
-    api: &Api,
-) -> Result<()> {
+fn generation_lock(artifacts: &Path, options: &Generate, api: &Api) -> Result<String> {
     let (kind, locator, source_sha256) = match (&options.artifacts, &options.source) {
         (Some(path), _) => ("artifacts", path.to_string_lossy().into_owned(), None),
         (None, Some(OpenApiInput::Path(path))) if remote_spec_url(path).is_none() => (
@@ -2452,17 +3044,7 @@ fn write_generation_lock(
         },
         replay: direct_generation_replay(options),
     };
-    let destination = output.join(GENERATION_LOCK_PATH);
-    if let Some(parent) = destination.parent() {
-        std::fs::create_dir_all(parent).with_context(|| {
-            format!("create generation metadata directory {}", parent.display())
-        })?;
-    }
-    std::fs::write(
-        &destination,
-        format!("{}\n", serde_json::to_string_pretty(&lock)?),
-    )
-    .with_context(|| format!("write generation metadata {}", destination.display()))
+    Ok(format!("{}\n", serde_json::to_string_pretty(&lock)?))
 }
 
 fn direct_generation_replay(options: &Generate) -> Option<GenerationReplayLock> {
@@ -2664,6 +3246,8 @@ fn replay_generate_options(replay: GenerationReplayLock, output: PathBuf) -> Res
         source_sha256: None,
         jobs: replay.go_jobs.unwrap_or_default(),
         color: ColorChoice::Auto,
+        check: false,
+        json_changes: false,
     })
 }
 
@@ -3678,6 +4262,7 @@ fn main() -> ExitCode {
         Action::MockServe(options) => serve_mock(options),
         Action::Check(options) => check(options),
         Action::Generate(options) => generate(*options),
+        Action::Sdk(options) => sdk_automation::run(options),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
