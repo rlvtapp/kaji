@@ -111,5 +111,8 @@ validation and generator mapping tests alongside it.
 
 Execution through Postman or Newman is a separate, deliberate test step. Use an
 explicit sandbox/mock URL and test fixtures, especially for create/delete operations.
-Portable export and validation are implemented; remote workspace synchronization
-and GitHub Release asset publishing remain separate follow-up work.
+Portable export and validation are implemented. The editable
+[Postman synchronization helper](../packages/postman-sync/README.md) checks or
+updates an explicitly selected existing collection with a reviewed remote hash.
+It does not create workspaces, synchronize environments or publish release assets.
+Live Postman API execution remains unverified.

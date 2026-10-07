@@ -60,3 +60,9 @@ examples use explicit placeholder text and are not validation fixtures.
 Long operation filenames are bounded and receive a deterministic hash suffix;
 paths that normalize to the same filename are disambiguated rather than
 overwriting another operation. See [large-spec verification](large-specs.md).
+
+OpenAPI 3.2 and future versions fail with a capability diagnostic before any
+compiler artifacts are modified. Kaji does not yet interpret 3.2 query/additional
+operations, querystring parameters or streaming item schemas. Changing only the
+version string is not a safe conversion. See the
+[OpenAPI 3.2 specification](https://spec.openapis.org/oas/v3.2.0.html).

@@ -8,6 +8,8 @@ and Swift SDKs, plus API CLIs, Postman collections, Terraform providers,
 frontend helpers, mocks, documentation, and MCP tools. Its typed Rust plugin
 system lets you compose or extend generation for your own needs.
 
+Read the [full feature catalog](docs/features.md) for capabilities, language differences, configuration entry points and verification limits.
+
 ## What do you want to do?
 
 | Your goal | Start here | Kaji helps you |

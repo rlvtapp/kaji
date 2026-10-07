@@ -31,7 +31,7 @@ jobs:
       - name: Test CI integration templates
         run: node --test packages/github-action/test/*.test.cjs packages/gitlab-ci/test/*.test.cjs
       - name: Test editable SDK delivery and App broker sources
-        run: node --test packages/sdk-check/test/*.mjs packages/sdk-publish/test/*.mjs packages/github-app-broker/*.test.mjs packages/spec-sync/test/*.test.mjs packages/sdk-delivery-test/test/*.test.mjs packages/runtime-contract/test.mjs
+        run: node --test packages/sdk-check/test/*.mjs packages/sdk-publish/test/*.mjs packages/github-app-broker/*.test.mjs packages/spec-sync/test/*.test.mjs packages/sdk-delivery-test/test/*.test.mjs packages/runtime-contract/test.mjs packages/postman-sync/test/*.mjs
       - name: Test portable collection checker
         run: |
           python -m pip install --disable-pip-version-check 'jsonschema==4.23.0'
@@ -53,6 +53,8 @@ jobs:
           cargo test -p kaji-plugin-typescript bundled_middleware_is_enabled_without_customer_registration -- --ignored
           cargo test -p kaji-plugin-typescript generated_lossless_fetch_axios_and_sse_round_trip -- --ignored
           cargo test -p kaji-plugin-typescript generated_page_pagination_executes_defaults_and_selectors -- --ignored
+          cargo test -p kaji-plugin-typescript native_generated_fetch_and_axios_operation_tests_execute -- --ignored
+          cargo test -p kaji-plugin-typescript native_standard_webhook_vectors_execute -- --ignored
       - name: Verify generated Postman exports against the official schema
         run: cargo test -p kaji-plugin-postman validates_actual_official_draft04_schema -- --ignored
       - name: Verify exported collections with Newman against a local mock
@@ -233,10 +235,15 @@ jobs:
         if: matrix.language == 'Swift' || matrix.language == 'Elixir' || matrix.language == 'PHP' || matrix.language == 'Java' || matrix.language == 'C#'
       - name: Verify generated Java retry parsers
         if: matrix.language == 'Java'
-        run: cargo test -p kaji-plugin-java generated_retry_parsers_execute_with_jdk -- --ignored
+        run: |
+          cargo test -p kaji-plugin-java generated_retry_parsers_execute_with_jdk -- --ignored
+          cargo test -p kaji-plugin-java native_webhook_verification_executes_canonical_vectors -- --ignored
       - name: Verify generated C# retry parser
         if: matrix.language == 'C#'
-        run: cargo test -p kaji-plugin-csharp generated_retry_parser_executes_with_dotnet -- --ignored
+        run: |
+          cargo test -p kaji-plugin-csharp generated_retry_parser_executes_with_dotnet -- --ignored
+          cargo test -p kaji-plugin-csharp generated_sse_framing_executes_with_dotnet -- --ignored
+          cargo test -p kaji-plugin-csharp native_webhook_verification_executes_canonical_vectors -- --ignored
       - name: Verify native PHP pagination generation and iteration
         if: matrix.language == 'PHP'
         run: |
@@ -244,14 +251,28 @@ jobs:
           cargo test -p kaji-plugin-php native_auto_idempotency_preserves_key_and_scopes_retry_header -- --ignored
           cargo test -p kaji-plugin-php native_retry_after_ms_has_precedence_and_configured_cap -- --ignored
           cargo test -p kaji-plugin-php native_required_null_and_scalar_query_serialization -- --ignored
+          cargo test -p kaji-plugin-php webhooks::tests::generated_webhook_verifier_executes_native_security_cases -- --ignored
       - name: Verify native Elixir pagination generation and iteration
         if: matrix.language == 'Elixir'
         run: |
           cargo test -p kaji-plugin-elixir generated_page_stream_executes_lazily -- --ignored
           cargo test -p kaji-plugin-elixir elixir_customer_middleware_executes -- --ignored
           cargo test -p kaji-plugin-elixir native_required_null_and_optional_omission -- --ignored
+          cargo test -p kaji-plugin-elixir webhooks::tests::generated_webhook_verifier_executes_native_security_cases -- --ignored
       - name: Verify native Swift middleware models pagination and cancellation
         if: matrix.language == 'Swift'
         run: cargo test -p kaji-plugin-swift -- --ignored
+      - name: Verify complex OpenAPI contract through native Swift SDK
+        if: matrix.language == 'Swift'
+        env:
+          KAJI_OPENAPI_BIN: ${{ github.workspace }}/target/debug/kaji-openapi
+        run: |
+          (cd openapi && go build -o ../target/debug/kaji-openapi .)
+          cargo test -p kaji --test complex_contract -- --ignored
+      - name: Verify generated Rust operation tests
+        if: matrix.language == 'Rust'
+        run: |
+          cargo test -p kaji-plugin-rust native_generated_rust_operation_tests_execute -- --ignored
+          cargo test -p kaji-plugin-rust native_standard_webhook_vectors_execute -- --ignored
       - name: Execute generated public operations against shared runtime scenarios
         run: node packages/runtime-contract/runner.mjs "${{ matrix.path }}" "$GITHUB_WORKSPACE/runtime-contract-fixture/sdk/${{ matrix.path }}"

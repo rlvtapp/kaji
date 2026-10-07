@@ -166,3 +166,30 @@ check builds, packs, installs, imports root/subpath exports and checks customer
 NodeNext types. Regeneration tests protect all packages from partial writes on
 late conflicts; delivery tests inject failure at every phase and verify cleanup.
 These checks use local fixtures and mocked delivery, not registry publication.
+
+## Expanded security, models and delivery sources
+
+Optional Standard Webhooks verifiers now exist for all ten SDK targets. Native
+canonical-vector probes passed in TypeScript, Rust, Go, Python, Ruby and Swift on
+Apple; Java/C#/PHP/Elixir probes await their CI toolchains, and Swift's Linux
+Crypto backend remains unverified. Go's OAuth probe runs with the race detector
+and checks coordinated refresh, cancellation, expiry and bounded replay safety.
+See [OAuth/webhooks](guides/oauth-webhooks.md).
+
+Generated operation tests now include TypeScript Fetch/Axios and Rust beside
+Python/Go. The new native suites execute the emitted tests through production
+package compilation and fake native drivers. Unsupported operations are explicitly
+listed, not counted as covered. The complex OpenAPI corpus passes through the
+actual Go compiler and executes Swift models; Java/C# SSE probes require native CI.
+
+The checksum-pinned Graph regression compiles the full generated Go package,
+executes typed request and extension-data roundtrips, compares SDK outputs with
+one/four workers and generates a multi-language recipe. Run metadata intentionally
+records different output paths/worker settings. TypeScript generation in that
+large-contract check is not native TypeScript compilation. See [large specs](large-specs.md).
+
+Postman sync tests mock API requests, reviewed remote hashes and read-back checks.
+Terraform release scaffolding is editable and inactive until deliberately copied
+into workflows. Native Framework lifecycle checks passed after the namespace and
+version changes; GoReleaser signing, external release uploads and registry ingestion
+remain unexecuted. The [feature catalog](features.md) records these boundaries.

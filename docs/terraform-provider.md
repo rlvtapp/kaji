@@ -157,3 +157,35 @@ raw-JSON prototype for source compatibility. It is not the typed provider path
 and does not gain the new state guarantees. Migrate its resource mappings to
 `ResourceBinding` and `provider()` before using the new recipe target. Existing
 Terraform state migrations are not automatically generated or promised.
+
+## Prepare a registry release
+
+The opt-in `release-scaffold` plugin emits create-once GoReleaser configuration,
+protocol-6 registry metadata, `RELEASING.md` and a workflow template. Specify the
+actual registry namespace in the provider configuration:
+
+```json
+{
+  "language": "terraform",
+  "path": "terraform",
+  "plugins": [
+    {"name":"provider", "provider_name":"widgets", "registry_namespace":"acme"},
+    {"name":"release-scaffold"}
+  ]
+}
+```
+
+The namespace is used in the generated provider address and package README. In
+the library use `.provider_name("widgets").registry_namespace("acme")` and
+`.with(terraform::release_scaffold())`. The provider exposes `main.version` for
+release injection. Archives, manifest checksums and detached signing follow the
+[Terraform Registry release requirements](https://developer.hashicorp.com/terraform/registry/providers/publishing).
+
+Use a dedicated `terraform-provider-widgets` repository with the package at its
+root. Review/copy the workflow template into `.github/workflows` deliberately;
+it is not activated by generation. Register the namespace/provider and public
+signing key, configure the protected release environment, then validate with
+`goreleaser check` and a local unsigned snapshot before a real release. Generated
+sources/native Framework checks were verified; GoReleaser signing, GitHub release
+upload and registry ingestion remain unexecuted. Existing Terraform state is not
+migrated automatically by changing the provider address.

@@ -28,10 +28,11 @@ npx @relevate/kaji generate graph.yaml --output ./generated --language go \
   --name "Microsoft Graph" --jobs 4
 ```
 
-Use a fresh output directory when changing output paths or removing operations:
-the existing writer intentionally preserves unrelated/custom files and does not
-prune obsolete generated files. Leftover declarations can conflict with the new
-output. This is not yet a manifest-based clean rebuild.
+Regenerate through the ownership-aware writer when changing paths or removing
+operations. It preflights conflicts, removes unchanged stale owned files and
+preserves unrelated/customer files. An edited owned file blocks regeneration
+until resolved; `--check` detects drift without writing. See
+[safe regeneration](safe-regeneration.md).
 
 ## Parallelism and memory
 
@@ -61,7 +62,7 @@ Run the full opt-in check with Rust, Go, curl, and Bash installed:
 bash scripts/test-large-graph.sh
 ```
 
-It downloads Microsoft's Graph v1.0 document, compiles it using Kaji's bundled Go
+It downloads a pinned Microsoft Graph v1.0 document, compiles it using Kaji's bundled Go
 compiler source, generates the complete Go SDK with one and four workers,
 compares every output file, and runs a generated-SDK test. The test uses an
 in-memory HTTP transport (no Graph account, credentials, or live API calls) and
@@ -79,7 +80,12 @@ The September 27, 2026 input used during development had SHA-256
   previously compiled artifacts; this excludes OpenAPI parsing and Go compilation
   and is not a cross-machine performance guarantee.
 
-The test intentionally downloads the current document, so counts may change.
+The test now pins upstream revision `fd42f0e5bcd96b0c5edd5e62e2956a1dc1c5d17a`
+and SHA-256 `533f6d86985584327109ba2c52c0e51454ce1ba2153c11f4d841e898b88c5b1b`.
+A changed checksum fails before compilation. `KAJI_GRAPH_SPEC` can supply those
+exact bytes from a local cache; `KAJI_BINARY` can use an already built generator.
+The historical counts above describe the earlier recorded input. A new pin needs
+intentional review and a new native run.
 The compiler previously hit a 1 GB goroutine stack overflow while synthesizing
 recursive examples; path-local guards now stop that traversal. Tests also cover
 recursive field summaries, branching budgets, long paths, and filename collisions.
@@ -89,3 +95,8 @@ Ambiguous/non-object intersections and union types can still use
 `json.RawMessage`; this does not claim full discriminator-aware union support.
 Wire-distinct enum values and path/query parameters retain distinct identifiers
 even if their normalized Go names collide.
+
+The read-only `Pinned large contract regression` workflow runs this same pinned
+check on explicit dispatch. It does not call Microsoft Graph or publish packages.
+This verifies full Go compilation/behavior and multi-language generation; it
+does not yet compile every target against multiple public specifications.

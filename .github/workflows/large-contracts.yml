@@ -1,0 +1,17 @@
+name: Pinned large contract regression
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  graph:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: openapi/go.mod
+      - name: Compile pinned Graph contract and execute generated Go SDK
+        run: bash scripts/test-large-graph.sh

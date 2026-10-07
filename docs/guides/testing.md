@@ -85,3 +85,24 @@ lifetime, page iteration, decoding failures and exact path/query/body serializat
 Use its [installed package check](../../packages/runtime-contract/README.md#installed-typescript-package)
 to verify TypeScript ESM exports and customer types. Source snapshots and compilation
 alone cannot establish that an installed package imports successfully.
+
+## Opt-in generated operation checks
+
+Python, Go, Rust and TypeScript recipes accept `{"name":"operation-tests"}`
+beside `sdk`. TypeScript consumers can bind `uses.models`, `uses.operations` and
+`uses.transport` to named compatible providers. Native custom providers can opt
+in through the typed handles documented by the plugin.
+
+The emitted `OPERATION_TESTS.md` (TypeScript/Rust) describes execution. TypeScript
+builds with its package tsconfig and runs `node dist/tests/operation-tests.js`;
+Rust runs `cargo test`; Go runs `go test ./...`; Python uses unittest discovery.
+They call actual public operations through in-memory native HTTP drivers, assert
+serialization and decoded success, and never contact a live API. Bounded structural
+samples omit specification examples/secrets. Explicit diagnostics list unsupported
+operations and sample bounds; skipped operations are not test coverage.
+
+The complex checked-in OpenAPI corpus additionally passes through the actual Go
+compiler and executes Swift models. It covers recursive references, Unicode,
+nullable values, unknown fields, unions and rejected identifier collisions. This
+is a synthetic regression corpus, not proof that large third-party specifications
+compile in every target.

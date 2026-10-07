@@ -6,6 +6,18 @@
 
 ### Added
 
+- Full feature catalog with SDK target differences, configuration entry points and
+  verification limits, linked from the main README and documentation index.
+- Opt-in Standard Webhooks HMAC v1 verifiers across ten SDK targets, with shared
+  canonical vectors, timestamp/rotation checks and native probes. Go gains cached
+  OAuth client credentials with coordinated refresh and bounded safe 401 replay.
+- Optional generated TypeScript Fetch/Axios and Rust operation tests with bounded
+  structural fixtures and explicit unsupported diagnostics; Go recipe registration.
+- Swift cursor pagination, checked-in complex-model OpenAPI regressions and a
+  checksum-pinned Microsoft Graph native test with manual read-only CI.
+- Reviewed-hash Postman collection synchronization and optional editable Terraform
+  registry-release scaffolding, explicit namespace and injected provider version.
+
 - Expanded 17-scenario native wire corpus, installed TypeScript ESM package checks,
   OAuth/cancellation and nested-model probes, atomic regeneration conflict tests,
   and delivery phase failure/cleanup tests. Native CI runs the additional probes.
@@ -57,6 +69,11 @@
   GitHub automation, per-language repositories, Postman, and Terraform.
 
 ### Changed
+
+- Unsupported OpenAPI 3.2/future versions fail before modifying compiler artifacts.
+  Swift recursive models compile as immutable classes; Swift/Java/C# report model
+  identifier collisions and reject unsupported multipart requests. Java/C# SSE
+  parsers join multiline data and ignore event metadata.
 
 - Generated TypeScript ESM imports resolve in installed Node packages. SDK runtime
   fixes preserve nullable/omitted fields, repeated query arrays, encoded paths,

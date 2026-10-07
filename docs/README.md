@@ -2,6 +2,8 @@
 
 Kaji turns an OpenAPI contract into SDK packages and related artifacts. The main workflow is for **SDK authors who own the generated code and its releases**: keep a recipe, bundle your policies, review regeneration, and deliver tested versions to customers.
 
+Use the [full feature catalog](features.md) to compare SDK targets, runtime policies, plugins, artifacts and delivery options. It distinguishes implemented features from verified behavior and prepared workflows.
+
 If you already received an SDK, start with [using generated SDKs](generated-sdks.md) and its package-local README. You do not need Kaji to use that package.
 
 ## SDK authors: from a contract to a released package
@@ -36,6 +38,8 @@ Native Rust plugins are composed through the library API. Installing an arbitrar
 
 | Topic | Guide |
 | --- | --- |
+| Full capabilities and target differences | [Feature catalog](features.md) |
+| OAuth providers and signed webhooks | [OAuth/webhooks](guides/oauth-webhooks.md) |
 | All CLI commands or typed settings | [CLI reference](cli.md), [configuration reference](configuration.md) |
 | Large contracts and compiler artifacts | [Large specifications](large-specs.md), [OpenAPI compiler](openapi-compiler.md) |
 | Extra generated outputs | [Auxiliary generators](auxiliary-generators.md), [ReDoc/MCP artifacts](guides/artifacts.md) |

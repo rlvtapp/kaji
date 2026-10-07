@@ -56,7 +56,7 @@ limits below for legacy paginator selector differences.
 | C# | `IAsyncEnumerable`, `<operation>PagesAsync` | Cursor, page, offset/limit |
 | PHP | `Generator`, `<operation>Pages` | Cursor, page, offset/limit, next URL |
 | Ruby | `Enumerator`, `<operation>_pages` | Page |
-| Swift | Native async sequence, `<operation>Pages` | Page |
+| Swift | Native async sequence, `<operation>Pages` | Cursor, page |
 | Elixir | Lazy `Stream`, `<operation>_pages` | Cursor, page |
 
 These are capability forms, not a guarantee that every schema/control binding
@@ -87,3 +87,8 @@ generation assertions alone do not prove native runtime behavior.
 
 See [testing generated SDKs](testing.md) and the
 [runtime contract coverage](../../packages/runtime-contract/README.md).
+
+Swift cursor helpers accept unconstrained string parameter controls, preserve
+caller arguments and middleware, and stop on empty/missing or repeated cursors.
+Body and integer cursor controls remain unsupported. Page and cursor iterators
+are lazy and retain Swift task cancellation.

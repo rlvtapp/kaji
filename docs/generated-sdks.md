@@ -32,11 +32,11 @@ The Notes contract does not require credentials. The configuration sections belo
 
 ## TypeScript: install, call and inspect HTTP results
 
-These examples assume a TypeScript application with a bundler that resolves
-extensionless imports. The generated package uses ESM with bundler module
-resolution; direct Node ESM use may need an additional build adapter. The
-[bundled middleware example](../examples/bundled-middleware/README.md) shows an
-isolated native test build without changing the published package format.
+Generated TypeScript packages use ESM. Kaji resolves generated relative imports
+to emitted `.js` files, including directory entry points. The installed-package
+check verifies native Node root/subpath imports and NodeNext consumer types; see
+[verification](verification.md). Authored source overlays should also use `.js`
+relative specifiers. Build the package before importing it.
 
 Build the package before installing it in your application:
 
