@@ -24,12 +24,14 @@ type SourceClosureDoc struct {
 	Files  []SourceFileDoc `json:"files"`
 }
 type sourceClosure struct {
-	Documents map[string][]byte
-	Manifest  SourceClosureDoc
-	Hash      uint64
-	Files     []string
-	Base      string
-	Root      string
+	Documents  map[string][]byte
+	Bases      map[string]string
+	Identities map[string]string
+	Manifest   SourceClosureDoc
+	Hash       uint64
+	Files      []string
+	Base       string
+	Root       string
 }
 
 // Hash the entire bounded reference closure before considering a cache hit.
@@ -59,6 +61,8 @@ func collectSourceClosureWithOrigin(specPath string, root []byte, origin string,
 	}
 
 	documents := map[string][]byte{}
+	bases := map[string]string{}
+	identities := map[string]string{}
 	totalBytes := 0
 	var visit func(string, []byte) error
 	visit = func(path string, data []byte) error {
@@ -83,10 +87,31 @@ func collectSourceClosureWithOrigin(specPath string, root []byte, origin string,
 		if err := yaml.Unmarshal(data, &node); err != nil {
 			return fmt.Errorf("parse local reference document %s: %w", path, err)
 		}
+		resolutionBase := path
+		if len(node.Content) > 0 {
+			if self := mappingValue(node.Content[0], "$self"); self != nil {
+				if self.Kind != yaml.ScalarNode || self.Tag != "!!str" {
+					return fmt.Errorf("$self must be a URI string")
+				}
+				identity, fragment, err := resolveSourceReference(path, self.Value)
+				if err != nil || fragment != "" {
+					return fmt.Errorf("invalid OpenAPI $self URI %q", self.Value)
+				}
+				if previous, exists := identities[identity]; exists && previous != path {
+					return fmt.Errorf("duplicate OpenAPI $self identity %s", identity)
+				}
+				resolutionBase = identity
+				identities[identity] = path
+			}
+		}
+		bases[path] = resolutionBase
 		follow := func(value string) error {
-			target, _, err := resolveSourceReference(path, value)
+			target, _, err := resolveSourceReference(resolutionBase, value)
 			if err != nil {
 				return fmt.Errorf("invalid reference in %s: %w", path, err)
+			}
+			if identity, exists := identities[target]; exists {
+				target = identity
 			}
 			if _, exists := documents[target]; exists {
 				return nil
@@ -169,7 +194,7 @@ func collectSourceClosureWithOrigin(specPath string, root []byte, origin string,
 		return nil, fmt.Errorf("local reference closure exceeds 256 MiB")
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i] < files[j] })
-	source := &sourceClosure{Base: base, Root: rootID, Files: files, Documents: documents}
+	source := &sourceClosure{Base: base, Root: rootID, Files: files, Documents: documents, Bases: bases, Identities: identities}
 	hash := sha256.New()
 	incremental := xxhash.New()
 	for _, path := range files {

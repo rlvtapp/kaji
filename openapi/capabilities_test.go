@@ -45,11 +45,10 @@ func TestOpenAPI32QueryAndNullableWebhook(t *testing.T) {
 		})
 	}
 }
-func TestOpenAPI32UnsupportedWireFeaturesPreserveArtifacts(t *testing.T) {
+func TestOpenAPI32InvalidWireFeaturesPreserveArtifacts(t *testing.T) {
 	for _, tc := range []struct{ name, operation, diagnostic string }{
-		{"querystring", `"get":{"parameters":[{"name":"whole","in":"querystring","content":{"application/json":{"schema":{"type":"object"}}}}],"responses":{"200":{"description":"ok"}}}`, "querystring"},
-		{"itemSchema", `"get":{"responses":{"200":{"description":"ok","content":{"text/event-stream":{"itemSchema":{"type":"string"}}}}}}`, "itemSchema"},
-		{"prefixEncoding", `"post":{"requestBody":{"content":{"multipart/mixed":{"schema":{"type":"array"},"prefixEncoding":[{}]}}},"responses":{"200":{"description":"ok"}}}`, "prefixEncoding"},
+		{"querystring", `"get":{"parameters":[{"name":"whole","in":"querystring","schema":{"type":"string"}}],"responses":{"200":{"description":"ok"}}}`, "querystring"},
+		{"encodingConflict", `"post":{"requestBody":{"content":{"multipart/mixed":{"schema":{"type":"array"},"encoding":{},"prefixEncoding":[{}]}}},"responses":{"200":{"description":"ok"}}}`, "mutually exclusive"},
 		{"custommethod", `"additionalOperations":{"BAD METHOD":{"responses":{"200":{"description":"ok"}}}}`, "additionalOperations"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -79,7 +78,7 @@ func TestOpenAPI32UnsupportedWireFeaturesPreserveArtifacts(t *testing.T) {
 	}
 }
 
-func TestOpenAPI32ReferencedStreamingFailsBeforeWrite(t *testing.T) {
+func TestOpenAPI32ReferencedStreamingPreservesItemSchema(t *testing.T) {
 	root := t.TempDir()
 	input := filepath.Join(root, "api.json")
 	out := filepath.Join(root, "out")
@@ -88,11 +87,13 @@ func TestOpenAPI32ReferencedStreamingFailsBeforeWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, _, _, err := runWithHash(input, out, nil)
-	if err == nil || !strings.Contains(err.Error(), "itemSchema") {
-		t.Fatalf("resolvedstreaming metadata lost: %v", err)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, err := os.Stat(out); !os.IsNotExist(err) {
-		t.Fatalf("createdoutput before capability rejection: %v", err)
+	files, _ := os.ReadDir(filepath.Join(out, "operations"))
+	bytes, _ := os.ReadFile(filepath.Join(out, "operations", files[0].Name()))
+	if !strings.Contains(string(bytes), `"item_schema_definition"`) {
+		t.Fatalf("itemSchema lost: %s", bytes)
 	}
 }
 func TestOpenAPI32WebhookOnlyAndSchemaPropertyNames(t *testing.T) {

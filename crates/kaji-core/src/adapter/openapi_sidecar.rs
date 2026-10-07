@@ -102,6 +102,8 @@ struct SidecarBody {
 
 #[derive(Debug, Deserialize)]
 struct SidecarResponse {
+    #[serde(flatten)]
+    content_metadata: crate::openapi32::ContentDefinition,
     code: String,
     #[serde(default)]
     example_json: Option<String>,
@@ -115,6 +117,8 @@ struct SidecarResponse {
 
 #[derive(Debug, Deserialize)]
 struct SidecarParameter {
+    #[serde(default)]
+    content: Vec<crate::openapi32::ContentDefinition>,
     name: String,
     #[serde(default)]
     allow_reserved: Option<bool>,
@@ -134,50 +138,7 @@ struct SidecarParameter {
     schema: Option<Value>,
 }
 
-#[derive(Debug, Deserialize)]
-struct SidecarMediaType {
-    content_type: String,
-    #[serde(default)]
-    schema_definition: Option<Value>,
-    #[serde(default)]
-    encoding: BTreeMap<String, SidecarFormEncoding>,
-}
-
-/// Transport hints from an OpenAPI Encoding Object. They stay as operation
-/// annotations until a target runtime consumes them; the core AST remains
-/// independent of a particular form-data implementation.
-#[derive(Debug, Deserialize, serde::Serialize)]
-struct SidecarFormEncoding {
-    #[serde(default, rename = "contentType")]
-    content_type: Option<String>,
-    #[serde(default)]
-    headers: BTreeMap<String, SidecarFormHeader>,
-    #[serde(default)]
-    style: Option<String>,
-    #[serde(default)]
-    explode: Option<bool>,
-    #[serde(default, rename = "allowReserved")]
-    allow_reserved: bool,
-}
-
-/// The Header Objects associated with one multipart part. These remain MIME
-/// part headers in the annotation; they must not be confused with HTTP
-/// request headers.
-#[derive(Debug, Deserialize, serde::Serialize)]
-struct SidecarFormHeader {
-    #[serde(default)]
-    required: bool,
-    #[serde(default)]
-    style: Option<String>,
-    #[serde(default)]
-    explode: Option<bool>,
-    #[serde(default, rename = "allowReserved")]
-    allow_reserved: bool,
-    #[serde(default)]
-    schema_definition: Option<Value>,
-    #[serde(default)]
-    example_json: Option<String>,
-}
+type SidecarMediaType = crate::openapi32::ContentDefinition;
 
 /// Kept source-compatible with `openapi.ExampleDoc`, which is also the shape
 /// consumed by Kaji Docs' operation playground payload.
@@ -242,6 +203,8 @@ struct SidecarSecurityScheme {
 
 #[derive(Debug, Deserialize)]
 struct SidecarOAuthFlow {
+    #[serde(default)]
+    device_authorization_url: Option<String>,
     #[serde(rename = "type")]
     flow_type: String,
     #[serde(default)]
@@ -312,6 +275,32 @@ pub fn load_operations(output_dir: &Path, name: String, version: String) -> Resu
                 );
             }
         }
+        if let Some(body) = &document.request_body {
+            annotations.insert(
+                "kaji.request_content".into(),
+                serde_json::to_value(&body.media_types)?,
+            );
+        }
+        let responses = document
+            .responses
+            .iter()
+            .filter(|response| response.content_type.is_some())
+            .map(|response| crate::openapi32::ResponseContentDefinition {
+                status: response.code.clone(),
+                content: {
+                    let mut content = response.content_metadata.clone();
+                    content.content_type = response.content_type.clone().unwrap_or_default();
+                    content.schema_definition = response.schema_definition.clone();
+                    content
+                },
+            })
+            .collect::<Vec<_>>();
+        if !responses.is_empty() {
+            annotations.insert(
+                "kaji.response_content".into(),
+                serde_json::to_value(responses)?,
+            );
+        }
         operations.push(Operation {
             id: if document.operation_id.is_empty() {
                 operation_id(&document.method, &document.path)
@@ -335,11 +324,23 @@ pub fn load_operations(output_dir: &Path, name: String, version: String) -> Resu
                     if let Some(value) = parameter.example {
                         annotations.insert("example".into(), value);
                     }
+                    if !parameter.content.is_empty() {
+                        annotations.insert(
+                            "kaji.parameter_content".into(),
+                            serde_json::to_value(&parameter.content)
+                                .expect("typed content is JSON compatible"),
+                        );
+                    }
                     OperationParameter {
                         name: parameter.name,
                         location: parameter.location,
                         required: parameter.required,
-                        schema: parameter.schema.as_ref().map(convert_value),
+                        schema: parameter.schema.as_ref().map(convert_value).or_else(|| {
+                            parameter
+                                .content
+                                .first()
+                                .and_then(crate::openapi32::ContentDefinition::schema)
+                        }),
                         description: parameter.description,
                         annotations,
                     }
@@ -369,12 +370,21 @@ pub fn load_operations(output_dir: &Path, name: String, version: String) -> Resu
         .map(|schema| Schema::new(schema.name.clone(), convert_value(&schema.schema)))
         .collect();
 
+    let mut annotations = BTreeMap::new();
+    let metadata_path = output_dir.join("api-metadata.json");
+    if metadata_path.exists() {
+        let metadata: crate::openapi32::ApiMetadata = read_json(&metadata_path)?;
+        annotations.insert(
+            "kaji.openapi.metadata".into(),
+            serde_json::to_value(metadata)?,
+        );
+    }
     Ok(Api {
         name,
         version,
         schemas,
         operations,
-        annotations: BTreeMap::new(),
+        annotations,
     })
 }
 
@@ -408,6 +418,7 @@ fn convert_security_scheme(scheme: SidecarSecurityScheme) -> SecurityScheme {
                 .into_iter()
                 .map(|flow| OAuthFlow {
                     flow_type: flow.flow_type,
+                    device_authorization_url: flow.device_authorization_url,
                     authorization_url: flow.authorization_url,
                     token_url: flow.token_url,
                     refresh_url: flow.refresh_url,
@@ -447,8 +458,83 @@ fn convert_request_body(body: &SidecarBody) -> OperationRequestBody {
 fn convert_media_type(media_type: &SidecarMediaType) -> OperationMediaType {
     OperationMediaType {
         content_type: media_type.content_type.clone(),
-        schema: media_type.schema_definition.as_ref().map(convert_value),
+        schema: content_schema(media_type),
     }
+}
+
+fn item_array(content: &crate::openapi32::ContentDefinition) -> Option<SchemaValue> {
+    content.item_schema().map(|item| {
+        SchemaValue::new(SchemaKind::Array {
+            items: Box::new(item),
+        })
+    })
+}
+fn content_schema(content: &crate::openapi32::ContentDefinition) -> Option<SchemaValue> {
+    if is_event_stream_media(&content.content_type) && content.item_schema_definition.is_some() {
+        return content.item_schema();
+    }
+    if is_sequential_json(&content.content_type) && content.item_schema_definition.is_some() {
+        return item_array(content);
+    }
+    content.schema().or_else(|| item_array(content))
+}
+
+fn is_sequential_json(content_type: &str) -> bool {
+    matches!(
+        content_type
+            .split(';')
+            .next()
+            .unwrap_or("")
+            .trim()
+            .to_ascii_lowercase()
+            .as_str(),
+        "application/json-seq"
+            | "application/x-ndjson"
+            | "application/ndjson"
+            | "application/jsonl"
+    )
+}
+
+fn is_event_stream_media(content_type: &str) -> bool {
+    content_type
+        .split(';')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .eq_ignore_ascii_case("text/event-stream")
+}
+
+fn response_schema(response: &SidecarResponse) -> Option<SchemaValue> {
+    if response
+        .content_type
+        .as_deref()
+        .is_some_and(|media| media.trim().to_ascii_lowercase().starts_with("multipart/"))
+    {
+        let mut value = SchemaValue::new(SchemaKind::String);
+        value.format = Some("binary".into());
+        return Some(value);
+    }
+    if response
+        .content_type
+        .as_deref()
+        .is_some_and(is_event_stream_media)
+        && response.content_metadata.item_schema_definition.is_some()
+    {
+        return response.content_metadata.item_schema();
+    }
+    if response
+        .content_type
+        .as_deref()
+        .is_some_and(is_sequential_json)
+        && response.content_metadata.item_schema_definition.is_some()
+    {
+        return item_array(&response.content_metadata);
+    }
+    response
+        .schema_definition
+        .as_ref()
+        .map(convert_value)
+        .or_else(|| item_array(&response.content_metadata))
 }
 
 fn convert_responses(responses: &[SidecarResponse]) -> Vec<OperationResponse> {
@@ -464,7 +550,7 @@ fn convert_responses(responses: &[SidecarResponse]) -> Vec<OperationResponse> {
             if let Some(content_type) = &response.content_type {
                 existing.media_types.push(OperationMediaType {
                     content_type: content_type.clone(),
-                    schema: response.schema_definition.as_ref().map(convert_value),
+                    schema: response_schema(response),
                 });
             }
             continue;
@@ -479,7 +565,7 @@ fn convert_responses(responses: &[SidecarResponse]) -> Vec<OperationResponse> {
                 .map(|content_type| {
                     vec![OperationMediaType {
                         content_type: content_type.clone(),
-                        schema: response.schema_definition.as_ref().map(convert_value),
+                        schema: response_schema(response),
                     }]
                 })
                 .unwrap_or_default(),
@@ -500,7 +586,7 @@ fn add_optional_annotation(
 
 /// Converts an OpenAPI Schema Object represented as JSON without rendering a
 /// target-language type string or discarding a schema composition keyword.
-fn convert_value(schema: &Value) -> SchemaValue {
+pub(crate) fn convert_value(schema: &Value) -> SchemaValue {
     let Some(object) = schema.as_object() else {
         return SchemaValue::unknown();
     };

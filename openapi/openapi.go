@@ -46,14 +46,16 @@ func runWithHash(specPath, outDir string, prevHash *uint64) (uint64, bool, int, 
 	if err != nil {
 		return 0, false, 0, err
 	}
-	newHash := source.Hash
+	// Artifact changes must invalidate caches even when the contract is unchanged.
+	// Keep the provenance manifest's digest specific to source bytes.
+	newHash := xxhash.Sum64String(fmt.Sprintf("content-ir-3.2-v1:%016x", source.Hash))
 
 	if prevHash != nil && *prevHash == newHash {
 		return newHash, false, 0, nil
 	}
 
 	configuration := datamodel.NewDocumentConfiguration()
-	if len(source.Files) > 1 {
+	if len(source.Files) > 1 || len(source.Identities) > 0 {
 		configuration.ExcludeExtensionRefs = true
 		data, err = bundleLocalSources(source, specPath)
 		if err != nil {
@@ -114,6 +116,16 @@ func runWithHash(specPath, outDir string, prevHash *uint64) (uint64, bool, int, 
 	securitySchemes := collectSecuritySchemes(spec.Components)
 	if err := writeJSON(filepath.Join(outDir, "security-schemes.json"), SecuritySchemesDoc{Schemes: securitySchemes}); err != nil {
 		return 0, false, 0, fmt.Errorf("write security schemes: %w", err)
+	}
+
+	metadata := APIMetadataDoc{Self: spec.Self}
+	for _, tag := range spec.Tags {
+		if tag != nil {
+			metadata.Tags = append(metadata.Tags, TagMetadataDoc{Name: tag.Name, Summary: tag.Summary, Description: tag.Description, Parent: tag.Parent, Kind: tag.Kind})
+		}
+	}
+	if err := writeJSON(filepath.Join(outDir, "api-metadata.json"), metadata); err != nil {
+		return 0, false, 0, err
 	}
 
 	index := make(map[string]string)
@@ -228,11 +240,12 @@ func collectOAuthFlows(flows *v3.OAuthFlows) []OAuthFlowDoc {
 			}
 		}
 		result = append(result, OAuthFlowDoc{
-			Type:             kind,
-			AuthorizationURL: flow.AuthorizationUrl,
-			TokenURL:         flow.TokenUrl,
-			RefreshURL:       flow.RefreshUrl,
-			Scopes:           scopes,
+			Type:                   kind,
+			AuthorizationURL:       flow.AuthorizationUrl,
+			DeviceAuthorizationURL: oauthDeviceURL(flow),
+			TokenURL:               flow.TokenUrl,
+			RefreshURL:             flow.RefreshUrl,
+			Scopes:                 scopes,
 		})
 	}
 
@@ -243,6 +256,11 @@ func collectOAuthFlows(flows *v3.OAuthFlows) []OAuthFlowDoc {
 	appendFlow("clientCredentials", flows.ClientCredentials)
 	appendFlow("authorizationCode", flows.AuthorizationCode)
 	appendFlow("device", flows.Device)
+	if flows.GoLow() != nil {
+		if node := mappingValue(flows.GoLow().RootNode, "deviceAuthorization"); node != nil {
+			result = append(result, deviceAuthorizationFlow(node))
+		}
+	}
 	return result
 }
 
@@ -507,6 +525,15 @@ func convertParameter(param *v3.Parameter) (ParameterDoc, error) {
 		}
 	}
 
+	if param.Content != nil {
+		for pair := param.Content.First(); pair != nil; pair = pair.Next() {
+			media, err := convertMediaDefinition(pair.Key(), pair.Value())
+			if err != nil {
+				return doc, err
+			}
+			doc.Content = append(doc.Content, media)
+		}
+	}
 	return doc, nil
 }
 func convertResponses(responses *v3.Responses) ([]ResponseDoc, error) {
@@ -652,6 +679,9 @@ func convertRequestBody(requestBody *v3.RequestBody) (*BodyDoc, error) {
 			ExampleJSON:      formatExampleJSON(exampleValue),
 			Encoding:         encodings,
 		}
+		if err := addMedia32(mediaType, &mediaTypeDoc); err != nil {
+			return nil, err
+		}
 		mediaTypes = append(mediaTypes, mediaTypeDoc)
 
 	}
@@ -679,13 +709,17 @@ func convertFormEncodings(mediaType *v3.MediaType) (map[string]FormEncodingDoc, 
 		if err != nil {
 			return nil, err
 		}
-		encodings[pair.Key()] = FormEncodingDoc{
-			ContentType:   encoding.ContentType,
-			Headers:       headers,
-			Style:         encoding.Style,
-			Explode:       encoding.Explode,
-			AllowReserved: encoding.AllowReserved,
+		converted := FormEncodingDoc{ContentType: encoding.ContentType, Headers: headers, Style: encoding.Style, Explode: encoding.Explode, AllowReserved: encoding.AllowReserved}
+		if encoding.GoLow() != nil {
+			detailed, err := decodeEncoding32(encoding.GoLow().RootNode)
+			if err != nil {
+				return nil, err
+			}
+			converted.Encoding = detailed.Encoding
+			converted.PrefixEncoding = detailed.PrefixEncoding
+			converted.ItemEncoding = detailed.ItemEncoding
 		}
+		encodings[pair.Key()] = converted
 	}
 	return encodings, nil
 }
@@ -751,13 +785,21 @@ func convertResponse(code string, response *v3.Response) ([]ResponseDoc, error) 
 
 			exampleJSON := formatExampleJSON(exampleValue)
 
+			metadata, err := convertMediaDefinition(contentType, mediaType)
+			if err != nil {
+				return nil, err
+			}
 			docs = append(docs, ResponseDoc{
-				Code:             code,
-				Description:      response.Description,
-				ContentType:      contentType,
-				Schema:           schemaFields,
-				SchemaDefinition: schemaDefinition,
-				ExampleJSON:      exampleJSON,
+				ItemSchemaDefinition: metadata.ItemSchemaDefinition,
+				Encoding:             metadata.Encoding,
+				PrefixEncoding:       metadata.PrefixEncoding,
+				ItemEncoding:         metadata.ItemEncoding,
+				Code:                 code,
+				Description:          response.Description,
+				ContentType:          contentType,
+				Schema:               schemaFields,
+				SchemaDefinition:     schemaDefinition,
+				ExampleJSON:          exampleJSON,
 			})
 		}
 	}

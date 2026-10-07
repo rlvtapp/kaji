@@ -21,26 +21,30 @@ func validateCompilerCapabilities(spec *v3.Document) error {
 			if mt == nil {
 				continue
 			}
-			if mt.ItemSchema != nil {
-				return fmt.Errorf("%s content %s: unsupported OpenAPI itemSchema streaming representation; use supported explicit streaming plugins with schema until itemSchema codecs are implemented", where, p.Key())
-			}
-			if low := mt.GoLow(); low != nil && low.RootNode != nil {
-				node := low.RootNode
-				for i := 0; i+1 < len(node.Content); i += 2 {
-					key := node.Content[i].Value
-					if key == "prefixEncoding" || key == "itemEncoding" {
-						return fmt.Errorf("%s content %s: unsupported OpenAPI %s positional/streaming multipart encoding", where, p.Key(), key)
-					}
-				}
+			if _, err := convertMediaDefinition(p.Key(), mt); err != nil {
+				return fmt.Errorf("%s content %s: %w", where, p.Key(), err)
 			}
 		}
 		return nil
 	}
 	checkParams := func(params []*v3.Parameter, where string) error {
+		whole, named := 0, 0
 		for _, p := range params {
-			if p != nil && p.In == "querystring" {
-				return fmt.Errorf("%s: unsupported OpenAPI querystring parameter %q; whole-query content serialization is not equivalent to named query parameters", where, p.Name)
+			if p == nil {
+				continue
 			}
+			if p.In == "query" {
+				named++
+			}
+			if p.In == "querystring" {
+				whole++
+				if p.Schema != nil || p.Content == nil || orderedmap.Len(p.Content) != 1 {
+					return fmt.Errorf("%s: querystring requires exactly one content entry and no schema", where)
+				}
+			}
+		}
+		if whole > 1 || whole > 0 && named > 0 {
+			return fmt.Errorf("%s: querystring cannot coexist with another querystring or query parameter", where)
 		}
 		return nil
 	}
@@ -70,7 +74,7 @@ func validateCompilerCapabilities(spec *v3.Document) error {
 					continue
 				}
 				label := where + " " + strings.ToUpper(op.Key())
-				if err := checkParams(value.Parameters, label); err != nil {
+				if err := checkParams(mergeParameterObjects(item.Parameters, value.Parameters), label); err != nil {
 					return err
 				}
 				if value.RequestBody != nil {
@@ -189,4 +193,25 @@ func compilerOperations(item *v3.PathItem) *orderedmap.Map[string, *v3.Operation
 		sorted.Set(entry.key, entry.operation)
 	}
 	return sorted
+}
+
+func mergeParameterObjects(path, operation []*v3.Parameter) []*v3.Parameter {
+	result := append([]*v3.Parameter{}, path...)
+	for _, value := range operation {
+		if value == nil {
+			continue
+		}
+		found := false
+		for i, existing := range result {
+			if existing != nil && existing.In == value.In && existing.Name == value.Name {
+				result[i] = value
+				found = true
+				break
+			}
+		}
+		if !found {
+			result = append(result, value)
+		}
+	}
+	return result
 }

@@ -54,7 +54,14 @@ func bundleLocalSources(source *sourceClosure, specPath string) ([]byte, error) 
 		if err != nil {
 			return "", "", nil, err
 		}
-		path, fragment, err := resolveSourceReference(origin, ref)
+		resolutionBase := origin
+		if base, exists := source.Bases[origin]; exists {
+			resolutionBase = base
+		}
+		path, fragment, err := resolveSourceReference(resolutionBase, ref)
+		if identity, exists := source.Identities[path]; exists {
+			path = identity
+		}
 		if err != nil {
 			return "", "", nil, err
 		}

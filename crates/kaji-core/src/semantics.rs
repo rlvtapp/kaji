@@ -225,19 +225,36 @@ fn streaming_kind(operation: &Operation) -> Option<StreamingKind> {
         .responses
         .iter()
         .flat_map(|response| &response.media_types)
-        .find_map(|media| match media.content_type.as_str() {
-            "text/event-stream" => Some(StreamingKind::ServerSentEvents),
-            "application/octet-stream" | "application/pdf" | "image/png" | "image/jpeg" => {
-                Some(StreamingKind::Binary)
+        .find_map(|media| {
+            let content_type = media
+                .content_type
+                .split(';')
+                .next()
+                .unwrap_or_default()
+                .trim()
+                .to_ascii_lowercase();
+            match content_type.as_str() {
+                "text/event-stream" => Some(StreamingKind::ServerSentEvents),
+                "application/octet-stream" | "application/pdf" | "image/png" | "image/jpeg" => {
+                    Some(StreamingKind::Binary)
+                }
+                _ if content_type.starts_with("multipart/") => Some(StreamingKind::Binary),
+                _ => None,
             }
-            _ => None,
         })
 }
 
 fn request_body_kind(media: &OperationMediaType) -> RequestBodyKind {
-    match media.content_type.as_str() {
+    let content_type = media
+        .content_type
+        .split(';')
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+    match content_type.as_str() {
         "application/json" | "application/problem+json" => RequestBodyKind::Json,
-        "multipart/form-data" => RequestBodyKind::Multipart,
+        _ if content_type.starts_with("multipart/") => RequestBodyKind::Multipart,
         "application/x-www-form-urlencoded" => RequestBodyKind::FormUrlEncoded,
         "application/octet-stream" => RequestBodyKind::Binary,
         _ => RequestBodyKind::Other,

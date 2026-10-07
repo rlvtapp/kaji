@@ -12,6 +12,7 @@ pub mod httpmock;
 pub mod idempotency;
 pub mod manifest;
 pub mod mocking;
+pub mod openapi32;
 pub mod pagination;
 pub mod release;
 pub mod samples;

@@ -479,6 +479,8 @@ pub enum SecuritySchemeKind {
 /// One named OAuth2 flow, including its token endpoints and advertised scopes.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OAuthFlow {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_authorization_url: Option<String>,
     pub flow_type: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub authorization_url: Option<String>,
