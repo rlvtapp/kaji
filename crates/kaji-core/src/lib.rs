@@ -18,6 +18,7 @@ pub mod release;
 pub mod samples;
 pub mod semantics;
 pub mod style;
+pub mod vendor;
 
 pub use adapter::{AdaptedApi, Adapter};
 pub use ast::{

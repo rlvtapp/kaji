@@ -48,7 +48,7 @@ func runWithHash(specPath, outDir string, prevHash *uint64) (uint64, bool, int, 
 	}
 	// Artifact changes must invalidate caches even when the contract is unchanged.
 	// Keep the provenance manifest's digest specific to source bytes.
-	newHash := xxhash.Sum64String(fmt.Sprintf("content-ir-3.2-v1:%016x", source.Hash))
+	newHash := xxhash.Sum64String(fmt.Sprintf("content-ir-3.2-v2:%016x", source.Hash))
 
 	if prevHash != nil && *prevHash == newHash {
 		return newHash, false, 0, nil
@@ -124,6 +124,10 @@ func runWithHash(specPath, outDir string, prevHash *uint64) (uint64, bool, int, 
 			metadata.Tags = append(metadata.Tags, TagMetadataDoc{Name: tag.Name, Summary: tag.Summary, Description: tag.Description, Parent: tag.Parent, Kind: tag.Kind})
 		}
 	}
+	if err := writeJSON(filepath.Join(outDir, "vendor-extensions.json"), convertExtensions(model.Model.Extensions)); err != nil {
+		return 0, false, 0, err
+	}
+
 	if err := writeJSON(filepath.Join(outDir, "api-metadata.json"), metadata); err != nil {
 		return 0, false, 0, err
 	}
@@ -429,11 +433,9 @@ func convertExtensions(extensions *orderedmap.Map[string, *yaml.Node]) map[strin
 	out := make(map[string]any)
 	for pair := extensions.First(); pair != nil; pair = pair.Next() {
 		key := pair.Key()
-		// The docs renderer owns x-mint/x-rlvt, while Kaji consumes its own
-		// operation-level contract extensions after this sidecar has normalized
-		// the OpenAPI document. Keep that boundary explicit rather than passing
-		// every arbitrary vendor extension to downstream generators.
-		if key != "x-mint" && key != "x-rlvt" && !strings.HasPrefix(key, "x-kaji-") {
+		// Preserve supported vendor namespaces for explicit Rust compatibility
+		// normalization and diagnostics; arbitrary extensions stay private.
+		if key != "x-mint" && key != "x-rlvt" && !strings.HasPrefix(key, "x-kaji-") && !strings.HasPrefix(key, "x-fern-") && !strings.HasPrefix(key, "x-stainless-") && !strings.HasPrefix(key, "x-speakeasy-") {
 			continue
 		}
 		value, err := yamlNodeToInterface(pair.Value())

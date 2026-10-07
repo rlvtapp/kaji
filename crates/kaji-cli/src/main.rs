@@ -24,6 +24,7 @@ use sha2::{Digest, Sha256};
 mod credentials;
 mod eject;
 mod mcp;
+mod migration;
 mod registry;
 mod sdk_automation;
 mod sdk_doctor;
@@ -33,6 +34,7 @@ mod sdk_status;
 const HELP: &str = "Kaji — native multi-language OpenAPI SDK generator
 
 Usage:
+  kaji migrate [project-or-config] [--input <file>] [--output <new-directory>] [--strict]
   kaji init [--config <file>] [--input <openapi-file>] [--output <directory>]
   kaji generate                         # reads ./kaji.json
   kaji generate --config <file>
@@ -868,6 +870,7 @@ fn default_sdk_version() -> String {
 
 enum Action {
     Eject(Vec<OsString>),
+    Migrate(Vec<OsString>),
     Sdk(sdk_automation::Options),
     Help,
     Version,
@@ -945,6 +948,9 @@ fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Action> {
     }
     if command == "init" {
         return parse_init(args);
+    }
+    if command == "migrate" {
+        return Ok(Action::Migrate(args.collect()));
     }
     if command == "eject" {
         return Ok(Action::Eject(args.collect()));
@@ -2661,6 +2667,18 @@ fn generate_from_config(
     check: bool,
     json_changes: bool,
 ) -> Result<()> {
+    if path
+        .extension()
+        .is_some_and(|extension| extension == "yml" || extension == "yaml")
+        || !path.exists() && path == Path::new("kaji.json")
+    {
+        return migration::generate(
+            if path.exists() { path } else { Path::new(".") },
+            color,
+            check,
+            json_changes,
+        );
+    }
     let path = std::fs::canonicalize(path)
         .with_context(|| format!("cannot read Kaji config {}", path.display()))?;
     let source = std::fs::read_to_string(&path)
@@ -3057,6 +3075,15 @@ fn write_sdk(artifacts: &Path, options: &Generate, reporter: &Reporter) -> Resul
         options.name.clone(),
         options.version.clone(),
     )?;
+    if let Some(report) = api.annotations.get("kaji.vendor.report") {
+        if let Some(manual) = report.get("manual").and_then(serde_json::Value::as_array) {
+            for diagnostic in manual {
+                if let Some(message) = diagnostic.as_str() {
+                    eprintln!("kaji compatibility: {message}");
+                }
+            }
+        }
+    }
     let api = slice_api_paths(api, &options.path_selection)?;
     let security_schemes = kaji_core::adapter::openapi_sidecar::load_security_schemes(artifacts)?;
     let mut tree =
@@ -4503,6 +4530,7 @@ fn main() -> ExitCode {
         Action::Generate(options) => generate(*options),
         Action::Sdk(options) => sdk_automation::run(options),
         Action::Eject(arguments) => eject::run(arguments),
+        Action::Migrate(arguments) => migration::run(arguments),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,

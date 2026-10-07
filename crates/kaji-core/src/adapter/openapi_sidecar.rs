@@ -379,13 +379,31 @@ pub fn load_operations(output_dir: &Path, name: String, version: String) -> Resu
             serde_json::to_value(metadata)?,
         );
     }
-    Ok(Api {
+    let mut api = Api {
         name,
         version,
         schemas,
         operations,
         annotations,
-    })
+    };
+    let root_path = output_dir.join("vendor-extensions.json");
+    let root: Value = if root_path.exists() {
+        read_json(&root_path)?
+    } else {
+        Value::Null
+    };
+    let report = crate::vendor::normalize_api(&mut api, &root);
+    let mut operation_ids = std::collections::BTreeSet::new();
+    for operation in &api.operations {
+        anyhow::ensure!(
+            operation_ids.insert(&operation.id),
+            "duplicate SDK operation name {:?} after vendor normalization; choose unique method names",
+            operation.id
+        );
+    }
+    api.annotations
+        .insert("kaji.vendor.report".into(), serde_json::to_value(report)?);
+    Ok(api)
 }
 
 /// Loads reusable OpenAPI component security schemes from the Go-sidecar
