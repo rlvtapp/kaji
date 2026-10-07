@@ -29,3 +29,9 @@ Declared JSON decoding is bounded to 10 MiB and nesting depth 128. Validation is
 opt-in and does not add retries. Error bodies, streams and undeclared/non-JSON
 responses are outside this check; this is not complete JSON Schema constraint
 validation or strict `oneOf` exclusivity.
+
+## Retries and cancellation
+
+Set `max_attempts: 3` on the client to enable bounded retries; the default is one attempt. `retry_base_delay: 0.5` and `retry_max_delay: 30` configure exponential backoff in seconds (maximum delay 60 seconds; maximum attempts 10). `retry-after-ms` and `Retry-After` override the delay within that cap. Transient transport failures and HTTP 408/429/500/502/503/504 are eligible. GET/HEAD/OPTIONS/PUT/DELETE can replay; POST/PATCH require a nonblank idempotency key. Generated custom key headers qualify only on their annotated operation. Automatic keys are created once by the operation and retained across attempts.
+
+Middleware runs for each attempt. Pass `cancelled: -> { cancellation_requested }` to check cancellation before execution and during backoff; cancellation raises `KajiCancellationError`. An already executing synchronous transport needs its own interruption mechanism. Decode failures and ordinary client errors are not retried.

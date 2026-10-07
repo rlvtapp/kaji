@@ -4,6 +4,9 @@
 //! libraries. The public client accepts normal Ruby keyword arguments and has
 //! both direct operations and optional resource namespaces.
 
+mod operation_tests;
+pub use operation_tests::{OperationTests, operation_tests};
+
 use std::collections::BTreeMap;
 use std::fmt::Write;
 
@@ -329,7 +332,7 @@ fn render_client(api: &Api, module: &str, style: SdkClientStyle) -> String {
         &format!("require_relative \"response_validation\"\n\nmodule {module}\n"),
         1,
     );
-    out.push_str("  class ApiError < StandardError\n    attr_reader :status, :body\n    def initialize(status, body)\n      @status = status\n      @body = body\n      super(\"API request failed with status #{status}\")\n    end\n  end\n\n  class Client\n    def initialize(base_url:, api_key: nil, bearer_token: nil, headers: {}, timeout: 30, transport: nil, middleware: [], validate_responses: false)\n      @base_url = base_url.sub(%r{/$}, \"\")\n      @api_key = api_key\n      @bearer_token = bearer_token\n      @headers = headers.transform_keys(&:to_s)\n      @timeout = timeout\n      @transport = transport\n      @validate_responses = validate_responses\n      @middleware = middleware.to_a.dup.freeze\n      raise ArgumentError, \"middleware must be callable\" unless @middleware.all? { |item| item.respond_to?(:call) }\n");
+    out.push_str("  class KajiCancellationError < StandardError; end\n  class ApiError < StandardError\n    attr_reader :status, :body\n    def initialize(status, body)\n      @status = status\n      @body = body\n      super(\"API request failed with status #{status}\")\n    end\n  end\n\n  class Client\n    def initialize(base_url:, api_key: nil, bearer_token: nil, headers: {}, timeout: 30, transport: nil, middleware: [], validate_responses: false, max_attempts: 1, retry_base_delay: 0.5, retry_max_delay: 30, cancelled: nil)\n      @base_url = base_url.sub(%r{/$}, \"\")\n      @api_key = api_key\n      @bearer_token = bearer_token\n      @headers = headers.transform_keys(&:to_s)\n      @timeout = timeout\n      raise ArgumentError, \"invalid retry configuration\" unless max_attempts.is_a?(Integer) && max_attempts.between?(1, 10) && retry_base_delay.is_a?(Numeric) && retry_max_delay.is_a?(Numeric) && retry_base_delay.finite? && retry_max_delay.finite? && retry_base_delay >= 0 && retry_base_delay <= 60 && retry_max_delay >= 0 && retry_max_delay <= 60\n      @max_attempts = max_attempts\n      @retry_base_delay = retry_base_delay.to_f\n      @retry_max_delay = retry_max_delay.to_f\n      @cancelled = cancelled\n      @transport = transport\n      @validate_responses = validate_responses\n      @middleware = middleware.to_a.dup.freeze\n      raise ArgumentError, \"middleware must be callable\" unless @middleware.all? { |item| item.respond_to?(:call) }\n");
     if style == SdkClientStyle::Namespaced {
         for resource in resource_operations(api).keys() {
             let _ = writeln!(
@@ -361,6 +364,7 @@ fn render_client(api: &Api, module: &str, style: SdkClientStyle) -> String {
         out.push_str(pagination::HELPERS);
         out.push_str("    private :kaji_json_path, :kaji_with_body_value\n\n");
     }
+    out.push_str(include_str!("retry_runtime.rb.txt"));
     out.push_str(&render_runtime());
     out.push_str("  end\n\n");
     if style == SdkClientStyle::Namespaced {
@@ -457,9 +461,12 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
     } else {
         "nil"
     };
+    let retry_header = kaji_core::idempotency::resolved(operation)
+        .map(|p| ruby_string(&p.header))
+        .unwrap_or_else(|| "nil".into());
     let _ = writeln!(
         out,
-        "      result = request({}, path, query: query, headers: headers, body: {body}, response_schemas: ResponseShapes[\"operations\"][{}])",
+        "      result = request({}, path, query: query, headers: headers, body: {body}, response_schemas: ResponseShapes[\"operations\"][{}], idempotency_header: {retry_header})",
         ruby_string(operation.method.as_str()),
         ruby_string(&operation.id)
     );
@@ -476,7 +483,7 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
 }
 
 fn render_runtime() -> String {
-    "    private\n\n    def request(method, path, query:, headers:, body:, response_schemas: nil)\n      uri = URI.join(@base_url + \"/\", path.sub(%r{^/}, \"\"))\n      uri.query = URI.encode_www_form(query) unless query.empty?\n      request = Net::HTTP.const_get(method.capitalize).new(uri)\n      merged_headers = @headers.merge(headers)\n      merged_headers[\"Authorization\"] ||= \"Bearer #{@bearer_token}\" if @bearer_token\n      merged_headers[\"X-API-Key\"] ||= @api_key if @api_key\n      merged_headers.each { |key, value| request[key] = value }\n      unless body.nil?\n        request[\"Content-Type\"] ||= \"application/json\"\n        request.body = body.is_a?(String) ? body : JSON.generate(body.respond_to?(:to_h) ? body.to_h : body)\n      end\n      handler = @transport || lambda do |native_request|\n        target = native_request.uri || uri\n        Net::HTTP.start(target.hostname, target.port, use_ssl: target.scheme == \"https\", open_timeout: @timeout, read_timeout: @timeout) { |http| http.request(native_request) }\n      end\n      @middleware.reverse_each do |item|\n        following = handler\n        handler = ->(native_request) { item.call(native_request, following) }\n      end\n      response = handler.call(request)\n      shape = nil\n      if @validate_responses && response_schemas && response.code.to_i.between?(200, 299)\n        content_type = response.respond_to?(:[]) ? response[\"Content-Type\"] : nil\n        shape = ResponseValidation.response_shape(response_schemas, response.code.to_i, content_type)\n      end\n      if shape\n        return ResponseValidation.decode(response.body, shape, ResponseShapes[\"refs\"])\n      end\n      parsed = response.body.nil? || response.body.empty? ? nil : JSON.parse(response.body) rescue response.body\n      raise ApiError.new(response.code.to_i, parsed) unless response.code.to_i.between?(200, 299)\n      parsed\n    end\n".into()
+    "    private\n\n    def request(method, path, query:, headers:, body:, response_schemas: nil, idempotency_header: nil)\n      uri = URI.join(@base_url + \"/\", path.sub(%r{^/}, \"\"))\n      uri.query = URI.encode_www_form(query) unless query.empty?\n      request = Net::HTTP.const_get(method.capitalize).new(uri)\n      merged_headers = @headers.merge(headers)\n      merged_headers[\"Authorization\"] ||= \"Bearer #{@bearer_token}\" if @bearer_token\n      merged_headers[\"X-API-Key\"] ||= @api_key if @api_key\n      merged_headers.each { |key, value| request[key] = value }\n      unless body.nil?\n        request[\"Content-Type\"] ||= \"application/json\"\n        request.body = body.is_a?(String) ? body : JSON.generate(body.respond_to?(:to_h) ? body.to_h : body)\n      end\n      handler = @transport || lambda do |native_request|\n        target = native_request.uri || uri\n        Net::HTTP.start(target.hostname, target.port, use_ssl: target.scheme == \"https\", open_timeout: @timeout, read_timeout: @timeout) { |http| http.request(native_request) }\n      end\n      @middleware.reverse_each do |item|\n        following = handler\n        handler = ->(native_request) { item.call(native_request, following) }\n      end\n      response = execute_with_retry(handler, request, idempotency_header)\n      shape = nil\n      if @validate_responses && response_schemas && response.code.to_i.between?(200, 299)\n        content_type = response.respond_to?(:[]) ? response[\"Content-Type\"] : nil\n        shape = ResponseValidation.response_shape(response_schemas, response.code.to_i, content_type)\n      end\n      if shape\n        return ResponseValidation.decode(response.body, shape, ResponseShapes[\"refs\"])\n      end\n      parsed = response.body.nil? || response.body.empty? ? nil : JSON.parse(response.body) rescue response.body\n      raise ApiError.new(response.code.to_i, parsed) unless response.code.to_i.between?(200, 299)\n      parsed\n    end\n".into()
 }
 
 fn render_resource(api: &Api, resource: &str, operations: &[&Operation]) -> String {

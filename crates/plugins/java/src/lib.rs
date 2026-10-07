@@ -5,6 +5,12 @@
 //! the JDK's `java.net.http.HttpClient`; Jackson is the only runtime dependency
 //! and handles generated records, JSON bodies, and typed responses.
 
+#[cfg(test)]
+mod model_compat_tests;
+mod operation_samples;
+mod operation_tests;
+pub use operation_tests::{OperationTests, operation_tests};
+pub use package::NativeSdk;
 mod webhooks;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
@@ -504,7 +510,7 @@ fn render_open_enum(name: &str, value: &SchemaValue, package: &str) -> String {
 
 fn render_value_model(name: &str, value: &SchemaValue, package: &str) -> String {
     format!(
-        "package {package}.model;\n\nimport com.fasterxml.jackson.annotation.JsonValue;\nimport com.fasterxml.jackson.databind.JsonNode;\nimport java.util.List;\nimport java.util.Map;\n\n{NOTICE}\n/** Wrapper for the {name} schema. */\npublic record {name}(@JsonValue {} value) {{}}\n",
+        "package {package}.model;\n\nimport com.fasterxml.jackson.annotation.JsonValue;\nimport com.fasterxml.jackson.annotation.JsonCreator;\nimport com.fasterxml.jackson.databind.JsonNode;\nimport java.util.List;\nimport java.util.Map;\n\n{NOTICE}\n/** Wrapper for the {name} schema. */\npublic record {name}(@JsonValue {} value) {{\n    @JsonCreator(mode = JsonCreator.Mode.DELEGATING)\n    public {name} {{}}\n}}\n",
         java_type(value)
     )
 }

@@ -313,11 +313,12 @@ fn render_client(module: &str) -> String {
   @doc "Only idempotent methods, or POST requests with Idempotency-Key, retry automatically."
   @spec request(t(), atom(), String.t(), list(), list(), term(), atom(), atom(), map(), String.t() | nil) :: {:ok, term()} | {:error, term()}
   def request(client, method, path, query \\ [], headers \\ [], body \\ nil, body_kind \\ :json, response_kind \\ :json, error_types \\ %{}, idempotency_header \\ nil) do
-    url = client.base_url <> path <> encode_query(query)
-    headers = default_headers(client, headers, body, body_kind, response_kind)
-    context = %{method: method, url: url, query: query, headers: headers, body: body, idempotency_header: idempotency_header}
-    notify(client.before_request, context)
-    do_request(client, method, url, headers, body, body_kind, response_kind, error_types, context, 0)
+    with {:ok, url} <- request_url(client, path, query) do
+      headers = default_headers(client, headers, body, body_kind, response_kind)
+      context = %{method: method, url: url, query: query, headers: headers, body: body, idempotency_header: idempotency_header}
+      notify(client.before_request, context)
+      do_request(client, method, url, headers, body, body_kind, response_kind, error_types, context, 0)
+    end
   end
 
   @doc "Returns a lazy stream of decoded server-sent event data values."
@@ -536,6 +537,25 @@ fn render_client(module: &str) -> String {
   defp notify(_, _), do: :ok
   defp non_negative(value, _default) when is_integer(value) and value >= 0, do: value
   defp non_negative(_value, default), do: default
+
+  # Continuations are validated before authorization headers or middleware are applied.
+  defp request_url(client, {:kaji_url, url}, _query) when is_binary(url) do
+    try do
+      base = URI.parse(client.base_url)
+      next = URI.parse(url)
+      if next.scheme in ["http", "https"] and next.scheme == base.scheme and next.host != nil and
+          String.downcase(next.host) == String.downcase(base.host || "") and next.port == base.port and
+          next.userinfo == nil and next.fragment == nil and not String.contains?(url, ["\r", "\n"]) do
+        {:ok, url}
+      else
+        {:error, :unsafe_pagination_url}
+      end
+    rescue
+      _ -> {:error, :unsafe_pagination_url}
+    end
+  end
+  defp request_url(_client, {:kaji_url, _}, _query), do: {:error, :unsafe_pagination_url}
+  defp request_url(client, path, query), do: {:ok, client.base_url <> path <> encode_query(query)}
 
   defp encode_query([]), do: ""
   defp encode_query(query), do: "?" <> URI.encode_query(flatten_query(query))
@@ -947,6 +967,19 @@ fn render_operation_body(
             output,
             "{pad}path = String.replace(path, \"{{{}}}\", URI.encode(to_string({value}), &URI.char_unreserved?/1))",
             escape_elixir_string(&parameter.name),
+        );
+    }
+    if operation
+        .annotations
+        .get("x-kaji-pagination")
+        .or_else(|| operation.annotations.get("x-speakeasy-pagination"))
+        .and_then(|value| value.get("type"))
+        .and_then(Value::as_str)
+        == Some("url")
+    {
+        let _ = writeln!(
+            output,
+            "{pad}path = case Keyword.fetch(options, :_kaji_pagination_url) do {{:ok, url}} -> {{:kaji_url, url}}; :error -> path end"
         );
     }
     let query = operation
@@ -2065,3 +2098,6 @@ pub use package::{Elixir, PackageExt, Sdk, Settings, package, sdk};
 
 mod webhooks;
 pub use webhooks::{Webhooks, webhooks};
+
+mod operation_tests;
+pub use operation_tests::{OperationTests, operation_tests};

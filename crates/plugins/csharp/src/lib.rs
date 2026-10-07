@@ -13,6 +13,12 @@ use kaji_core::{
     SchemaKind, SchemaValue, SdkClientStyle,
 };
 
+#[cfg(test)]
+mod model_compat_tests;
+mod operation_samples;
+mod operation_tests;
+pub use operation_tests::{OperationTests, operation_tests};
+pub use package::NativeSdk;
 mod webhooks;
 pub use webhooks::{Webhooks, webhooks};
 mod pagination;
@@ -41,11 +47,22 @@ fn render_test_sdk(
 /// exports resource properties, for example `client.Contacts.CreateAsync(...)`.
 /// The direct methods remain available in both modes, so choosing the facade is
 /// a non-breaking additive change for generated consumers.
+#[cfg(test)]
 fn render_sdk(
     api: &Api,
     output_dir: &str,
     package_name: Option<&str>,
     client_style: SdkClientStyle,
+) -> Result<GeneratedTree> {
+    render_sdk_with_policy(api, output_dir, package_name, client_style, false)
+}
+
+fn render_sdk_with_policy(
+    api: &Api,
+    output_dir: &str,
+    package_name: Option<&str>,
+    client_style: SdkClientStyle,
+    open_enums: bool,
 ) -> Result<GeneratedTree> {
     for operation in &api.operations {
         if operation.request_body.as_ref().is_some_and(|body| {
@@ -113,7 +130,7 @@ fn render_sdk(
                 &root,
                 &format!("Models/{}", bounded_filename(&schema.name, index, "cs")),
             ),
-            render_model(schema, &namespace),
+            render_model_with_policy(schema, &namespace, open_enums),
         )?)?;
     }
     tree.insert(GeneratedFile::new(
@@ -183,12 +200,17 @@ fn render_project(api: &Api, package: &str) -> String {
     )
 }
 
+#[cfg(test)]
 fn render_model(schema: &Schema, namespace: &str) -> String {
+    render_model_with_policy(schema, namespace, false)
+}
+
+fn render_model_with_policy(schema: &Schema, namespace: &str, open_enums: bool) -> String {
     let mut output = format!(
         "{NOTICE}\nusing System.Text.Json;\nusing System.Text.Json.Serialization;\n\nnamespace {namespace};\n"
     );
     output.push('\n');
-    render_schema(&mut output, schema);
+    render_schema_with_policy(&mut output, schema, open_enums);
     output
 }
 
@@ -204,7 +226,7 @@ fn bounded_filename(value: &str, index: usize, extension: &str) -> String {
     format!("{prefix}_{index:05}_{hash:016x}.{extension}")
 }
 
-fn render_schema(output: &mut String, schema: &Schema) {
+fn render_schema_with_policy(output: &mut String, schema: &Schema, open_enums: bool) {
     let name = pascal_case(&schema.name);
     match &schema.value.kind {
         SchemaKind::Object {
@@ -249,6 +271,37 @@ fn render_schema(output: &mut String, schema: &Schema) {
             }
             output.push_str("}\n");
         }
+        SchemaKind::String if open_enums && !schema.value.enum_values.is_empty() => {
+            let _ = writeln!(
+                output,
+                "[JsonConverter(typeof({name}JsonConverter))]\npublic sealed record {name}(string Value)\n{{"
+            );
+            let mut members = std::collections::BTreeSet::from([
+                name.clone(),
+                "Value".into(),
+                "Equals".into(),
+                "GetHashCode".into(),
+                "ToString".into(),
+                "EqualityContract".into(),
+            ]);
+            for (index, value) in schema.value.enum_values.iter().enumerate() {
+                let Some(value) = value.as_str() else {
+                    continue;
+                };
+                let mut member = enum_member_name(value, index);
+                while !members.insert(member.clone()) {
+                    member.push('_');
+                }
+                let _ = writeln!(
+                    output,
+                    "    public static {name} {member} {{ get; }} = new({value:?});"
+                );
+            }
+            let _ = writeln!(
+                output,
+                "}}\npublic sealed class {name}JsonConverter : JsonConverter<{name}>\n{{\n    public override {name} Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)\n        => reader.TokenType == JsonTokenType.String ? new(reader.GetString()!) : throw new JsonException(\"Expected string enum value\");\n    public override void Write(Utf8JsonWriter writer, {name} value, JsonSerializerOptions options)\n        => writer.WriteStringValue(value.Value);\n}}"
+            );
+        }
         SchemaKind::String if !schema.value.enum_values.is_empty() => {
             output.push_str("[JsonConverter(typeof(JsonStringEnumConverter))]\n");
             let _ = writeln!(output, "public enum {name}");
@@ -266,7 +319,7 @@ fn render_schema(output: &mut String, schema: &Schema) {
             let value_type = csharp_type(&schema.value, false);
             let _ = writeln!(
                 output,
-                "public sealed record {name}([property: JsonPropertyName(\"value\")] {value_type} Value);"
+                "[JsonConverter(typeof({name}JsonConverter))]\npublic sealed record {name}([property: JsonPropertyName(\"value\")] {value_type} Value);\n\npublic sealed class {name}JsonConverter : JsonConverter<{name}>\n{{\n    public override bool HandleNull => true;\n    public override {name} Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)\n        => new(JsonSerializer.Deserialize<{value_type}>(ref reader, options)!);\n    public override void Write(Utf8JsonWriter writer, {name} value, JsonSerializerOptions options)\n    {{\n        if (value is null) {{ writer.WriteNullValue(); return; }}\n        JsonSerializer.Serialize(writer, value.Value, options);\n    }}\n}}"
             );
         }
     }

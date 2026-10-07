@@ -1,7 +1,9 @@
 //! Typed package integration for the existing complete Java generator.
 use anyhow::Result;
 use kaji_core::SdkClientStyle;
-use kaji_core::engine::{Language, Meta, Package, Plugin, PluginContext};
+use kaji_core::engine::{
+    Contract, Handle, Language, Meta, Package, Plugin, PluginContext, Provision,
+};
 
 pub struct Java;
 #[derive(Default)]
@@ -31,6 +33,13 @@ impl PackageExt for Package<Java> {
         self
     }
 }
+/// Native public SDK identity consumed by optional generated-operation tests.
+pub struct NativeSdk {
+    pub namespace: String,
+}
+impl Contract for NativeSdk {
+    const NAME: &'static str = "native-sdk";
+}
 pub struct Sdk {
     meta: Meta,
     client_style: Option<SdkClientStyle>,
@@ -59,12 +68,20 @@ impl Sdk {
         self
     }
 }
+impl Sdk {
+    pub fn contract(&self) -> Handle<NativeSdk> {
+        self.meta.handle()
+    }
+}
 impl Plugin<Java> for Sdk {
     fn kind(&self) -> &'static str {
         "java-sdk"
     }
     fn meta(&self) -> &Meta {
         &self.meta
+    }
+    fn provides(&self) -> Vec<Provision> {
+        vec![Provision::of::<NativeSdk>()]
     }
     fn generate(&self, cx: &mut PluginContext<'_, Java>) -> Result<()> {
         cx.files.append(crate::render_sdk_with_policy(
@@ -75,6 +92,14 @@ impl Plugin<Java> for Sdk {
                 .or(cx.common.client_style)
                 .unwrap_or(SdkClientStyle::Namespaced),
             self.open_enums,
-        )?)
+        )?)?;
+        cx.publish(NativeSdk {
+            namespace: crate::java_package_name(
+                cx.settings
+                    .package_name
+                    .as_deref()
+                    .unwrap_or(&format!("io.kaji.{}", crate::package_segment(&cx.api.name))),
+            ),
+        })
     }
 }

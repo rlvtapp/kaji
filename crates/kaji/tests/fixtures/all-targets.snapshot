@@ -12,7 +12,7 @@ sdk/elixir/lib/kaji_contract_api_sdk/api/operations_0001.ex	879	bec7a835b2c065ed
 sdk/elixir/lib/kaji_contract_api_sdk/api.ex	272	592899a876e048bc
 sdk/elixir/lib/kaji_contract_api_sdk/api_error.ex	367	b31cc94d0c095a4a
 sdk/elixir/lib/kaji_contract_api_sdk/application.ex	222	5451d0672cc27866
-sdk/elixir/lib/kaji_contract_api_sdk/client.ex	16271	22328d4885dd2f5f
+sdk/elixir/lib/kaji_contract_api_sdk/client.ex	17177	ee94e96357639c41
 sdk/elixir/lib/kaji_contract_api_sdk/errors/chunk_0001.ex	34	50cc6ef2361eaae9
 sdk/elixir/lib/kaji_contract_api_sdk/json.ex	622	5bf9c30aae0a11d7
 sdk/elixir/lib/kaji_contract_api_sdk/models/contact.ex	608	677e3c0c59201923

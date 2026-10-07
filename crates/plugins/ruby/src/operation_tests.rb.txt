@@ -1,0 +1,22 @@
+require 'json'
+require '__IMPORT__'
+fixtures=JSON.parse(File.read(File.join(__dir__,'operation-fixtures.json')))
+Response=Struct.new(:code,:body) { def [](name); name.downcase=='content-type' ? 'application/json' : nil; end }
+fixtures.fetch('cases').each do |sample|
+ calls=0
+ transport=->(request) {
+  calls+=1
+  raise 'method/path mismatch' unless request.method==sample['method'] && request.uri.path==sample['path']
+  query=URI.decode_www_form(request.uri.query||'').to_h
+  sample['query'].each{|name,value|raise 'query mismatch' unless query[name]==value.to_s}
+  sample['headers'].each{|name,value|raise 'header mismatch' unless request[name]==value}
+  raise 'body mismatch' unless (request.body.nil? ? nil : JSON.parse(request.body))==sample['body']
+  Response.new(sample['status'],sample['response'].nil? ? '' : JSON.generate(sample['response']))
+ }
+ client=__MODULE__::Client.new(base_url:'https://unused.example',transport:transport)
+ result=sample['args'].empty? ? client.public_send(sample['operation']) : client.public_send(sample['operation'],**sample['args'].transform_keys(&:to_sym))
+ result=result.to_h if result.respond_to?(:to_h) && !result.nil? && !result.is_a?(Array)
+ raise 'response mismatch' unless result==sample['response']
+ raise 'unexpected attempts' unless calls==1
+end
+fixtures.fetch('skipped').each{|id,reason|warn "SKIP #{id}: #{reason}"}

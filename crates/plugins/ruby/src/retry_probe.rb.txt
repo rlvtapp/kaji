@@ -1,0 +1,30 @@
+require 'probe_sdk'
+Reply=Struct.new(:code,:body) {def [](name);name.downcase=='retry-after-ms' ? '0' : nil;end}
+calls=0;keys=[]
+driver=->(request){calls+=1;keys<<request['X-Once'];Reply.new(calls==1 ? '503' : '204','')}
+client=ProbeSdk::Client.new(base_url:'https://unused.example',transport:driver,max_attempts:2,retry_base_delay:0)
+client.delete_thing
+raise 'GET/DELETE retry missing' unless calls==2
+calls=0
+begin;client.send(:request,'POST','/thing',query:{},headers:{},body:nil);raise 'unsafe accepted';rescue ProbeSdk::ApiError;end
+raise 'unsafe POST retried' unless calls==1
+calls=0;keys.clear
+client.retry_thing
+raise "automatic key unstable" unless calls==2 && keys[0]==keys[1] && keys[0].match?(/\A[0-9a-f-]{36}\z/)
+calls=0;keys.clear
+client.send(:request,'PATCH','/thing',query:{},headers:{'X-Once'=>'stable'},body:nil,idempotency_header:'X-Once')
+raise 'key changed' unless calls==2 && keys==['stable','stable']
+calls=0
+begin;client.send(:request,'PATCH','/thing',query:{},headers:{'X-Once'=>'  '},body:nil,idempotency_header:'X-Once');raise 'blank accepted';rescue ProbeSdk::ApiError;end
+raise 'blank retried' unless calls==1
+cancel=false;calls=0
+client=ProbeSdk::Client.new(base_url:'https://unused.example',transport:->(_){calls+=1;cancel=true;Reply.new('503','')},max_attempts:2,retry_base_delay:60,retry_max_delay:60,cancelled:-> {cancel})
+begin;client.delete_thing;raise 'cancellation missing';rescue ProbeSdk::KajiCancellationError;end
+raise 'cancel retried' unless calls==1
+
+HeaderReply=Struct.new(:code,:body,:headers){def [](name);headers[name];end}
+probe=ProbeSdk::Client.new(base_url:'https://unused.example',retry_base_delay:0,retry_max_delay:30)
+raise 'retry cap missing' unless probe.send(:retry_delay,HeaderReply.new('503','',{'Retry-After'=>'999999'}),1)==30
+raise 'ms priority missing' unless probe.send(:retry_delay,HeaderReply.new('503','',{'retry-after-ms'=>'0','Retry-After'=>'999999'}),1)==0
+raise 'date parse missing' unless probe.send(:retry_delay,HeaderReply.new('503','',{'Retry-After'=>'Thu, 01 Jan 1970 00:00:00 GMT'}),1)==0
+begin;ProbeSdk::Client.new(base_url:'https://unused.example',retry_base_delay:61);raise 'invalid options';rescue ArgumentError;end

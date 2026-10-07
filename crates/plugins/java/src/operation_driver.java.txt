@@ -1,0 +1,82 @@
+package __PACKAGE__;
+import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import java.net.*;
+import java.net.http.*;
+import java.time.Duration;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.Flow;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.io.ByteArrayOutputStream;
+import javax.net.ssl.*;
+
+/** Generated smoke tests; all HTTP is handled in memory, no sockets are opened. */
+public final class KajiOperationTests {
+    static final ObjectMapper MAPPER = new ObjectMapper().registerModule(new JavaTimeModule());
+    static void check(boolean value,String reason) {if(!value)throw new AssertionError(reason);}
+    static String scalar(JsonNode value){return value.isTextual()?value.textValue():value.toString();}
+    static final class Driver extends HttpClient {
+        final JsonNode fixture; int calls;
+        Driver(JsonNode fixture){this.fixture=fixture;}
+        byte[] requestBody(HttpRequest request) {
+            if(request.bodyPublisher().isEmpty())return new byte[0];
+            var result=new CompletableFuture<byte[]>();var bytes=new ByteArrayOutputStream();
+            request.bodyPublisher().get().subscribe(new Flow.Subscriber<ByteBuffer>(){
+                public void onSubscribe(Flow.Subscription subscription){subscription.request(Long.MAX_VALUE);}
+                public void onNext(ByteBuffer value){byte[] data=new byte[value.remaining()];value.get(data);bytes.writeBytes(data);}
+                public void onError(Throwable error){result.completeExceptionally(error);}
+                public void onComplete(){result.complete(bytes.toByteArray());}
+            });return result.join();
+        }
+        void assertRequest(HttpRequest request) throws java.io.IOException {
+            calls++;check(request.method().equals(fixture.get("method").asText()),"request method");
+            check(request.uri().getRawPath().equals(fixture.get("encoded_path").asText()),"request path");
+            var query=new HashMap<String,String>();
+            if(request.uri().getRawQuery()!=null)for(var entry:request.uri().getRawQuery().split("&")){
+                var pair=entry.split("=",2);check(pair.length==2,"query pair");
+                query.put(URLDecoder.decode(pair[0],StandardCharsets.UTF_8),URLDecoder.decode(pair[1],StandardCharsets.UTF_8));
+            }
+            for(var parameter:fixture.get("parameters")){
+                var name=parameter.get("name").asText();var value=scalar(parameter.get("value"));
+                if(parameter.get("location").asText().equals("query"))check(value.equals(query.get(name)),"query value");
+                if(parameter.get("location").asText().equals("header"))check(request.headers().firstValue(name).orElse("").equals(value),"header value");
+            }
+            var body=requestBody(request);
+            if(fixture.get("has_body").asBoolean())check(MAPPER.readTree(body).equals(fixture.get("body")),"request body");
+            else check(body.length==0,"unexpected request body");
+        }
+        public <T> HttpResponse<T> send(HttpRequest request,HttpResponse.BodyHandler<T> handler)throws java.io.IOException {
+            assertRequest(request);
+            int status=fixture.get("status").asInt();
+            var headers=HttpHeaders.of(Map.of("content-type",List.of("application/json")),(a,b)->true);
+            var subscriber=handler.apply(new HttpResponse.ResponseInfo(){
+                public int statusCode(){return status;}public HttpHeaders headers(){return headers;}public HttpClient.Version version(){return Version.HTTP_1_1;}
+            });
+            subscriber.onSubscribe(new Flow.Subscription(){public void request(long count){}public void cancel(){}});
+            subscriber.onNext(List.of(ByteBuffer.wrap(MAPPER.writeValueAsBytes(fixture.get("response")))));subscriber.onComplete();
+            T body=subscriber.getBody().toCompletableFuture().join();
+            return new HttpResponse<T>(){
+                public int statusCode(){return status;}public HttpRequest request(){return request;}
+                public Optional<HttpResponse<T>> previousResponse(){return Optional.empty();}public HttpHeaders headers(){return headers;}
+                public T body(){return body;}public Optional<SSLSession> sslSession(){return Optional.empty();}
+                public URI uri(){return request.uri();}public HttpClient.Version version(){return Version.HTTP_1_1;}
+            };
+        }
+        public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,HttpResponse.BodyHandler<T> handler){throw new UnsupportedOperationException("sync SDK fixture");}
+        public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,HttpResponse.BodyHandler<T> handler,HttpResponse.PushPromiseHandler<T> push){throw new UnsupportedOperationException("sync SDK fixture");}
+        public Optional<CookieHandler> cookieHandler(){return Optional.empty();}public Optional<Duration> connectTimeout(){return Optional.empty();}
+        public Redirect followRedirects(){return Redirect.NEVER;}public Optional<ProxySelector> proxy(){return Optional.empty();}
+        public SSLContext sslContext(){try{return SSLContext.getDefault();}catch(Exception e){throw new IllegalStateException("SSL context");}}
+        public SSLParameters sslParameters(){return new SSLParameters();}public Optional<Authenticator> authenticator(){return Optional.empty();}
+        public Version version(){return Version.HTTP_1_1;}public Optional<Executor> executor(){return Optional.empty();}
+    }
+    static void assertResult(Driver driver,Object result)throws Exception {
+        check(driver.calls==1,"one native request required");
+        check(MAPPER.valueToTree(result).equals(driver.fixture.get("response")),"response round trip");
+    }
+    public static void main(String[] args)throws Exception {
+__CASES__
+    }
+}

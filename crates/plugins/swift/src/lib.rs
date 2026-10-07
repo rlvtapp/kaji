@@ -13,6 +13,9 @@ mod package;
 mod pagination;
 pub use package::{PackageExt, Settings, Swift, package, sdk};
 
+mod operation_tests;
+pub use operation_tests::{OperationTests, operation_tests};
+
 use std::collections::BTreeMap;
 use std::fmt::Write;
 
@@ -222,7 +225,7 @@ let transport = KajiMiddlewareTransport(inner: KajiURLSessionTransport()) { requ
 let client = KajiClient(options: .init(baseURL: URL(string: "https://api.example.com")!), transport: transport)
 ```
 
-Nest wrappers for composition; outer layers see requests first and responses last. Implement `KajiTransport` directly to substitute execution, or return a response without calling `next`. Existing `session:` initialization remains supported. Middleware wraps the buffered transport; it does not add streaming or automatic retries. Errors from HTTP status validation and decoding occur after middleware. Captures must satisfy Swift `Sendable` rules. Lifecycle hooks remain separate notifications.
+Nest wrappers for composition; outer layers see requests first and responses last. Implement `KajiTransport` directly to substitute execution, or return a response without calling `next`. Existing `session:` initialization remains supported. Middleware wraps the buffered transport once per attempt. Enable automatic retries with `KajiClientOptions(baseURL: ..., maxAttempts: 3, retryBaseDelay: 0.5, retryMaxDelay: 30)`; the default is one attempt. Attempts are capped at 10, delays at 60 seconds. Exponential backoff honors bounded `retry-after-ms` and `Retry-After` (seconds or HTTP date). GET/HEAD/OPTIONS/PUT/DELETE may replay; POST/PATCH require a nonblank standard idempotency key or an operation-declared custom key. Generated keys remain stable across attempts. Transient URLSession errors and HTTP 408/429/500/502/503/504 are eligible. Task cancellation interrupts backoff and is never retried. Buffered response decoding happens after retry selection, so decode errors do not replay requests. Errors from HTTP status validation and decoding occur after middleware. Captures must satisfy Swift `Sendable` rules. Lifecycle hooks remain separate notifications.
 "#.replace("MODULE", module));
     output
 }
@@ -280,6 +283,15 @@ public final class KajiClient: @unchecked Sendable {"#)
     .replace("hooks: [any KajiClientHook] = [])", "hooks: [any KajiClientHook] = [], transport: (any KajiTransport)? = nil)")
     .replace("        self.options = options\n        self.session = session", "        self.options = options\n        self.session = session\n        self.transport = transport ?? KajiURLSessionTransport(session: session)")
     .replace("try await session.data(for: request)", "try await transport.execute(request)")
+    .replace("    public var timeout: TimeInterval", "    public var timeout: TimeInterval\n    public var maxAttempts: Int\n    public var retryBaseDelay: Double\n    public var retryMaxDelay: Double")
+    .replace("timeout: TimeInterval = 30)", "timeout: TimeInterval = 30, maxAttempts: Int = 1, retryBaseDelay: Double = 0.5, retryMaxDelay: Double = 30)")
+    .replace("        self.timeout = timeout", "        self.timeout = timeout\n        self.maxAttempts = min(10,max(1,maxAttempts))\n        self.retryBaseDelay = retryBaseDelay.isFinite ? max(0,min(60,retryBaseDelay)) : 0.5\n        self.retryMaxDelay = retryMaxDelay.isFinite ? max(0,min(60,retryMaxDelay)) : 30")
+    .replace("_ request: URLRequest, as type: T.Type)", "_ request: URLRequest, as type: T.Type, idempotencyHeader: String? = nil)")
+    .replace("sendVoid(_ request: URLRequest)", "sendVoid(_ request: URLRequest, idempotencyHeader: String? = nil)")
+    .replace("        hooks.forEach { $0.willSend(request) }\n", "")
+    .replace("        hooks.forEach { $0.didReceive(http, body: data) }\n", "")
+    .replace("let (data, response) = try await transport.execute(request)", "let (data, response) = try await executeWithRetry(request, idempotencyHeader: idempotencyHeader)")
+    .replace("    internal func encode<T:", &(include_str!("retry_runtime.swift.txt").to_owned()+"\n    internal func encode<T:"))
     // Preserve the default adapter's direct Foundation execution.
     .replace("        try await transport.execute(request)\n    }\n}\npublic typealias", "        try await session.data(for: request)\n    }\n}\npublic typealias")
 }
@@ -666,12 +678,18 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
             );
         }
     }
+    let retry_header = kaji_core::idempotency::resolved(operation)
+        .map(|p| format!("{:?}", p.header))
+        .unwrap_or_else(|| "nil".into());
     if response == "Void" {
-        let _ = writeln!(output, "{indent}    try await sendVoid(request)");
+        let _ = writeln!(
+            output,
+            "{indent}    try await sendVoid(request, idempotencyHeader: {retry_header})"
+        );
     } else {
         let _ = writeln!(
             output,
-            "{indent}    return try await send(request, as: {response}.self)"
+            "{indent}    return try await send(request, as: {response}.self, idempotencyHeader: {retry_header})"
         );
     }
     let _ = writeln!(output, "{indent}}}\n");

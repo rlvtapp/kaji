@@ -15,6 +15,12 @@ impl Language for Swift {
     type Settings = Settings;
     type Workspace = ();
     fn finalize_files(tree: &mut kaji_core::GeneratedTree) -> Result<()> {
+        if tree.get("test/OperationTests.swift").is_some() {
+            anyhow::ensure!(
+                tree.get("Package.swift").is_some(),
+                "Swift operation tests require a generated SDK"
+            );
+        }
         if !tree
             .iter()
             .any(|(path, _)| path.ends_with("StandardWebhooks.swift"))
