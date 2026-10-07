@@ -11,8 +11,16 @@
 - Opt-in Standard Webhooks HMAC v1 verifiers across ten SDK targets, with shared
   canonical vectors, timestamp/rotation checks and native probes. Go gains cached
   OAuth client credentials with coordinated refresh and bounded safe 401 replay.
-- Optional generated TypeScript Fetch/Axios and Rust operation tests with bounded
-  structural fixtures and explicit unsupported diagnostics; Go recipe registration.
+- Optional generated operation tests in all ten SDK language recipes, with bounded
+  structural fixtures, fake native HTTP drivers and explicit unsupported diagnostics.
+- Opt-in Ruby/Swift replay-safe retries, bounded server delay handling and backoff
+  cancellation; the default remains one attempt.
+- Elixir offset and absolute same-origin URL pagination; continuations reject origin
+  changes before authentication. C# gains opt-in forward-compatible open enums.
+- Reviewed Postman environment synchronization preserves remote secrets and manually
+  added variables, with bounded responses, hash review and verified read-back.
+- Java/C# named scalar and union wrappers preserve their underlying JSON value
+  during round-trip serialization. Optional-null/omission ambiguity remains.
 - Swift cursor pagination, checked-in complex-model OpenAPI regressions and a
   checksum-pinned Microsoft Graph native test with manual read-only CI.
 - Reviewed-hash Postman collection synchronization and optional editable Terraform

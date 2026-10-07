@@ -1,0 +1,32 @@
+name: Kaji Postman synchronization
+description: Compare or publish an explicitly reviewed environment to an existing Postman environment
+inputs:
+  environment:
+    description: Generated environment file
+    required: true
+  uid:
+    description: Existing destination environment UID
+    required: true
+  api-key:
+    description: Postman API key; pass a repository or environment secret
+    required: true
+  mode:
+    description: check (read only) or publish
+    default: check
+  expected-hash:
+    description: Reviewed remoteHash from check; required for changed publication
+    required: false
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v6
+      with:
+        node-version: '22'
+    - shell: bash
+      env:
+        KAJI_POSTMAN_ENVIRONMENT: ${{ inputs.environment }}
+        KAJI_POSTMAN_UID: ${{ inputs.uid }}
+        KAJI_POSTMAN_API_KEY: ${{ inputs.api-key }}
+        KAJI_POSTMAN_MODE: ${{ inputs.mode }}
+        KAJI_POSTMAN_EXPECTED_HASH: ${{ inputs.expected-hash }}
+      run: node "$GITHUB_ACTION_PATH/../environment.mjs"

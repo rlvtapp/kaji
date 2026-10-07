@@ -56,9 +56,9 @@ than imposing one runtime interface on every language.
 | Java | Maven; HttpClient | Cursor, page, offset, next URL | Yes | Harness 15/17; native CI execution required |
 | C#/.NET | .NET; HttpClient/DelegatingHandler | Cursor, page, offset | Yes | Harness 17/17; native CI execution required |
 | PHP | Composer; PSR-18 | Cursor, page, offset, next URL | Yes | Harness 15/17; native CI execution required |
-| Elixir | Mix; Finch | Cursor, page | Yes | Harness 15/17; native CI execution required |
-| Ruby | Ruby package; native HTTP | Page | No | 12/17 |
-| Swift | Swift package; Foundation | Cursor, page | No | 13/17 |
+| Elixir | Mix; Finch | Cursor, page, offset, absolute same-origin URL | Yes | Harness 15/17; native CI execution required |
+| Ruby | Ruby package; native HTTP | Page | Opt-in | 16/17; retries opt-in |
+| Swift | Swift package; Foundation | Cursor, page | Opt-in | 17/17; retries opt-in |
 
 The corpus contains 17 scenarios per target. Unsupported scenarios are recorded,
 not counted as passes. See the [executable manifest](../packages/runtime-contract/scenarios.json)
@@ -73,14 +73,14 @@ and selector restrictions are in the [pagination guide](guides/pagination.md).
 | OAuth client credentials | Python sync/async and opt-in Go cached providers, coordinated refresh and bounded unauthorized recovery | Go refresh covers buffered operations; other targets require caller-supplied providers/tokens |
 | Consumer middleware | Rewrite requests/responses, short-circuit or recover through native supported hooks | Java/C#/PHP use native HTTP decorators; hook signatures differ |
 | Bundled author middleware | Ship policy modules and register them by default during generation | Customers need no middleware registration for bundled policies |
-| Retry and backoff | Replay safe operations with bounded attempts and server delay handling | Ruby/Swift have no automatic retry policy |
+| Retry and backoff | Replay safe operations with bounded attempts and server delay handling | Ruby/Swift default to one attempt; retry settings enable replay-safe retries |
 | Idempotency keys | `x-kaji-idempotency` or per-package rules; secure UUIDs, caller overrides, operation-scoped header | Requires server semantics; blank keys do not protect replay; PATCH requires a key |
 | Pagination | Lazy helpers reuse the actual operation, transport/auth and middleware | Helpers yield pages; forms/body controls differ by target |
 | Cancellation | Native context/signal/task cancellation; tests cover selected transports and pagers | Not a universal per-call timeout option |
 | Structural response checks | Opt-in TypeScript, Go, Python and Ruby checks; native model decoders also reject some invalid shapes | Java/PHP/Elixir shared cases remain permissive |
 | Errors and raw results | Declared native errors and response envelopes where supported | Inspect each target's surface; raw response/stream ownership differs |
 | Streaming and file media | Target renderers support selected SSE/binary forms; Java/C# frame multiline SSE payloads | Swift SSE is unsupported; Swift/Java/C# reject unsupported multipart requests. Shared corpus is not exhaustive |
-| Forward-compatible models | Open Java enums; selected unknown-property and nullable handling; TypeScript int64 string/bigint options | Unknown enum/union roundtrip and omitted-vs-null behavior are not universal |
+| Forward-compatible models | Opt-in Java/C# open enums; transparent named scalar/union JSON; selected unknown-property and nullable handling; TypeScript int64 string/bigint options | Unknown enum/union roundtrip and omitted-vs-null behavior are not universal |
 | Webhook verification | Opt-in verifiers in all ten SDKs: raw-body HMAC verification, timestamp checks and secret rotation | Java/C#/PHP/Elixir probes require native CI; Swift Linux crypto unverified; HMAC v1, no durable replay store |
 
 Start from [generated SDKs](generated-sdks.md), then follow
@@ -115,7 +115,7 @@ Read [auxiliary generators](auxiliary-generators.md), [mocking](mocking.md),
 | Postman Collection 2.1 | Implemented: operation folders, parameters/media/auth, examples, stable IDs and secret redaction | [Postman](postman.md) |
 | Postman environment | Create-once template; customer credentials are not overwritten | [Postman](postman.md) |
 | Collection checks | Official pinned schema validation; bounded local Newman execution | [Execution](../packages/postman-execute/README.md) |
-| Postman remote sync | Explicit existing UID; read-only check and reviewed-hash publication; mocked tests, live service unverified | [Sync helper](../packages/postman-sync/README.md) |
+| Postman remote sync | Collection and environment existing UIDs; secrets/manual environment variables preserved; read-only check and reviewed-hash publication; mocked tests, live service unverified | [Sync helper](../packages/postman-sync/README.md) |
 | Typed Terraform provider | Framework CRUD bindings, scalar plan/state, import, authentication, drift and diagnostics | [Terraform](terraform-provider.md) |
 | Terraform data sources | Supported single-entity reads | [Terraform](terraform-provider.md) |
 | Terraform native verification | Framework object tests and real local CLI lifecycle against a mock | [Verification](verification.md) |
@@ -143,16 +143,15 @@ presence is not evidence that registry trust or live delivery works.
 
 ## Tests and confidence
 
-The current verification baseline includes 388 passing workspace tests, 93 native
-wire scenarios across six available runtimes, 28 runner/delivery/sync tests and an
+The current verification baseline includes 399 passing workspace tests, 101 native
+wire scenarios across six available runtimes, 37 runner/delivery/sync tests and an
 installed TypeScript package consumer check. Ignored native probes need explicit
 toolchain execution; they are not passes. Counts describe the recorded baseline,
 not a permanent CI badge.
 
 Snapshots protect output shape; native compilation checks types; fake transports
 check request/response behavior; loopback tests check native HTTP; real registry
-tests establish delivery. Keep those evidence levels separate. Optional Python/Go/Rust/TypeScript
-operation tests generate bounded fake-driver checks and explicit skip diagnostics.
+tests establish delivery. Keep those evidence levels separate. Optional operation tests in all ten SDK languages generate bounded fake-driver checks and explicit skip diagnostics.
 Complex contracts, SSE/uploads and real API semantics still need focused tests.
 
 [Verification](verification.md) has commands and prerequisites. The

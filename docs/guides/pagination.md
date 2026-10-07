@@ -57,7 +57,7 @@ limits below for legacy paginator selector differences.
 | PHP | `Generator`, `<operation>Pages` | Cursor, page, offset/limit, next URL |
 | Ruby | `Enumerator`, `<operation>_pages` | Page |
 | Swift | Native async sequence, `<operation>Pages` | Cursor, page |
-| Elixir | Lazy `Stream`, `<operation>_pages` | Cursor, page |
+| Elixir | Lazy `Stream`, `<operation>_pages` | Cursor, page, offset, absolute same-origin URL |
 
 These are capability forms, not a guarantee that every schema/control binding
 can be represented. Page helpers require buffered JSON response arrays selected
@@ -92,3 +92,11 @@ Swift cursor helpers accept unconstrained string parameter controls, preserve
 caller arguments and middleware, and stop on empty/missing or repeated cursors.
 Body and integer cursor controls remain unsupported. Page and cursor iterators
 are lazy and retain Swift task cancellation.
+
+
+Elixir offset helpers advance by the actual result count and preserve caller
+options. URL helpers accept absolute HTTP(S) continuations on the configured
+origin; relative URLs, userinfo, fragments, scheme/host/port changes are rejected
+before authentication or transport. Repeated continuations stop iteration and a
+page cap bounds traversal. Body controls remain unsupported. Native execution of
+these additions is selected in CI and requires Elixir.

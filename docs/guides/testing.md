@@ -88,7 +88,7 @@ alone cannot establish that an installed package imports successfully.
 
 ## Opt-in generated operation checks
 
-Python, Go, Rust and TypeScript recipes accept `{"name":"operation-tests"}`
+All ten SDK language recipes accept `{"name":"operation-tests"}`
 beside `sdk`. TypeScript consumers can bind `uses.models`, `uses.operations` and
 `uses.transport` to named compatible providers. Native custom providers can opt
 in through the typed handles documented by the plugin.
@@ -106,3 +106,25 @@ compiler and executes Swift models. It covers recursive references, Unicode,
 nullable values, unknown fields, unions and rejected identifier collisions. This
 is a synthetic regression corpus, not proof that large third-party specifications
 compile in every target.
+
+
+The remaining targets also emit executable public-operation probes with in-memory
+HTTP drivers. Select `{"name":"operation-tests"}` beside `{"name":"sdk"}`:
+
+| Target | Generated command |
+| --- | --- |
+| Ruby | `ruby test/operation_tests.rb` |
+| Swift | See `OPERATION_TESTS.md` for the native compiler command |
+| PHP | `composer install && php tests/operations.php` |
+| Elixir | `mix deps.get && mix run test/operations_test.exs` |
+| Java | See `OPERATION_TESTS.md` for Maven test-classpath execution |
+| C# | `dotnet run --project tests/OperationTests/OperationTests.csproj` |
+
+Each target emits a report of supported cases and exclusions. Generated samples
+cover bounded buffered-operation serialization; authentication, streaming, complex
+constraints and real server behavior require dedicated fixtures. An empty supported
+set is not evidence of operation coverage. The C# test project is excluded from the
+SDK project's compile inputs. PHP/Elixir/Java/C# native execution is selected in CI
+and has not been run on the local machine. Ruby and Swift have native local probes.
+These six JSON recipes infer the bundled SDK; custom typed-provider selection, where
+exposed by the plugin, uses the Rust API instead of ignored JSON `uses` bindings.

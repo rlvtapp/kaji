@@ -176,9 +176,11 @@ Crypto backend remains unverified. Go's OAuth probe runs with the race detector
 and checks coordinated refresh, cancellation, expiry and bounded replay safety.
 See [OAuth/webhooks](guides/oauth-webhooks.md).
 
-Generated operation tests now include TypeScript Fetch/Axios and Rust beside
-Python/Go. The new native suites execute the emitted tests through production
-package compilation and fake native drivers. Unsupported operations are explicitly
+Generated operation tests now exist in all ten SDK languages (and the dotnet
+recipe alias). Ruby and Swift emitted operation/retry probes passed locally alongside the prior
+TypeScript/Rust/Go/Python probes. Java/C#/PHP/Elixir emitted probes are wired into
+CI but remain unverified locally. The suites use production SDK compilation and
+fake native drivers. Unsupported operations are explicitly
 listed, not counted as covered. The complex OpenAPI corpus passes through the
 actual Go compiler and executes Swift models; Java/C# SSE probes require native CI.
 
@@ -193,3 +195,22 @@ Terraform release scaffolding is editable and inactive until deliberately copied
 into workflows. Native Framework lifecycle checks passed after the namespace and
 version changes; GoReleaser signing, external release uploads and registry ingestion
 remain unexecuted. The [feature catalog](features.md) records these boundaries.
+
+
+The shared corpus now enables Ruby/Swift retry options and passed their replay-safe
+GET, generated-key POST/PATCH and caller-key override cases. Defaults remain one
+attempt. Swift cancellation interrupts backoff; Ruby's cancellation callback is
+checked between attempts and during backoff, while in-flight synchronous transport
+interruption remains the driver's responsibility.
+
+Java/C# named scalar and union wrappers now serialize as their underlying JSON
+values. C# `sdk().open_enums(true)` (JSON `open_enums`) preserves future enum strings;
+the default enum API is unchanged. Dedicated native model probes are selected in
+CI and unverified locally. Default optional-nullable fields still cannot reliably
+distinguish omission from explicit null; these changes do not claim that gap is
+closed. Union wrappers preserve raw JSON and do not validate union matching.
+
+Postman environment synchronization adds mocked checks for reviewed publication,
+secret preservation, manual-variable preservation, duplicate rejection, read-back
+failure, response size limits and redacted transport errors. No live Postman API
+call has been made.

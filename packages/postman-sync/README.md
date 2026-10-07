@@ -30,3 +30,22 @@ API requests use the [official Postman API](https://learning.postman.com/docs/re
 ```sh
 node --test packages/postman-sync/test/*.mjs
 ```
+
+## Existing environment sync
+
+Use `node packages/postman-sync/environment.mjs` with `KAJI_POSTMAN_ENVIRONMENT`,
+`KAJI_POSTMAN_UID`, `KAJI_POSTMAN_API_KEY`, and the same `KAJI_POSTMAN_MODE` /
+`KAJI_POSTMAN_EXPECTED_HASH` review flow as collections. The composite action is
+`./packages/postman-sync/environment` with `environment`, `uid`, `api-key`,
+`mode`, and `expected-hash` inputs.
+
+The destination must already exist. The check reports hashes only. Publishing
+updates portable environment fields through Postman's [replace environment
+endpoint](https://learning.postman.com/api-docs/api-reference/environments/put-environment)
+and verifies a fresh read-back. Source secret variables must be empty placeholders;
+remote secret values and remote variables absent from the source are preserved.
+A remote secret cannot be downgraded or replaced by a source value. Service identity
+and export metadata are not submitted. This manages shared variables only; Postman
+local values and Vault secrets are outside the API's scope. There is no atomic
+compare-and-swap in this endpoint, so avoid concurrent edits between review and
+publication. Workspace creation, relocation, and removal are not performed.

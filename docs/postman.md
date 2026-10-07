@@ -114,5 +114,5 @@ explicit sandbox/mock URL and test fixtures, especially for create/delete operat
 Portable export and validation are implemented. The editable
 [Postman synchronization helper](../packages/postman-sync/README.md) checks or
 updates an explicitly selected existing collection with a reviewed remote hash.
-It does not create workspaces, synchronize environments or publish release assets.
+The companion environment action checks and publishes reviewed updates to an existing environment, preserving remote secrets and manually added variables. It does not create or relocate workspaces or publish release assets.
 Live Postman API execution remains unverified.
