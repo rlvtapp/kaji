@@ -1,0 +1,59 @@
+<?php
+
+declare(strict_types=1);
+
+namespace __NAMESPACE__;
+
+/** Explicit buffered multipart parts; repeated names preserve repeated fields. */
+final class MultipartBody
+{
+    private const MAX_BYTES = 67108864;
+    private const MAX_PARTS = 1024;
+    private array $parts = [];
+    private ?array $encoded = null;
+
+    public function addText(string $name, string|int|float|bool $value): self
+    {
+        return $this->addPart($name, is_bool($value) ? ($value ? 'true' : 'false') : (string)$value, null, 'text/plain; charset=utf-8');
+    }
+
+    public function addJson(string $name, mixed $value): self
+    {
+        return $this->addPart($name, json_encode($value, JSON_THROW_ON_ERROR), null, 'application/json');
+    }
+
+    public function addFile(string $name, string $bytes, string $filename, string $contentType = 'application/octet-stream'): self
+    {
+        return $this->addPart($name, $bytes, $filename, $contentType);
+    }
+
+    public function addPart(string $name, string $bytes, ?string $filename = null, string $contentType = 'application/octet-stream'): self
+    {
+        if (count($this->parts) >= self::MAX_PARTS) throw new \InvalidArgumentException('too many multipart parts');
+        foreach ([$name, $filename, $contentType] as $value) {
+            if ($value !== null && ($value === '' || strlen($value) > 4096 || preg_match('/[\r\n\x00]/', $value))) throw new \InvalidArgumentException('invalid multipart metadata');
+        }
+        if (strlen($bytes) + array_sum(array_map(static fn(array $part): int => strlen($part[1]), $this->parts)) > self::MAX_BYTES) throw new \InvalidArgumentException('multipart body exceeds buffer limit');
+        $this->parts[] = [$name, $bytes, $filename, $contentType];
+        $this->encoded = null;
+        return $this;
+    }
+
+    /** @return array{string,string} content type and matching bytes */
+    public function encode(): array
+    {
+        if ($this->encoded !== null) return $this->encoded;
+        $boundary = 'kaji-' . bin2hex(random_bytes(24));
+        $encoded = '';
+        $quote = static fn(string $value): string => str_replace(['\\', '"'], ['\\\\', '\\"'], $value);
+        foreach ($this->parts as [$name, $bytes, $filename, $contentType]) {
+            $encoded .= '--' . $boundary . "\r\nContent-Disposition: form-data; name=\"" . $quote($name) . '"';
+            if ($filename !== null) $encoded .= '; filename="' . $quote($filename) . '"';
+            $encoded .= "\r\nContent-Type: " . $contentType . "\r\n\r\n" . $bytes . "\r\n";
+            if (strlen($encoded) > self::MAX_BYTES) throw new \InvalidArgumentException('multipart body exceeds buffer limit');
+        }
+        $encoded .= '--' . $boundary . "--\r\n";
+        if (strlen($encoded) > self::MAX_BYTES) throw new \InvalidArgumentException('multipart body exceeds buffer limit');
+        return $this->encoded = ['multipart/form-data; boundary=' . $boundary, $encoded];
+    }
+}

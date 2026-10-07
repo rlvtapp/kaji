@@ -65,6 +65,12 @@ fn render_sdk(
         page_pagination::render(api, operation)?;
     }
     let mut tree = GeneratedTree::default();
+    insert(
+        &mut tree,
+        root,
+        &format!("lib/{app}/multipart_body.ex"),
+        include_str!("multipart.ex.txt").replace("__KAJI_MODULE__", &module),
+    )?;
 
     insert(
         &mut tree,
@@ -293,6 +299,18 @@ fn render_client(module: &str) -> String {
     end
   end
 
+  @doc "Returns an independent client for one call or traversal; timeout is per HTTP attempt."
+  def for_call(%__MODULE__{} = client, options) do
+    headers = Keyword.get(options, :headers, [])
+    timeout = Keyword.get(options, :timeout, client.timeout)
+    if not is_integer(timeout) or timeout <= 0 or not is_list(headers) or
+       not Enum.all?(headers, fn {name, value} -> is_binary(name) and is_binary(value) and not String.contains?(name <> value, ["\r", "\n"]) ; _ -> false end) do
+      raise ArgumentError, "invalid call options"
+    end
+    names = Enum.map(headers, fn {name, _} -> String.downcase(name) end)
+    %{client | timeout: timeout, headers: Enum.reject(client.headers, fn {name, _} -> String.downcase(name) in names end) ++ headers}
+  end
+
   @spec required(keyword(), atom()) :: {:ok, term()} | {:error, {:missing_required_option, atom()}}
   def required(options, key) do
     case Keyword.fetch(options, key) do
@@ -314,6 +332,7 @@ fn render_client(module: &str) -> String {
   @spec request(t(), atom(), String.t(), list(), list(), term(), atom(), atom(), map(), String.t() | nil) :: {:ok, term()} | {:error, term()}
   def request(client, method, path, query \\ [], headers \\ [], body \\ nil, body_kind \\ :json, response_kind \\ :json, error_types \\ %{}, idempotency_header \\ nil) do
     with {:ok, url} <- request_url(client, path, query) do
+      {body, body_kind} = prepare_body(body, body_kind)
       headers = default_headers(client, headers, body, body_kind, response_kind)
       context = %{method: method, url: url, query: query, headers: headers, body: body, idempotency_header: idempotency_header}
       notify(client.before_request, context)
@@ -325,6 +344,7 @@ fn render_client(module: &str) -> String {
   @spec event_stream(t(), atom(), String.t(), list(), list(), term(), atom()) :: {:ok, Enumerable.t()}
   def event_stream(client, method, path, query \\ [], headers \\ [], body \\ nil, body_kind \\ :json) do
     url = client.base_url <> path <> encode_query(query)
+    {body, body_kind} = prepare_body(body, body_kind)
     headers = default_headers(client, headers, body, body_kind, :stream)
     request = Finch.build(method, url, headers, encode_body(body, body_kind))
     notify(client.before_request, %{method: method, url: url, query: query, headers: headers, body: body})
@@ -568,6 +588,16 @@ fn render_client(module: &str) -> String {
     base = if is_nil(body), do: base, else: [{"content-type", content_type(body_kind)} | base]
     case client.api_key do nil -> base; "" -> base; key -> [{client.api_key_header, credential(client.api_key_prefix, key)} | base] end
   end
+  defp prepare_body(%__KAJI_MODULE__.MultipartBody{} = body, kind) when kind in [:multipart, :multipart_json] do
+    {content_type, bytes} = __KAJI_MODULE__.MultipartBody.encode(body)
+    {bytes, {:multipart, content_type}}
+  end
+  defp prepare_body(%__KAJI_MODULE__.MultipartBody{}, _), do: raise(ArgumentError, "operation does not accept multipart/form-data")
+  defp prepare_body(nil, :multipart), do: {nil, :json}
+  defp prepare_body(_body, :multipart), do: raise(ArgumentError, "multipart request body must be MultipartBody")
+  defp prepare_body(body, :multipart_json), do: {body, :json}
+  defp prepare_body(body, kind), do: {body, kind}
+  defp content_type({:multipart, content_type}), do: content_type
   defp content_type(:form), do: "application/x-www-form-urlencoded"
   defp content_type(:binary), do: "application/octet-stream"
   defp content_type(_), do: "application/json"
@@ -575,6 +605,7 @@ fn render_client(module: &str) -> String {
   defp credential("", key), do: key
   defp credential(prefix, key), do: prefix <> " " <> key
   defp encode_body(nil, _), do: nil
+  defp encode_body(body, {:multipart, _}), do: body
   defp encode_body(body, :binary) when is_binary(body), do: body
   defp encode_body(_body, :binary), do: raise(ArgumentError, "binary request bodies must be binaries")
   defp encode_body(body, :form), do: body |> JSON.to_wire() |> URI.encode_query()
@@ -1053,8 +1084,11 @@ fn render_operation_body(
         .and_then(serde_json::Value::as_str)
         .map(|header| format!(", \"{}\"", escape_elixir_string(header)))
         .unwrap_or_else(|| ", nil".into());
-    let native_method = if operation.method == kaji_core::HttpMethod::Query {
-        "\"QUERY\"".to_owned()
+    let native_method = if matches!(
+        &operation.method,
+        kaji_core::HttpMethod::Query | kaji_core::HttpMethod::Custom(_)
+    ) {
+        format!("\"{}\"", escape_elixir_string(operation.method.as_str()))
     } else {
         format!(":{}", operation.method.as_str().to_ascii_lowercase())
     };
@@ -1132,6 +1166,21 @@ fn operation_option_types(operation: &Operation, module: &str) -> String {
 }
 
 fn operation_body_kind(operation: &Operation) -> &'static str {
+    if operation.request_body.as_ref().is_some_and(|body| {
+        body.media_types
+            .iter()
+            .any(|media| media.content_type == "multipart/form-data")
+    }) {
+        return if operation.request_body.as_ref().is_some_and(|body| {
+            body.media_types.iter().any(|media| {
+                media.content_type == "application/json" || media.content_type.ends_with("+json")
+            })
+        }) {
+            "multipart_json"
+        } else {
+            "multipart"
+        };
+    }
     operation
         .request_body
         .as_ref()
@@ -1542,6 +1591,63 @@ mod tests {
             }],
             annotations: Default::default(),
         }
+    }
+
+    #[test]
+    #[ignore = "requires Elixir Mix project with Finch/Jason; KAJI_ELIXIR_NATIVE_PROJECT optional"]
+    fn native_multipart_binary_json_limits_and_retry_bytes() {
+        let root = tempfile::tempdir().unwrap();
+        let tree = render_sdk(
+            &Api::default(),
+            "sdk",
+            Some("multipart-probe"),
+            SdkClientStyle::Flat,
+        )
+        .unwrap();
+        tree.write_to(root.path()).unwrap();
+        let files = ["multipart_body", "api_error", "json", "client"];
+        let mut script = String::new();
+        for file in files {
+            let path = root
+                .path()
+                .join(format!("sdk/lib/multipart_probe/{file}.ex"));
+            use std::fmt::Write as _;
+            writeln!(
+                script,
+                "Code.compile_file({})",
+                serde_json::to_string(&path.to_string_lossy()).unwrap()
+            )
+            .unwrap();
+        }
+        script.push_str(include_str!("multipart_probe.exs.txt"));
+        let path = root.path().join("probe.exs");
+        std::fs::write(&path, script).unwrap();
+        let project = std::env::var_os("KAJI_ELIXIR_NATIVE_PROJECT")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| root.path().join("sdk"));
+        if std::env::var_os("KAJI_ELIXIR_NATIVE_PROJECT").is_none() {
+            let deps = std::process::Command::new("mix")
+                .arg("deps.get")
+                .current_dir(&project)
+                .output()
+                .unwrap();
+            assert!(
+                deps.status.success(),
+                "{}",
+                String::from_utf8_lossy(&deps.stderr)
+            );
+        }
+        let output = std::process::Command::new("mix")
+            .args(["run", "--no-start"])
+            .arg(path)
+            .current_dir(project)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     #[test]
@@ -2124,3 +2230,6 @@ pub use webhooks::{Webhooks, webhooks};
 
 mod operation_tests;
 pub use operation_tests::{OperationTests, operation_tests};
+
+mod oauth;
+pub use oauth::{OAuth, oauth};

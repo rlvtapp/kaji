@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,7 +50,7 @@ func TestOpenAPI32UnsupportedWireFeaturesPreserveArtifacts(t *testing.T) {
 		{"querystring", `"get":{"parameters":[{"name":"whole","in":"querystring","content":{"application/json":{"schema":{"type":"object"}}}}],"responses":{"200":{"description":"ok"}}}`, "querystring"},
 		{"itemSchema", `"get":{"responses":{"200":{"description":"ok","content":{"text/event-stream":{"itemSchema":{"type":"string"}}}}}}`, "itemSchema"},
 		{"prefixEncoding", `"post":{"requestBody":{"content":{"multipart/mixed":{"schema":{"type":"array"},"prefixEncoding":[{}]}}},"responses":{"200":{"description":"ok"}}}`, "prefixEncoding"},
-		{"custommethod", `"additionalOperations":{"COPY":{"responses":{"200":{"description":"ok"}}}}`, "additionalOperations"},
+		{"custommethod", `"additionalOperations":{"BAD METHOD":{"responses":{"200":{"description":"ok"}}}}`, "additionalOperations"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()
@@ -130,5 +131,54 @@ func TestOpenAPI32UnresolvedExternalReferencePreservesArtifacts(t *testing.T) {
 	bytes, err := os.ReadFile(marker)
 	if err != nil || string(bytes) != "owned" {
 		t.Fatalf("artifact overwritten %q %v", bytes, err)
+	}
+}
+
+func TestOpenAPI32AdditionalOperationsPreserveOrderAndCase(t *testing.T) {
+	root := t.TempDir()
+	input, output := filepath.Join(root, "api.json"), filepath.Join(root, "out")
+	spec := `{"openapi":"3.2.0","info":{"title":"Methods","version":"1"},"paths":{"/thing":{"additionalOperations":{"COPY":{"operationId":"copyThing","responses":{"204":{"description":"ok"}}},"x-Custom":{"operationId":"customThing","responses":{"204":{"description":"ok"}}}},"get":{"operationId":"getThing","responses":{"204":{"description":"ok"}}}}}}`
+	if err := os.WriteFile(input, []byte(spec), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, _, count, err := runWithHash(input, output, nil)
+	if err != nil || count != 3 {
+		t.Fatalf("count %d error %v", count, err)
+	}
+	orderBytes, err := os.ReadFile(filepath.Join(output, "operations-order.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var order []string
+	if err := json.Unmarshal(orderBytes, &order); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(order, ",") != "COPY /thing,x-Custom /thing,GET /thing" {
+		t.Fatalf("order %v", order)
+	}
+	indexBytes, err := os.ReadFile(filepath.Join(output, "operations.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var index map[string]string
+	if err := json.Unmarshal(indexBytes, &index); err != nil {
+		t.Fatal(err)
+	}
+	for _, method := range []string{"GET", "COPY", "x-Custom"} {
+		file := index[method+" /thing"]
+		if file == "" {
+			t.Fatalf("missing %s in index %s", method, indexBytes)
+		}
+		data, err := os.ReadFile(filepath.Join(output, "operations", file))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var operation OperationDoc
+		if err := json.Unmarshal(data, &operation); err != nil {
+			t.Fatal(err)
+		}
+		if operation.Method != method {
+			t.Fatalf("method %s wanted %s", operation.Method, method)
+		}
 	}
 }

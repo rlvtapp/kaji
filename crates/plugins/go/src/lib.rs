@@ -1877,6 +1877,55 @@ mod tests {
     }
 
     #[test]
+    fn native_custom_method_preserves_wire_and_is_not_replayed() {
+        let api = Api {
+            name: "Custom".into(),
+            operations: vec![
+                Operation {
+                    id: "copyThing".into(),
+                    method: HttpMethod::Custom("COPY".into()),
+                    path: "/thing".into(),
+                    ..Default::default()
+                },
+                Operation {
+                    id: "quoteThing".into(),
+                    method: HttpMethod::Custom("X'CHECK`TEST".into()),
+                    path: "/quote".into(),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        let root = tempfile::tempdir().unwrap();
+        render_test_sdk(&api, "sdk", Some("custom"))
+            .unwrap()
+            .write_to(root.path())
+            .unwrap();
+        fs::write(root.path().join("sdk/custom_method_test.go"), r#"package custom
+import("context";"net/http";"net/http/httptest";"testing";"sync/atomic")
+func TestCustomMethod(t *testing.T){
+ var calls atomic.Int32
+ server:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){calls.Add(1);expected:="COPY";if r.URL.Path=="/quote"{expected="X'CHECK`TEST"};if r.Method!=expected{t.Errorf("method %s",r.Method)};w.WriteHeader(503)}));defer server.Close()
+ client,err:=NewClient(ClientConfig{BaseURL:server.URL,HTTPClient:server.Client(),Retry:&RetryConfig{MaxAttempts:3}});if err!=nil{t.Fatal(err)}
+ if err:=client.CopyThing(context.Background());err==nil{t.Fatal("expected HTTP failure")};if calls.Load()!=1{t.Fatal("unsafe custom method replayed",calls.Load())}
+ if err:=client.QuoteThing(context.Background());err==nil{t.Fatal("expected HTTP failure")};if calls.Load()!=2{t.Fatal("unsafe punctuation method replayed",calls.Load())}
+}
+"#).unwrap();
+        let output = Command::new("go")
+            .args(["test", "-race", "./..."])
+            .current_dir(root.path().join("sdk"))
+            .env("GOCACHE", std::env::temp_dir().join("kaji-go-cache"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
     fn emits_safe_retry_runtime_without_changing_operation_signatures() {
         let tree = render_test_sdk(&contact_api(), "go", None).unwrap();
         let client = all_source(&tree);

@@ -2,9 +2,10 @@ const assert = require('node:assert/strict')
 const http = require('node:http')
 const { createClient } = require('./runtime.js')
 ;(async () => {
-  let calls = 0, retryCalls = 0, closed = false
+  let calls = 0, retryCalls = 0, customCalls = 0, closed = false
   const server = http.createServer((req, res) => {
     calls++
+    if (req.url === '/custom') { assert.equal(req.method, 'COPY'); customCalls++; res.writeHead(503); res.end(); return }
     if (req.url === '/stall') { req.socket.once('close', () => { closed = true }); return }
     if (req.url === '/retry') { retryCalls++; res.writeHead(503, { 'content-type': 'application/json' }); res.end('{}'); return }
     const finish = () => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ header: req.headers['x-trace'] })) }
@@ -16,6 +17,7 @@ const { createClient } = require('./runtime.js')
     const config = { baseUrl, headers: { 'X-Trace': 'global' }, retry: { maxAttempts: 3, initialDelayMs: 1000 }, timeoutMs: 1000 }
     if (process.env.KAJI_CONTROL_AXIOS) config.client = require('axios').create({ baseURL: baseUrl, proxy: false })
     const client = createClient(config)
+    await assert.rejects(client({ method: 'COPY', url: '/custom' }), error => error.status === 503); assert.equal(customCalls, 1)
     const options = { headers: { 'X-Trace': 'call' }, timeoutMs: 200 }
     const response = await client({ method: 'GET', url: '/headers', headers: { 'X-Trace': 'declared' }, requestOptions: options })
     assert.equal(response.data.header, 'call'); assert.deepEqual(options, { headers: { 'X-Trace': 'call' }, timeoutMs: 200 })

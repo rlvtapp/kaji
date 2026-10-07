@@ -1,0 +1,50 @@
+require 'example_sdk'
+Response = Struct.new(:code, :body) { def [](name); nil; end }
+body = ExampleSdk::MultipartBody.new
+bytes = "\x00\xff\r\n".b
+body.add_file('file', bytes, filename: 'résumé.bin').add_text('count', 0).add_text('active', false).add_json('options', { 'nullable' => nil }).add_text('tags', 'a').add_text('tags', 'b')
+bytes.replace('changed')
+seen = []
+transport = ->(request) do
+  seen << [request['Content-Type'], request.body.dup]
+  Response.new(seen.length == 1 ? '503' : '200', '{}')
+end
+client = ExampleSdk::Client.new(base_url: 'https://example.test', transport: transport, max_attempts: 2, retry_base_delay: 0, retry_max_delay: 0)
+client.send(:request, 'PUT', '/upload', query: {}, headers: {}, body: body, multipart: true)
+raise 'retry changed multipart bytes' unless seen.length == 2 && seen[0] == seen[1]
+content_type, payload = seen.first
+boundary = content_type.split('boundary=').last
+raise 'missing closing boundary' unless payload.end_with?("--#{boundary}--\r\n".b)
+raise 'binary bytes lost' unless payload.include?("\x00\xff\r\n".b)
+raise 'false or zero lost' unless payload.include?("\r\n\r\nfalse\r\n".b) && payload.include?("\r\n\r\n0\r\n".b)
+raise 'JSON null lost' unless payload.include?('{"nullable":null}')
+raise 'repeated fields lost' unless payload.scan('name="tags"').length == 2
+raise 'unicode filename lost' unless payload.include?('résumé.bin'.b)
+begin
+  client.send(:request, 'PUT', '/json', query: {}, headers: {}, body: body)
+  raise 'JSON-only operation accepted multipart'
+rescue ArgumentError
+end
+begin
+  body.add_text("injected\r\nX-Foo: yes", 'x')
+  raise 'metadata injection accepted'
+rescue ArgumentError
+end
+limited = ExampleSdk::MultipartBody.new
+1024.times { limited.add_text('x', '') }
+begin
+  limited.add_text('x', '')
+  raise 'part limit ignored'
+rescue ArgumentError
+end
+unsafe_seen = []
+unsafe = ExampleSdk::Client.new(base_url: 'https://example.test', transport: ->(request) { unsafe_seen << request.body; Response.new('503', '{}') }, max_attempts: 2, retry_base_delay: 0, retry_max_delay: 0)
+begin
+  unsafe.send(:request, 'POST', '/upload', query: {}, headers: {}, body: body, multipart: true)
+rescue ExampleSdk::ApiError
+end
+raise 'unsafe POST replayed' unless unsafe_seen.length == 1
+
+custom_method = "X'CHECK`TEST"
+custom = ExampleSdk::Client.new(base_url: 'https://example.test', transport: ->(request) { raise 'custom method changed' unless request.method == custom_method; Response.new('200','{}') })
+custom.send(:request, custom_method, '/custom', query: {}, headers: {}, body: nil)

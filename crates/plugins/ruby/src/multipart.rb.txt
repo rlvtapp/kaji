@@ -1,0 +1,48 @@
+  # Explicit buffered parts: add repeated fields by calling add_text/add_file again.
+  class MultipartBody
+    MAX_BYTES = 64 * 1024 * 1024
+    MAX_PARTS = 1024
+
+    def initialize
+      @parts = []
+    end
+
+    def add_text(name, value)
+      add_part(name, value.to_s, content_type: 'text/plain; charset=utf-8')
+    end
+
+    def add_json(name, value)
+      add_part(name, JSON.generate(value), content_type: 'application/json')
+    end
+
+    def add_file(name, data, filename:, content_type: 'application/octet-stream')
+      add_part(name, data, filename: filename, content_type: content_type)
+    end
+
+    def add_part(name, data, filename: nil, content_type: 'application/octet-stream')
+      raise ArgumentError, 'too many multipart parts' if @parts.length >= MAX_PARTS
+      [name, filename, content_type].compact.each do |value|
+        raise ArgumentError, 'invalid multipart metadata' unless value.is_a?(String) && !value.empty? && value.bytesize <= 4096 && !value.match?(/[\r\n\x00]/)
+      end
+      raise ArgumentError, 'multipart data must be a String' unless data.is_a?(String)
+      raise ArgumentError, 'multipart body exceeds buffer limit' if data.bytesize + @parts.sum { |part| part[1].bytesize } > MAX_BYTES
+      @parts << [name.dup.freeze, data.b.dup.freeze, filename&.dup&.freeze, content_type.dup.freeze]
+      self
+    end
+
+    def encode
+      require 'securerandom'
+      boundary = "kaji-#{SecureRandom.hex(24)}"
+      quote = ->(value) { value.gsub('\\', '\\\\').gsub('"', '\\"') }
+      encoded = ''.b
+      @parts.each do |name, data, filename, content_type|
+        encoded << "--#{boundary}\r\nContent-Disposition: form-data; name=\"#{quote.call(name)}\"".b
+        encoded << "; filename=\"#{quote.call(filename)}\"".b if filename
+        encoded << "\r\nContent-Type: #{content_type}\r\n\r\n".b << data << "\r\n".b
+        raise ArgumentError, 'multipart body exceeds buffer limit' if encoded.bytesize > MAX_BYTES
+      end
+      encoded << "--#{boundary}--\r\n".b
+      raise ArgumentError, 'multipart body exceeds buffer limit' if encoded.bytesize > MAX_BYTES
+      ["multipart/form-data; boundary=#{boundary}", encoded]
+    end
+  end

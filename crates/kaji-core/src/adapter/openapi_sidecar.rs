@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
@@ -723,18 +723,7 @@ fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T> {
 }
 
 fn parse_method(method: &str) -> Result<HttpMethod> {
-    match method {
-        "GET" => Ok(HttpMethod::Get),
-        "POST" => Ok(HttpMethod::Post),
-        "PUT" => Ok(HttpMethod::Put),
-        "PATCH" => Ok(HttpMethod::Patch),
-        "DELETE" => Ok(HttpMethod::Delete),
-        "HEAD" => Ok(HttpMethod::Head),
-        "OPTIONS" => Ok(HttpMethod::Options),
-        "TRACE" => Ok(HttpMethod::Trace),
-        "QUERY" => Ok(HttpMethod::Query),
-        other => bail!("unsupported HTTP method from Go OpenAPI sidecar: {other}"),
-    }
+    HttpMethod::parse(method).map_err(anyhow::Error::msg)
 }
 
 fn operation_id(method: &str, path: &str) -> String {
@@ -777,7 +766,11 @@ mod tests {
                 method
             );
         }
-        assert!(super::parse_method("COPY").is_err());
+        assert_eq!(
+            super::parse_method("COPY").unwrap(),
+            HttpMethod::Custom("COPY".into())
+        );
+        assert!(super::parse_method("BAD METHOD").is_err());
     }
 
     use super::*;

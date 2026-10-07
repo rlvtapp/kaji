@@ -1,0 +1,68 @@
+import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+
+public enum KajiOAuthError: Error { case invalidConfiguration, tokenRejected }
+/// Supply a bounded issuer transport with redirects disabled. Serializes refreshes. Secrets and issuer response bodies never appear in errors.
+public actor KajiOAuthClientCredentials {
+    private let tokenURL: URL
+    private let clientID: String
+    private let clientSecret: String
+    private let scope: String?
+    private let transport: any KajiTransport
+    private var cached: (String, Date)?
+    private var pending: Task<(String, Date), Error>?
+    public init(tokenURL: URL, clientID: String, clientSecret: String, scope: String? = nil, transport: any KajiTransport) throws {
+        guard tokenURL.scheme == "https", tokenURL.user == nil, tokenURL.password == nil, tokenURL.fragment == nil, !clientID.isEmpty, !clientSecret.isEmpty else { throw KajiOAuthError.invalidConfiguration }
+        self.tokenURL = tokenURL; self.clientID = clientID; self.clientSecret = clientSecret; self.scope = scope; self.transport = transport
+    }
+    public func invalidate(_ rejected: String) { if cached?.0 == rejected { cached = nil } }
+    public func token() async throws -> String {
+        try Task.checkCancellation()
+        if let cached, cached.1 > Date() { return cached.0 }
+        if let pending { let value = try await pending.value; try Task.checkCancellation(); return value.0 }
+        let url = tokenURL, id = clientID, secret = clientSecret, scope = scope, transport = transport
+        let task = Task<(String, Date), Error> {
+            func form(_ value: String) -> String { value.addingPercentEncoding(withAllowedCharacters: CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~"))! }
+            var request = URLRequest(url: url, timeoutInterval: 30); request.httpMethod = "POST"
+            request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+            request.setValue("Basic " + Data((form(id) + ":" + form(secret)).utf8).base64EncodedString(), forHTTPHeaderField: "Authorization")
+            request.httpBody = Data(("grant_type=client_credentials" + (scope.map { "&scope=" + form($0) } ?? "")).utf8)
+            let result: (Data, URLResponse)
+            do { result = try await transport.execute(request) } catch is CancellationError { throw CancellationError() } catch { throw KajiOAuthError.tokenRejected }
+            guard let http = result.1 as? HTTPURLResponse, http.statusCode == 200, result.0.count <= 1_048_576,
+                  let object = try? JSONSerialization.jsonObject(with: result.0) as? [String: Any], let token = object["access_token"] as? String, !token.isEmpty, token.utf8.count <= 16384,
+                  token.utf8.allSatisfy({ $0 > 32 && $0 < 127 }), (object["token_type"] as? String)?.lowercased() == "bearer",
+                  let expires = object["expires_in"] as? Double, expires.isFinite, expires > 0 else { throw KajiOAuthError.tokenRejected }
+            return (token, Date().addingTimeInterval(max(0, min(expires, 86400) - min(30, expires / 10))))
+        }
+        pending = task
+        do { let value = try await task.value; cached = value; pending = nil; try Task.checkCancellation(); return value.0 }
+        catch { pending = nil; throw error }
+    }
+}
+/// Applies credentials only to the configured origin. Buffered requests only; one safe buffered 401 replay.
+public struct KajiOAuthTransport: KajiTransport {
+    private let inner: any KajiTransport
+    private let provider: KajiOAuthClientCredentials
+    private let origin: URL
+    public init(inner: any KajiTransport, provider: KajiOAuthClientCredentials, origin: URL) { self.inner = inner; self.provider = provider; self.origin = origin }
+    public func execute(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        guard let url = request.url, url.scheme == origin.scheme, url.host == origin.host, (url.port ?? (url.scheme == "https" ? 443 : 80)) == (origin.port ?? (origin.scheme == "https" ? 443 : 80)) else { throw KajiOAuthError.invalidConfiguration }
+        var request = request
+        let ownsAuth = request.value(forHTTPHeaderField: "Authorization") == nil
+        let token = ownsAuth ? try await provider.token() : nil
+        if let token { request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization") }
+        try Task.checkCancellation()
+        let result = try await inner.execute(request)
+        if ownsAuth, let token, (result.1 as? HTTPURLResponse)?.statusCode == 401,
+           ["GET", "HEAD", "OPTIONS", "QUERY", "TRACE", "PUT", "DELETE"].contains(request.httpMethod ?? "GET"), request.httpBodyStream == nil {
+            await provider.invalidate(token)
+            request.setValue("Bearer " + (try await provider.token()), forHTTPHeaderField: "Authorization")
+            try Task.checkCancellation()
+            return try await inner.execute(request)
+        }
+        return result
+    }
+}

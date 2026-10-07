@@ -367,6 +367,7 @@ fn render_client(api: &Api, module: &str, style: SdkClientStyle) -> String {
         &format!("require_relative \"response_validation\"\n\nmodule {module}\n"),
         1,
     );
+    out.push_str(include_str!("multipart.rb.txt"));
     out.push_str("  class KajiCancellationError < StandardError; end\n  class KajiTimeoutError < Timeout::Error; end\n  class ApiError < StandardError\n    attr_reader :status, :body\n    def initialize(status, body)\n      @status = status\n      @body = body\n      super(\"API request failed with status #{status}\")\n    end\n  end\n\n  class Client\n    def initialize(base_url:, api_key: nil, bearer_token: nil, headers: {}, timeout: 30, transport: nil, middleware: [], validate_responses: false, max_attempts: 1, retry_base_delay: 0.5, retry_max_delay: 30, cancelled: nil, token_provider: nil)\n      @base_url = base_url.sub(%r{/$}, \"\")\n      @api_key = api_key\n      @bearer_token = bearer_token\n      @headers = headers.transform_keys(&:to_s)\n      @timeout = timeout\n      raise ArgumentError, \"invalid retry configuration\" unless max_attempts.is_a?(Integer) && max_attempts.between?(1, 10) && retry_base_delay.is_a?(Numeric) && retry_max_delay.is_a?(Numeric) && retry_base_delay.finite? && retry_max_delay.finite? && retry_base_delay >= 0 && retry_base_delay <= 60 && retry_max_delay >= 0 && retry_max_delay <= 60\n      @max_attempts = max_attempts\n      @retry_base_delay = retry_base_delay.to_f\n      @retry_max_delay = retry_max_delay.to_f\n      @cancelled = cancelled\n      @token_provider = token_provider\n      @transport = transport\n      @validate_responses = validate_responses\n      @middleware = middleware.to_a.dup.freeze\n      raise ArgumentError, \"middleware must be callable\" unless @middleware.all? { |item| item.respond_to?(:call) }\n");
     if style == SdkClientStyle::Namespaced {
         for resource in resource_operations(api).keys() {
@@ -510,12 +511,17 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
     } else {
         "nil"
     };
+    let multipart = operation.request_body.as_ref().is_some_and(|body| {
+        body.media_types
+            .iter()
+            .any(|media| media.content_type == "multipart/form-data")
+    });
     let retry_header = kaji_core::idempotency::resolved(operation)
         .map(|p| ruby_string(&p.header))
         .unwrap_or_else(|| "nil".into());
     let _ = writeln!(
         out,
-        "      result = request({}, path, query: query, headers: headers, body: {body}, response_schemas: ResponseShapes[\"operations\"][{}], idempotency_header: {retry_header}, request_options: {request_options_name})",
+        "      result = request({}, path, query: query, headers: headers, body: {body}, response_schemas: ResponseShapes[\"operations\"][{}], idempotency_header: {retry_header}, request_options: {request_options_name}, multipart: {multipart})",
         ruby_string(operation.method.as_str()),
         ruby_string(&operation.id)
     );
@@ -751,6 +757,30 @@ mod tests {
     use super::*;
     use kaji_core::{Field, HttpMethod, OperationParameter, OperationResponse};
     use std::process::Command;
+
+    #[test]
+    fn native_multipart_binary_json_limits_and_retry_bytes() {
+        let api = Api {
+            name: "Example".into(),
+            ..Default::default()
+        };
+        let root = tempfile::tempdir().unwrap();
+        render_sdk(&api, "ruby", Some("example-sdk"), SdkClientStyle::Flat)
+            .unwrap()
+            .write_to(root.path())
+            .unwrap();
+        let script = include_str!("multipart_probe.rb.txt");
+        let output = Command::new("ruby")
+            .args(["-Ilib", "-e", script])
+            .current_dir(root.path().join("ruby"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 
     #[test]
     fn native_per_call_headers_deadlines_cancellation_and_retries_are_isolated() {

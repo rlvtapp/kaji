@@ -1,0 +1,30 @@
+alias MultipartProbe.{Client, MultipartBody}
+body = MultipartBody.new() |> MultipartBody.add_file("file", <<0, 255, 13, 10>>, "résumé.bin") |> MultipartBody.add_text("active", false) |> MultipartBody.add_text("count", 0) |> MultipartBody.add_json("options", %{"nullable" => nil}) |> MultipartBody.add_text("tags", "a") |> MultipartBody.add_text("tags", "b")
+Process.put(:seen, [])
+transport = fn request, _options ->
+  seen = Process.get(:seen)
+  Process.put(:seen, seen ++ [request])
+  status = if seen == [], do: 503, else: 200
+  {:ok, %Finch.Response{status: status, headers: [], body: "{}"}}
+end
+{:ok, client} = Client.new(base_url: "https://example.test", transport: transport, retry_initial_delay: 0, retry_max_delay: 0)
+{:ok, %{}} = Client.request(client, :put, "/upload", [], [], body, :multipart)
+[first, second] = Process.get(:seen)
+if first.body != second.body or first.headers != second.headers, do: raise("retry MIME bytes changed")
+for value <- [<<0, 255, 13, 10>>, "\r\n\r\nfalse\r\n", "\r\n\r\n0\r\n", "{\"nullable\":null}", "résumé.bin"] do
+  if not String.contains?(first.body, value), do: raise("lost MIME bytes")
+end
+if length(:binary.matches(first.body, "name=\"tags\"")) != 2, do: raise("repeated parts lost")
+try do
+  Client.request(client, :put, "/json", [], [], body, :json)
+  raise "JSON accepted multipart"
+rescue ArgumentError -> :ok end
+try do
+  MultipartBody.add_text(body, "bad\r\nX-Evil: yes", "x")
+  raise "injection accepted"
+rescue ArgumentError -> :ok end
+limited = Enum.reduce(1..1024, MultipartBody.new(), fn _, acc -> MultipartBody.add_text(acc, "x", "") end)
+try do
+  MultipartBody.add_text(limited, "x", "")
+  raise "part limit ignored"
+rescue ArgumentError -> :ok end

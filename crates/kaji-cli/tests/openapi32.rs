@@ -98,6 +98,10 @@ fn native_openapi32_query_compiles_and_executes_typed_sdk_bytes() {
     let source = fs::read_to_string(rust.join("src/client/operations/chunk_0001.rs")).unwrap();
     assert!(source.contains("QUERY"));
     assert!(
+        source.contains("COPY"),
+        "custom methods must retain their wire token"
+    );
+    assert!(
         source.contains("retry_allowed = true") || source.contains("retry_allowed: true"),
         "QUERY must remain replayable"
     );
@@ -116,7 +120,7 @@ fn native_openapi32_query_compiles_and_executes_typed_sdk_bytes() {
             .unwrap_or_else(|| std::env::temp_dir().join("kaji-runtime-contract-rust-target")),
     );
     let output = checked(&mut cargo);
-    assert!(String::from_utf8_lossy(&output.stdout).contains("2 passed"));
+    assert!(String::from_utf8_lossy(&output.stdout).contains("4 passed"));
     let ts = temp.path().join("generated/typescript");
     let compiler =
         std::env::var_os("KAJI_TSC_JS").expect("KAJI_TSC_JS must identify TypeScript's tsc.js");

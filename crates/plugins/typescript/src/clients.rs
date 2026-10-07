@@ -166,7 +166,7 @@ fn render_operation(
     let type_name = pascal_identifier(&operation.id);
     let throw_on_error = if throw_on_error { "true" } else { "false" };
     let link_path = operation.path.replace('{', ":").replace('}', "");
-    let method = operation.method.as_str();
+    let method = operation.method.as_str().replace('\'', "\\'");
 
     // These concerns deliberately compose. Older generation selected the
     // first matching branch (form body *or* security *or* styles), silently
@@ -354,7 +354,7 @@ fn render_event_stream_operation(
     let type_name = pascal_identifier(&operation.id);
     let throw_on_error = if throw_on_error { "true" } else { "false" };
     let link_path = operation.path.replace('{', ":").replace('}', "");
-    let method = operation.method.as_str();
+    let method = operation.method.as_str().replace('\'', "\\'");
     let mut metadata = String::new();
     if let Some(content_type) = request_content_type(operation) {
         metadata.push_str(&format!(

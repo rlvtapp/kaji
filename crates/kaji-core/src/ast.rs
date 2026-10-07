@@ -199,8 +199,7 @@ pub struct Field {
     pub annotations: BTreeMap<String, Value>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "UPPERCASE")]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HttpMethod {
     Get,
     Post,
@@ -211,10 +210,11 @@ pub enum HttpMethod {
     Options,
     Trace,
     Query,
+    Custom(String),
 }
 
 impl HttpMethod {
-    pub fn as_str(self) -> &'static str {
+    pub fn as_str(&self) -> &str {
         match self {
             Self::Get => "GET",
             Self::Post => "POST",
@@ -225,7 +225,62 @@ impl HttpMethod {
             Self::Options => "OPTIONS",
             Self::Trace => "TRACE",
             Self::Query => "QUERY",
+            Self::Custom(method) => method,
         }
+    }
+}
+
+impl HttpMethod {
+    /// HTTP methods are case-sensitive ASCII tokens. Unknown methods default to
+    /// unsafe retry semantics; callers must explicitly supply idempotency policy.
+    pub fn parse(method: &str) -> Result<Self, String> {
+        if method.is_empty()
+            || method.len() > 256
+            || !method
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&byte))
+        {
+            return Err("HTTP method must be an ASCII token of 1..=256 bytes".into());
+        }
+        if method != method.to_ascii_uppercase()
+            && matches!(
+                method.to_ascii_uppercase().as_str(),
+                "GET"
+                    | "POST"
+                    | "PUT"
+                    | "PATCH"
+                    | "DELETE"
+                    | "HEAD"
+                    | "OPTIONS"
+                    | "TRACE"
+                    | "QUERY"
+            )
+        {
+            return Err("standard HTTP methods must use canonical uppercase tokens".into());
+        }
+        Ok(match method {
+            "GET" => Self::Get,
+            "POST" => Self::Post,
+            "PUT" => Self::Put,
+            "PATCH" => Self::Patch,
+            "DELETE" => Self::Delete,
+            "HEAD" => Self::Head,
+            "OPTIONS" => Self::Options,
+            "TRACE" => Self::Trace,
+            "QUERY" => Self::Query,
+            other => Self::Custom(other.to_owned()),
+        })
+    }
+}
+impl Serialize for HttpMethod {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+impl<'de> Deserialize<'de> for HttpMethod {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let method = String::deserialize(deserializer)?;
+        Self::parse(&method).map_err(serde::de::Error::custom)
     }
 }
 
@@ -514,5 +569,34 @@ mod tests {
             serde_json::from_str(&serde_json::to_string(&value).unwrap()).unwrap();
         assert_eq!(round_trip, value);
         assert_eq!(value.kind.reference_name(), None);
+    }
+}
+
+#[cfg(test)]
+mod method_tests {
+    use super::*;
+    #[test]
+    fn custom_methods_preserve_case_and_string_serialization() {
+        for token in ["GET", "COPY", "x-Custom", "X!#$%&'*+-.^_`|~"] {
+            let method = HttpMethod::parse(token).unwrap();
+            assert_eq!(method.as_str(), token);
+            let encoded = serde_json::to_string(&method).unwrap();
+            assert_eq!(
+                serde_json::from_str::<HttpMethod>(&encoded).unwrap(),
+                method
+            );
+        }
+        for token in [
+            "",
+            "BAD METHOD",
+            "BAD\r\nMETHOD",
+            "Méthod",
+            "X/Path",
+            "get",
+            "pOst",
+        ] {
+            assert!(HttpMethod::parse(token).is_err());
+        }
+        assert!(HttpMethod::parse(&"X".repeat(257)).is_err());
     }
 }

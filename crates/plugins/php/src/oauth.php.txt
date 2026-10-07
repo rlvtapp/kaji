@@ -1,0 +1,70 @@
+<?php
+declare(strict_types=1);
+namespace __NAMESPACE__;
+
+use Psr\Http\Client\ClientInterface;
+use Psr\Http\Message\RequestInterface;
+use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\RequestFactoryInterface;
+use Psr\Http\Message\StreamFactoryInterface;
+
+/** Optional PSR-18 decorator. Buffered calls; one safe seekable 401 replay. */
+final class OAuthClient implements ClientInterface
+{
+    private ?string $token = null;
+    private float $expires = 0;
+    public function __construct(
+        private readonly ClientInterface $inner,
+        private readonly ClientInterface $issuer,
+        private readonly RequestFactoryInterface $requests,
+        private readonly StreamFactoryInterface $streams,
+        private readonly string $origin,
+        private readonly string $tokenUrl,
+        private readonly string $clientId,
+        private readonly string $clientSecret,
+        private readonly ?string $scope = null,
+    ) {
+        $url = parse_url($tokenUrl);
+        if (!$url || ($url['scheme'] ?? '') !== 'https' || isset($url['user']) || isset($url['pass']) || isset($url['fragment']) || $clientId === '' || $clientSecret === '') {
+            throw new \InvalidArgumentException('Invalid OAuth configuration');
+        }
+    }
+    public function __debugInfo(): array { return ['type' => 'OAuthClient']; }
+    private static function originOf(string $url): string {
+        $parts = parse_url($url);
+        if (!$parts || !isset($parts['scheme'], $parts['host']) || isset($parts['user']) || isset($parts['pass'])) { throw new \RuntimeException('Invalid OAuth origin'); }
+        return strtolower($parts['scheme'].'://'.$parts['host']).':'.($parts['port'] ?? (strtolower($parts['scheme']) === 'https' ? 443 : 80));
+    }
+    public function invalidate(): void { $this->token = null; $this->expires = 0; }
+    public function sendRequest(RequestInterface $request): ResponseInterface {
+        if (self::originOf((string)$request->getUri()) !== self::originOf($this->origin)) { throw new \RuntimeException('OAuth origin mismatch'); }
+        $ownsAuth = !$request->hasHeader('Authorization');
+        if ($ownsAuth) { $request = $request->withHeader('Authorization', 'Bearer '.$this->accessToken()); }
+        $body = $request->getBody(); $position = $body->isSeekable() ? $body->tell() : null;
+        $response = $this->inner->sendRequest($request);
+        if ($ownsAuth && $response->getStatusCode() === 401 && in_array(strtoupper($request->getMethod()), ['GET','HEAD','OPTIONS','QUERY','TRACE','PUT','DELETE'], true) && $position !== null) {
+            $body->seek($position); $this->invalidate();
+            return $this->inner->sendRequest($request->withHeader('Authorization', 'Bearer '.$this->accessToken()));
+        }
+        return $response;
+    }
+    private function accessToken(): string {
+        if ($this->token !== null && microtime(true) < $this->expires) { return $this->token; }
+        $body = ['grant_type' => 'client_credentials'];
+        if ($this->scope !== null) { $body['scope'] = $this->scope; }
+        $request = $this->requests->createRequest('POST', $this->tokenUrl)
+            ->withHeader('Content-Type', 'application/x-www-form-urlencoded')
+            ->withHeader('Authorization', 'Basic '.base64_encode(urlencode($this->clientId).':'.urlencode($this->clientSecret)))
+            ->withBody($this->streams->createStream(http_build_query($body, '', '&', PHP_QUERY_RFC1738)));
+        try {
+            $response = $this->issuer->sendRequest($request);
+            $stream = $response->getBody(); $bytes = '';
+            while (!$stream->eof() && strlen($bytes) <= 1048576) { $chunk = $stream->read(8192); if ($chunk === '') { break; } $bytes .= $chunk; }
+            $data = json_decode($bytes, true, 64, JSON_THROW_ON_ERROR);
+            $token = $data['access_token'] ?? null; $expires = $data['expires_in'] ?? null;
+            if ($response->getStatusCode() !== 200 || strlen($bytes) > 1048576 || !is_string($token) || $token === '' || strlen($token) > 16384 || preg_match('/[^\x21-\x7e]/', $token) === 1 || strtolower($data['token_type'] ?? '') !== 'bearer' || !is_numeric($expires) || !is_finite((float)$expires) || (float)$expires <= 0) { throw new \RuntimeException(); }
+            $this->token = $token; $this->expires = microtime(true) + max(0, min((float)$expires, 86400) - min(30, (float)$expires / 10));
+            return $token;
+        } catch (\Throwable) { throw new \RuntimeException('OAuth token request failed'); }
+    }
+}

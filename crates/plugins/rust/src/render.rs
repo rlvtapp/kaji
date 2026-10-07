@@ -575,10 +575,15 @@ fn render_operation(operation: &Operation, config: &RenderOptions) -> String {
         render_parameter_use(&mut output, parameter);
     }
     let retry_allowed = rust_retry_allowed(operation);
-    let native_method = if operation.method == kaji_core::HttpMethod::Query {
-        "Method::from_bytes(b\"QUERY\").expect(\"static HTTP method\")".to_owned()
-    } else {
-        format!("Method::{}", operation.method.as_str())
+    let native_method = match &operation.method {
+        kaji_core::HttpMethod::Query => {
+            "Method::from_bytes(b\"QUERY\").expect(\"static HTTP method\")".to_owned()
+        }
+        kaji_core::HttpMethod::Custom(_) => format!(
+            "Method::from_bytes({:?}.as_bytes()).expect(\"validated HTTP method\")",
+            operation.method.as_str()
+        ),
+        _ => format!("Method::{}", operation.method.as_str()),
     };
     if matches!(request_media_kind(operation), RequestMediaKind::Multipart) {
         output
@@ -1169,7 +1174,7 @@ fn rust_retry_allowed(operation: &Operation) -> String {
         | kaji_core::ast::HttpMethod::Query
         | kaji_core::ast::HttpMethod::Put
         | kaji_core::ast::HttpMethod::Delete => "true".into(),
-        kaji_core::ast::HttpMethod::Post | kaji_core::ast::HttpMethod::Patch => operation
+        kaji_core::ast::HttpMethod::Post | kaji_core::ast::HttpMethod::Patch | kaji_core::ast::HttpMethod::Custom(_) => operation
             .parameters
             .iter()
             .find(|parameter| {

@@ -57,7 +57,7 @@ func runWithHash(specPath, outDir string, prevHash *uint64) (uint64, bool, int, 
 		configuration.ExcludeExtensionRefs = true
 		data, err = bundleLocalSources(source, specPath)
 		if err != nil {
-			return 0, false, 0, fmt.Errorf("bundle local references: %w", err)
+			return 0, false, 0, fmt.Errorf("bundle references: %w", err)
 		}
 	}
 	doc, err := libopenapi.NewDocumentWithConfiguration(data, configuration)
@@ -75,7 +75,7 @@ func runWithHash(specPath, outDir string, prevHash *uint64) (uint64, bool, int, 
 			return 0, false, 0, fmt.Errorf("build OpenAPI model (v3: %v; v2: %w)", v3Err, v2Err)
 		}
 		if len(source.Files) > 1 {
-			return 0, false, 0, fmt.Errorf("local multifile references currently require OpenAPI 3; bundle Swagger 2 input explicitly")
+			return 0, false, 0, fmt.Errorf("multifile references currently require OpenAPI 3; bundle Swagger 2 input explicitly")
 		}
 		count, err := compileSwaggerV2(&v2Model.Model, outDir)
 		if err != nil {
@@ -273,7 +273,7 @@ func collectPathItemOperations(
 			return 0, fmt.Errorf("convert path parameters (%s): %w", path, err)
 		}
 
-		operations := item.GetOperations()
+		operations := compilerOperations(item)
 		if operations == nil {
 			continue
 		}
@@ -281,11 +281,16 @@ func collectPathItemOperations(
 		methods := make([]string, 0)
 		for opPair := operations.First(); opPair != nil; opPair = opPair.Next() {
 			method := strings.ToLower(opPair.Key())
+			wireMethod := strings.ToUpper(method)
+			if item.AdditionalOperations != nil && item.AdditionalOperations.GetOrZero(opPair.Key()) != nil {
+				method = opPair.Key()
+				wireMethod = method
+			}
 			op := opPair.Value()
 			if op == nil {
 				continue
 			}
-			methods = append(methods, method)
+			methods = append(methods, wireMethod)
 
 			opParams, err := convertParameterList(op.Parameters)
 			if err != nil {
@@ -332,7 +337,7 @@ func collectPathItemOperations(
 			opDoc := OperationDoc{
 				OperationID:          op.OperationId,
 				Path:                 path,
-				Method:               strings.ToUpper(method),
+				Method:               wireMethod,
 				Summary:              op.Summary,
 				Description:          op.Description,
 				Deprecated:           deprecated,
@@ -352,7 +357,7 @@ func collectPathItemOperations(
 				opDoc.Name = path
 			} else {
 				opDoc.Kind = "operation"
-				opDoc.Name = strings.ToUpper(method) + " " + path
+				opDoc.Name = wireMethod + " " + path
 			}
 
 			slug := slugFor(path, method)
@@ -378,11 +383,11 @@ func collectPathItemOperations(
 			}
 
 			if isWebhook {
-				key := "WEBHOOK " + strings.ToUpper(method) + " " + path
+				key := "WEBHOOK " + wireMethod + " " + path
 				index[key] = slug + ".json"
 				*order = append(*order, key)
 			} else {
-				key := strings.ToUpper(method) + " " + path
+				key := wireMethod + " " + path
 				index[key] = slug + ".json"
 				*order = append(*order, key)
 			}
@@ -391,7 +396,7 @@ func collectPathItemOperations(
 
 		if isWebhook && len(methods) == 1 {
 			sort.Strings(methods)
-			index["WEBHOOK "+path] = index["WEBHOOK "+strings.ToUpper(methods[0])+" "+path]
+			index["WEBHOOK "+path] = index["WEBHOOK "+methods[0]+" "+path]
 		}
 	}
 
@@ -1247,7 +1252,13 @@ func slugFor(path, method string) string {
 
 	var builder strings.Builder
 	builder.Grow(len(trimmed) + len(method) + 1)
-	builder.WriteString(method)
+	for _, r := range method {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			builder.WriteRune(r)
+		} else {
+			builder.WriteByte('_')
+		}
+	}
 	builder.WriteRune('_')
 
 	lastUnderscore := false

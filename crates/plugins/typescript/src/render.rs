@@ -692,6 +692,15 @@ impl TypeScriptMsw {
             "{NOTICE}\nimport {{ http, HttpResponse }} from 'msw';\n\nexport const handlers = [\n"
         );
         for operation in &api.operations {
+            if matches!(operation.method, kaji_core::HttpMethod::Custom(_)) {
+                let _ = writeln!(
+                    output,
+                    "  http.all({}, ({{ request }}) => request.method === {} ? HttpResponse.json({{}}) : undefined),",
+                    js_string(&openapi_path_to_msw(&operation.path)),
+                    js_string(operation.method.as_str())
+                );
+                continue;
+            }
             let _ = writeln!(
                 output,
                 "  http.{}({}, () => HttpResponse.json({{}})),",

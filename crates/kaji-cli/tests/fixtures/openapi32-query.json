@@ -57,6 +57,30 @@
           }
         }
       }
+    },
+    "/copy": {
+      "additionalOperations": {
+        "COPY": {
+          "operationId": "copyThing",
+          "responses": {
+            "204": {
+              "description": "copied"
+            }
+          }
+        }
+      }
+    },
+    "/quote": {
+      "additionalOperations": {
+        "X'CHECK`TEST": {
+          "operationId": "quoteThing",
+          "responses": {
+            "204": {
+              "description": "copied"
+            }
+          }
+        }
+      }
     }
   }
 }

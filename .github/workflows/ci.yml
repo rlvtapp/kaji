@@ -301,9 +301,15 @@ jobs:
           cargo test -p kaji-plugin-csharp native_call_scopes_preserve_headers_and_cancel_timeout_without_mutation -- --ignored
       - name: Verify all native PHP probes
         if: matrix.language == 'PHP'
-        run: cargo test -p kaji-plugin-php -- --ignored
+        env:
+          KAJI_PHP_AUTOLOAD: ${{ runner.temp }}/generated-sdk-fixture/php/vendor/autoload.php
+        run: |
+          composer install --working-dir="$RUNNER_TEMP/generated-sdk-fixture/php" --no-interaction --no-progress
+          cargo test -p kaji-plugin-php -- --ignored
       - name: Verify all native Elixir probes
         if: matrix.language == 'Elixir'
+        env:
+          KAJI_ELIXIR_NATIVE_PROJECT: ${{ runner.temp }}/generated-sdk-fixture/elixir
         run: cargo test -p kaji-plugin-elixir -- --ignored
       - name: Verify native Swift middleware models pagination and cancellation
         if: matrix.language == 'Swift'

@@ -12,10 +12,11 @@ sdk/elixir/lib/kaji_contract_api_sdk/api/operations_0001.ex	879	bec7a835b2c065ed
 sdk/elixir/lib/kaji_contract_api_sdk/api.ex	272	592899a876e048bc
 sdk/elixir/lib/kaji_contract_api_sdk/api_error.ex	367	b31cc94d0c095a4a
 sdk/elixir/lib/kaji_contract_api_sdk/application.ex	222	5451d0672cc27866
-sdk/elixir/lib/kaji_contract_api_sdk/client.ex	17211	a0b51bd6dab82bb8
+sdk/elixir/lib/kaji_contract_api_sdk/client.ex	18854	78f227962822a439
 sdk/elixir/lib/kaji_contract_api_sdk/errors/chunk_0001.ex	34	50cc6ef2361eaae9
 sdk/elixir/lib/kaji_contract_api_sdk/json.ex	622	5bf9c30aae0a11d7
 sdk/elixir/lib/kaji_contract_api_sdk/models/contact.ex	608	677e3c0c59201923
+sdk/elixir/lib/kaji_contract_api_sdk/multipart_body.ex	2317	0823a8b5f029afc1
 sdk/elixir/lib/kaji_contract_api_sdk/resources/contacts/chunk_0001.ex	320	2babb735f2c1e372
 sdk/elixir/lib/kaji_contract_api_sdk/resources/contacts.ex	293	0d0eae66b9a24af4
 sdk/elixir/lib/kaji_contract_api_sdk.ex	402	925b22f23dced582
@@ -53,10 +54,11 @@ sdk/mock-server/run.sh	173	50dde01f7a3efeb8
 sdk/php/README.md	2167	cb6d5ed8bbc3c107
 sdk/php/STYLE_GUIDE.md	761	2def4782508ecd4e
 sdk/php/composer.json	384	8658697953d7cc97
-sdk/php/src/Client.php	13727	a27dfe7dbdef0379
+sdk/php/src/Client.php	15663	f6cdfb0e451eedb5
 sdk/php/src/ClientOperations000.php	795	8246d2f5141eefd8
 sdk/php/src/Exceptions/ApiException.php	376	992bf4d8ffc6e6e2
 sdk/php/src/Models/Contact.php	1004	763545d5dda82a7b
+sdk/php/src/MultipartBody.php	2941	ff27c7c0e3fa6d8d
 sdk/php/src/Resources/ContactsResource.php	308	d53fbbc72e634126
 sdk/php/src/Resources/ContactsResourceOperations000.php	407	bc1910d29fa99aa9
 sdk/python/README.md	1801	e6d4ebbc575905e9

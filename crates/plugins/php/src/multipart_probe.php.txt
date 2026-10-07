@@ -1,0 +1,49 @@
+<?php
+namespace MultipartProbe;
+require __DIR__ . '/MultipartBody.php';
+final class Request {
+    public array $headers=[]; public string $body='';
+    public function withHeader($name,$value):self { $clone=clone $this; $clone->headers[$name]=$value; return $clone; }
+    public function withBody($value):self { $clone=clone $this; $clone->body=$value; return $clone; }
+}
+final class Factory {
+    public function createRequest($method,$url):Request { return new Request(); }
+    public function createStream($value):string { return $value; }
+}
+final class Wire {
+    public array $seen=[];
+    public function sendRequest($request):object {
+        $this->seen[]=$request;
+        $status=count($this->seen)===1?503:200;
+        return new class($status) {
+            public function __construct(private int $status) {}
+            public function getStatusCode():int { return $this->status; }
+            public function getHeaderLine($name):string { return ''; }
+            public function getBody():string { return '{}'; }
+            public function getHeaders():array { return []; }
+        };
+    }
+}
+final class Probe {
+    private string $baseUrl='https://example.test'; private array $defaultHeaders=[];
+    private mixed $beforeRequest=null; private mixed $afterResponse=null; private mixed $onError=null;
+    private int $maxRetries=1; private int $retryInitialDelayMs=0; private int $retryMaxDelayMs=0;
+    private Factory $requestFactory; private Factory $streamFactory;
+    public function __construct(public Wire $httpClient) { $this->requestFactory=$this->streamFactory=new Factory(); }
+    private function authHeaders():array { return []; }
+    private function encodeQuery($query):string { return http_build_query($query); }
+    public function upload($body):string { return $this->request('PUT','/upload',[],[],$body,'multipart',true); }
+    public function json($body):string { return $this->request('PUT','/json',[],[],$body,'json',true); }
+__REQUEST_METHODS__
+}
+$bytes="\x00\xff\r\n";
+$body=(new MultipartBody())->addFile('file',$bytes,'résumé.bin')->addText('active',false)->addText('count',0)->addJson('options',['nullable'=>null])->addText('tags','a')->addText('tags','b');
+$wire=new Wire(); $client=new Probe($wire); $client->upload($body);
+if(count($wire->seen)!==2 || $wire->seen[0]->body!==$wire->seen[1]->body || $wire->seen[0]->headers!==$wire->seen[1]->headers) throw new \Exception('retry bytes differ');
+$payload=$wire->seen[0]->body;
+foreach([$bytes,"\r\n\r\nfalse\r\n","\r\n\r\n0\r\n",'{"nullable":null}','résumé.bin'] as $value) if(!str_contains($payload,$value)) throw new \Exception('lost MIME data');
+if(substr_count($payload,'name="tags"')!==2) throw new \Exception('repeated parts lost');
+try {$client->json($body);throw new \Exception('JSON accepted multipart');} catch(\InvalidArgumentException) {}
+try {$body->addText("bad\r\nX-Evil: yes",'x');throw new \Exception('injection accepted');} catch(\InvalidArgumentException) {}
+$limited=new MultipartBody(); for($i=0;$i<1024;$i++)$limited->addText('x','');
+try {$limited->addText('x','');throw new \Exception('limit ignored');} catch(\InvalidArgumentException) {}

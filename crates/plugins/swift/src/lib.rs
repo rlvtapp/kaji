@@ -267,6 +267,18 @@ public struct KajiMiddlewareTransport: KajiTransport {
     }
 }
 public final class KajiClient: @unchecked Sendable {"#)
+    .replace("    internal func makeRequest(method:", r#"    /// Independent options for a call or traversal. Native request timeout applies per attempt.
+    public func forCall(headers: [String: String] = [:], timeout: TimeInterval? = nil) throws -> KajiClient {
+        var scoped = options
+        if let timeout { guard timeout.isFinite && timeout > 0 else { throw KajiAPIError.invalidResponse }; scoped.timeout = timeout }
+        for (name, value) in headers {
+            guard !name.isEmpty && !name.contains("\r") && !name.contains("\n") && !value.contains("\r") && !value.contains("\n") else { throw KajiAPIError.invalidResponse }
+            scoped.headers = scoped.headers.filter { $0.key.lowercased() != name.lowercased() }
+            scoped.headers[name] = value
+        }
+        return KajiClient(options: scoped, session: session, hooks: hooks, transport: transport)
+    }
+    internal func makeRequest(method:"#)
     .replace("    private let hooks: [any KajiClientHook]", "    private let transport: any KajiTransport\n    private let hooks: [any KajiClientHook]")
     .replace("hooks: [any KajiClientHook] = [])", "hooks: [any KajiClientHook] = [], transport: (any KajiTransport)? = nil)")
     .replace("        self.options = options\n        self.session = session", "        self.options = options\n        self.session = session\n        self.transport = transport ?? KajiURLSessionTransport(session: session)")
@@ -1690,3 +1702,6 @@ struct Terminal: KajiTransport {
 }
 
 mod streaming;
+
+mod oauth;
+pub use oauth::{OAuth, oauth};

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
@@ -53,21 +54,13 @@ func validateCompilerCapabilities(spec *v3.Document) error {
 				continue
 			}
 			where := kind + " " + p.Key()
-			if low := item.GoLow(); low != nil && low.RootNode != nil {
-				node := low.RootNode
-				for i := 0; i+1 < len(node.Content); i += 2 {
-					if node.Content[i].Value == "additionalOperations" && len(node.Content[i+1].Content) > 0 {
-						return fmt.Errorf("%s: unsupported OpenAPI additionalOperations custom HTTP methods; Kaji's typed method IR supports GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS/TRACE/QUERY", where)
-					}
-				}
-			}
 			if err := checkParams(item.Parameters, where); err != nil {
 				return err
 			}
-			if item.AdditionalOperations != nil && item.AdditionalOperations.Len() > 0 {
-				return fmt.Errorf("%s: unsupported OpenAPI additionalOperations custom HTTP methods; Kaji's typed method IR supports GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS/TRACE/QUERY", where)
+			if err := validateAdditionalMethods(item); err != nil {
+				return fmt.Errorf("%s: %w", where, err)
 			}
-			ops := item.GetOperations()
+			ops := compilerOperations(item)
 			if ops == nil {
 				continue
 			}
@@ -109,4 +102,91 @@ func validateCompilerCapabilities(spec *v3.Document) error {
 		}
 	}
 	return checkPaths(spec.Webhooks, "webhook")
+}
+
+func validateAdditionalMethods(item *v3.PathItem) error {
+	if low := item.GoLow(); low != nil && low.RootNode != nil {
+		additional := mappingValue(low.RootNode, "additionalOperations")
+		if additional != nil {
+			for i := 0; i+1 < len(additional.Content); i += 2 {
+				if err := validateHTTPMethodToken(additional.Content[i].Value); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	if item.AdditionalOperations == nil {
+		return nil
+	}
+	for pair := item.AdditionalOperations.First(); pair != nil; pair = pair.Next() {
+		method := pair.Key()
+		if err := validateHTTPMethodToken(method); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateHTTPMethodToken(method string) error {
+	if len(method) == 0 || len(method) > 256 {
+		return fmt.Errorf("additionalOperations HTTP method must contain 1..256 ASCII token bytes")
+	}
+	for _, r := range method {
+		if !(r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || strings.ContainsRune("!#$%&'*+-.^_`|~", r)) {
+			return fmt.Errorf("additionalOperations has invalid HTTP method token")
+		}
+	}
+	switch strings.ToUpper(method) {
+	case "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE", "QUERY":
+		return fmt.Errorf("additionalOperations must not shadow standard HTTP method %s", method)
+	}
+	return nil
+}
+
+// libopenapi 0.38.7 omits the low additionalOperations KeyNode and therefore
+// high-level IsEmpty/GetOperations can lose custom methods. Read its populated
+// low values explicitly, retaining source-line order alongside standard methods.
+func compilerOperations(item *v3.PathItem) *orderedmap.Map[string, *v3.Operation] {
+	result := item.GetOperations()
+	if low := item.GoLow(); low != nil && low.AdditionalOperations.Value != nil {
+		if item.AdditionalOperations == nil {
+			item.AdditionalOperations = orderedmap.New[string, *v3.Operation]()
+		}
+		for key, value := range low.AdditionalOperations.Value.FromOldest() {
+			if value.Value != nil {
+				item.AdditionalOperations.Set(key.Value, v3.NewOperation(value.Value))
+			}
+		}
+	}
+	if item.AdditionalOperations != nil {
+		for pair := item.AdditionalOperations.First(); pair != nil; pair = pair.Next() {
+			result.Set(pair.Key(), pair.Value())
+		}
+	}
+	type entry struct {
+		key       string
+		operation *v3.Operation
+		line      int
+		column    int
+	}
+	entries := []entry{}
+	for pair := result.First(); pair != nil; pair = pair.Next() {
+		line, column := 0, 0
+		if pair.Value() != nil && pair.Value().GoLow() != nil && pair.Value().GoLow().KeyNode != nil {
+			line = pair.Value().GoLow().KeyNode.Line
+			column = pair.Value().GoLow().KeyNode.Column
+		}
+		entries = append(entries, entry{pair.Key(), pair.Value(), line, column})
+	}
+	sort.SliceStable(entries, func(i, j int) bool {
+		if entries[i].line == entries[j].line {
+			return entries[i].column < entries[j].column
+		}
+		return entries[i].line < entries[j].line
+	})
+	sorted := orderedmap.New[string, *v3.Operation]()
+	for _, entry := range entries {
+		sorted.Set(entry.key, entry.operation)
+	}
+	return sorted
 }

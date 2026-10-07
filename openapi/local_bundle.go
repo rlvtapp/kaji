@@ -23,6 +23,9 @@ func bundleLocalSources(source *sourceClosure, specPath string) ([]byte, error) 
 		return nil, err
 	}
 	rootPath = filepath.Clean(rootPath)
+	if source.Root != "" {
+		rootPath = source.Root
+	}
 	documents := map[string]*yaml.Node{}
 	for path, data := range source.Documents {
 		var document yaml.Node
@@ -51,17 +54,11 @@ func bundleLocalSources(source *sourceClosure, specPath string) ([]byte, error) 
 		if err != nil {
 			return "", "", nil, err
 		}
-		if uri.Scheme != "" || uri.Host != "" || uri.RawQuery != "" {
-			return "", "", nil, fmt.Errorf("unsupported non-local reference %q", ref)
+		path, fragment, err := resolveSourceReference(origin, ref)
+		if err != nil {
+			return "", "", nil, err
 		}
-		path := origin
-		if uri.Path != "" {
-			path = uri.Path
-			if !filepath.IsAbs(path) {
-				path = filepath.Join(filepath.Dir(origin), filepath.FromSlash(path))
-			}
-			path = filepath.Clean(path)
-		}
+		uri.Fragment = fragment
 		node := documents[path]
 		if node == nil {
 			return "", "", nil, fmt.Errorf("reference document %s is outside the collected local closure", path)
@@ -98,7 +95,10 @@ func bundleLocalSources(source *sourceClosure, specPath string) ([]byte, error) 
 					label.WriteByte('_')
 				}
 			}
-			relative, _ := filepath.Rel(source.Base, path)
+			relative := path
+			if !isRemoteDocument(path) {
+				relative, _ = filepath.Rel(source.Base, path)
+			}
 			digest := sha256.Sum256([]byte(filepath.ToSlash(relative) + "#" + fragment))
 			name = "Local_" + label.String() + "_" + hex.EncodeToString(digest[:6])
 			for used[name] {
@@ -137,7 +137,7 @@ func bundleLocalSources(source *sourceClosure, specPath string) ([]byte, error) 
 				}
 				// Root-local references already have the correct scope and are normalized
 				// when their component declaration is visited.
-				if origin != rootPath || uri.Path != "" {
+				if origin != rootPath || uri.Path != "" || uri.Host != "" {
 					path, fragment, target, err := locate(origin, reference.Value)
 					if err != nil {
 						return nil, err
@@ -219,7 +219,7 @@ func bundleLocalSources(source *sourceClosure, specPath string) ([]byte, error) 
 							if parseErr != nil {
 								return nil, parseErr
 							}
-							if origin == rootPath && uri.Path == "" {
+							if origin == rootPath && uri.Path == "" && uri.Host == "" && uri.Scheme == "" {
 								continue
 							}
 							ref := mapping.Value

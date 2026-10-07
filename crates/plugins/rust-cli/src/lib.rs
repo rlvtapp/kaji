@@ -439,7 +439,7 @@ fn render_skill_references(api: &Api, command_name: &str) -> Vec<(String, String
                 let command = skill_command_parts(operation, command_name).join(" ");
                 output.push_str(&format!(
                     "## {command_name} {command}\n\n{} {}\n\n",
-                    format!("{:?}", operation.method).to_uppercase(), operation.path
+                    operation.method.as_str(), operation.path
                 ));
                 output.push_str("| Flag | Type | Required | Description |\n| --- | --- | --- | --- |\n");
                 for parameter in &operation.parameters {

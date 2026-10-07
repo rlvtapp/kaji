@@ -216,7 +216,7 @@ fn retry_class(operation: &Operation) -> RetryClass {
         | HttpMethod::Options
         | HttpMethod::Trace
         | HttpMethod::Query => RetryClass::Idempotent,
-        HttpMethod::Post | HttpMethod::Patch => RetryClass::Unsafe,
+        HttpMethod::Post | HttpMethod::Patch | HttpMethod::Custom(_) => RetryClass::Unsafe,
     }
 }
 
@@ -413,5 +413,18 @@ mod tests {
         assert_eq!(semantics.streaming, Some(StreamingKind::ServerSentEvents));
         assert_eq!(semantics.pagination, None);
         assert_eq!(semantics.retry, RetryClass::Idempotent);
+    }
+}
+
+#[cfg(test)]
+mod custom_method_tests {
+    use super::*;
+    #[test]
+    fn custom_method_is_unsafe_without_explicit_idempotency() {
+        let operation = Operation {
+            method: HttpMethod::Custom("COPY".into()),
+            ..Default::default()
+        };
+        assert_eq!(retry_class(&operation), RetryClass::Unsafe);
     }
 }

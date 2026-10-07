@@ -463,6 +463,15 @@ fn remote_spec_url(source: &Path) -> Option<&str> {
     (source.starts_with("https://") || source.starts_with("http://")).then_some(source)
 }
 
+fn compiler_source_origin(remote: &RemoteInput) -> Result<String> {
+    let mut url = reqwest::Url::parse(&remote.url).context("invalid OpenAPI source URL")?;
+    url.set_username("")
+        .map_err(|_| anyhow::anyhow!("cannot sanitize OpenAPI source URL"))?;
+    url.set_password(None)
+        .map_err(|_| anyhow::anyhow!("cannot sanitize OpenAPI source URL"))?;
+    Ok(url.to_string())
+}
+
 fn download_openapi(source: &RemoteInput, destination: &Path) -> Result<()> {
     let client = reqwest::blocking::Client::builder()
         .user_agent(concat!("kaji/", env!("CARGO_PKG_VERSION")))
@@ -2327,7 +2336,7 @@ fn config_profiles(
                 profiles.package(with_configured_middleware(package_builder, package))
             }
             "php" => {
-                has_only_known_plugins(package, &["sdk", "webhooks", "operation-tests"])?;
+                has_only_known_plugins(package, &["sdk", "webhooks", "operation-tests", "oauth"])?;
                 let package_builder =
                     php::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
@@ -2341,6 +2350,9 @@ fn config_profiles(
                 }
                 if package.plugins.iter().any(|p| p.name == "operation-tests") {
                     package_builder = package_builder.with(php::operation_tests());
+                }
+                if package.plugins.iter().any(|p| p.name == "oauth") {
+                    package_builder = package_builder.with(php::oauth());
                 }
                 profiles.package(with_configured_middleware(package_builder, package))
             }
@@ -2417,7 +2429,7 @@ fn config_profiles(
                 profiles.package(with_configured_middleware(package_builder, package))
             }
             "elixir" => {
-                has_only_known_plugins(package, &["sdk", "webhooks", "operation-tests"])?;
+                has_only_known_plugins(package, &["sdk", "webhooks", "operation-tests", "oauth"])?;
                 let package_builder =
                     elixir::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
@@ -2431,6 +2443,9 @@ fn config_profiles(
                 }
                 if package.plugins.iter().any(|p| p.name == "operation-tests") {
                     package_builder = package_builder.with(elixir::operation_tests());
+                }
+                if package.plugins.iter().any(|p| p.name == "oauth") {
+                    package_builder = package_builder.with(elixir::oauth());
                 }
                 profiles.package(with_configured_middleware(package_builder, package))
             }
@@ -2458,7 +2473,7 @@ fn config_profiles(
                 profiles.package(with_configured_middleware(package_builder, package))
             }
             "swift" => {
-                has_only_known_plugins(package, &["sdk", "webhooks", "operation-tests"])?;
+                has_only_known_plugins(package, &["sdk", "webhooks", "operation-tests", "oauth"])?;
                 let package_builder =
                     swift::package(&package.path).common(configured_common(style, package));
                 let package_builder = if let Some(name) = &package.name {
@@ -2474,6 +2489,9 @@ fn config_profiles(
                 }
                 if package.plugins.iter().any(|p| p.name == "operation-tests") {
                     package_builder = package_builder.with(swift::operation_tests());
+                }
+                if package.plugins.iter().any(|p| p.name == "oauth") {
+                    package_builder = package_builder.with(swift::oauth());
                 }
                 profiles.package(with_configured_middleware(package_builder, package))
             }
@@ -2963,6 +2981,7 @@ fn generate(mut options: Generate) -> Result<()> {
                 auth: None,
             }),
         };
+        let compiler_source_url = remote.as_ref().map(compiler_source_origin).transpose()?;
         let source = if let Some(remote) = remote {
             let downloaded = temporary.path().join("openapi.downloaded.yaml");
             reporter.downloading(&remote.url);
@@ -2986,9 +3005,12 @@ fn generate(mut options: Generate) -> Result<()> {
         let helper = compiler_path(options.compiler.clone())?;
         reporter.compiling(&source);
         let started = Instant::now();
-        let status = Command::new(&helper)
-            .arg("--out")
-            .arg(temporary.path())
+        let mut compiler = Command::new(&helper);
+        compiler.arg("--out").arg(temporary.path());
+        if let Some(source_url) = &compiler_source_url {
+            compiler.arg("--source-url").arg(source_url);
+        }
+        let status = compiler
             .arg(&source)
             .status()
             .with_context(|| format!("cannot start OpenAPI compiler {}", helper.display()))?;
@@ -4886,6 +4908,25 @@ mod tests {
     }
 
     #[test]
+    fn compiler_origin_preserves_resolution_without_forwarding_url_credentials() {
+        let remote = RemoteInput {
+            url: "https://user:secret@example.com/spec/root.yaml?version=1".into(),
+            headers: BTreeMap::new(),
+            auth: None,
+        };
+        assert_eq!(
+            compiler_source_origin(&remote).unwrap(),
+            "https://example.com/spec/root.yaml?version=1"
+        );
+        assert!(remote.url.contains("user:secret"));
+        let plain = RemoteInput {
+            url: "http://example.com/spec.yaml".into(),
+            ..remote
+        };
+        assert_eq!(compiler_source_origin(&plain).unwrap(), plain.url);
+    }
+
+    #[test]
     fn remote_input_applies_headers_and_basic_auth_before_downloading() {
         let source = RemoteInput {
             url: "https://example.com/openapi.yaml".into(),
@@ -5277,7 +5318,10 @@ mod tests {
             {"language":"go","path":"go","plugins":[{"name":"sdk"},{"name":"operation-tests"},{"name":"oauth"},{"name":"webhooks"}]},
             {"language":"ruby","path":"ruby","plugins":[{"name":"sdk"},{"name":"webhooks"},{"name":"oauth"}]},
             {"language":"java","path":"java","plugins":[{"name":"sdk"},{"name":"oauth"}]},
-            {"language":"csharp","path":"csharp","plugins":[{"name":"sdk"},{"name":"oauth"}]}
+            {"language":"csharp","path":"csharp","plugins":[{"name":"sdk"},{"name":"oauth"}]},
+            {"language":"swift","path":"swift","plugins":[{"name":"sdk"},{"name":"oauth"}]},
+            {"language":"php","path":"php","plugins":[{"name":"sdk"},{"name":"oauth"}]},
+            {"language":"elixir","path":"elixir","plugins":[{"name":"sdk"},{"name":"oauth"}]}
         ])).unwrap();
         let api = Api {
             name: "Consumer".into(),
@@ -5314,6 +5358,9 @@ mod tests {
         for (language, helper) in [
             ("java", "OAuthClientCredentials.java"),
             ("csharp", "OAuthClientCredentials.cs"),
+            ("swift", "OAuth.swift"),
+            ("php", "OAuthClient.php"),
+            ("elixir", "oauth.ex"),
         ] {
             assert!(
                 tree.iter()

@@ -29,22 +29,42 @@ type sourceClosure struct {
 	Hash      uint64
 	Files     []string
 	Base      string
+	Root      string
 }
 
-// Hash every local reference document before considering an incremental cache
-// hit. Remote references are deliberately rejected; this compiler does not
-// forward source authentication or fetch arbitrary referenced URLs.
+// Hash the entire bounded reference closure before considering a cache hit.
+// Remote documents use public HTTPS only and never inherit source credentials.
 func collectSourceClosure(specPath string, root []byte) (*sourceClosure, error) {
+	return collectSourceClosureWithOrigin(specPath, root, sourceDocumentURL, fetchRemoteSource)
+}
+
+func collectSourceClosureWithFetcher(specPath string, root []byte, fetch func(string) ([]byte, error)) (*sourceClosure, error) {
+	return collectSourceClosureWithOrigin(specPath, root, "", fetch)
+}
+
+func collectSourceClosureWithOrigin(specPath string, root []byte, origin string, fetch func(string) ([]byte, error)) (*sourceClosure, error) {
 	absolute, err := filepath.Abs(specPath)
 	if err != nil {
 		return nil, err
 	}
 	base := filepath.Dir(absolute)
+	rootID := absolute
+	if origin != "" {
+		uri, err := url.Parse(origin)
+		if err != nil || (uri.Scheme != "https" && uri.Scheme != "http") || uri.Host == "" || uri.User != nil {
+			return nil, fmt.Errorf("source-url must be an HTTP(S) document URL without credentials")
+		}
+		uri.Fragment = ""
+		rootID = uri.String()
+	}
+
 	documents := map[string][]byte{}
 	totalBytes := 0
 	var visit func(string, []byte) error
 	visit = func(path string, data []byte) error {
-		path = filepath.Clean(path)
+		if !isRemoteDocument(path) {
+			path = filepath.Clean(path)
+		}
 		if _, exists := documents[path]; exists {
 			return nil
 		}
@@ -64,23 +84,19 @@ func collectSourceClosure(specPath string, root []byte) (*sourceClosure, error) 
 			return fmt.Errorf("parse local reference document %s: %w", path, err)
 		}
 		follow := func(value string) error {
-			ref, err := url.Parse(value)
+			target, _, err := resolveSourceReference(path, value)
 			if err != nil {
-				return fmt.Errorf("invalid $ref %q: %w", value, err)
+				return fmt.Errorf("invalid reference in %s: %w", path, err)
 			}
-			if ref.Scheme != "" || ref.Host != "" || ref.RawQuery != "" {
-				return fmt.Errorf("unsupported non-local reference %q; bundle remote references explicitly", value)
-			}
-			if ref.Path == "" {
-				return nil
-			}
-			target := ref.Path
-			if !filepath.IsAbs(target) {
-				target = filepath.Join(filepath.Dir(path), filepath.FromSlash(target))
-			}
-			target = filepath.Clean(target)
 			if _, exists := documents[target]; exists {
 				return nil
+			}
+			if isRemoteDocument(target) {
+				bytes, err := fetch(target)
+				if err != nil {
+					return fmt.Errorf("fetch remote reference %s: %w", target, err)
+				}
+				return visit(target, bytes)
 			}
 			info, err := os.Stat(target)
 			if err != nil {
@@ -140,7 +156,7 @@ func collectSourceClosure(specPath string, root []byte) (*sourceClosure, error) 
 		}
 		return walk(&node, false, false)
 	}
-	if err := visit(absolute, root); err != nil {
+	if err := visit(rootID, root); err != nil {
 		return nil, err
 	}
 	files := make([]string, 0, len(documents))
@@ -153,13 +169,16 @@ func collectSourceClosure(specPath string, root []byte) (*sourceClosure, error) 
 		return nil, fmt.Errorf("local reference closure exceeds 256 MiB")
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i] < files[j] })
-	source := &sourceClosure{Base: base, Files: files, Documents: documents}
+	source := &sourceClosure{Base: base, Root: rootID, Files: files, Documents: documents}
 	hash := sha256.New()
 	incremental := xxhash.New()
 	for _, path := range files {
-		relative, err := filepath.Rel(base, path)
-		if err != nil {
-			return nil, err
+		relative := path
+		if !isRemoteDocument(path) {
+			relative, err = filepath.Rel(base, path)
+			if err != nil {
+				return nil, err
+			}
 		}
 		relative = filepath.ToSlash(relative)
 		bytes := documents[path]

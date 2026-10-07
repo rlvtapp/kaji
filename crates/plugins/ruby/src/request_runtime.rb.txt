@@ -1,6 +1,6 @@
     private
 
-    def request(method, path, query:, headers:, body:, response_schemas: nil, idempotency_header: nil, request_options: nil)
+    def request(method, path, query:, headers:, body:, response_schemas: nil, idempotency_header: nil, request_options: nil, multipart: false)
       options = request_options || {}
       raise ArgumentError, 'request_options must be a Hash' unless options.is_a?(Hash)
       raise ArgumentError, 'unknown request option' unless (options.keys - [:headers, :timeout, :cancelled]).empty?
@@ -14,7 +14,7 @@
       check_cancellation(cancelled)
       uri = URI.join(@base_url + "/", path.sub(%r{^/}, ""))
       uri.query = URI.encode_www_form(query) unless query.empty?
-      request = if Net::HTTP.const_defined?(method.capitalize, false)
+      request = if %w[GET HEAD POST PUT DELETE OPTIONS TRACE PATCH].include?(method.upcase) && Net::HTTP.const_defined?(method.capitalize, false)
         Net::HTTP.const_get(method.capitalize, false).new(uri)
       else
         Net::HTTPGenericRequest.new(method, !body.nil?, method != "HEAD", uri)
@@ -23,7 +23,10 @@
       merged_headers.each { |key, value| request[key] = value }
       request["Authorization"] ||= "Bearer #{@bearer_token}" if @bearer_token
       request["X-API-Key"] ||= @api_key if @api_key
-      unless body.nil?
+      if body.is_a?(MultipartBody)
+        raise ArgumentError, 'operation does not accept multipart/form-data' unless multipart
+        request["Content-Type"], request.body = body.encode
+      elsif !body.nil?
         request["Content-Type"] ||= "application/json"
         request.body = body.is_a?(String) ? body : JSON.generate(body.respond_to?(:to_h) ? body.to_h : body)
       end

@@ -1,0 +1,35 @@
+defmodule __KAJI_MODULE__.MultipartBody do
+  @moduledoc "Explicit buffered multipart parts, including repeated names and binary files."
+  defstruct parts: [], size: 0
+  @max_bytes 67_108_864
+  @max_parts 1024
+
+  def new, do: %__MODULE__{}
+  def add_text(body, name, value), do: add_part(body, name, to_string(value), nil, "text/plain; charset=utf-8")
+  def add_json(body, name, value), do: add_part(body, name, Jason.encode!(value), nil, "application/json")
+  def add_file(body, name, bytes, filename, content_type \\ "application/octet-stream"), do: add_part(body, name, bytes, filename, content_type)
+  def add_part(%__MODULE__{} = body, name, bytes, filename \\ nil, content_type \\ "application/octet-stream") do
+    if length(body.parts) >= @max_parts, do: raise(ArgumentError, "too many multipart parts")
+    Enum.each([name, filename, content_type], fn
+      nil -> :ok
+      value when is_binary(value) ->
+        if value == "" or byte_size(value) > 4096 or String.contains?(value, ["\r", "\n", <<0>>]), do: raise(ArgumentError, "invalid multipart metadata")
+      _ -> raise(ArgumentError, "multipart metadata must be strings")
+    end)
+    if not is_binary(bytes), do: raise(ArgumentError, "multipart data must be binary")
+    if body.size + byte_size(bytes) > @max_bytes, do: raise(ArgumentError, "multipart body exceeds buffer limit")
+    %{body | parts: [{name, bytes, filename, content_type} | body.parts], size: body.size + byte_size(bytes)}
+  end
+
+  def encode(%__MODULE__{} = body) do
+    boundary = "kaji-" <> Base.encode16(:crypto.strong_rand_bytes(24), case: :lower)
+    chunks = Enum.map(Enum.reverse(body.parts), fn {name, bytes, filename, content_type} ->
+      file_header = if filename, do: "; filename=\"" <> quote_metadata(filename) <> "\"", else: ""
+      ["--", boundary, "\r\nContent-Disposition: form-data; name=\"", quote_metadata(name), "\"", file_header, "\r\nContent-Type: ", content_type, "\r\n\r\n", bytes, "\r\n"]
+    end)
+    chunks = [chunks, "--", boundary, "--\r\n"]
+    if IO.iodata_length(chunks) > @max_bytes, do: raise(ArgumentError, "multipart body exceeds buffer limit")
+    {"multipart/form-data; boundary=" <> boundary, IO.iodata_to_binary(chunks)}
+  end
+  defp quote_metadata(value), do: value |> String.replace("\\", "\\\\") |> String.replace("\"", "\\\"")
+end

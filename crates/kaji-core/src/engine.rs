@@ -736,6 +736,13 @@ impl Packages {
         api: &Api,
         catalog: Option<&SecuritySchemeCatalog>,
     ) -> Result<GeneratedTree> {
+        for operation in &api.operations {
+            let parsed =
+                crate::HttpMethod::parse(operation.method.as_str()).map_err(anyhow::Error::msg)?;
+            if parsed != operation.method {
+                bail!("HTTP method variants must use their canonical representation");
+            }
+        }
         let mut dirs: Vec<PathBuf> = Vec::new();
         // Validate every package before executing any generator.
         for package in &self.packages {
