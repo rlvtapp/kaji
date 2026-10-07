@@ -118,3 +118,25 @@ create/update plan consistency, import, drift, authentication errors, HTTP 404
 refresh/delete, and recovery of identity after create normalization errors. It
 does not launch the Terraform CLI or validate remote registry publication.
 The repository CI runs both checks and the combined API-artifacts example.
+
+## Shared runtime contract and artifact execution
+
+The [runtime contract](../packages/runtime-contract/README.md) exports the same
+API into ten SDK targets and drives their public operations against a loopback
+server. Its manifest declares five scenarios and every supported/unsupported
+mapping. TypeScript, Python, Go, Rust, Swift and Ruby have been executed locally;
+Java, C#, PHP and Elixir harnesses are wired into CI but were not executed on the
+local implementation host. A configured CI job is not evidence of a passing run.
+
+Additional native checks execute Python sync/async and Ruby response validation,
+Python/TypeScript/Go page pagination, and Python/Go generated operation smoke
+tests. Optional API reference and Terraform data source recipes are covered by
+CLI output assertions and actual JSON Schema validation. Newman executes an
+exported collection against a local mock; a real Terraform CLI exercises
+create/read/update/import/destroy and a supported single-entity data source.
+These tests have the limits stated in each artifact's guide.
+
+The [delivery test workflow](../packages/sdk-delivery-test/README.md) is prepared
+only. Local drift, immutable-tag mock publishing and workflow validation passed;
+no workflow dispatch, GitHub App installation, registry trust configuration or
+real package publication has been performed.

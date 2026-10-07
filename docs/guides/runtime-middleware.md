@@ -221,3 +221,23 @@ For streams, retain the native body/iterator and its lifetime. A response wrappe
 The configured chain is copied or compiled into the client. Shared mutable wrapper state must support concurrent calls. Native wrappers can see resolved authentication headers; choose logged fields deliberately. If a policy should ship to every SDK customer, move it into the generator recipe rather than asking every application to register it.
 
 Continue with [SDK customization](../sdk-customization.md) to bundle the policy, [generated SDK usage](../generated-sdks.md) to document the customer's entry point, and [SDK publishing](../sdk-publishing.md) to distribute the tested package.
+
+## Python and Ruby structural response checks
+
+Python SDK consumers can construct `Client(..., validate_responses=True)` or
+`AsyncClient(..., validate_responses=True)`. Ruby uses
+`Client.new(..., validate_responses: true)`. These checks run after middleware,
+including responses returned by a cache or replacement policy, before model
+conversion. The default remains permissive.
+
+The generated checks cover declared primitive types, required response fields,
+nullability, arrays, references and supported compositions. Future enum strings
+and additional object properties remain accepted. Write-only fields are not
+required in responses. They reject malformed JSON with a redacted
+`ResponseDecodeError`; error messages identify a field path without echoing the
+payload. They are structural checks, not complete JSON Schema validation of
+formats, numeric bounds or every composition rule.
+
+Python sync decoding bounds bytes read; async HTTPX decoding checks size after
+reading the response. Both close responses and report terminal decoding failures
+without treating them as retryable transport errors.

@@ -92,6 +92,23 @@ Copy its source into your repository or use a revision that includes the action:
     environment: generated/postman/api.postman_environment.json
 ```
 
+For an opt-in execution check, the editable
+[local Newman runner](../packages/postman-execute/README.md) executes one bounded
+iteration against its own ephemeral loopback mock. It rejects existing collection
+scripts, replaces all request destinations/auth helpers, and asserts the first
+saved successful response status. No environment credentials or remote API access
+are used:
+
+```sh
+npm ci --prefix packages/postman-execute --ignore-scripts
+node packages/postman-execute/run.mjs generated/postman/api.postman_collection.json
+```
+
+The runner tests and an actual generated collection execution passed with pinned
+Newman 6.2.1. This verifies executable collection structure, not original path/auth
+handling, response semantics, ordered CRUD behavior or streaming. Keep schema
+validation and generator mapping tests alongside it.
+
 Execution through Postman or Newman is a separate, deliberate test step. Use an
 explicit sandbox/mock URL and test fixtures, especially for create/delete operations.
 Portable export and validation are implemented; remote workspace synchronization

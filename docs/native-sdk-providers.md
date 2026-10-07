@@ -69,9 +69,25 @@ This is a source audit, not an execution claim for every runtime.
 | C# | Injected `HttpClient` supports ordinary `DelegatingHandler` chains, including synthetic responses. | Generated hooks are separate notifications; binary/SSE paths do not consistently invoke the before-request hook. |
 | PHP | Injected PSR-18 `ClientInterface` supports transport decorators and middleware adapters. | Generated callbacks observe context/outcomes; their return values do not replace requests or responses. |
 | Swift | `KajiTransport` and `KajiMiddlewareTransport` support request/response/error transformations and short circuits; `URLSession` initialization remains supported. | Buffered transport only; status and decode errors occur after middleware. Notification hooks remain observational. |
-| Ruby | Generated runtime calls `Net::HTTP` directly. | No public transport injection or middleware/hook API; overriding its private request method requires subclass coupling. |
+| Ruby | Callable `transport` and ordered `middleware` wrap Net::HTTP execution. | Buffered calls; request/response/error rewriting and short circuits. No generated retry or SSE surface. |
 | Elixir | `transport` function and ordered `middleware` continuations support buffered transformations/recovery/short circuits; `stream_transport` decorates Finch-style SSE execution/events. | Buffered middleware runs per retry attempt and does not process SSE frames; callbacks remain observational. |
 
 Swift generated README examples show `KajiMiddlewareTransport(inner:middleware:)` with a mutable `URLRequest` and async continuation. The `KajiTransport` protocol returns `(Data, URLResponse)` and preserves existing `session:` callers. A Swift 6 warnings-as-errors executable test verifies header mutation, response transformation, transport-error recovery, ordering, and a short circuit without terminal execution.
 
 Elixir generated README examples show ordered `middleware: [fn request, next -> ... end]`, optional `transport: fn request, options -> ... end`, and the separate `stream_transport` signature. The generated dependency-free ExUnit probe covers buffered mutation/recovery/short circuits, error notifications, and synthetic SSE. Elixir is unavailable in the verification environment; that probe is committed as an ignored toolchain test and has not been executed here. Run `cargo test -p kaji-plugin-elixir elixir_customer_middleware_executes -- --ignored` with Elixir installed. Source-generation tests execute normally.
+
+## Generic documentation and custom consumers
+
+The core `api_reference::<L>()` consumer works with native providers, the SDK
+convenience plugin and community languages. Add it through `.with(...)` or enable
+package `api_reference: true` in CLI configuration. It emits an owned
+`API_REFERENCE.md` with operation/parameter/status/media/schema structure from the
+normalized API. It has no hard-coded SDK imports or model-name assumptions.
+Examples/defaults and credential-bearing external reference URIs are omitted.
+
+For a compiled provider substitution example with no SDK dependencies, see
+[custom plugin authoring](../examples/custom-plugin/README.md). For the API
+reference contract and custom output path, see
+[typed plugin documentation](typed-plugins.md#add-a-target-neutral-api-reference).
+Generated documentation and source probes do not replace native consumer/runtime
+conformance tests.

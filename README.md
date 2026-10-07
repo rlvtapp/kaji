@@ -220,6 +220,10 @@ available. See the [Rust API guide](docs/getting-started.md) and
   release checked tags through Release Please and supported registry OIDC flows.
 - Use one SDK repository per language, with destination-scoped generation jobs
   and each repository's own editable build, test, release, and publishing actions.
+- Generate optional API references and Python/Go operation tests. Exercise SDK
+  wire behavior in a shared ten-language CI suite with explicit coverage limits.
+- Enable structural response checks in TypeScript, Go, Python and Ruby; generate
+  Terraform data sources and run Postman collections against local test APIs.
 - Extend SDK runtimes and models with Python async/OAuth/webhook support,
   TypeScript wide integer handling, Java open enums, and provider composition.
 

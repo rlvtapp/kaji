@@ -342,3 +342,18 @@ filesystem errors exit with status `1`. Generated files are overwritten, while
 explicit custom starter files and unrelated output files remain. Kaji does not
 prune stale generated files, so use a fresh output directory after removing or
 renaming packages, schemas, or operations.
+
+## Package-local API reference
+
+Set `api_reference: true` on any package to emit `API_REFERENCE.md` alongside
+its generated source. The reference lists normalized operations, parameter
+locations and types, response media/status mappings, and component schemas.
+It is an optional language-neutral plugin; it does not replace generated
+language symbols or include authentication secrets and specification examples.
+The library equivalent is `kaji::api_reference::<Language>()`, with an optional
+`.output("relative/path.md")`.
+
+Python packages accept the optional `operation-tests` consumer. Terraform's
+`provider` plugin accepts `data_sources: true` to expose supported single-entity
+GET bindings as typed data sources. Both remain opt-in; consult the testing and
+Terraform guides for capability limits.

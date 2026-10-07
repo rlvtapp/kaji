@@ -1,6 +1,6 @@
 # Terraform provider generation plan
 
-Status: initial typed CRUD implementation is now available. See [the implementation guide](terraform-provider.md) for its supported subset and actual recipe API. Repository inspection and primary-source research: 7 October 2026. Advanced configuration and Rust structures below remain proposed APIs unless covered by that guide.
+Status: typed scalar CRUD and opt-in resource-read data sources are available; a real Terraform CLI lifecycle harness passes against a local mock. See [the implementation guide](terraform-provider.md) for its supported subset and actual recipe API. Repository inspection and primary-source research: 7 October 2026. Advanced configuration and Rust structures below remain proposed APIs unless covered by that guide.
 
 ## 1. Current architecture and gaps
 

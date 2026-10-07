@@ -33,3 +33,41 @@ MSW handlers are editable in-process scaffolding. Cypress output needs real
 paths, credentials, bodies, and assertions before use; never run generated
 mutation tests against production. The [TypeScript stack example](../../examples/typescript-stack/README.md)
 shows Faker, MSW, Cypress, and the Docker mock together.
+
+## Generate operation smoke tests
+
+Python authors can add an `operation-tests` consumer beside their SDK:
+
+```json
+{
+  "language": "python",
+  "path": "python",
+  "package_name": "my-api-sdk",
+  "api_reference": true,
+  "plugins": [{ "name": "sdk" }, { "name": "operation-tests" }]
+}
+```
+
+Run `python -m unittest discover -s tests -v` from the generated package after
+installing it locally. The emitted tests call public SDK operations through a
+fake HTTP driver and assert contract-derived method, path, parameters, JSON body
+and decoded result. They do not call a real API. `.kaji/operation-test-diagnostics.json`
+lists operations that cannot safely be sampled; generated skips are not coverage.
+Samples are bounded and avoid copying specification examples or defaults.
+
+The Rust library also exposes `kaji::go::operation_tests()`; select its client or
+operations provider with a typed handle. Run the resulting Go tests with `go test
+./...`. These smoke tests supplement a service integration suite.
+
+## Verify runtime behavior across languages
+
+The [runtime contract](../../packages/runtime-contract/README.md) generates one
+API for ten targets and exercises authentication, middleware, errors, retries and
+JSON decoding through a loopback server. The CI matrix runs the native harnesses;
+its manifest explicitly records unsupported scenarios. See its coverage table
+before treating a passing job as full runtime parity.
+
+[Postman execution](../../packages/postman-execute/README.md) runs generated
+collections through Newman against a local server. Terraform's native suite also
+runs a real Terraform CLI lifecycle against a local service; see the
+[provider guide](../terraform-provider.md).

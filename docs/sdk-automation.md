@@ -370,3 +370,31 @@ publishers. Custom commands own their own retry/idempotency policy.
 Continue with [publishing setup and registry rules](sdk-publishing.md),
 [SDK author customization](sdk-customization.md), or
 [plugin authoring](typed-plugins.md).
+
+## Diagnose an existing delivery setup
+
+```sh
+kaji sdk doctor --root generated --json
+kaji sdk inspect --root generated --json
+```
+
+`doctor` checks the generation ownership inventory, package delivery metadata,
+expected toolchain commands and workflow files without changing or building the
+output. Add `--repository OWNER/REPO` for optional remote configuration-name
+checks through `gh`. It reports remediation steps without returning credential
+values. `inspect` describes emitted artifacts and ownership; it is not a
+pre-generation plugin dependency graph inspector.
+
+API diffs now include deterministic structured change entries and Markdown
+notes. When `sdk pr` computes a local source diff, bounded, sanitized API notes
+are embedded into its commit and matching squash-merge override for Release
+Please. The selected release bump controls the outer commit title. Supplying
+an explicit `--bump` to `sdk pr` bypasses source comparison, so no inferred API
+notes are available for that invocation.
+
+For a disposable end-to-end verification, use the prepared
+[delivery workflow template](../packages/sdk-delivery-test/README.md). It defaults
+to preview and requires configured allowlists and a protected environment before
+opening a test SDK PR. Registry publication follows the destination's regular
+reviewed release workflow. This template has not been dispatched or published
+as part of these changes.

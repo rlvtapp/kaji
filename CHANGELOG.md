@@ -6,6 +6,16 @@
 
 ### Added
 
+- A shared executable HTTP runtime contract with ten native harnesses and explicit
+  unsupported-scenario reporting, wired into the language CI matrix.
+- Optional Python and Go generated operation smoke tests, a package-local API
+  reference, and a standalone custom plugin composition example.
+- Python sync/async and Ruby opt-in structural response validation, plus shared
+  page pagination in Python/TypeScript/Go with RFC 6901 selectors.
+- Terraform single-entity data sources and real local Terraform CLI lifecycle
+  tests; executable Postman collection tests through pinned Newman.
+- Read-only SDK doctor/inspection, structured API diff notes carried into Release
+  Please, and a gated disposable delivery workflow prepared without publication.
 - Ownership-aware regeneration and check mode with stale generated-file cleanup,
   customer edit protection, preserved create-once files, and npm manifest merging.
 - SDK author customization through bundled runtime HTTP middleware across native

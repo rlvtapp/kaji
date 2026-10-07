@@ -28,7 +28,7 @@ Choose the guide for the task around your client: [TypeScript helpers](guides/ty
 
 ## Plugin developers: extend generation through contracts
 
-Use the [Rust library workflow](library/README.md) when generation belongs in a tool or when you need a native custom plugin. Follow [plugin composition](library/plugins.md), then the [typed plugin reference](typed-plugins.md) to provide or consume contracts and control package finalization. [Architecture](architecture.md) explains the compiler boundary and neutral model; [native SDK providers](native-sdk-providers.md) documents Rust/Go transport composition and runtime extension boundaries.
+Use the [Rust library workflow](library/README.md) when generation belongs in a tool or when you need a native custom plugin. Start from the [standalone custom plugin example](../examples/custom-plugin/README.md). Follow [plugin composition](library/plugins.md), then the [typed plugin reference](typed-plugins.md) to provide or consume contracts and control package finalization. [Architecture](architecture.md) explains the compiler boundary and neutral model; [native SDK providers](native-sdk-providers.md) documents Rust/Go transport composition and runtime extension boundaries.
 
 Native Rust plugins are composed through the library API. Installing an arbitrary plugin does not register it in `kaji.json`; the CLI exposes its bundled registry. Keep target-specific behavior in the plugin, and use [source customization](source-customization.md) if you need to extend the CLI or delivery actions.
 

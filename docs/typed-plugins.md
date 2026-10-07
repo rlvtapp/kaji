@@ -194,6 +194,45 @@ See [native Rust/Go providers](native-sdk-providers.md) for their transport
 contracts and practical boundaries. Transport substitution should be tested
 through a generated public method and its real consumer compiler.
 
+## Start with a compiled minimal plugin
+
+The standalone [custom plugin example](../examples/custom-plugin/README.md)
+depends only on `kaji-core`, declares a documentation language, publishes a typed
+`Names` contract from two providers and binds a consumer to the replacement’s
+handle. Its test verifies the actual emitted value, not just registration:
+
+```sh
+cargo test --manifest-path examples/custom-plugin/Cargo.toml
+```
+
+This is the smallest authoring path before adding a target-specific model or
+transport ABI. A Rust plugin must be compiled into an embedded generator; naming
+it in CLI JSON does not dynamically load its source.
+
+## Add a target-neutral API reference
+
+Any native package can include the generic consumer:
+
+```rust
+let package = kaji::ts::package("typescript")
+    .with(kaji::ts::sdk())
+    .with(kaji_core::api_reference().output("docs/API_REFERENCE.md"));
+```
+
+`api_reference::<L>()` defaults to `API_REFERENCE.md` and publishes the typed
+`ApiReferenceDocument` contract. Its `.handle()` allows another consumer to bind
+that document explicitly. It reads the normalized `Api` directly and has no
+model/transport provider dependency. CLI packages can opt in with
+`"api_reference": true`; the default is false.
+
+The reference lists operation IDs, HTTP methods/paths, parameters, request media,
+response statuses/media, schema references and component field shapes. These are
+contract identifiers, not a promise of generated client method names. It omits
+examples, defaults, enum literal values, source descriptions and external reference
+URIs, and escapes active Markdown/HTML. It is documentation, not an executable
+operation test or full schema validator. Output remains owned and participates in
+safe regeneration/checks; the normal writer rejects path escapes and collisions.
+
 ## Implement a reusable consumer
 
 This small plugin emits an inventory from the model contract. It is an example
