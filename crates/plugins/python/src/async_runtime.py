@@ -7,6 +7,7 @@ from typing import Any, AsyncIterator
 import inspect
 from urllib.parse import urljoin, urlsplit
 from .runtime import BaseClient, ApiError, to_wire
+from .multipart import encode_multipart
 from .response_validation import ResponseDecodeError
 
 
@@ -87,11 +88,24 @@ class AsyncBaseClient(BaseClient):
             request_headers.setdefault('Authorization', f'Bearer {self.bearer_token or self.api_key}')
         options: dict[str, Any] = {'headers': request_headers, 'params': {k: v for k, v in (query or {}).items() if v is not None}, 'timeout': self.timeout}
         if body is not None:
+            from .multipart import MultipartBody
+            if isinstance(body, MultipartBody):
+                if body_kind != 'multipart' and not body_kind.endswith('_or_multipart'):
+                    raise TypeError('operation does not declare multipart/form-data')
+                body_kind = 'multipart'
+            elif body_kind.endswith('_or_multipart'):
+                body_kind = body_kind.removesuffix('_or_multipart')
             if body_kind == 'binary':
                 if not isinstance(body, (bytes, bytearray, memoryview)):
                     raise TypeError('binary request bodies must be bytes-like')
                 options['content'] = bytes(body)
                 request_headers.setdefault('Content-Type', 'application/octet-stream')
+            elif body_kind == 'multipart':
+                options['content'], multipart_content_type = encode_multipart(body, to_wire)
+                for key in list(request_headers):
+                    if key.lower() == 'content-type':
+                        del request_headers[key]
+                request_headers['Content-Type'] = multipart_content_type
             elif body_kind == 'form':
                 value = to_wire(body)
                 if not isinstance(value, dict):
@@ -100,7 +114,7 @@ class AsyncBaseClient(BaseClient):
             else:
                 options['json'] = to_wire(body)
         context = {'method': method, 'url': url, 'query': query or {}, 'headers': request_headers, 'body': body}
-        can_retry = retryable and (method.upper() in {'GET', 'PUT', 'DELETE'} or (method.upper() in {'POST', 'PATCH'} and any((k.lower() == 'idempotency-key' or (idempotency_header is not None and k.lower() == idempotency_header.lower())) and value is not None and bool(str(value).strip()) for k, value in request_headers.items())))
+        can_retry = retryable and (method.upper() in {'GET', 'HEAD', 'OPTIONS', 'TRACE', 'QUERY', 'PUT', 'DELETE'} or (method.upper() in {'POST', 'PATCH'} and any((k.lower() == 'idempotency-key' or (idempotency_header is not None and k.lower() == idempotency_header.lower())) and value is not None and bool(str(value).strip()) for k, value in request_headers.items())))
         auth_refreshed = False
         for attempt in range(self.max_retries + (2 if managed_auth else 1)):
             if self.before_request is not None:
@@ -121,7 +135,7 @@ class AsyncBaseClient(BaseClient):
                 if self.on_error is not None:
                     self.on_error(error, context)
                 raise
-            if response.status_code == 401 and managed_auth and not auth_refreshed:
+            if response.status_code == 401 and managed_auth and can_retry and not auth_refreshed:
                 await response.aclose()
                 auth_token = await self.token_provider(auth_token)
                 request_headers['Authorization'] = f'Bearer {auth_token}'

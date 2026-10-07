@@ -49,6 +49,8 @@ pub(crate) fn render(api: &Api, op: &Operation) -> Option<String> {
     if let Some(body) = &op.request_body {
         args.push(if body.required { "body:" } else { "body: nil" }.into())
     }
+    let options_name = ruby_request_options_name(op);
+    args.push(format!("{options_name}: nil"));
     let page_arg = ruby_identifier(&page.name);
     let state = if page.location == "requestBody" {
         format!(
@@ -87,6 +89,7 @@ pub(crate) fn render(api: &Api, op: &Operation) -> Option<String> {
             .into(),
         )
     }
+    forwarded.push(format!("{options_name}: {options_name}"));
     let limit = limit
         .map(|input| {
             if input.location == "requestBody" {
@@ -121,6 +124,7 @@ pub(crate) fn render(api: &Api, op: &Operation) -> Option<String> {
                 format!("{id}: {id}")
             })
             .chain(op.request_body.as_ref().map(|_| "body: body".into()))
+            .chain(std::iter::once(format!("{options_name}: {options_name}")))
             .collect::<Vec<_>>()
             .join(", "),
         forwarded = forwarded.join(", "),

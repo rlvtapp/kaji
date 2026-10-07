@@ -40,6 +40,9 @@ fn fixture(
     op: &Operation,
     options: kaji_core::samples::SampleOptions,
 ) -> std::result::Result<Value, String> {
+    if crate::multipart::selected(op) {
+        return Err("multipart MIME requests require the dedicated native test adapter".into());
+    }
     if !op.security.is_empty() {
         return Err("authentication requires a fixture adapter".into());
     }

@@ -1,0 +1,67 @@
+
+// KajiMultipartBody explicitly selects multipart/form-data for upload operations.
+// Parts are buffered once, so replay-safe requests reuse identical bytes/boundaries.
+// Do not mutate the body while a request is executing.
+type KajiMultipartBody struct { Parts []KajiMultipartPart }
+type KajiMultipartPart struct {
+    Name string
+    Filename string
+    ContentType string
+    Data []byte
+    Headers http.Header
+}
+func (body *KajiMultipartBody) AddText(name, value string) {
+    body.Parts = append(body.Parts, KajiMultipartPart{Name:name, ContentType:"text/plain; charset=utf-8", Data:[]byte(value)})
+}
+func (body *KajiMultipartBody) AddFile(name, filename, contentType string, data []byte) {
+    body.Parts = append(body.Parts, KajiMultipartPart{Name:name, Filename:filename, ContentType:contentType, Data:append([]byte(nil),data...)})
+}
+func (body *KajiMultipartBody) AddJSON(name string, value any) error {
+    data, err := json.Marshal(value)
+    if err != nil { return fmt.Errorf("kaji: encode multipart JSON: %w",err) }
+    body.Parts = append(body.Parts, KajiMultipartPart{Name:name, ContentType:"application/json", Data:data})
+    return nil
+}
+type kajiMultipartBuffer struct { bytes.Buffer }
+func (buffer *kajiMultipartBuffer) Write(data []byte) (int,error) {
+    if len(data) > (64<<20)-buffer.Len() { return 0,fmt.Errorf("kaji: multipart body exceeds 64 MiB") }
+    return buffer.Buffer.Write(data)
+}
+func (body *KajiMultipartBody) encode() ([]byte,string,error) {
+    if body == nil { return nil,"",fmt.Errorf("kaji: multipart body is required") }
+    if len(body.Parts)>10000 { return nil,"",fmt.Errorf("kaji: multipart exceeds 10000 parts") }
+    buffer:=&kajiMultipartBuffer{}
+    writer:=multipart.NewWriter(buffer)
+    for _,part:=range body.Parts {
+        if part.Name=="" || len(part.Name)>4096 || len(part.Filename)>4096 || strings.ContainsAny(part.Name+part.Filename,"\r\n\x00") {
+            return nil,"",fmt.Errorf("kaji: invalid multipart name or filename")
+        }
+        if len(part.Data)>64<<20 {return nil,"",fmt.Errorf("kaji: multipart body exceeds 64 MiB")}
+        contentType:=part.ContentType
+        if contentType=="" {if part.Filename!="" {contentType="application/octet-stream"} else {contentType="text/plain; charset=utf-8"}}
+        if len(contentType)>1024 {return nil,"",fmt.Errorf("kaji: invalid multipart content type")}
+        if _,_,err:=mime.ParseMediaType(contentType);err!=nil{return nil,"",fmt.Errorf("kaji: invalid multipart content type")}
+        headers:=textproto.MIMEHeader{}
+        parameters:=map[string]string{"name":part.Name}
+        if part.Filename!="" {parameters["filename"]=part.Filename}
+        headers.Set("Content-Disposition",mime.FormatMediaType("form-data",parameters))
+        headers.Set("Content-Type",contentType)
+        if len(part.Headers)>64{return nil,"",fmt.Errorf("kaji: too many multipart headers")}
+        for name,values:=range part.Headers {
+            if len(name)==0||len(name)>256||strings.EqualFold(name,"Content-Disposition")||strings.EqualFold(name,"Content-Type"){return nil,"",fmt.Errorf("kaji: invalid multipart header")}
+            for _,character:=range name {if !strings.ContainsRune("!#$%&'*+-.^_`|~0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",character){return nil,"",fmt.Errorf("kaji: invalid multipart header")}}
+            if len(values)>64{return nil,"",fmt.Errorf("kaji: too many multipart header values")}
+            for _,value:=range values {if len(value)>8192||strings.ContainsAny(value,"\r\n\x00"){return nil,"",fmt.Errorf("kaji: invalid multipart header")};headers.Add(name,value)}
+        }
+        target,err:=writer.CreatePart(headers)
+        if err!=nil{return nil,"",err}
+        if _,err:=target.Write(part.Data);err!=nil{return nil,"",err}
+    }
+    if err:=writer.Close();err!=nil{return nil,"",err}
+    return buffer.Bytes(),writer.FormDataContentType(),nil
+}
+func encodeKajiBody(body any) ([]byte,string,error) {
+    if multipartBody,ok:=body.(*KajiMultipartBody);ok{return multipartBody.encode()}
+    data,err:=json.Marshal(body)
+    return data,"application/json",err
+}

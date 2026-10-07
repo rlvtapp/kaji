@@ -209,7 +209,13 @@ fn retry_class(operation: &Operation) -> RetryClass {
         return RetryClass::IdempotencyKey;
     }
     match operation.method {
-        HttpMethod::Get | HttpMethod::Put | HttpMethod::Delete => RetryClass::Idempotent,
+        HttpMethod::Get
+        | HttpMethod::Put
+        | HttpMethod::Delete
+        | HttpMethod::Head
+        | HttpMethod::Options
+        | HttpMethod::Trace
+        | HttpMethod::Query => RetryClass::Idempotent,
         HttpMethod::Post | HttpMethod::Patch => RetryClass::Unsafe,
     }
 }
@@ -264,6 +270,24 @@ mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn query_and_standard_safe_methods_are_replayable() {
+        for method in [
+            HttpMethod::Query,
+            HttpMethod::Head,
+            HttpMethod::Options,
+            HttpMethod::Trace,
+        ] {
+            assert_eq!(
+                retry_class(&Operation {
+                    method,
+                    ..Operation::default()
+                }),
+                RetryClass::Idempotent
+            );
+        }
+    }
 
     #[test]
     fn patch_requires_explicit_key_and_custom_resolved_header_is_recognized() {

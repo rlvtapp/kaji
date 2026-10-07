@@ -1,0 +1,84 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
+namespace __PACKAGE__;
+public sealed class OAuthTokenException : Exception { public OAuthTokenException() : base("OAuth token acquisition failed") {} }
+/// <summary>Client credentials provider with serialized refresh. Inject a separate issuer HttpClient.</summary>
+public sealed class OAuthClientCredentials {
+    private readonly HttpClient _issuer;
+    private readonly Uri _tokenUrl;
+    private readonly string _basic;
+    private readonly string _scope;
+    private readonly TimeSpan _leeway, _timeout;
+    private readonly SemaphoreSlim _refresh = new(1, 1);
+    private readonly object _cacheLock = new();
+    private string? _token;
+    private DateTimeOffset _expires;
+    public OAuthClientCredentials(HttpClient issuer, string tokenUrl, string clientId, string clientSecret, IEnumerable<string>? scopes = null, TimeSpan? refreshLeeway = null, TimeSpan? timeout = null) {
+        _issuer = issuer ?? throw new ArgumentNullException(nameof(issuer));
+        if (!Uri.TryCreate(tokenUrl, UriKind.Absolute, out var uri) || (uri.Scheme != "https" && uri.Scheme != "http") || uri.UserInfo.Length > 0 || uri.Fragment.Length > 0 || string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret)) throw new OAuthTokenException();
+        _tokenUrl = uri; _leeway = refreshLeeway ?? TimeSpan.FromSeconds(30); _timeout = timeout ?? TimeSpan.FromSeconds(30);
+        if (_leeway < TimeSpan.Zero || _timeout <= TimeSpan.Zero) throw new OAuthTokenException();
+        static string Encode(string value) => Uri.EscapeDataString(value).Replace("%20", "+");
+        _basic = Convert.ToBase64String(Encoding.ASCII.GetBytes(Encode(clientId) + ":" + Encode(clientSecret)));
+        _scope = string.Join(" ", scopes ?? Array.Empty<string>());
+    }
+    public void Invalidate(string rejectedToken) { lock (_cacheLock) { if (_token == rejectedToken) _token = null; } }
+    public async Task<string> TokenAsync(CancellationToken cancellationToken = default) {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_cacheLock) { if (_token != null && DateTimeOffset.UtcNow < _expires) return _token; }
+        await _refresh.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try {
+            lock (_cacheLock) { if (_token != null && DateTimeOffset.UtcNow < _expires) return _token; }
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken); timeout.CancelAfter(_timeout);
+            using var request = new HttpRequestMessage(HttpMethod.Post, _tokenUrl);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Basic", _basic);
+            var fields = new List<KeyValuePair<string,string>> { new("grant_type", "client_credentials") }; if (_scope.Length > 0) fields.Add(new("scope", _scope));
+            request.Content = new FormUrlEncodedContent(fields);
+            using var response = await _issuer.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode || response.RequestMessage?.RequestUri is Uri final && final != _tokenUrl) throw new OAuthTokenException();
+            await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token).ConfigureAwait(false);
+            using var buffer = new MemoryStream(); var chunk = new byte[4096];
+            for (;;) { int count = await stream.ReadAsync(chunk, timeout.Token).ConfigureAwait(false); if (count == 0) break; if (buffer.Length + count > 65536) throw new OAuthTokenException(); buffer.Write(chunk, 0, count); }
+            using var document = JsonDocument.Parse(buffer.ToArray()); var root = document.RootElement;
+            if (!root.TryGetProperty("access_token", out var tokenValue) || tokenValue.ValueKind != JsonValueKind.String || !root.TryGetProperty("token_type", out var type) || type.ValueKind != JsonValueKind.String || !string.Equals(type.GetString(), "Bearer", StringComparison.OrdinalIgnoreCase) || !root.TryGetProperty("expires_in", out var expires) || !expires.TryGetDouble(out double seconds) || !double.IsFinite(seconds) || seconds < 0) throw new OAuthTokenException();
+            var token = tokenValue.GetString(); if (string.IsNullOrEmpty(token) || !System.Text.RegularExpressions.Regex.IsMatch(token, "^[A-Za-z0-9._~+/-]+=*$")) throw new OAuthTokenException();
+            cancellationToken.ThrowIfCancellationRequested();
+            double duration = Math.Max(0, Math.Min(seconds, 365 * 24 * 3600) - _leeway.TotalSeconds); if (duration > 0) { var expiry = DateTimeOffset.UtcNow.AddSeconds(duration); lock (_cacheLock) { _token = token; _expires = expiry; } }
+            return token;
+        } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch { throw new OAuthTokenException(); }
+        finally { _refresh.Release(); }
+    }
+    public override string ToString() => "OAuthClientCredentials";
+}
+/// <summary>Attach to the SDK HttpClient; only the configured API origin receives tokens.</summary>
+public sealed class OAuthClientCredentialsHandler : DelegatingHandler {
+    private readonly OAuthClientCredentials _provider; private readonly Uri _origin; private readonly string? _idempotencyHeader;
+    public OAuthClientCredentialsHandler(OAuthClientCredentials provider, string apiOrigin, string? idempotencyHeader = null) {
+        _provider = provider; _origin = new Uri(apiOrigin, UriKind.Absolute); _idempotencyHeader = idempotencyHeader;
+        if ((_origin.Scheme != "https" && _origin.Scheme != "http") || _origin.UserInfo.Length > 0 || _origin.Fragment.Length > 0) throw new ArgumentException("Invalid API origin");
+    }
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
+        var uri = request.RequestUri;
+        if (uri == null || uri.Scheme != _origin.Scheme || uri.Host != _origin.Host || uri.Port != _origin.Port || request.Headers.Authorization != null) return await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        var token = await _provider.TokenAsync(cancellationToken).ConfigureAwait(false);
+        bool safe = request.Method.Method is "GET" or "HEAD" or "OPTIONS" or "TRACE" or "QUERY" or "PUT" or "DELETE" || _idempotencyHeader != null && request.Headers.TryGetValues(_idempotencyHeader, out var keys) && keys.Any(x => !string.IsNullOrWhiteSpace(x));
+        // Generated buffered bodies are replayable; clone before the driver consumes them.
+        using var replay = safe ? await CloneAsync(request, cancellationToken).ConfigureAwait(false) : null;
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var response = await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        if (response.StatusCode != HttpStatusCode.Unauthorized || replay == null) return response;
+        response.Dispose(); _provider.Invalidate(token);
+        replay.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await _provider.TokenAsync(cancellationToken).ConfigureAwait(false));
+        return await base.SendAsync(replay, cancellationToken).ConfigureAwait(false);
+    }
+    private static async Task<HttpRequestMessage> CloneAsync(HttpRequestMessage source, CancellationToken token) {
+        var copy = new HttpRequestMessage(source.Method, source.RequestUri) { Version = source.Version, VersionPolicy = source.VersionPolicy };
+        foreach (var header in source.Headers) copy.Headers.TryAddWithoutValidation(header.Key, header.Value);
+        foreach (var option in source.Options) copy.Options.Set(new HttpRequestOptionsKey<object?>(option.Key), option.Value);
+        if (source.Content != null) { copy.Content = new ByteArrayContent(await source.Content.ReadAsByteArrayAsync(token).ConfigureAwait(false)); foreach (var header in source.Content.Headers) copy.Content.Headers.TryAddWithoutValidation(header.Key, header.Value); }
+        return copy;
+    }
+}

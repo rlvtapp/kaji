@@ -27,7 +27,7 @@ pub(super) fn generate(
     })?)?;
     tree.append(parallel_files(&api.operations, jobs, |operation, tree| {
         let mut body = String::new();
-        render_operation(&mut body, operation);
+        render_operation(&mut body, api, operation);
         render_cursor_pager(&mut body, api, operation);
         page_pagination::render(&mut body, api, operation);
         if cursor_pagination(api, operation).is_none() {
@@ -68,7 +68,7 @@ pub(super) fn generate(
                         }
                     }
                     render_namespaced_operation(
-                        &mut body, resource, facade, &method, &direct, operation,
+                        &mut body, api, resource, facade, &method, &direct, operation,
                     );
                 }
                 emit(
@@ -156,6 +156,9 @@ pub(super) fn emit(
         ("errors", "errors"),
         ("fmt", "fmt"),
         ("io", "io"),
+        ("mime", "mime"),
+        ("multipart", "mime/multipart"),
+        ("textproto", "net/textproto"),
         ("http", "net/http"),
         ("url", "net/url"),
         ("reflect", "reflect"),

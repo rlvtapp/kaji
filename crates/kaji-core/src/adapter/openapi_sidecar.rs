@@ -729,6 +729,10 @@ fn parse_method(method: &str) -> Result<HttpMethod> {
         "PUT" => Ok(HttpMethod::Put),
         "PATCH" => Ok(HttpMethod::Patch),
         "DELETE" => Ok(HttpMethod::Delete),
+        "HEAD" => Ok(HttpMethod::Head),
+        "OPTIONS" => Ok(HttpMethod::Options),
+        "TRACE" => Ok(HttpMethod::Trace),
+        "QUERY" => Ok(HttpMethod::Query),
         other => bail!("unsupported HTTP method from Go OpenAPI sidecar: {other}"),
     }
 }
@@ -758,6 +762,24 @@ fn operation_id(method: &str, path: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn openapi32_query_and_standard_methods_are_typed() {
+        for (wire, method) in [
+            ("HEAD", crate::HttpMethod::Head),
+            ("OPTIONS", crate::HttpMethod::Options),
+            ("TRACE", crate::HttpMethod::Trace),
+            ("QUERY", crate::HttpMethod::Query),
+        ] {
+            assert_eq!(super::parse_method(wire).unwrap(), method);
+            assert_eq!(method.as_str(), wire);
+            assert_eq!(
+                serde_json::from_str::<crate::HttpMethod>(&format!("\"{wire}\"")).unwrap(),
+                method
+            );
+        }
+        assert!(super::parse_method("COPY").is_err());
+    }
+
     use super::*;
     use std::fs;
 

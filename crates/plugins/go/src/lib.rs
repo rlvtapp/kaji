@@ -62,6 +62,12 @@ fn render_sdk(
         output_path(&output_dir, "README.md"),
         render_readme(api, client_style),
     )?)?;
+    if api.operations.iter().any(has_multipart) {
+        tree.insert(GeneratedFile::new(
+            output_path(&output_dir, "MULTIPART.md"),
+            include_str!("go_multipart_readme.md"),
+        )?)?;
+    }
     if client_style == SdkClientStyle::Namespaced {
         tree.insert(GeneratedFile::new(
             output_path(&output_dir, "STYLE_GUIDE.md"),
@@ -94,6 +100,28 @@ fn render_go_mod(module: &str) -> String {
     format!("module {module}\n\ngo 1.22\n")
 }
 
+fn model_field_names(fields: &[kaji_core::Field]) -> BTreeMap<String, String> {
+    let reserved: BTreeSet<String> = fields
+        .iter()
+        .map(|field| go_type_name(&field.name))
+        .collect();
+    let mut used = BTreeSet::new();
+    fields
+        .iter()
+        .map(|field| {
+            let base = go_type_name(&field.name);
+            let mut name = base.clone();
+            let mut suffix = 2;
+            while used.contains(&name) || (name != base && reserved.contains(&name)) {
+                name = format!("{base}{suffix}");
+                suffix += 1;
+            }
+            used.insert(name.clone());
+            (field.name.clone(), name)
+        })
+        .collect()
+}
+
 fn render_schema(output: &mut String, schema: &Schema) {
     let name = go_type_name(&schema.name);
     match &schema.value.kind {
@@ -101,9 +129,10 @@ fn render_schema(output: &mut String, schema: &Schema) {
             fields,
             additional_properties,
         } => {
+            let field_names = model_field_names(fields);
             let _ = writeln!(output, "type {name} struct {{");
             for field in fields {
-                let field_name = go_type_name(&field.name);
+                let field_name = &field_names[&field.name];
                 let mut field_type = go_type(&field.value);
                 if !field.required && !field_type.starts_with('*') {
                     field_type = format!("*{field_type}");
@@ -125,10 +154,7 @@ fn render_schema(output: &mut String, schema: &Schema) {
             // Preserve declared wire fields and allocate the synthetic extension bag separately.
             let mut extra_name = "AdditionalProperties".to_owned();
             let mut suffix = 2;
-            while fields
-                .iter()
-                .any(|field| go_type_name(&field.name) == extra_name)
-            {
+            while field_names.values().any(|name| *name == extra_name) {
                 extra_name = format!("AdditionalProperties{suffix}");
                 suffix += 1;
             }
@@ -185,7 +211,7 @@ fn render_schema(output: &mut String, schema: &Schema) {
                 }
                 for field in &nullable {
                     let key = serde_json::to_string(&field.name).unwrap();
-                    let ident = go_type_name(&field.name);
+                    let ident = &field_names[&field.name];
                     let _ = writeln!(
                         output,
                         "if model.kajiNullFields[{key}] && model.{ident}==nil {{fields[{key}]=json.RawMessage(\"null\")}}"
@@ -228,6 +254,20 @@ fn render_schema(output: &mut String, schema: &Schema) {
             let _ = writeln!(output, "type {name} = {}", go_type(&schema.value));
         }
     }
+}
+
+fn has_multipart(operation: &Operation) -> bool {
+    operation.request_body.as_ref().is_some_and(|body| {
+        body.media_types.iter().any(|media| {
+            media
+                .content_type
+                .split(';')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .eq_ignore_ascii_case("multipart/form-data")
+        })
+    })
 }
 
 fn render_runtime(api: &Api, package: &str, client_style: SdkClientStyle) -> String {
@@ -302,6 +342,30 @@ fn render_runtime(api: &Api, package: &str, client_style: SdkClientStyle) -> Str
     }
     output.push_str(&response_validation::render(api));
     output.push_str(include_str!("go_middleware_runtime.txt"));
+    output = output.replace(
+        "\treturn request, nil\n}",
+        "\tapplyCallHeaders(request)\n\treturn request, nil\n}",
+    );
+    output.push_str(include_str!("go_call_options.txt"));
+    if api.operations.iter().any(has_multipart) {
+        output = output.replace(
+            "\tvar reader io.Reader\n",
+            "\tvar reader io.Reader\n\tcontentType := \"application/json\"\n",
+        );
+        output = output.replace(
+            "encoded, err := json.Marshal(body)",
+            "encoded, selectedType, err := encodeKajiBody(body)",
+        );
+        output = output.replace(
+            "reader = bytes.NewReader(encoded)",
+            "reader = bytes.NewReader(encoded)\n\t\tcontentType = selectedType",
+        );
+        output = output.replace(
+            "request.Header.Set(\"Content-Type\", \"application/json\")",
+            "request.Header.Set(\"Content-Type\", contentType)",
+        );
+        output.push_str(include_str!("go_multipart_runtime.txt"));
+    }
     output = output.replace("ValidateResponses bool\n", "ValidateResponses bool\n\t// TokenProvider supplies managed bearer tokens; explicit Authorization wins.\n\tTokenProvider KajiTokenProvider\n");
     output = output.replace(
         "validateResponses bool\n",
@@ -515,7 +579,7 @@ fn body_cursor_location(
     })?;
     Some(GoCursorLocation::RequestBody {
         body_type: go_type_name(body_name),
-        field_name: go_type_name(&field.name),
+        field_name: model_field_names(fields)[&field.name].clone(),
         body_required: body.required,
     })
 }
@@ -704,9 +768,53 @@ fn operation_error_expression(operation: &Operation, error: &str) -> String {
     }
 }
 
-fn render_operation(output: &mut String, operation: &Operation) {
+/// Allocate operation input types separately from schema types. Reserve every
+/// preferred input name first so adding a collision never steals another
+/// operation's existing public name.
+fn operation_request_name(api: &Api, operation: &Operation) -> String {
+    let preferred = format!("{}Request", go_type_name(&operation.id));
+    let mut reserved: BTreeSet<String> = api
+        .schemas
+        .iter()
+        .map(|schema| go_type_name(&schema.name))
+        .collect();
+    if !reserved.contains(&preferred) {
+        return preferred;
+    }
+    reserved.extend(
+        api.operations
+            .iter()
+            .map(|op| format!("{}Request", go_type_name(&op.id))),
+    );
+    let model_names: BTreeSet<String> = api
+        .schemas
+        .iter()
+        .map(|schema| go_type_name(&schema.name))
+        .collect();
+    let mut collisions = api
+        .operations
+        .iter()
+        .filter(|op| model_names.contains(&format!("{}Request", go_type_name(&op.id))))
+        .collect::<Vec<_>>();
+    collisions.sort_by(|a, b| a.id.cmp(&b.id));
+    for op in collisions {
+        let base = format!("{}OperationRequest", go_type_name(&op.id));
+        let mut name = base.clone();
+        let mut suffix = 2;
+        while !reserved.insert(name.clone()) {
+            name = format!("{base}{suffix}");
+            suffix += 1;
+        }
+        if op.id == operation.id {
+            return name;
+        }
+    }
+    unreachable!("colliding operation belongs to API")
+}
+
+fn render_operation(output: &mut String, api: &Api, operation: &Operation) {
     let operation_name = go_type_name(&operation.id);
-    let request_name = format!("{operation_name}Request");
+    let request_name = operation_request_name(api, operation);
     let has_input = !operation.parameters.is_empty() || operation.request_body.is_some();
     if has_input {
         let _ = writeln!(
@@ -730,7 +838,17 @@ fn render_operation(output: &mut String, operation: &Operation) {
                 .and_then(|media_type| media_type.schema.as_ref())
                 .map(go_type)
                 .unwrap_or_else(|| "any".into());
-            let body_type = if body.required || body_type.starts_with('*') {
+            let body_type = if has_multipart(operation) {
+                if body
+                    .media_types
+                    .iter()
+                    .any(|media| media.content_type.contains("json"))
+                {
+                    "any".to_owned()
+                } else {
+                    "*KajiMultipartBody".to_owned()
+                }
+            } else if body.required || body_type.starts_with('*') {
                 body_type
             } else {
                 format!("*{body_type}")
@@ -798,8 +916,12 @@ fn render_operation(output: &mut String, operation: &Operation) {
             let _ = writeln!(output, "\t\t}}\n\t\theaders.Set({header:?}, key)\n\t}}");
         }
     }
-    if has_input && operation.request_body.is_some() {
-        output.push_str("\tbody := input.Body\n");
+    if let Some(body_config) = &operation.request_body {
+        if has_multipart(operation) && !body_config.required {
+            output.push_str("\tvar body any\n\tif input.Body != nil { body = input.Body }\n");
+        } else {
+            output.push_str("\tbody := input.Body\n");
+        }
     } else {
         output.push_str("\tvar body any\n");
     }
@@ -886,7 +1008,7 @@ fn render_cursor_pager(output: &mut String, api: &Api, operation: &Operation) {
         return;
     };
     let operation_name = go_type_name(&operation.id);
-    let request_name = format!("{operation_name}Request");
+    let request_name = operation_request_name(api, operation);
     let pager_name = format!("{operation_name}Pager");
     let cursor_update = match &pagination.location {
         GoCursorLocation::Parameter { name, optional } => {
@@ -978,7 +1100,7 @@ fn render_offset_pager(output: &mut String, api: &Api, operation: &Operation) {
         return;
     };
     let operation_name = go_type_name(&operation.id);
-    let request_name = format!("{operation_name}Request");
+    let request_name = operation_request_name(api, operation);
     let pager_name = format!("{operation_name}Pager");
     let offset_field = &pagination.offset_name;
     let limit_field = &pagination.limit_name;
@@ -1045,7 +1167,7 @@ fn render_url_pager(output: &mut String, api: &Api, operation: &Operation) {
         return;
     };
     let operation_name = go_type_name(&operation.id);
-    let request_name = format!("{operation_name}Request");
+    let request_name = operation_request_name(api, operation);
     let pager_name = format!("{operation_name}Pager");
     let has_input = !operation.parameters.is_empty() || operation.request_body.is_some();
     let input_field = if has_input {
@@ -1388,13 +1510,14 @@ fn resource_method_name(operation: &str, resource: &str) -> String {
 
 fn render_namespaced_operation(
     output: &mut String,
+    api: &Api,
     resource: &str,
     facade: &str,
     method: &str,
     direct: &str,
     operation: &Operation,
 ) {
-    let request = format!("{direct}Request");
+    let request = operation_request_name(api, operation);
     let has_input = !operation.parameters.is_empty() || operation.request_body.is_some();
     let parameters = if has_input {
         format!(", input *{request}")
@@ -1652,6 +1775,108 @@ mod tests {
     }
 
     #[test]
+    fn native_multipart_bytes_replay_stably_and_unsafe_uploads_do_not_retry() {
+        let mut upload = Operation {
+            id: "uploadFile".into(),
+            method: HttpMethod::Put,
+            path: "/upload".into(),
+            request_body: Some(OperationRequestBody {
+                required: true,
+                description: None,
+                media_types: vec![OperationMediaType {
+                    content_type: "multipart/form-data".into(),
+                    schema: None,
+                }],
+            }),
+            responses: vec![OperationResponse {
+                status: "204".into(),
+                description: None,
+                media_types: vec![],
+            }],
+            ..Default::default()
+        };
+        let mut create = upload.clone();
+        create.id = "createFile".into();
+        create.method = HttpMethod::Post;
+        create.path = "/create".into();
+        upload
+            .request_body
+            .as_mut()
+            .unwrap()
+            .media_types
+            .push(OperationMediaType {
+                content_type: "application/json".into(),
+                schema: Some(SchemaValue::new(SchemaKind::Object {
+                    fields: vec![],
+                    additional_properties: AdditionalProperties::Any,
+                })),
+            });
+        let api = Api {
+            name: "Upload".into(),
+            operations: vec![upload, create],
+            ..Default::default()
+        };
+        let root = tempfile::tempdir().unwrap();
+        render_test_sdk(&api, "sdk", Some("upload"))
+            .unwrap()
+            .write_to(root.path())
+            .unwrap();
+        fs::write(
+            root.path().join("sdk/multipart_test.go"),
+            include_str!("go_multipart_probe.txt"),
+        )
+        .unwrap();
+        let output = Command::new("go")
+            .args(["test", "-race", "./..."])
+            .current_dir(root.path().join("sdk"))
+            .env("GOCACHE", std::env::temp_dir().join("kaji-go-cache"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
+    fn native_scoped_call_headers_and_deadlines_preserve_client_defaults() {
+        let api = Api {
+            name: "Call".into(),
+            operations: vec![Operation {
+                id: "getThing".into(),
+                method: HttpMethod::Get,
+                path: "/thing".into(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let root = tempfile::tempdir().unwrap();
+        render_test_sdk(&api, "sdk", Some("call"))
+            .unwrap()
+            .write_to(root.path())
+            .unwrap();
+        fs::write(
+            root.path().join("sdk/call_options_test.go"),
+            include_str!("go_call_options_probe.txt"),
+        )
+        .unwrap();
+        let output = Command::new("go")
+            .args(["test", "-race", "./..."])
+            .current_dir(root.path().join("sdk"))
+            .env("GOCACHE", std::env::temp_dir().join("kaji-go-cache"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
     fn emits_safe_retry_runtime_without_changing_operation_signatures() {
         let tree = render_test_sdk(&contact_api(), "go", None).unwrap();
         let client = all_source(&tree);
@@ -1664,7 +1889,7 @@ mod tests {
         assert!(client.contains("client.onError(requestInfo, result)"));
         assert!(client.contains("client.doWithRetry(request, &response)"));
         assert!(client.contains("func canRetry(request *http.Request) bool"));
-        assert!(client.contains("case http.MethodGet, http.MethodPut, http.MethodDelete:"));
+        assert!(client.contains("case http.MethodGet, http.MethodHead, http.MethodOptions, http.MethodTrace, \"QUERY\", http.MethodPut, http.MethodDelete:"));
         assert!(client.contains("case http.MethodPost, http.MethodPatch:"));
         assert!(
             client.contains("strings.TrimSpace(request.Header.Get(\"Idempotency-Key\")) != \"\"")
@@ -1672,6 +1897,75 @@ mod tests {
         assert!(client.contains("http.StatusTooManyRequests"));
         assert!(client.contains("func replayRequest(request *http.Request)"));
         assert!(client.contains("func parseRetryAfter(value string)"));
+    }
+
+    #[test]
+    fn native_operation_inputs_do_not_shadow_models_or_reserved_input_names() {
+        let mut api = contact_api();
+        let original_name = operation_request_name(&api, &api.operations[0]);
+        assert_eq!(original_name, "GetContactRequest");
+        api.schemas
+            .push(Schema::new("GetContactRequest", string_schema()));
+        api.schemas
+            .push(Schema::new("GetContactOperationRequest", string_schema()));
+        assert_eq!(
+            operation_request_name(&api, &api.operations[0]),
+            "GetContactOperationRequest2"
+        );
+        api.schemas.push(Schema::new(
+            "Reaction",
+            SchemaValue::new(SchemaKind::Object {
+                fields: ["+1", "-1", "v12"]
+                    .into_iter()
+                    .map(|name| Field {
+                        name: name.into(),
+                        value: SchemaValue::new(SchemaKind::Integer),
+                        required: true,
+                        annotations: BTreeMap::new(),
+                    })
+                    .collect(),
+                additional_properties: AdditionalProperties::Forbidden,
+            }),
+        ));
+        let root = tempfile::tempdir().unwrap();
+        let tree = render_sdk(
+            &api,
+            "sdk",
+            Some("collision"),
+            SdkClientStyle::Namespaced,
+            0,
+        )
+        .unwrap();
+        tree.write_to(root.path()).unwrap();
+        fs::write(root.path().join("sdk/collision_test.go"), r#"package collision
+import("context";"testing";"encoding/json")
+func TestDistinctInputAndModelTypes(t *testing.T){
+  var wireModel GetContactRequest = "wire model"
+  var otherModel GetContactOperationRequest = "another wire model"
+  input := &GetContactOperationRequest2{ContactID:"contact"}
+  if string(wireModel)==string(otherModel){t.Fatal("models conflated")}
+  var direct func(context.Context,*GetContactOperationRequest2)(*Contact,error) = (*Client)(nil).GetContact
+  var facade func(context.Context,*GetContactOperationRequest2)(*Contact,error) = (*ContactsService)(nil).Get
+  _=input;_=direct;_=facade
+  var reaction Reaction
+  if err:=json.Unmarshal([]byte(`{"+1":2,"-1":3,"v12":4}`), &reaction); err!=nil {t.Fatal(err)}
+  if reaction.V1!=2 || reaction.V13!=3 || reaction.V12!=4 {t.Fatal("wire fields conflated")}
+  encoded,err:=json.Marshal(reaction);if err!=nil {t.Fatal(err)}
+  var wire map[string]int64;if err=json.Unmarshal(encoded,&wire);err!=nil {t.Fatal(err)}
+  if wire["+1"]!=2 || wire["-1"]!=3 || wire["v12"]!=4 {t.Fatal("wire fields changed")}
+}
+"#).unwrap();
+        let result = Command::new("go")
+            .args(["test", "./..."])
+            .current_dir(root.path().join("sdk"))
+            .env("GOCACHE", std::env::temp_dir().join("kaji-go-cache"))
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
     }
 
     #[test]

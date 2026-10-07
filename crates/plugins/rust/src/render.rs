@@ -21,6 +21,7 @@ pub(super) struct RenderOptions {
     pub crate_name: Option<String>,
     pub client_style: SdkClientStyle,
     pub operation_prefix: Option<String>,
+    pub open_unions: bool,
 }
 
 impl Default for RenderOptions {
@@ -29,6 +30,7 @@ impl Default for RenderOptions {
             crate_name: None,
             client_style: SdkClientStyle::Namespaced,
             operation_prefix: None,
+            open_unions: false,
         }
     }
 }
@@ -57,7 +59,7 @@ impl RustModels {
     pub(crate) fn generate(
         &self,
         api: &Api,
-        _options: &RenderOptions,
+        options: &RenderOptions,
     ) -> Result<Vec<GeneratedFile>> {
         let mut files = Vec::with_capacity(api.schemas.len() + 64);
         let mut root_index = String::new();
@@ -73,7 +75,7 @@ impl RustModels {
                 let _ = writeln!(chunk_index_source, "pub use {module}::*;");
                 files.push(GeneratedFile::new(
                     format!("src/models/{chunk}/{module}.rs"),
-                    render_model(schema),
+                    render_model(schema, options.open_unions),
                 )?);
             }
             files.push(GeneratedFile::new(
@@ -115,11 +117,11 @@ impl RustPackage {
     }
 }
 
-fn render_model(schema: &Schema) -> String {
+fn render_model(schema: &Schema, open_unions: bool) -> String {
     let mut output = format!(
         "{NOTICE}\n\n#[allow(unused_imports)]\nuse crate::models::*;\n#[allow(unused_imports)]\nuse serde::{{Deserialize, Serialize}};\n\n"
     );
-    render_schema(&mut output, schema);
+    render_schema(&mut output, schema, open_unions);
     output
 }
 
@@ -143,7 +145,7 @@ fn bounded_module_stem(name: &str) -> String {
     }
 }
 
-fn render_schema(output: &mut String, schema: &Schema) {
+fn render_schema(output: &mut String, schema: &Schema, open_unions: bool) {
     let name = type_name(&schema.name);
     match &schema.value.kind {
         SchemaKind::Object {
@@ -198,6 +200,9 @@ fn render_schema(output: &mut String, schema: &Schema) {
             for (index, variant) in variants.iter().enumerate() {
                 let _ = writeln!(output, "    Variant{index}({}),", rust_type(variant));
             }
+            if open_unions {
+                output.push_str("    /// Retains a future variant without discarding its wire value.\n    Unknown(serde_json::Value),\n");
+            }
             output.push_str("}\n");
         }
         _ => {
@@ -220,7 +225,10 @@ fn rust_type(value: &SchemaValue) -> String {
         SchemaKind::Array { items } => format!("Vec<{}>", rust_type(items)),
         SchemaKind::Object { .. } => "serde_json::Value".into(),
         SchemaKind::Reference { reference } => {
-            type_name(reference.rsplit('/').next().unwrap_or(reference))
+            format!(
+                "crate::models::{}",
+                type_name(reference.rsplit('/').next().unwrap_or(reference))
+            )
         }
         SchemaKind::OneOf { .. } | SchemaKind::AnyOf { .. } | SchemaKind::AllOf { .. } => {
             "serde_json::Value".into()
@@ -272,7 +280,7 @@ pub(crate) fn render_client_runtime(api: &Api, include_resources: bool) -> Strin
     );
     output = output.replacen(
         "    bearer_token: Option<String>,\n",
-        "    bearer_token: Option<String>,\n    retry: RetryConfig,\n    hooks: Option<Arc<dyn ClientHooks>>,\n",
+        "    bearer_token: Option<String>,\n    retry: RetryConfig,\n    hooks: Option<Arc<dyn ClientHooks>>,\n    token_provider: Option<Arc<dyn BearerTokenProvider>>,\n    call_options: CallOptions,\n",
         1,
     );
     output = output.replacen(
@@ -310,12 +318,15 @@ fn kaji_query_pairs<T: Serialize>(name: &str, value: &T, style: &str, explode: b
     if has_pagination {
         output.push_str(render_pagination_runtime());
     }
+    output.push_str(include_str!("token_provider_contract.rs.txt"));
+    output.push_str(include_str!("multipart_runtime.rs.txt"));
+    output.push_str(include_str!("call_options_runtime.rs.txt"));
     output.push_str(
         "impl Client {\n    pub fn new(base_url: impl Into<String>) -> Self {\n        Self { base_url: base_url.into().trim_end_matches('/').to_owned(), http: reqwest::Client::new(), bearer_token: None }\n    }\n\n    /// Configures a bearer token for operations that declare OpenAPI security.\n    /// Other credential kinds are intentionally not guessed by this generated client.\n    pub fn with_bearer_token(mut self, token: impl Into<String>) -> Self {\n        self.bearer_token = Some(token.into());\n        self\n    }\n\n",
     );
     output = output.replacen(
         "Self { base_url: base_url.into().trim_end_matches('/').to_owned(), http: reqwest::Client::new(), bearer_token: None }",
-        "Self { base_url: base_url.into().trim_end_matches('/').to_owned(), http: reqwest::Client::new(), bearer_token: None, retry: RetryConfig::default(), hooks: None }",
+        "Self { base_url: base_url.into().trim_end_matches('/').to_owned(), http: reqwest::Client::new(), bearer_token: None, retry: RetryConfig::default(), hooks: None, token_provider: None, call_options: CallOptions::default() }",
         1,
     );
     output = output.replacen(
@@ -323,6 +334,8 @@ fn kaji_query_pairs<T: Serialize>(name: &str, value: &T, style: &str, explode: b
         "    /// Replaces the conservative default retry policy. Set `max_attempts` to one to disable retries.\n    pub fn with_retry(mut self, retry: RetryConfig) -> Self {\n        self.retry = retry;\n        self\n    }\n\n    /// Adds package-level lifecycle hooks without changing generated operation signatures.\n    pub fn with_hooks(mut self, hooks: Arc<dyn ClientHooks>) -> Self {\n        self.hooks = Some(hooks);\n        self\n    }\n\n    fn kaji_before_request(&self, request: &RequestInfo) {\n        if let Some(hooks) = &self.hooks { hooks.before_request(request); }\n    }\n\n    fn kaji_after_response(&self, request: &RequestInfo, response: &reqwest::Response) {\n        if let Some(hooks) = &self.hooks {\n            hooks.after_response(&ResponseInfo { request: request.clone(), status: response.status(), headers: response.headers().clone() });\n        }\n    }\n\n    fn kaji_on_error(&self, request: &RequestInfo, error: &str) {\n        if let Some(hooks) = &self.hooks { hooks.on_error(request, error); }\n    }\n\n    fn kaji_retry_delay(&self, completed_attempts: usize, retry_after: Option<Duration>) -> Duration {\n        if let Some(retry_after) = retry_after { return retry_after.min(self.retry.max_delay); }\n        let factor = 1_u32 << completed_attempts.saturating_sub(1).min(16);\n        self.retry.initial_delay.saturating_mul(factor).min(self.retry.max_delay)\n    }\n\n    /// Configures a bearer token for operations that declare OpenAPI security.\n",
         1,
     );
+    output.push_str(include_str!("token_provider_runtime.rs.txt"));
+    output.push_str(include_str!("call_options_methods.rs.txt"));
     output.push_str("    /// Substitute the request executor without changing operation signatures.\n    pub fn with_transport(mut self, transport: Arc<dyn crate::transport::Transport>) -> Self { self.transport = transport; self }\n}\n");
     output = output.replace(
         "    http: reqwest::Client,",
@@ -383,6 +396,15 @@ pub(crate) fn render_operation_files(
         contents.push_str("impl Client {\n");
         for operation in operations {
             contents.push_str(&render_operation(operation, config));
+            if let Some(form) = multipart_alternative(operation) {
+                let direct = direct_method_name(operation, config);
+                let name = multipart_method_name(api, operation, config);
+                contents.push_str(&render_operation(&form, config).replacen(
+                    &format!("pub async fn {direct}("),
+                    &format!("pub async fn {name}("),
+                    1,
+                ));
+            }
         }
         contents.push_str("}\n");
         files.push(GeneratedFile::new(
@@ -443,12 +465,24 @@ pub(crate) fn render_resource_files(
                 );
                 let _ = writeln!(
                     contents,
-                    "/// Resource-first operations for {resource}.\npub struct {client_type}<'a> {{\n    client: &'a Client,\n}}\n"
+                    "/// Resource-first operations for {resource}.\npub struct {client_type}<'a> {{\n    pub(super) client: &'a Client,\n}}\n"
                 );
             }
             let _ = writeln!(contents, "impl {client_type}<'_> {{");
             for (operation, method) in chunk {
                 contents.push_str(&render_resource_operation(method, operation, options));
+                if let Some(form) = multipart_alternative(operation) {
+                    let mut facade = format!("{method}_multipart");
+                    while methods.iter().any(|(_, existing)| existing == &facade) {
+                        facade.push_str("_body");
+                    }
+                    let direct = direct_method_name(operation, options);
+                    let companion = multipart_method_name(api, operation, options);
+                    contents.push_str(&render_resource_operation(&facade, &form, options).replace(
+                        &format!("self.client.{direct}("),
+                        &format!("self.client.{companion}("),
+                    ));
+                }
                 if rust_pagination(operation).is_some() {
                     contents.push_str(&render_resource_pagination_operation(
                         method, operation, options,
@@ -494,7 +528,10 @@ fn render_operation(operation: &Operation, config: &RenderOptions) -> String {
     let error = operation_error_name(operation);
     let pagination = rust_pagination(operation);
     let parameters = if operation_has_parameters(operation) {
-        format!(", input: {}", operation_request_name(operation))
+        format!(
+            ", input: crate::client::operations::{}",
+            operation_request_name(operation)
+        )
     } else {
         String::new()
     };
@@ -538,10 +575,19 @@ fn render_operation(operation: &Operation, config: &RenderOptions) -> String {
         render_parameter_use(&mut output, parameter);
     }
     let retry_allowed = rust_retry_allowed(operation);
+    let native_method = if operation.method == kaji_core::HttpMethod::Query {
+        "Method::from_bytes(b\"QUERY\").expect(\"static HTTP method\")".to_owned()
+    } else {
+        format!("Method::{}", operation.method.as_str())
+    };
+    if matches!(request_media_kind(operation), RequestMediaKind::Multipart) {
+        output
+            .push_str("        let (multipart_content_type, multipart_bytes) = body.encoded();\n");
+    }
     output.push_str(&format!(
-        "        let request_url = format!(\"{{}}{{}}\", self.base_url, path);\n        let request_info = RequestInfo {{ method: Method::{}, url: request_url.clone() }};\n        self.kaji_before_request(&request_info);\n        let retry_allowed = {retry_allowed};\n        let max_attempts = self.retry.max_attempts.max(1);\n        let mut attempt = 0_usize;\n        loop {{\n            attempt += 1;\n            let mut request = self.http.request(Method::{}, request_url.clone());\n            if !query.is_empty() {{ request = request.query(&query); }}\n",
-        operation.method.as_str(),
-        operation.method.as_str(),
+        "        let request_url = format!(\"{{}}{{}}\", self.base_url, path);\n        let request_info = RequestInfo {{ method: {}, url: request_url.clone() }};\n        self.kaji_before_request(&request_info);\n        let retry_allowed = {retry_allowed};\n        let max_attempts = self.retry.max_attempts.max(1);\n        let mut attempt = 0_usize;\n        let mut oauth_replayed = false;\n        #[allow(unused_mut)]\n        let mut oauth_token: Option<String> = None;\n        loop {{\n            attempt += 1;\n            let mut request = self.http.request({}, request_url.clone()).headers(self.call_options.headers.clone());\n            if let Some(timeout) = self.call_options.timeout {{ request = request.timeout(timeout); }}\n            if !query.is_empty() {{ request = request.query(&query); }}\n",
+        native_method,
+        native_method,
     ));
     for parameter in &operation.parameters {
         if parameter.location == "header" {
@@ -549,13 +595,14 @@ fn render_operation(operation: &Operation, config: &RenderOptions) -> String {
         }
     }
     if !operation.security.is_empty() {
-        output.push_str("        if let Some(token) = &self.bearer_token { request = request.bearer_auth(token); }\n");
+        output.push_str("        if !self.call_options.headers.contains_key(reqwest::header::AUTHORIZATION) { if let Some(token) = &self.bearer_token { request = request.bearer_auth(token); } }\n");
     }
     if operation.request_body.is_some() {
         match request_media_kind(operation) {
             RequestMediaKind::Json | RequestMediaKind::Unknown => {
                 output.push_str("        request = request.json(body);\n");
             }
+            RequestMediaKind::Multipart => output.push_str("        request = request.header(reqwest::header::CONTENT_TYPE, multipart_content_type.clone()).body(multipart_bytes.clone());\n"),
             RequestMediaKind::Unsupported(content_type) => {
                 let _ = writeln!(
                     output,
@@ -565,7 +612,13 @@ fn render_operation(operation: &Operation, config: &RenderOptions) -> String {
         }
     }
     output.push_str(&format!(
-        "            let response = match self.transport.execute(request.build().map_err({error}::Transport)?).await {{\n                Ok(response) => response,\n                Err(source) => {{\n                    if retry_allowed && attempt < max_attempts {{\n                        tokio::time::sleep(self.kaji_retry_delay(attempt, None)).await;\n                        continue;\n                    }}\n                    self.kaji_on_error(&request_info, &source.to_string());\n                    return Err({error}::Transport(source));\n                }}\n            }};\n            let status = response.status();\n            let retry_after = kaji_retry_after(response.headers());\n            if retry_allowed && attempt < max_attempts && matches!(status.as_u16(), 408 | 429 | 500 | 502 | 503 | 504) {{\n                tokio::time::sleep(self.kaji_retry_delay(attempt, retry_after)).await;\n                continue;\n            }}\n            self.kaji_after_response(&request_info, &response);\n            if !status.is_success() {{\n                let headers = response.headers().clone();\n                let body = response.bytes().await.map_err({error}::Transport)?.to_vec();\n                self.kaji_on_error(&request_info, &format!(\"HTTP {{}}\", status));\n                return Err({});\n            }}\n",
+        "            #[allow(unused_mut)]\n            let mut request = request.build().map_err({error}::Transport)?;\n"
+    ));
+    if !operation.security.is_empty() {
+        output.push_str(&format!("            if !request.headers().contains_key(reqwest::header::AUTHORIZATION) {{ if let Some(provider) = &self.token_provider {{ let token = provider.token().await.map_err({error}::TokenProvider)?; let header = reqwest::header::HeaderValue::from_str(&format!(\"Bearer {{token}}\")).map_err(|_| {error}::TokenProvider(TokenProviderError))?; request.headers_mut().insert(reqwest::header::AUTHORIZATION, header); oauth_token = Some(token); }} }}\n"));
+    }
+    output.push_str(&format!(
+        "            let response = match self.transport.execute(request).await {{\n                Ok(response) => response,\n                Err(source) => {{\n                    if retry_allowed && attempt < max_attempts {{\n                        tokio::time::sleep(self.kaji_retry_delay(attempt, None)).await;\n                        continue;\n                    }}\n                    self.kaji_on_error(&request_info, &source.to_string());\n                    return Err({error}::Transport(source));\n                }}\n            }};\n            let status = response.status();\n            if status.as_u16() == 401 && retry_allowed && !oauth_replayed {{ if let (Some(provider), Some(token)) = (&self.token_provider, oauth_token.take()) {{ provider.invalidate(&token); oauth_replayed = true; continue; }} }}\n            let retry_after = kaji_retry_after(response.headers());\n            if retry_allowed && attempt < max_attempts && matches!(status.as_u16(), 408 | 429 | 500 | 502 | 503 | 504) {{\n                tokio::time::sleep(self.kaji_retry_delay(attempt, retry_after)).await;\n                continue;\n            }}\n            self.kaji_after_response(&request_info, &response);\n            if !status.is_success() {{\n                let headers = response.headers().clone();\n                let body = response.bytes().await.map_err({error}::Transport)?.to_vec();\n                self.kaji_on_error(&request_info, &format!(\"HTTP {{}}\", status));\n                return Err({});\n            }}\n",
         render_error_response(operation, &error),
     ));
     match response_kind(operation) {
@@ -630,6 +683,7 @@ enum ResponseKind {
 enum RequestMediaKind<'a> {
     Json,
     Unknown,
+    Multipart,
     Unsupported(&'a str),
 }
 
@@ -1027,7 +1081,11 @@ fn render_rust_url_iterator(method: &str, operation: &Operation, path: &str) -> 
     let response = operation_response_type(operation);
     let error = operation_error_name(operation);
     let (parameters, input, args) = if operation_has_parameters(operation) {
-        (format!(", input: {request}"), "input", "input.clone(), ")
+        (
+            format!(", input: crate::client::operations::{request}"),
+            "input",
+            "input.clone(), ",
+        )
     } else {
         (String::new(), "()", "")
     };
@@ -1105,6 +1163,10 @@ fn operation_response_type(operation: &Operation) -> String {
 fn rust_retry_allowed(operation: &Operation) -> String {
     match operation.method {
         kaji_core::ast::HttpMethod::Get
+        | kaji_core::ast::HttpMethod::Head
+        | kaji_core::ast::HttpMethod::Options
+        | kaji_core::ast::HttpMethod::Trace
+        | kaji_core::ast::HttpMethod::Query
         | kaji_core::ast::HttpMethod::Put
         | kaji_core::ast::HttpMethod::Delete => "true".into(),
         kaji_core::ast::HttpMethod::Post | kaji_core::ast::HttpMethod::Patch => operation
@@ -1134,6 +1196,36 @@ fn rust_retry_allowed(operation: &Operation) -> String {
     }
 }
 
+fn multipart_alternative(operation: &Operation) -> Option<Operation> {
+    let body = operation.request_body.as_ref()?;
+    if body.media_types.len() < 2
+        || !body.media_types.iter().any(|media| {
+            media.content_type == "application/json" || media.content_type.ends_with("+json")
+        })
+    {
+        return None;
+    }
+    let media = body
+        .media_types
+        .iter()
+        .find(|media| media.content_type == "multipart/form-data")?
+        .clone();
+    let mut form = operation.clone();
+    form.request_body.as_mut().unwrap().media_types = vec![media];
+    Some(form)
+}
+fn multipart_method_name(api: &Api, operation: &Operation, options: &RenderOptions) -> String {
+    let mut name = format!("{}_multipart", direct_method_name(operation, options));
+    while api
+        .operations
+        .iter()
+        .any(|other| direct_method_name(other, options) == name)
+    {
+        name.push_str("_body");
+    }
+    name
+}
+
 fn request_media_kind(operation: &Operation) -> RequestMediaKind<'_> {
     match operation
         .request_body
@@ -1155,6 +1247,7 @@ fn request_media_kind(operation: &Operation) -> RequestMediaKind<'_> {
         {
             RequestMediaKind::Json
         }
+        Some("multipart/form-data") => RequestMediaKind::Multipart,
         Some(content_type) => RequestMediaKind::Unsupported(content_type),
     }
 }
@@ -1166,7 +1259,7 @@ fn operation_error_name(operation: &Operation) -> String {
 fn render_operation_error(operation: &Operation) -> String {
     let error = operation_error_name(operation);
     let mut output = format!(
-        "/// Errors returned by `{}`. Declared OpenAPI error bodies are decoded into typed variants.\n#[derive(Debug)]\npub enum {error} {{\n    Transport(reqwest::Error),\n    Decode {{ source: serde_json::Error, response: ApiResponse }},\n    UnsupportedRequestMedia(&'static str),\n",
+        "/// Errors returned by `{}`. Declared OpenAPI error bodies are decoded into typed variants.\n#[derive(Debug)]\npub enum {error} {{\n    Transport(reqwest::Error),\n    TokenProvider(TokenProviderError),\n    Decode {{ source: serde_json::Error, response: ApiResponse }},\n    UnsupportedRequestMedia(&'static str),\n",
         operation.id,
     );
     if rust_pagination(operation).is_some() {
@@ -1376,7 +1469,10 @@ fn render_resource_operation(
     let response = operation_response_type(operation);
     let error = operation_error_name(operation);
     let parameters = if operation_has_parameters(operation) {
-        format!(", input: {}", operation_request_name(operation))
+        format!(
+            ", input: crate::client::operations::{}",
+            operation_request_name(operation)
+        )
     } else {
         String::new()
     };
@@ -1594,7 +1690,7 @@ pub(crate) fn render_cargo_toml_for_api(crate_name: &str, api: &Api) -> String {
 pub(crate) fn render_cargo_toml(crate_name: &str, version: &str) -> String {
     let version = cargo_package_version(version);
     format!(
-        "[package]\nname = {:?}\nversion = {:?}\nedition = \"2024\"\ndescription = \"Generated API client\"\n\n[dependencies]\nfutures-util = \"0.3\"\nhttpdate = \"1\"\nreqwest = {{ version = \"0.12\", features = [\"json\"] }}\nserde = {{ version = \"1\", features = [\"derive\"] }}\nserde_json = \"1\"\ntokio = {{ version = \"1\", features = [\"time\"] }}\n",
+        "[package]\nname = {:?}\nversion = {:?}\nedition = \"2024\"\ndescription = \"Generated API client\"\n\n[dependencies]\nfutures-util = \"0.3\"\nhttpdate = \"1\"\nreqwest = {{ version = \"0.12\", features = [\"json\"] }}\nserde = {{ version = \"1\", features = [\"derive\"] }}\nserde_json = \"1\"\ntokio = {{ version = \"1\", features = [\"time\", \"sync\"] }}\n",
         crate_name, version
     )
 }
@@ -1623,6 +1719,9 @@ fn cargo_package_version(version: &str) -> String {
 
 fn request_body_type(operation: &Operation) -> Option<String> {
     operation.request_body.as_ref().map(|_| {
+        if matches!(request_media_kind(operation), RequestMediaKind::Multipart) {
+            return "MultipartBody".into();
+        }
         operation
             .request_schema()
             .map(rust_type)
@@ -2121,7 +2220,9 @@ impl Transport for Mock {fn execute(&self, request:reqwest::Request)->TransportF
         let source = rendered_source(&client);
         assert!(source.contains("pub struct ApiResponse"));
         assert!(source.contains("pub enum DownloadExportError"));
-        assert!(source.contains("NotFound { body: ApiError, response: ApiResponse }"));
+        assert!(
+            source.contains("NotFound { body: crate::models::ApiError, response: ApiResponse }")
+        );
         assert!(source.contains("Result<Vec<u8>, DownloadExportError>"));
         assert!(source.contains("response.bytes().await.map(|body| body.to_vec())"));
         assert!(source.contains("pub fn with_bearer_token"));

@@ -9,81 +9,131 @@ pub(crate) fn selected(operation: &Operation) -> bool {
         })
     })
 }
-fn fields<'a>(api: &'a Api, operation: &Operation) -> Result<&'a [kaji_core::Field]> {
+pub(crate) fn body_name(operation: &Operation) -> String {
+    let name = format!("{}MultipartBody", type_name(&operation.id));
+    let collision=operation.request_body.as_ref().is_some_and(|body|body.media_types.iter().filter_map(|media|media.schema.as_ref()).any(|value|matches!(&value.kind,SchemaKind::Reference{reference} if type_name(reference.rsplit('/').next().unwrap_or(reference))==name)));
+    if collision {
+        format!("{name}Wire")
+    } else {
+        name
+    }
+}
+pub(crate) fn mixed(operation: &Operation) -> bool {
+    selected(operation)
+        && operation
+            .request_body
+            .as_ref()
+            .is_some_and(|body| body.media_types.len() > 1)
+}
+
+fn root_fields(api: &Api, value: &SchemaValue, depth: usize) -> Result<Vec<kaji_core::Field>> {
+    anyhow::ensure!(
+        depth < 12,
+        "Multipart root references exceed supported depth"
+    );
+    let value = resolved(api, value, 0);
+    match &value.kind {
+        SchemaKind::Object {
+            fields,
+            additional_properties,
+        } => {
+            let _ = additional_properties;
+            Ok(fields.clone())
+        }
+        SchemaKind::OneOf { variants } | SchemaKind::AnyOf { variants } if !variants.is_empty() => {
+            let variants = variants
+                .iter()
+                .map(|value| root_fields(api, value, depth + 1))
+                .collect::<Result<Vec<_>>>()?;
+            let mut fields = std::collections::BTreeMap::<String, kaji_core::Field>::new();
+            for variant in &variants {
+                for field in variant {
+                    if let Some(existing) = fields.get_mut(&field.name) {
+                        if existing.value != field.value {
+                            existing.value = SchemaValue::new(SchemaKind::Any);
+                        }
+                    } else {
+                        fields.insert(field.name.clone(), field.clone());
+                    }
+                }
+            }
+            for field in fields.values_mut() {
+                field.required = variants.iter().all(|variant| {
+                    variant
+                        .iter()
+                        .any(|member| member.name == field.name && member.required)
+                });
+            }
+            Ok(fields.into_values().collect())
+        }
+        _ => anyhow::bail!("Multipart root must be an object or union of closed objects"),
+    }
+}
+fn open_root(api: &Api, value: &SchemaValue, depth: usize) -> bool {
+    if depth > 12 {
+        return false;
+    }
+    match &resolved(api, value, 0).kind {
+        SchemaKind::Object {
+            additional_properties,
+            ..
+        } => !matches!(additional_properties, AdditionalProperties::Forbidden),
+        SchemaKind::OneOf { variants } | SchemaKind::AnyOf { variants } => variants
+            .iter()
+            .any(|value| open_root(api, value, depth + 1)),
+        _ => false,
+    }
+}
+fn extra_parts(api: &Api, operation: &Operation) -> bool {
+    operation
+        .request_body
+        .as_ref()
+        .and_then(|body| {
+            body.media_types.iter().find(|media| {
+                media
+                    .content_type
+                    .eq_ignore_ascii_case("multipart/form-data")
+            })
+        })
+        .and_then(|media| media.schema.as_ref())
+        .is_some_and(|value| open_root(api, value, 0))
+}
+fn fields(api: &Api, operation: &Operation) -> Result<Vec<kaji_core::Field>> {
     let body = operation.request_body.as_ref().unwrap();
     anyhow::ensure!(
-        body.media_types.len() == 1
-            && body.media_types[0]
-                .content_type
-                .eq_ignore_ascii_case("multipart/form-data"),
-        "multipart operation '{}' requires exactly one multipart/form-data media type",
-        operation.id
+        body.media_types
+            .iter()
+            .all(|media| !media.content_type.starts_with("multipart/")
+                || media
+                    .content_type
+                    .eq_ignore_ascii_case("multipart/form-data")),
+        "Only multipart/form-data multipart alternatives are supported"
     );
-    let schema = body.media_types[0].schema.as_ref().ok_or_else(|| {
-        anyhow::anyhow!(
-            "multipart operation '{}' requires a named object schema",
-            operation.id
-        )
-    })?;
+    let media = body
+        .media_types
+        .iter()
+        .find(|media| {
+            media
+                .content_type
+                .eq_ignore_ascii_case("multipart/form-data")
+        })
+        .ok_or_else(|| anyhow::anyhow!("Missing multipart/form-data media"))?;
+    let schema = media
+        .schema
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("Multipart root schema is required"))?;
     anyhow::ensure!(
         !schema.nullable && !schema.nullish,
-        "multipart operation '{}' cannot use a nullable root",
-        operation.id
+        "Multipart root cannot be nullable"
     );
-    let SchemaKind::Reference { reference } = &schema.kind else {
-        anyhow::bail!(
-            "multipart operation '{}' requires a named object reference",
-            operation.id
-        )
-    };
-    let name = reference.rsplit('/').next().unwrap_or(reference);
-    let schema = api.schemas.iter().find(|s| s.name == name).ok_or_else(|| {
-        anyhow::anyhow!(
-            "multipart operation '{}' references an unknown schema",
-            operation.id
-        )
-    })?;
-    anyhow::ensure!(
-        !schema.value.nullable && !schema.value.nullish,
-        "multipart operation '{}' resolves to a nullable object",
-        operation.id
-    );
-    let SchemaKind::Object {
-        fields,
-        additional_properties,
-    } = &schema.value.kind
-    else {
-        anyhow::bail!(
-            "multipart operation '{}' requires a direct object schema",
-            operation.id
-        )
-    };
-    anyhow::ensure!(
-        matches!(additional_properties, AdditionalProperties::Forbidden),
-        "multipart operation '{}' requires a closed object; extra parts need an adapter",
-        operation.id
-    );
-    for field in fields {
-        anyhow::ensure!(
-            !field.value.nullable
-                && !field.value.nullish
-                && matches!(
-                    field.value.kind,
-                    SchemaKind::String
-                        | SchemaKind::Boolean
-                        | SchemaKind::Integer
-                        | SchemaKind::Number
-                ),
-            "multipart operation '{}' field '{}' requires a direct nonnullable scalar or binary string; arrays, references and unions need an adapter",
-            operation.id,
-            field.name
-        );
+    let fields = root_fields(api, schema, 0)?;
+    for field in &fields {
         anyhow::ensure!(
             !field.name.is_empty()
                 && field
                     .name
                     .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b)),
+                    .all(|b| b.is_ascii_alphanumeric() || b"._-[]".contains(&b)),
             "multipart operation '{}' has an unsupported part name",
             operation.id
         );
@@ -102,9 +152,90 @@ pub(crate) fn validate(api: &Api) -> Result<()> {
     }
     Ok(())
 }
-fn binary(field: &kaji_core::Field) -> bool {
-    field.value.format.as_deref() == Some("binary")
-        && matches!(field.value.kind, SchemaKind::String)
+fn resolved<'a>(api: &'a Api, value: &'a SchemaValue, depth: usize) -> &'a SchemaValue {
+    if depth < 12 {
+        if let SchemaKind::Reference { reference } = &value.kind {
+            if let Some(schema) = api
+                .schemas
+                .iter()
+                .find(|s| s.name == reference.rsplit('/').next().unwrap_or(reference))
+            {
+                return resolved(api, &schema.value, depth + 1);
+            }
+        }
+    }
+    value
+}
+fn file_shape(api: &Api, value: &SchemaValue, depth: usize) -> Option<bool> {
+    if depth > 12 {
+        return None;
+    }
+    let value = resolved(api, value, 0);
+    match &value.kind {
+        SchemaKind::String if value.format.as_deref() == Some("binary") => Some(false),
+        SchemaKind::Array { items } if file_shape(api, items, depth + 1) == Some(false) => {
+            Some(true)
+        }
+        SchemaKind::OneOf { variants } | SchemaKind::AnyOf { variants } if !variants.is_empty() => {
+            let shapes = variants
+                .iter()
+                .map(|value| file_shape(api, value, depth + 1))
+                .collect::<Option<Vec<_>>>()?;
+            Some(shapes.into_iter().any(|array| array))
+        }
+        _ => None,
+    }
+}
+fn encoding<'a>(operation: &'a Operation, name: &str) -> Option<&'a serde_json::Value> {
+    operation
+        .annotations
+        .get("kaji.request_body_encodings")?
+        .get("multipart/form-data")?
+        .get(name)
+}
+fn part(
+    api: &Api,
+    operation: &Operation,
+    name: &str,
+    value: &SchemaValue,
+    property: &str,
+) -> Result<String> {
+    let value = resolved(api, value, 0);
+    let scalar = matches!(
+        value.kind,
+        SchemaKind::String | SchemaKind::Boolean | SchemaKind::Integer | SchemaKind::Number
+    );
+    let settings = encoding(operation, name);
+    anyhow::ensure!(
+        settings
+            .and_then(|x| x.get("headers"))
+            .and_then(|x| x.as_object())
+            .is_none_or(|x| x.is_empty()),
+        "Multipart per-part headers require an adapter"
+    );
+    let content_type = settings
+        .and_then(|x| x.get("contentType"))
+        .and_then(|x| x.as_str())
+        .unwrap_or(if scalar {
+            "text/plain"
+        } else {
+            "application/json"
+        });
+    anyhow::ensure!(
+        content_type
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"/!#$&^_.+-".contains(&b))
+            && content_type.matches('/').count() == 1,
+        "Unsupported multipart content type"
+    );
+    let content = if scalar {
+        format!("MultipartBody.scalar({property})")
+    } else {
+        format!("MultipartBody.json({property})")
+    };
+    Ok(format!(
+        "new MultipartBody.Part({name:?},{content},null,{content_type:?})"
+    ))
 }
 pub(crate) fn emit(api: &Api, root: &str, package: &str, tree: &mut GeneratedTree) -> Result<()> {
     if !api.operations.iter().any(selected) {
@@ -127,7 +258,7 @@ pub(crate) fn emit(api: &Api, root: &str, package: &str, tree: &mut GeneratedTre
         include_str!("multipart.java.txt").replace("__PACKAGE__", package),
     )?)?;
     for op in api.operations.iter().filter(|op| selected(op)) {
-        let name = format!("{}MultipartBody", type_name(&op.id));
+        let name = body_name(op);
         anyhow::ensure!(
             !api.schemas.iter().any(|s| type_name(&s.name) == name),
             "multipart body name collides with a schema"
@@ -136,7 +267,41 @@ pub(crate) fn emit(api: &Api, root: &str, package: &str, tree: &mut GeneratedTre
         let mut components = Vec::new();
         let mut encode = String::new();
         let mut checks = String::new();
-        for field in fields {
+        for field in &fields {
+            let settings = encoding(op, &field.name);
+            anyhow::ensure!(
+                settings
+                    .and_then(|v| v.get("headers"))
+                    .and_then(|v| v.as_object())
+                    .is_none_or(|v| v.is_empty()),
+                "Multipart per-part headers require an adapter"
+            );
+            anyhow::ensure!(
+                settings
+                    .and_then(|v| v.get("style"))
+                    .and_then(|v| v.as_str())
+                    .is_none_or(|style| style == "form"),
+                "Multipart encoding style requires an adapter"
+            );
+            if settings
+                .and_then(|v| v.get("explode"))
+                .and_then(|v| v.as_bool())
+                == Some(false)
+            {
+                if let SchemaKind::Array { items } = &resolved(api, &field.value, 0).kind {
+                    anyhow::ensure!(
+                        matches!(
+                            resolved(api, items, 0).kind,
+                            SchemaKind::String
+                                | SchemaKind::Boolean
+                                | SchemaKind::Integer
+                                | SchemaKind::Number
+                        ) && file_shape(api, &field.value, 0).is_none(),
+                        "Multipart joined complex or binary arrays require an adapter"
+                    );
+                }
+            }
+
             let property = field_name(&field.name);
             anyhow::ensure!(
                 !matches!(
@@ -153,7 +318,9 @@ pub(crate) fn emit(api: &Api, root: &str, package: &str, tree: &mut GeneratedTre
                 ),
                 "multipart field collides with encode method"
             );
-            let ty = if binary(field) {
+            let ty = if file_shape(api, &field.value, 0) == Some(true) {
+                "java.util.List<MultipartBody.FilePart>".into()
+            } else if file_shape(api, &field.value, 0) == Some(false) {
                 "MultipartBody.FilePart".into()
             } else {
                 java_type(&field.value)
@@ -167,18 +334,44 @@ pub(crate) fn emit(api: &Api, root: &str, package: &str, tree: &mut GeneratedTre
             if matches!(field.value.kind, SchemaKind::Number) {
                 checks.push_str(&format!("if({property}!=null&&!Double.isFinite({property}))throw new IllegalArgumentException(\"nonfinite multipart number\");\n"));
             }
-            let part = if binary(field) {
-                format!("new MultipartBody.Part({:?},null,{property})", field.name)
+            if file_shape(api, &field.value, 0) == Some(true) {
+                encode.push_str(&format!("if({property}!=null)for(var item:{property})parts.add(new MultipartBody.Part({:?},null,item));\n",field.name));
+            } else if let SchemaKind::Array { items } = &resolved(api, &field.value, 0).kind {
+                let item_part = part(api, op, &field.name, items, "item")?;
+                if encoding(op, &field.name)
+                    .and_then(|x| x.get("explode"))
+                    .and_then(|x| x.as_bool())
+                    == Some(false)
+                {
+                    let joined = format!(
+                        "{property}.stream().map(MultipartBody::scalar).collect(java.util.stream.Collectors.joining(\",\"))"
+                    );
+                    encode.push_str(&format!("if({property}!=null)parts.add(new MultipartBody.Part({:?},{joined},null));\n",field.name));
+                } else {
+                    encode.push_str(&format!(
+                        "if({property}!=null)for(var item:{property})parts.add({item_part});\n"
+                    ));
+                }
             } else {
-                format!(
-                    "new MultipartBody.Part({:?},String.valueOf({property}),null)",
-                    field.name
-                )
-            };
-            encode.push_str(&format!("if({property}!=null)parts.add({part});\n"));
+                let part = if file_shape(api, &field.value, 0) == Some(false) {
+                    format!("new MultipartBody.Part({:?},null,{property})", field.name)
+                } else {
+                    part(api, op, &field.name, &field.value, &property)?
+                };
+                encode.push_str(&format!("if({property}!=null)parts.add({part});\n"));
+            }
+        }
+        if extra_parts(api, op) {
+            components.push("java.util.Map<String,Object> kajiExtraParts".into());
+            let names = fields
+                .iter()
+                .map(|field| format!("{:?}", field.name))
+                .collect::<Vec<_>>()
+                .join(",");
+            encode.push_str(&format!("if(kajiExtraParts!=null)for(var entry:kajiExtraParts.entrySet()){{if(java.util.Set.of({names}).contains(entry.getKey()))throw new IllegalArgumentException(\"Extra multipart part collides with declared field\");MultipartBody.addExtra(parts,entry.getKey(),entry.getValue());}}\n"));
         }
         let source = format!(
-            "package {package};\npublic record {name}({}) implements MultipartBody {{\npublic {name} {{ {checks} }}\n@Override public MultipartBody.Encoded encode(){{var parts=new java.util.ArrayList<MultipartBody.Part>();{encode}return MultipartBody.encodeParts(parts);}}\n}}\n",
+            "package {package};\nimport {package}.model.*;\nimport java.util.*;\nimport java.time.*;\nimport java.math.*;\nimport com.fasterxml.jackson.databind.JsonNode;\npublic record {name}({}) implements MultipartBody {{\npublic {name} {{ {checks} }}\n@Override public MultipartBody.Encoded encode(){{var parts=new java.util.ArrayList<MultipartBody.Part>();{encode}return MultipartBody.encodeParts(parts);}}\n}}\n",
             components.join(",")
         );
         tree.insert(GeneratedFile::new(
@@ -186,7 +379,7 @@ pub(crate) fn emit(api: &Api, root: &str, package: &str, tree: &mut GeneratedTre
             source,
         )?)?;
     }
-    tree.insert(GeneratedFile::new(format!("{prefix}MULTIPART.md"), "Multipart/form-data operations accept a generated <Operation>MultipartBody record through their native request record. File fields use MultipartBody.FilePart(filename, contentType, bytes), or MultipartBody.FilePart.bytes(bytes). File bytes are copied; scalars use UTF-8. Only one multipart/form-data media type and a named closed object with direct nonnullable scalar/binary fields are supported. Optional parts with null values are omitted. Arrays, nested/reference fields, unions, extra parts, base64 byte format and custom per-part encoding require adapters. Part names use ASCII letters/digits/dot/underscore/hyphen; filenames use printable ASCII excluding quotes/backslashes. Files are buffered; no streaming/file-system access is implied. Java JSON model APIs remain separate.")?)?;
+    tree.insert(GeneratedFile::new(format!("{prefix}MULTIPART.md"), "Multipart/form-data operations accept a generated <Operation>MultipartBody record through their native request record. File fields use MultipartBody.FilePart(filename, contentType, bytes), or MultipartBody.FilePart.bytes(bytes). File bytes are copied; scalars use UTF-8. Multipart/form-data with explicit raw or JSON alternatives and object roots are supported. Open roots expose optional KajiExtraParts/kajiExtraParts maps, rejecting collisions with declared parts. Root object unions merge fields and retain only shared required members; branch-specific constraints remain server-validated. Mixed-media calls accept native JSON models or explicit MultipartBody.RawBody/KajiRawBody buffered media wrappers. Objects/unions/reference values use JSON parts; arrays repeat parts by default and explode=false joins scalar values. Optional parts with null values are omitted. Base64 byte format, streaming and custom per-part headers require adapters. Part names use ASCII letters/digits/dot/underscore/hyphen; filenames use printable ASCII excluding quotes/backslashes. Files are buffered; no streaming/file-system access is implied. Java JSON model APIs remain separate.")?)?;
     Ok(())
 }
 pub(crate) fn runtime(source: String) -> String {
@@ -252,12 +445,7 @@ mod tests {
         fields[0].value = SchemaValue::new(SchemaKind::Array {
             items: Box::new(SchemaValue::new(SchemaKind::String)),
         });
-        assert!(
-            validate(&source)
-                .unwrap_err()
-                .to_string()
-                .contains("arrays")
-        );
+        validate(&source).unwrap();
         let mut source = api();
         source.operations[0]
             .request_body
@@ -268,12 +456,7 @@ mod tests {
                 content_type: "application/json".into(),
                 schema: Some(SchemaValue::new(SchemaKind::String)),
             });
-        assert!(
-            validate(&source)
-                .unwrap_err()
-                .to_string()
-                .contains("exactly one")
-        );
+        validate(&source).unwrap();
     }
     #[test]
     fn emits_native_typed_multipart_in_all_response_drivers() {
@@ -298,7 +481,7 @@ mod tests {
             .get("sdk/src/main/java/io/kaji/multipart/UploadThingMultipartBody.java")
             .unwrap();
         assert!(dto.contains("MultipartBody.FilePart file"));
-        assert!(dto.contains("String.valueOf(flag)"));
+        assert!(dto.contains("MultipartBody.scalar(flag)"));
         let operation = tree
             .iter()
             .find(|(_, source)| source.contains("public record UploadThingRequest"))
@@ -329,6 +512,103 @@ mod tests {
             .unwrap()
             + start;
         source.replace_range(start..end, include_str!("multipart_probe_assert.java.txt"));
+        std::fs::write(
+            dir.path()
+                .join("sdk/src/test/java/io/kaji/multipart/KajiOperationTests.java"),
+            source,
+        )
+        .unwrap();
+        let output = std::process::Command::new("mvn")
+            .args([
+                "-q",
+                "test-compile",
+                "org.codehaus.mojo:exec-maven-plugin:3.5.0:java",
+                "-Dexec.mainClass=io.kaji.multipart.KajiOperationTests",
+                "-Dexec.classpathScope=test",
+            ])
+            .current_dir(dir.path().join("sdk"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    fn complex_api() -> Api {
+        let mut source = api();
+        let SchemaKind::Object {
+            fields,
+            additional_properties,
+        } = &mut source.schemas[0].value.kind
+        else {
+            unreachable!()
+        };
+        *additional_properties = AdditionalProperties::Any;
+        fields.push(kaji_core::Field {
+            name: "chunking_strategy".into(),
+            value: SchemaValue::new(SchemaKind::OneOf {
+                variants: vec![
+                    SchemaValue::new(SchemaKind::String),
+                    SchemaValue::new(SchemaKind::Object {
+                        fields: vec![],
+                        additional_properties: AdditionalProperties::Any,
+                    }),
+                ],
+            }),
+            required: false,
+            annotations: Default::default(),
+        });
+        fields.push(kaji_core::Field {
+            name: "timestamp_granularities[]".into(),
+            value: SchemaValue::new(SchemaKind::Array {
+                items: Box::new(SchemaValue::new(SchemaKind::String)),
+            }),
+            required: false,
+            annotations: Default::default(),
+        });
+        let mut binary = SchemaValue::new(SchemaKind::String);
+        binary.format = Some("binary".into());
+        fields.push(kaji_core::Field {
+            name: "files".into(),
+            value: SchemaValue::new(SchemaKind::Array {
+                items: Box::new(binary),
+            }),
+            required: false,
+            annotations: Default::default(),
+        });
+        source.operations[0].annotations.insert("kaji.request_body_encodings".into(),serde_json::json!({"multipart/form-data":{"chunking_strategy":{"contentType":"application/json"}}}));
+        source
+    }
+
+    #[test]
+    #[ignore = "requires JDK17+Maven; native complex multipart wire probe"]
+    fn native_multipart_complex_json_and_repeated_arrays() {
+        let tree = kaji_core::engine::Packages::new()
+            .package(
+                crate::package("sdk")
+                    .name("io.kaji.multipart")
+                    .with(crate::sdk())
+                    .with(crate::operation_tests()),
+            )
+            .generate(&complex_api(), None)
+            .unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        tree.write_to(dir.path()).unwrap();
+        let main=include_str!("multipart_probe_main.java.txt").replace("file,null);","file,null,MAPPER.valueToTree(Map.of(\"type\",\"server_vad\",\"label\",\"café雪\",\"threshold\",0.5)),List.of(\"word\",\"segment\"),List.of(file,file),Map.of(\"extra\",Map.of(\"snow\",\"雪\")));");
+        let mut source = include_str!("operation_driver.java.txt")
+            .replace("__PACKAGE__", "io.kaji.multipart")
+            .replace("__CASES__", &main);
+        let start = source.find("        void assertRequest(").unwrap();
+        let end = start
+            + source[start..]
+                .find("        public <T> HttpResponse<T> send(")
+                .unwrap();
+        source.replace_range(
+            start..end,
+            include_str!("multipart_complex_assert.java.txt"),
+        );
         std::fs::write(
             dir.path()
                 .join("sdk/src/test/java/io/kaji/multipart/KajiOperationTests.java"),

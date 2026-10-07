@@ -68,7 +68,7 @@ pub(super) fn render(output: &mut String, api: &Api, operation: &Operation) {
         return;
     };
     let name = go_type_name(&operation.id);
-    let request = format!("{name}Request");
+    let request = operation_request_name(api, operation);
     let pager = format!("{name}Pager");
     let page_start = if page.required {
         format!("page = copyInput.{}", page.field)

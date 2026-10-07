@@ -1,0 +1,36 @@
+package __PACKAGE__;
+import java.io.IOException;
+import java.net.*;
+import java.net.http.*;
+import java.time.Duration;
+import java.util.*;
+import java.util.concurrent.*;
+import javax.net.ssl.*;
+/** JDK driver middleware. Only a configured API origin receives OAuth tokens. */
+public final class OAuthHttpClient extends HttpClient {
+    private final HttpClient driver;private final OAuthClientCredentials provider;private final URI origin;private final String idempotencyHeader;private final boolean replayBufferedBodies;
+    public OAuthHttpClient(HttpClient driver,OAuthClientCredentials provider,String apiOrigin){this(driver,provider,apiOrigin,null,false);}
+    /** Set replayBufferedBodies only for repeatable publishers, such as generated JSON/multipart bodies. */
+    public OAuthHttpClient(HttpClient driver,OAuthClientCredentials provider,String apiOrigin,String idempotencyHeader,boolean replayBufferedBodies){
+        this.driver=Objects.requireNonNull(driver);this.provider=Objects.requireNonNull(provider);this.origin=URI.create(apiOrigin);this.idempotencyHeader=idempotencyHeader;this.replayBufferedBodies=replayBufferedBodies;
+        if(!Set.of("http","https").contains(origin.getScheme())||origin.getHost()==null||origin.getUserInfo()!=null||origin.getFragment()!=null||driver.followRedirects()!=Redirect.NEVER)throw new IllegalArgumentException("Invalid OAuth API origin or redirect policy");
+    }
+    private static int port(URI uri){return uri.getPort()==-1?(uri.getScheme().equalsIgnoreCase("https")?443:80):uri.getPort();}
+    private boolean applies(HttpRequest request){URI uri=request.uri();return origin.getScheme().equalsIgnoreCase(uri.getScheme())&&origin.getHost().equalsIgnoreCase(uri.getHost())&&port(origin)==port(uri)&&request.headers().firstValue("Authorization").isEmpty();}
+    private HttpRequest authorize(HttpRequest request,String token){var builder=HttpRequest.newBuilder(request.uri()).method(request.method(),request.bodyPublisher().orElse(HttpRequest.BodyPublishers.noBody()));request.timeout().ifPresent(builder::timeout);request.version().ifPresent(builder::version);builder.expectContinue(request.expectContinue());request.headers().map().forEach((name,values)->values.forEach(value->builder.header(name,value)));return builder.header("Authorization","Bearer "+token).build();}
+    @Override public <T> HttpResponse<T> send(HttpRequest request,HttpResponse.BodyHandler<T> handler)throws IOException,InterruptedException {
+        if(!applies(request))return driver.send(request,handler);
+        String token=provider.token();var response=driver.send(authorize(request,token),handler);
+        boolean safe=Set.of("GET","HEAD","OPTIONS","TRACE","QUERY","PUT","DELETE").contains(request.method())||idempotencyHeader!=null&&request.headers().firstValue(idempotencyHeader).filter(x->!x.isBlank()).isPresent();
+        boolean repeatable=request.bodyPublisher().map(body->body.contentLength()==0||replayBufferedBodies).orElse(true);
+        if(response.statusCode()!=401||!safe||!repeatable||response.body() instanceof java.io.InputStream)return response;
+        if(response.body() instanceof AutoCloseable closeable)try{closeable.close();}catch(Exception ignored){}
+        provider.invalidate(token);return driver.send(authorize(request,provider.token()),handler);
+    }
+    @Override public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,HttpResponse.BodyHandler<T> handler){var future=new CompletableFuture<HttpResponse<T>>();var worker=new Thread(()->{try{future.complete(send(request,handler));}catch(InterruptedException e){Thread.currentThread().interrupt();future.completeExceptionally(e);}catch(IOException e){future.completeExceptionally(e);}},"kaji-oauth-request");worker.setDaemon(true);future.whenComplete((value,error)->{if(future.isCancelled())worker.interrupt();});worker.start();return future;}
+    @Override public <T> CompletableFuture<HttpResponse<T>> sendAsync(HttpRequest request,HttpResponse.BodyHandler<T> handler,HttpResponse.PushPromiseHandler<T> push){return CompletableFuture.failedFuture(new UnsupportedOperationException("OAuth HTTP/2 push is unsupported"));}
+    @Override public Optional<CookieHandler> cookieHandler(){return driver.cookieHandler();}@Override public Optional<Duration> connectTimeout(){return driver.connectTimeout();}
+    @Override public Redirect followRedirects(){return driver.followRedirects();}@Override public Optional<ProxySelector> proxy(){return driver.proxy();}
+    @Override public SSLContext sslContext(){return driver.sslContext();}@Override public SSLParameters sslParameters(){return driver.sslParameters();}
+    @Override public Optional<Authenticator> authenticator(){return driver.authenticator();}@Override public Version version(){return driver.version();}@Override public Optional<Executor> executor(){return driver.executor();}
+}

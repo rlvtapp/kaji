@@ -1,0 +1,29 @@
+/// Buffered multipart input. Add repeated names for arrays; JSON parts use application/json.
+#[derive(Clone, Debug)]
+pub struct MultipartBody { boundary: String, bytes: Vec<u8> }
+#[derive(Clone, Copy, Debug)]
+pub struct MultipartBodyError;
+impl std::fmt::Display for MultipartBodyError { fn fmt(&self,f:&mut std::fmt::Formatter<'_>)->std::fmt::Result { f.write_str("invalid multipart part or body exceeds 64 MiB") } }
+impl std::error::Error for MultipartBodyError {}
+impl Default for MultipartBody { fn default()->Self { Self::new() } }
+impl MultipartBody {
+    pub fn new()->Self {
+        static SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let stamp=std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos();
+        Self { boundary:format!("kaji-{stamp:x}-{:x}",SEQUENCE.fetch_add(1,std::sync::atomic::Ordering::Relaxed)),bytes:Vec::new() }
+    }
+    pub fn add_text(&mut self,name:&str,value:impl AsRef<str>)->Result<&mut Self,MultipartBodyError> { self.add_part(name,None,"text/plain; charset=utf-8",value.as_ref().as_bytes()) }
+    pub fn add_file(&mut self,name:&str,filename:&str,content_type:&str,value:impl AsRef<[u8]>)->Result<&mut Self,MultipartBodyError> { self.add_part(name,Some(filename),content_type,value.as_ref()) }
+    pub fn add_json<T:serde::Serialize>(&mut self,name:&str,value:&T)->Result<&mut Self,MultipartBodyError> { let data=serde_json::to_vec(value).map_err(|_|MultipartBodyError)?; self.add_part(name,None,"application/json",&data) }
+    pub fn add_part(&mut self,name:&str,filename:Option<&str>,content_type:&str,value:&[u8])->Result<&mut Self,MultipartBodyError> {
+        let valid=|v:&str| !v.is_empty() && !v.chars().any(|c|c.is_control()||c=='"'||c=='\\');
+        if !valid(name)||filename.is_some_and(|f|!valid(f))||!valid(content_type)||!content_type.is_ascii() { return Err(MultipartBodyError) }
+        let mut head=format!("--{}\r\nContent-Disposition: form-data; name=\"{}\"",self.boundary,name);
+        if let Some(filename)=filename { head.push_str(&format!("; filename=\"{filename}\"")); }
+        head.push_str(&format!("\r\nContent-Type: {content_type}\r\n\r\n"));
+        if self.bytes.len().saturating_add(head.len()).saturating_add(value.len()).saturating_add(self.boundary.len()+10)>64*1024*1024 { return Err(MultipartBodyError) }
+        self.bytes.extend_from_slice(head.as_bytes());self.bytes.extend_from_slice(value);self.bytes.extend_from_slice(b"\r\n");Ok(self)
+    }
+    #[allow(dead_code)]
+    fn encoded(&self)->(String,Vec<u8>) { let mut bytes=self.bytes.clone();bytes.extend_from_slice(format!("--{}--\r\n",self.boundary).as_bytes());(format!("multipart/form-data; boundary={}",self.boundary),bytes) }
+}

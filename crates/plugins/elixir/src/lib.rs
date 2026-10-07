@@ -487,7 +487,7 @@ fn render_client(module: &str) -> String {
   defp decode_response(response, :text), do: {:ok, response}
   defp decode_response(response, :json), do: JSON.decode(response)
 
-  defp retryable?(method, _headers, _idempotency_header) when method in [:get, :put, :delete], do: true
+  defp retryable?(method, _headers, _idempotency_header) when method in [:get, :head, :options, :trace, "QUERY", :put, :delete], do: true
   defp retryable?(method, headers, idempotency_header) when method in [:post, :patch], do: Enum.any?(headers, fn {name, value} -> (String.downcase(name) == "idempotency-key" or (is_binary(idempotency_header) and String.downcase(name) == String.downcase(idempotency_header))) and String.trim(to_string(value)) != "" end)
   defp retryable?(_, _headers, _idempotency_header), do: false
   defp transient_status?(status), do: status in [408, 429, 500, 502, 503, 504]
@@ -1053,18 +1053,23 @@ fn render_operation_body(
         .and_then(serde_json::Value::as_str)
         .map(|header| format!(", \"{}\"", escape_elixir_string(header)))
         .unwrap_or_else(|| ", nil".into());
+    let native_method = if operation.method == kaji_core::HttpMethod::Query {
+        "\"QUERY\"".to_owned()
+    } else {
+        format!(":{}", operation.method.as_str().to_ascii_lowercase())
+    };
     if operation_is_sse(operation) {
         let _ = writeln!(
             output,
-            "{pad}Client.event_stream(client, :{}, path, query, headers, {body}, :{body_kind})",
-            operation.method.as_str().to_ascii_lowercase(),
+            "{pad}Client.event_stream(client, {}, path, query, headers, {body}, :{body_kind})",
+            native_method,
         );
         return;
     }
     let _ = writeln!(
         output,
-        "{pad}case Client.request(client, :{}, path, query, headers, {body}, :{body_kind}, :{response_kind}, {error_types}{idempotency_argument}) do",
-        operation.method.as_str().to_ascii_lowercase(),
+        "{pad}case Client.request(client, {}, path, query, headers, {body}, :{body_kind}, :{response_kind}, {error_types}{idempotency_argument}) do",
+        native_method,
     );
     let _ = writeln!(output, "{pad}  {{:ok, response}} -> {{:ok, {response}}}");
     for response in operation

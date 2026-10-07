@@ -1,0 +1,68 @@
+import { createClient, withRequestControl, type ClientConfig, type ClientInstance } from './.kaji/client'
+export class OAuthTokenError extends Error { constructor() { super('OAuth token acquisition failed'); this.name = 'OAuthTokenError' } }
+export interface OAuthClientCredentialsOptions { tokenUrl: string; clientId: string; clientSecret: string; scopes?: readonly string[]; refreshLeewaySeconds?: number; timeoutMs?: number; fetch?: typeof globalThis.fetch }
+/** Client credentials only. Concurrent callers share refresh; credentials and issuer bodies never enter errors. */
+export class OAuthClientCredentials {
+  #options: OAuthClientCredentialsOptions
+  #cached?: { value: string; expires: number }
+  #pending?: Promise<string>
+  constructor(options: OAuthClientCredentialsOptions) {
+    const url = new URL(options.tokenUrl)
+    if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.hash || !options.clientId || !options.clientSecret || !Number.isFinite(options.timeoutMs ?? 30000) || (options.timeoutMs ?? 30000) <= 0 || !Number.isFinite(options.refreshLeewaySeconds ?? 30) || (options.refreshLeewaySeconds ?? 30) < 0) throw new OAuthTokenError()
+    this.#options = { ...options, scopes: [...(options.scopes ?? [])] }
+  }
+  invalidate(rejected: string): void { if (this.#cached?.value === rejected) this.#cached = undefined }
+  async token(signal?: AbortSignal): Promise<string> {
+    signal?.throwIfAborted()
+    if (this.#cached && Date.now() < this.#cached.expires) return this.#cached.value
+    const pending = this.#pending ??= this.#refresh().finally(() => { this.#pending = undefined })
+    if (!signal) return pending
+    return new Promise((resolve, reject) => {
+      const abort = () => { cleanup(); reject(signal.reason ?? new DOMException('Aborted', 'AbortError')) }
+      const cleanup = () => signal.removeEventListener('abort', abort)
+      signal.addEventListener('abort', abort, { once: true })
+      pending.then(value => { cleanup(); resolve(value) }, error => { cleanup(); reject(error) })
+      if (signal.aborted) abort()
+    })
+  }
+  async #refresh(): Promise<string> {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), this.#options.timeoutMs ?? 30000)
+    try {
+      const form = new URLSearchParams({ grant_type: 'client_credentials' })
+      if (this.#options.scopes?.length) form.set('scope', this.#options.scopes.join(' '))
+      // RFC 6749 requires form-encoding each credential before HTTP Basic encoding.
+      const encode = (value: string) => new URLSearchParams({ x: value }).toString().slice(2)
+      const credentials = btoa(`${encode(this.#options.clientId)}:${encode(this.#options.clientSecret)}`)
+      const response = await (this.#options.fetch ?? globalThis.fetch)(this.#options.tokenUrl, { method: 'POST', redirect: 'error', signal: controller.signal, headers: { authorization: `Basic ${credentials}`, 'content-type': 'application/x-www-form-urlencoded' }, body: form.toString() })
+      if (!response.ok || !response.body) throw new OAuthTokenError()
+      const reader = response.body.getReader(); const chunks: Uint8Array[] = []; let size = 0
+      try { for (;;) { const item = await reader.read(); if (item.done) break; size += item.value.byteLength; if (size > 65536) throw new OAuthTokenError(); chunks.push(item.value) } } finally { await reader.cancel().catch(() => {}); reader.releaseLock() }
+      const bytes = new Uint8Array(size); let offset = 0; for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength }
+      const value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as Record<string, unknown>
+      if (typeof value.access_token !== 'string' || !value.access_token || !/^[A-Za-z0-9._~+\/-]+=*$/.test(value.access_token) || typeof value.token_type !== 'string' || value.token_type.toLowerCase() !== 'bearer' || typeof value.expires_in !== 'number' || !Number.isFinite(value.expires_in) || value.expires_in < 0) throw new OAuthTokenError()
+      const duration = Math.max(0, Math.min(value.expires_in, 365 * 24 * 3600) - (this.#options.refreshLeewaySeconds ?? 30)) * 1000
+      if (duration > 0) this.#cached = { value: value.access_token, expires: Date.now() + duration }
+      return value.access_token
+    } catch { throw new OAuthTokenError() } finally { clearTimeout(timer) }
+  }
+}
+/** OAuth wraps the maintained client, so customer middleware/auth/hook policies remain active on each attempt. */
+export const createOAuthClient = (config: ClientConfig, provider: OAuthClientCredentials): ClientInstance => {
+  const client = createClient(config)
+  return request => withRequestControl(request.requestOptions, config.timeoutMs, async controls => {
+    const supplied = new Headers(config.headers as HeadersInit)
+    new Headers(request.headers as HeadersInit).forEach((value, key) => supplied.set(key, value))
+    new Headers(controls.headers).forEach((value, key) => supplied.set(key, value))
+    if (supplied.has('authorization') || !request.security?.some(alternative => alternative.some(scheme => scheme.type === 'oauth2'))) return client({ ...request, requestOptions: controls })
+    const token = await provider.token(controls.signal)
+    const invoke = (value: string) => { const headers = new Headers(supplied); headers.set('authorization', `Bearer ${value}`); return client({ ...request, requestOptions: controls, headers: Object.fromEntries(headers.entries()) }) }
+    let response: unknown; let rejected: unknown
+    try { response = await invoke(token) } catch (error) { rejected = error }
+    const status = ((rejected ?? response) as { status?: number })?.status
+    const safe = ['GET', 'HEAD', 'OPTIONS', 'TRACE', 'QUERY', 'PUT', 'DELETE'].includes(request.method.toUpperCase()) || !!(request.idempotencyHeader && supplied.get(request.idempotencyHeader)?.trim())
+    if (status !== 401 || !safe || request.responseType === 'stream') { if (rejected) throw rejected; return response }
+    provider.invalidate(token)
+    return invoke(await provider.token(controls.signal))
+  })
+}

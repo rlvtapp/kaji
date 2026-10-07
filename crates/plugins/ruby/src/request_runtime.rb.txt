@@ -1,0 +1,50 @@
+    private
+
+    def request(method, path, query:, headers:, body:, response_schemas: nil, idempotency_header: nil, request_options: nil)
+      options = request_options || {}
+      raise ArgumentError, 'request_options must be a Hash' unless options.is_a?(Hash)
+      raise ArgumentError, 'unknown request option' unless (options.keys - [:headers, :timeout, :cancelled]).empty?
+      timeout = options.fetch(:timeout, @timeout)
+      raise ArgumentError, 'timeout must be a finite positive number' unless timeout.is_a?(Numeric) && timeout.finite? && timeout > 0
+      supplied_headers = options.fetch(:headers, {})
+      raise ArgumentError, 'headers must be a Hash' unless supplied_headers.is_a?(Hash)
+      supplied_cancelled = options[:cancelled]
+      raise ArgumentError, 'cancelled must be callable' if supplied_cancelled && !supplied_cancelled.respond_to?(:call)
+      cancelled = -> { (@cancelled && @cancelled.call) || (supplied_cancelled && supplied_cancelled.call) }
+      check_cancellation(cancelled)
+      uri = URI.join(@base_url + "/", path.sub(%r{^/}, ""))
+      uri.query = URI.encode_www_form(query) unless query.empty?
+      request = if Net::HTTP.const_defined?(method.capitalize, false)
+        Net::HTTP.const_get(method.capitalize, false).new(uri)
+      else
+        Net::HTTPGenericRequest.new(method, !body.nil?, method != "HEAD", uri)
+      end
+      merged_headers = @headers.merge(headers).merge(supplied_headers.transform_keys(&:to_s))
+      merged_headers.each { |key, value| request[key] = value }
+      request["Authorization"] ||= "Bearer #{@bearer_token}" if @bearer_token
+      request["X-API-Key"] ||= @api_key if @api_key
+      unless body.nil?
+        request["Content-Type"] ||= "application/json"
+        request.body = body.is_a?(String) ? body : JSON.generate(body.respond_to?(:to_h) ? body.to_h : body)
+      end
+      handler = @transport || lambda do |native_request|
+        target = native_request.uri || uri
+        Net::HTTP.start(target.hostname, target.port, use_ssl: target.scheme == "https", open_timeout: timeout, read_timeout: timeout) { |http| http.request(native_request) }
+      end
+      @middleware.reverse_each do |item|
+        following = handler
+        handler = ->(native_request) { item.call(native_request, following) }
+      end
+      response = Timeout.timeout(timeout, KajiTimeoutError) { execute_with_retry(handler, request, idempotency_header, cancelled: cancelled) }
+      shape = nil
+      if @validate_responses && response_schemas && response.code.to_i.between?(200, 299)
+        content_type = response.respond_to?(:[]) ? response["Content-Type"] : nil
+        shape = ResponseValidation.response_shape(response_schemas, response.code.to_i, content_type)
+      end
+      if shape
+        return ResponseValidation.decode(response.body, shape, ResponseShapes["refs"])
+      end
+      parsed = response.body.nil? || response.body.empty? ? nil : JSON.parse(response.body) rescue response.body
+      raise ApiError.new(response.code.to_i, parsed) unless response.code.to_i.between?(200, 299)
+      parsed
+    end

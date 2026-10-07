@@ -1,0 +1,7 @@
+    /// Create an independent scope sharing drivers, middleware, hooks and token provider.
+    pub fn for_call(&self, options: CallOptions) -> Self {
+        let mut scoped=self.clone();
+        scoped.call_options.headers.extend(options.headers);
+        scoped.call_options.timeout=options.timeout.or(self.call_options.timeout);
+        scoped
+    }

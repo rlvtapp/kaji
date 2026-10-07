@@ -1,4 +1,6 @@
 //! TypeScript renderers and package configuration live outside neutral core.
+mod oauth;
+pub use oauth::{OAuth, oauth};
 mod webhooks;
 pub use webhooks::{Webhooks, webhooks};
 mod bundled_middleware;
@@ -10,6 +12,7 @@ pub use operation_tests::{OperationTests, operation_tests};
 mod json;
 mod models;
 mod render;
+mod request_control;
 mod sdk;
 mod workspace;
 pub use models::{

@@ -1,4 +1,7 @@
 //! Rust SDK generation through typed packages and a Reqwest-backed client.
+mod oauth;
+mod open_union;
+pub use oauth::{OAuth, oauth};
 mod webhooks;
 pub use webhooks::{Webhooks, webhooks};
 mod bundled;
@@ -16,6 +19,7 @@ pub struct Rust;
 #[derive(Default)]
 pub struct Settings {
     pub package_name: Option<String>,
+    pub open_unions: bool,
 }
 impl Language for Rust {
     const NAME: &'static str = "rust";
@@ -36,8 +40,14 @@ pub fn package(dir: impl Into<String>) -> Package<Rust> {
 }
 pub trait PackageExt {
     fn name(self, name: impl Into<String>) -> Self;
+    /// Retain unknown named union variants as JSON; default decoding stays strict.
+    fn open_unions(self, enabled: bool) -> Self;
 }
 impl PackageExt for Package<Rust> {
+    fn open_unions(mut self, enabled: bool) -> Self {
+        self.settings_mut().open_unions = enabled;
+        self
+    }
     fn name(mut self, name: impl Into<String>) -> Self {
         self.settings_mut().package_name = Some(name.into());
         self
@@ -96,6 +106,7 @@ impl Plugin<Rust> for Sdk {
             crate_name: cx.settings.package_name.clone(),
             client_style: style,
             operation_prefix: self.operation_prefix.clone(),
+            open_unions: cx.settings.open_unions,
         };
         for (file, _) in render::generate_sdk(cx.api, &options)?.into_files() {
             if !matches!(
@@ -328,3 +339,6 @@ mod native_cargo_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod multipart_tests;

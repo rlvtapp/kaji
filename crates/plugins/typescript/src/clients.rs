@@ -195,6 +195,19 @@ fn render_operation(
 /// Preserves explicit OpenAPI parameter serialization metadata for Kaji's
 /// runtime. Unspecified style/explode settings intentionally remain absent so
 /// the runtime can apply each location's OpenAPI defaults.
+fn style_property_name(name: &str) -> String {
+    let mut chars = name.chars();
+    let valid = chars
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_' || c == '$')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$');
+    if valid {
+        name.to_owned()
+    } else {
+        serde_json::to_string(name).expect("string serialization")
+    }
+}
+
 fn render_parameter_styles(operation: &Operation) -> Option<String> {
     let groups = ["path", "query", "header", "cookie"]
         .into_iter()
@@ -217,7 +230,11 @@ fn render_parameter_styles(operation: &Operation) -> Option<String> {
                         if let Some(explode) = explode {
                             fields.push(format!("explode: {explode}"));
                         }
-                        format!("{}: {{ {} }}", parameter.name, fields.join(", "))
+                        format!(
+                            "{}: {{ {} }}",
+                            style_property_name(&parameter.name),
+                            fields.join(", ")
+                        )
                     })
                 })
                 .collect::<Vec<_>>();
@@ -231,10 +248,22 @@ fn render_parameter_styles(operation: &Operation) -> Option<String> {
 /// The compiler stores it as an annotation so non-TypeScript targets do not
 /// need a JavaScript-shaped form-data type in the shared AST.
 fn render_form_encodings(operation: &Operation) -> Option<String> {
-    operation
+    let mut encodings = operation
         .annotations
-        .get("kaji.request_body_encodings")
-        .and_then(|value| serde_json::to_string(value).ok())
+        .get("kaji.request_body_encodings")?
+        .clone();
+    if let Some(media_types) = encodings.as_object_mut() {
+        for fields in media_types.values_mut().filter_map(Value::as_object_mut) {
+            for encoding in fields.values_mut().filter_map(Value::as_object_mut) {
+                for key in ["style", "explode", "contentType", "allowReserved"] {
+                    if encoding.get(key).is_some_and(Value::is_null) {
+                        encoding.remove(key);
+                    }
+                }
+            }
+        }
+    }
+    serde_json::to_string(&encodings).ok()
 }
 
 /// Converts declared OpenAPI OR-of-AND requirements without guessing scheme kinds.
@@ -341,8 +370,18 @@ fn render_event_stream_operation(
     if let Some(security) = render_security(operation, security_schemes) {
         metadata.push_str(&format!("      security: {security},\n"));
     }
+    let options_default = if operation
+        .parameters
+        .iter()
+        .any(|parameter| parameter.required)
+        || operation.request_body.is_some()
+    {
+        ""
+    } else {
+        " = {}"
+    };
     format!(
-        "{ESLINT_HEADER}import type {{ Options, EventStreamResult, SuccessOf }} from './.kaji/client'\nimport type {{ {type_name}Options, {type_name}Responses }} from './{type_name}'\nimport {{ client, toEventStream }} from './.kaji/client'\n\n/**\n * {{@link {link_path}}}\n */\nexport function {function_name}<ThrowOnError extends boolean = {throw_on_error}>(\n  options: Options<{type_name}Options, ThrowOnError> = {{}},\n): Promise<EventStreamResult<SuccessOf<{type_name}Responses>>> {{\n  const {{ client: request = client, ...config }} = options\n\n  return toEventStream<SuccessOf<{type_name}Responses>>(\n    request({{\n      method: '{method}',\n      url: '{}',\n      responseType: 'stream',\n{metadata}      ...config,\n      throwOnError: config.throwOnError ?? {throw_on_error},\n    }}),\n  )\n}}\n",
+        "{ESLINT_HEADER}import type {{ Options, EventStreamResult, SuccessOf }} from './.kaji/client'\nimport type {{ {type_name}Options, {type_name}Responses }} from './{type_name}'\nimport {{ client, toEventStream }} from './.kaji/client'\n\n/**\n * {{@link {link_path}}}\n */\nexport function {function_name}<ThrowOnError extends boolean = {throw_on_error}>(\n  options: Options<{type_name}Options, ThrowOnError>{options_default},\n): Promise<EventStreamResult<SuccessOf<{type_name}Responses>>> {{\n  const {{ client: request = client, ...config }} = options\n\n  return toEventStream<SuccessOf<{type_name}Responses>>(\n    request({{\n      method: '{method}',\n      url: '{}',\n      responseType: 'stream',\n{metadata}      ...config,\n      throwOnError: config.throwOnError ?? {throw_on_error},\n    }}),\n  )\n}}\n",
         operation.path,
     )
 }
@@ -521,6 +560,56 @@ mod tests {
             source.contains("[{ id: 'query_key', type: 'apiKey', name: 'api_key', in: 'query'")
         );
         assert!(source.contains("id: 'oauth', type: 'oauth2'"));
+    }
+
+    #[test]
+    fn encoding_omission_and_required_sse_options_match_native_types() {
+        let mut operation = operation("streamProbe", HttpMethod::Get, "/probe/{id}");
+        operation.parameters.push(kaji_core::OperationParameter {
+            name: "id".into(),
+            location: "path".into(),
+            required: true,
+            schema: None,
+            description: None,
+            annotations: Default::default(),
+        });
+        operation.annotations.insert("kaji.request_body_encodings".into(), serde_json::json!({"multipart/form-data": {"payload": {"style":null,"explode":null,"contentType":null,"allowReserved":null}}}));
+        assert_eq!(
+            render_form_encodings(&operation).unwrap(),
+            "{\"multipart/form-data\":{\"payload\":{}}}"
+        );
+        let source = render_event_stream_operation(&operation, false, None);
+        assert!(source.contains("options: Options<StreamProbeOptions, ThrowOnError>,"));
+        assert!(!source.contains("Options<StreamProbeOptions, ThrowOnError> = {}"));
+        operation.parameters.clear();
+        let source = render_event_stream_operation(&operation, false, None);
+        assert!(source.contains("Options<StreamProbeOptions, ThrowOnError> = {}"));
+    }
+
+    #[test]
+    fn style_metadata_preserves_unsafe_wire_keys_as_string_properties() {
+        let mut operation = operation("headerProbe", HttpMethod::Get, "/probe");
+        for name in ["openai-beta", "x'quoted", "1st", "雪"] {
+            operation.parameters.push(kaji_core::OperationParameter {
+                name: name.into(),
+                location: "header".into(),
+                required: false,
+                schema: None,
+                description: None,
+                annotations: std::collections::BTreeMap::from([(
+                    "style".into(),
+                    serde_json::json!("simple"),
+                )]),
+            });
+        }
+        let styles = render_parameter_styles(&operation).unwrap();
+        for name in ["openai-beta", "x'quoted", "1st", "雪"] {
+            assert!(styles.contains(&format!(
+                "{}: {{ style: 'simple' }}",
+                serde_json::to_string(name).unwrap()
+            )));
+        }
+        assert_eq!(style_property_name("petId"), "petId");
     }
 
     #[test]

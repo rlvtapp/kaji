@@ -207,6 +207,10 @@ pub enum HttpMethod {
     Put,
     Patch,
     Delete,
+    Head,
+    Options,
+    Trace,
+    Query,
 }
 
 impl HttpMethod {
@@ -217,6 +221,10 @@ impl HttpMethod {
             Self::Put => "PUT",
             Self::Patch => "PATCH",
             Self::Delete => "DELETE",
+            Self::Head => "HEAD",
+            Self::Options => "OPTIONS",
+            Self::Trace => "TRACE",
+            Self::Query => "QUERY",
         }
     }
 }

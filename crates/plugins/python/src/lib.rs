@@ -104,6 +104,20 @@ fn render_sdk(
         response_validation::render(api),
     )?)?;
     tree.insert(GeneratedFile::new(
+        format!("{root}/src/{module}/multipart.py"),
+        include_str!("multipart.py"),
+    )?)?;
+    if api
+        .operations
+        .iter()
+        .any(|operation| operation_body_kind(operation).ends_with("multipart"))
+    {
+        tree.insert(GeneratedFile::new(
+            format!("{root}/MULTIPART.md"),
+            include_str!("multipart_readme.md"),
+        )?)?;
+    }
+    tree.insert(GeneratedFile::new(
         format!("{root}/src/{module}/oauth.py"),
         include_str!("oauth.py"),
     )?)?;
@@ -328,10 +342,51 @@ fn render_resource_exports(resources: &[String]) -> String {
 
 fn render_model(schema: &Schema) -> String {
     let mut output = format!(
-        "{NOTICE}from __future__ import annotations\n\nfrom dataclasses import dataclass, field\nfrom typing import Any, Literal\nfrom ._model_codec import decode_model_value\n\n"
+        "{NOTICE}from __future__ import annotations\n\nfrom dataclasses import dataclass, field\nfrom typing import Any, Literal, TYPE_CHECKING\nfrom ._model_codec import decode_model_value\n\nif TYPE_CHECKING:\n    from typing import TypeAlias\n\n"
     );
+    let mut references = std::collections::BTreeSet::new();
+    python_references(&schema.value, &mut references);
+    references.remove(&python_type_name(&schema.name));
+    if !references.is_empty() {
+        output.push_str("if TYPE_CHECKING:\n");
+        for reference in references {
+            let _ = writeln!(output, "    from . import {reference}");
+        }
+        output.push('\n');
+    }
     render_schema(&mut output, schema);
     output
+}
+
+fn python_references(value: &SchemaValue, names: &mut std::collections::BTreeSet<String>) {
+    match &value.kind {
+        SchemaKind::Reference { reference } => {
+            names.insert(python_type_name(
+                reference.rsplit('/').next().unwrap_or(reference),
+            ));
+        }
+        SchemaKind::Array { items } => python_references(items, names),
+        SchemaKind::Object {
+            fields,
+            additional_properties,
+        } => {
+            for field in fields {
+                python_references(&field.value, names);
+            }
+            if let AdditionalProperties::Schema { value } = additional_properties {
+                python_references(value, names);
+            }
+        }
+        SchemaKind::OneOf { variants }
+        | SchemaKind::AnyOf { variants }
+        | SchemaKind::AllOf { variants } => {
+            for variant in variants {
+                python_references(variant, names);
+            }
+        }
+        SchemaKind::Not { schema } => python_references(schema, names),
+        _ => {}
+    }
 }
 
 fn python_decode_shape(value: &SchemaValue) -> String {
@@ -470,7 +525,16 @@ fn render_schema(output: &mut String, schema: &Schema) {
             let _ = writeln!(output, "{name} = Literal[{}]", values.join(", "));
         }
         _ => {
-            let _ = writeln!(output, "{name} = {}", python_type(&schema.value));
+            let mut references = std::collections::BTreeSet::new();
+            python_references(&schema.value, &mut references);
+            let annotation = python_type(&schema.value);
+            if references.is_empty() {
+                let _ = writeln!(output, "{name} = {annotation}");
+            } else {
+                // Future annotations do not defer a type alias assignment. A
+                // PEP 613 forward alias also avoids circular model imports.
+                let _ = writeln!(output, "{name}: TypeAlias = {annotation:?}");
+            }
         }
     }
 }
@@ -494,6 +558,7 @@ from urllib.request import Request, urlopen
 
 from .models import *
 from .models import _to_wire as to_wire
+from .multipart import MultipartBody, FilePart, JsonPart, RawJsonPart, encode_multipart
 from .response_validation import ResponseDecodeError
 
 
@@ -593,7 +658,7 @@ class BaseClient:
         self.api_key = api_key
         self.bearer_token = bearer_token
         self.token_provider = token_provider
-        self.headers = headers or {{}}
+        self.headers = dict(headers or {{}})
         self.timeout = timeout
         self.max_retries = max(0, max_retries)
         self.retry_initial_delay = max(0.0, retry_initial_delay)
@@ -603,6 +668,27 @@ class BaseClient:
         self.before_request = before_request
         self.after_response = after_response
         self.on_error = on_error
+
+    def for_call(self, *, headers: dict[str, str] | None = None, timeout: float | None = None) -> Any:
+        """Create an independent scope sharing middleware, hooks, auth and async driver."""
+        import math
+        selected_timeout = self.timeout if timeout is None else timeout
+        if not math.isfinite(selected_timeout) or selected_timeout <= 0:
+            raise ValueError("call timeout must be finite and positive")
+        selected_headers = dict(self.headers)
+        for name, value in (headers or {{}}).items():
+            for previous in list(selected_headers):
+                if previous.lower() == name.lower():
+                    del selected_headers[previous]
+            selected_headers[name] = value
+        options = dict(api_key=self.api_key, bearer_token=self.bearer_token, token_provider=self.token_provider,
+                       headers=selected_headers, timeout=selected_timeout, max_retries=self.max_retries,
+                       retry_initial_delay=self.retry_initial_delay, retry_max_delay=self.retry_max_delay,
+                       middleware=self.middleware, validate_responses=self.validate_responses,
+                       before_request=self.before_request, after_response=self.after_response, on_error=self.on_error)
+        if hasattr(self, "_http_client"):
+            options.update(http_client=self._http_client, async_middleware=self.async_middleware)
+        return type(self)(self.base_url, **options)
 
     def _request(
         self,
@@ -642,12 +728,22 @@ class BaseClient:
             request_headers.setdefault("Authorization", f"Bearer {{self.api_key}}")
         data = None
         if body is not None:
+            if isinstance(body, MultipartBody):
+                if body_kind != "multipart" and not body_kind.endswith("_or_multipart"):
+                    raise TypeError("operation does not declare multipart/form-data")
+                body_kind = "multipart"
+            elif body_kind.endswith("_or_multipart"):
+                body_kind = body_kind.removesuffix("_or_multipart")
             if body_kind == "form":
                 value = to_wire(body)
                 if not isinstance(value, dict):
                     raise TypeError("form request bodies must serialize to a dictionary")
                 request_headers.setdefault("Content-Type", "application/x-www-form-urlencoded")
                 data = urlencode(value, doseq=True).encode("utf-8")
+            elif body_kind == "multipart":
+                data, multipart_content_type = encode_multipart(body, to_wire)
+                request_headers = {{key: value for key, value in request_headers.items() if key.lower() != "content-type"}}
+                request_headers["Content-Type"] = multipart_content_type
             elif body_kind == "binary":
                 if not isinstance(body, (bytes, bytearray, memoryview)):
                     raise TypeError("binary request bodies must be bytes-like")
@@ -657,7 +753,7 @@ class BaseClient:
                 request_headers.setdefault("Content-Type", "application/json")
                 data = json.dumps(to_wire(body)).encode("utf-8")
         request_context = {{"method": method, "url": url, "query": query or {{}}, "headers": request_headers, "body": body}}
-        can_retry = retryable and (method.upper() in {{"GET", "PUT", "DELETE"}} or (method.upper() in {{"POST", "PATCH"}} and any((name.lower() == "idempotency-key" or (idempotency_header is not None and name.lower() == idempotency_header.lower())) and value is not None and bool(str(value).strip()) for name, value in request_headers.items())))
+        can_retry = retryable and (method.upper() in {{"GET", "HEAD", "OPTIONS", "TRACE", "QUERY", "PUT", "DELETE"}} or (method.upper() in {{"POST", "PATCH"}} and any((name.lower() == "idempotency-key" or (idempotency_header is not None and name.lower() == idempotency_header.lower())) and value is not None and bool(str(value).strip()) for name, value in request_headers.items())))
         auth_refreshed = False
         for attempt in range(self.max_retries + (2 if managed_auth else 1)):
             if self.before_request is not None:
@@ -685,7 +781,7 @@ class BaseClient:
                     self.on_error(error, request_context)
                 raise
             except HTTPError as error:
-                if error.code == 401 and managed_auth and not auth_refreshed:
+                if error.code == 401 and managed_auth and can_retry and not auth_refreshed:
                     error.close()
                     auth_token = self.token_provider(auth_token)
                     request_headers["Authorization"] = f"Bearer {{auth_token}}"
@@ -780,12 +876,22 @@ class BaseClient:
             request_headers.setdefault("Authorization", f"Bearer {{self.api_key}}")
         data = None
         if body is not None:
+            if isinstance(body, MultipartBody):
+                if body_kind != "multipart" and not body_kind.endswith("_or_multipart"):
+                    raise TypeError("operation does not declare multipart/form-data")
+                body_kind = "multipart"
+            elif body_kind.endswith("_or_multipart"):
+                body_kind = body_kind.removesuffix("_or_multipart")
             if body_kind == "form":
                 value = to_wire(body)
                 if not isinstance(value, dict):
                     raise TypeError("form request bodies must serialize to a dictionary")
                 request_headers.setdefault("Content-Type", "application/x-www-form-urlencoded")
                 data = urlencode(value, doseq=True).encode("utf-8")
+            elif body_kind == "multipart":
+                data, multipart_content_type = encode_multipart(body, to_wire)
+                request_headers = {{key: value for key, value in request_headers.items() if key.lower() != "content-type"}}
+                request_headers["Content-Type"] = multipart_content_type
             elif body_kind == "binary":
                 if not isinstance(body, (bytes, bytearray, memoryview)):
                     raise TypeError("binary request bodies must be bytes-like")
@@ -795,7 +901,7 @@ class BaseClient:
                 request_headers.setdefault("Content-Type", "application/json")
                 data = json.dumps(to_wire(body)).encode("utf-8")
         context = {{"method": method, "url": url, "query": query or {{}}, "headers": request_headers, "body": body}}
-        can_retry = retryable and (method.upper() in {{"GET", "PUT", "DELETE"}} or (method.upper() in {{"POST", "PATCH"}} and any((name.lower() == "idempotency-key" or (idempotency_header is not None and name.lower() == idempotency_header.lower())) and value is not None and bool(str(value).strip()) for name, value in request_headers.items())))
+        can_retry = retryable and (method.upper() in {{"GET", "HEAD", "OPTIONS", "TRACE", "QUERY", "PUT", "DELETE"}} or (method.upper() in {{"POST", "PATCH"}} and any((name.lower() == "idempotency-key" or (idempotency_header is not None and name.lower() == idempotency_header.lower())) and value is not None and bool(str(value).strip()) for name, value in request_headers.items())))
         auth_refreshed = False
         for attempt in range(self.max_retries + (2 if managed_auth else 1)):
             if self.before_request is not None:
@@ -830,7 +936,7 @@ class BaseClient:
                         response.close()
                 return events()
             except HTTPError as error:
-                if error.code == 401 and managed_auth and not auth_refreshed:
+                if error.code == 401 and managed_auth and can_retry and not auth_refreshed:
                     error.close()
                     auth_token = self.token_provider(auth_token)
                     request_headers["Authorization"] = f"Bearer {{auth_token}}"
@@ -873,7 +979,7 @@ class BaseClient:
 
 fn render_operation_chunk(api: &Api, operations: &[Operation], index: usize) -> String {
     let mut output = format!(
-        "{NOTICE}from __future__ import annotations\n\nfrom typing import Any, Iterator, cast\nfrom uuid import uuid4\nfrom urllib.parse import quote\n\nfrom .runtime import ApiError, _kaji_json_path, _kaji_with_body_value\nfrom .models import *\n\n\nclass Operations{index:03}:\n"
+        "{NOTICE}from __future__ import annotations\n\nfrom typing import Any, Iterator, cast\nfrom uuid import uuid4\nfrom urllib.parse import quote\n\nfrom .runtime import ApiError, _kaji_json_path, _kaji_with_body_value\nfrom .multipart import MultipartBody\nfrom .models import *\n\n\nclass Operations{index:03}:\n"
     );
     for operation in operations {
         output.push_str(&render_operation(api, operation));
@@ -1483,32 +1589,54 @@ fn operation_signature(operation: &Operation) -> (String, Vec<String>) {
 }
 
 fn request_body_type(operation: &Operation) -> String {
-    if operation_body_kind(operation) == "binary" {
-        return "bytes".into();
+    let kind = operation_body_kind(operation);
+    if kind == "multipart" {
+        return "MultipartBody | dict[str, Any]".into();
     }
-    operation
-        .request_body
-        .as_ref()
-        .and_then(|body| body.media_types.first())
-        .and_then(|media| media.schema.as_ref())
-        .map(python_type)
-        .unwrap_or_else(|| "Any".into())
+    let value = if kind == "binary" || kind == "binary_or_multipart" {
+        "bytes".into()
+    } else {
+        operation
+            .request_body
+            .as_ref()
+            .and_then(|body| {
+                body.media_types
+                    .iter()
+                    .find(|media| media.content_type != "multipart/form-data")
+            })
+            .and_then(|media| media.schema.as_ref())
+            .map(python_type)
+            .unwrap_or_else(|| "Any".into())
+    };
+    if kind.ends_with("_or_multipart") {
+        format!("{value} | MultipartBody")
+    } else {
+        value
+    }
 }
 
-/// The selected request encoding is an OpenAPI concern, while the generated
-/// Python client handles the concrete stdlib serialization. Unsupported
-/// representations use JSON encoding.
+/// Mixed-media inputs use the ordinary representation unless explicitly wrapped.
 fn operation_body_kind(operation: &Operation) -> &'static str {
-    operation
-        .request_body
-        .as_ref()
-        .and_then(|body| body.media_types.first())
-        .map(|media| match media.content_type.as_str() {
-            "application/x-www-form-urlencoded" => "form",
-            "application/octet-stream" => "binary",
-            _ => "json",
-        })
-        .unwrap_or("json")
+    let Some(body) = operation.request_body.as_ref() else {
+        return "json";
+    };
+    let multipart = body
+        .media_types
+        .iter()
+        .any(|media| media.content_type == "multipart/form-data");
+    let other = body
+        .media_types
+        .iter()
+        .find(|media| media.content_type != "multipart/form-data");
+    match (multipart, other.map(|media| media.content_type.as_str())) {
+        (true, None) => "multipart",
+        (true, Some("application/x-www-form-urlencoded")) => "form_or_multipart",
+        (true, Some("application/octet-stream")) => "binary_or_multipart",
+        (true, Some(_)) => "json_or_multipart",
+        (false, Some("application/x-www-form-urlencoded")) => "form",
+        (false, Some("application/octet-stream")) => "binary",
+        _ => "json",
+    }
 }
 
 fn is_error_status(status: &str) -> bool {
@@ -1613,7 +1741,7 @@ fn render_init(api: &Api, client_style: SdkClientStyle) -> String {
         String::new()
     };
     format!(
-        "{NOTICE}\nfrom .client import Client\nfrom .oauth import OAuthClientCredentials, AsyncOAuthClientCredentials\nfrom .response_validation import ResponseDecodeError\nfrom .runtime import {}\nfrom .models import *\n{resource_import}",
+        "{NOTICE}\nfrom .client import Client\nfrom .oauth import OAuthClientCredentials, AsyncOAuthClientCredentials\nfrom .multipart import MultipartBody, FilePart, JsonPart, RawJsonPart\nfrom .response_validation import ResponseDecodeError\nfrom .runtime import {}\nfrom .models import *\n{resource_import}",
         client_imports.join(", "),
     )
 }
@@ -1786,7 +1914,7 @@ fn render_resource_chunk(
         format!("({class}Part{:03})", index - 1)
     };
     let mut output = format!(
-        "{NOTICE}from __future__ import annotations\n\nfrom typing import Any, Iterator\n\n{}\n\nclass {class}Part{index:03}{parent}:\n    \"\"\"Bounded typed {attribute} resource operations.\"\"\"\n\n    def __init__(self, client: Any) -> None:\n        self._client = client\n",
+        "{NOTICE}from __future__ import annotations\n\nfrom typing import Any, Iterator\nfrom ..multipart import MultipartBody\n\n{}\n\nclass {class}Part{index:03}{parent}:\n    \"\"\"Bounded typed {attribute} resource operations.\"\"\"\n\n    def __init__(self, client: Any) -> None:\n        self._client = client\n",
         if index == 0 {
             String::new()
         } else {
@@ -3641,6 +3769,40 @@ asyncio.run(run())
         );
     }
     #[test]
+    fn native_forward_union_aliases_allow_recursive_model_imports() {
+        let mut source = api();
+        source.schemas.push(Schema::new(
+            "Event",
+            SchemaValue::new(SchemaKind::OneOf {
+                variants: vec![
+                    SchemaValue::reference("#/components/schemas/Contact"),
+                    SchemaValue::reference("#/components/schemas/EventList"),
+                ],
+            }),
+        ));
+        source.schemas.push(Schema::new(
+            "EventList",
+            SchemaValue::new(SchemaKind::Array {
+                items: Box::new(SchemaValue::reference("#/components/schemas/Event")),
+            }),
+        ));
+        let root = tempfile::tempdir().unwrap();
+        render_sdk(&source, "sdk", Some("probe-sdk"), SdkClientStyle::Flat)
+            .unwrap()
+            .write_to(root.path())
+            .unwrap();
+        let output = std::process::Command::new("python3")
+            .args(["-c", "from probe_sdk.models import Event, EventList, Contact; assert Event == 'Contact | EventList'; assert EventList == 'list[Event]'; assert Contact.from_dict({'id': 'one'}).id == 'one'"])
+            .env("PYTHONPATH", root.path().join("sdk/src"))
+            .output().unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
     fn native_nested_reference_arrays_decode_models_and_round_trip_wire() {
         let mut source = api();
         source.schemas.push(Schema::new(
@@ -3680,9 +3842,35 @@ assert [item.id for item in page.items]==['one','two'] and to_wire(page)==wire
             String::from_utf8_lossy(&output.stderr)
         );
     }
+    #[test]
+    fn native_call_scopes_preserve_headers_timeouts_and_shared_async_driver() {
+        let root = tempfile::tempdir().unwrap();
+        render_sdk_with_async(
+            &api(),
+            "sdk/python",
+            Some("example-api-sdk"),
+            SdkClientStyle::Flat,
+            true,
+        )
+        .unwrap()
+        .write_to(root.path())
+        .unwrap();
+        let output = Command::new("python3")
+            .args(["-c", include_str!("call_options_probe.py.txt")])
+            .env("PYTHONPATH", root.path().join("sdk/python/src"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 }
 
 mod bundled_middleware;
+mod multipart;
 mod package;
 pub use package::{
     OperationTests, PackageExt, Python, PythonModels, Roundtrips, Sdk, Settings, Webhooks,

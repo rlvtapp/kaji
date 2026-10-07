@@ -1,0 +1,46 @@
+import asyncio
+from email.message import Message
+from example_api_sdk import Client
+from example_api_sdk.async_client import AsyncClient
+import example_api_sdk.runtime as runtime
+seen=[]
+class Response:
+    status=200
+    def __init__(self):self.headers=Message();self.headers['Content-Type']='application/json'
+    def read(self):return b'{"id":"ok"}'
+    def __enter__(self):return self
+    def __exit__(self,*args):pass
+def send(request,*,timeout):
+    seen.append((dict((k.lower(),v) for k,v in request.header_items()),timeout));return Response()
+runtime.urlopen=send
+headers={'X-Scope':'scope'}
+client=Client('https://api.test',headers={'X-Base':'base'},timeout=30,max_retries=0)
+scoped=client.for_call(headers=headers,timeout=0.25);headers['X-Scope']='mutated'
+assert scoped.get_contact(contact_id='id').id=='ok'
+assert client.get_contact(contact_id='id').id=='ok'
+assert seen[0][0]['x-scope']=='scope' and seen[0][1]==0.25
+assert 'x-scope' not in seen[1][0] and seen[1][1]==30
+assert scoped.headers is not client.headers
+for value in [0,-1,float('nan'),float('inf')]:
+    try:client.for_call(timeout=value)
+    except ValueError:pass
+    else:raise AssertionError('invalid timeout')
+class AsyncResponse:
+    status_code=200
+    headers={'content-type':'application/json'}
+    async def aread(self):return b'{"id":"ok"}'
+    async def aclose(self):pass
+class Transport:
+    def __init__(self):self.seen=[];self.closed=False
+    def build_request(self,method,url,**options):return options
+    async def send(self,request,stream=False):self.seen.append(request);return AsyncResponse()
+    async def aclose(self):self.closed=True
+async def main():
+    transport=Transport();client=AsyncClient('https://api.test',http_client=transport,headers={'X-Base':'base'},timeout=30)
+    scoped=client.for_call(headers={'X-Scope':'scope'},timeout=0.5)
+    assert (await scoped.get_contact(contact_id='id')).id=='ok'
+    assert (await client.get_contact(contact_id='id')).id=='ok'
+    assert transport.seen[0]['timeout']==0.5 and transport.seen[0]['headers']['X-Scope']=='scope'
+    assert transport.seen[1]['timeout']==30 and 'X-Scope' not in transport.seen[1]['headers']
+    await scoped.aclose();assert not transport.closed
+asyncio.run(main())

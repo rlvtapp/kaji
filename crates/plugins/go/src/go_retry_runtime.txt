@@ -79,7 +79,7 @@ func normalizeRetry(config *RetryConfig) retryConfig {
 
 func canRetry(request *http.Request) bool {
 	switch request.Method {
-	case http.MethodGet, http.MethodPut, http.MethodDelete:
+	case http.MethodGet, http.MethodHead, http.MethodOptions, http.MethodTrace, "QUERY", http.MethodPut, http.MethodDelete:
 		return true
 	case http.MethodPost, http.MethodPatch:
 		return strings.TrimSpace(request.Header.Get("Idempotency-Key")) != ""

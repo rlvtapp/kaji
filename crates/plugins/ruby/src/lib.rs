@@ -146,7 +146,21 @@ fn style_guide(api: &Api, module: &str, style: SdkClientStyle) -> String {
 
 fn render_models(api: &Api, module: &str) -> String {
     let mut out = format!("{NOTICE}require \"json\"\n\nmodule {module}\n  module Models\n");
-    out.push_str(r#"    def self.decode_model_value(value, shape)
+    out.push_str(r#"    # Lazy aliases avoid evaluating forward constants or Ruby's unsupported class union operator.
+    def self.wire_alias(shape)
+      Class.new do
+        define_singleton_method(:wire_shape) { shape }
+        define_singleton_method(:from_hash) { |value| Models.decode_model_value(value, shape) }
+        if shape && shape[0] == 'ref'
+          define_singleton_method(:new) do |*args, **kwargs|
+            target = Models.const_get(shape[1], false)
+            raise ArgumentError, 'cyclic model alias' if target.equal?(self)
+            target.new(*args, **kwargs)
+          end
+        end
+      end
+    end
+    def self.decode_model_value(value, shape)
       return value if value.nil? || shape.nil?
       kind, inner = shape
       if kind == 'ref'
@@ -184,6 +198,15 @@ fn ruby_decode_shape(value: &SchemaValue) -> String {
             ))
         ),
         SchemaKind::Array { items } => format!("[\"array\", {}]", ruby_decode_shape(items)),
+        SchemaKind::OneOf { variants } | SchemaKind::AnyOf { variants } => format!(
+            "[\"union\", [{}]]",
+            variants
+                .iter()
+                .map(ruby_decode_shape)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        SchemaKind::Boolean => "[\"boolean\", nil]".into(),
         SchemaKind::Object { fields, .. } => format!(
             "[\"object\", {{{}}}]",
             fields
@@ -317,6 +340,16 @@ fn render_model(api: &Api, schema: &Schema) -> String {
             }
             out.push_str("        value\n      end\n    end\n\n");
         }
+        SchemaKind::Reference { .. }
+        | SchemaKind::OneOf { .. }
+        | SchemaKind::AnyOf { .. }
+        | SchemaKind::Boolean => {
+            let _ = writeln!(
+                out,
+                "    {name} = Models.wire_alias({})\n",
+                ruby_decode_shape(&schema.value)
+            );
+        }
         _ => {
             let ruby_type = ruby_type(&schema.value);
             let _ = writeln!(out, "    {name} = {ruby_type}\n");
@@ -334,7 +367,7 @@ fn render_client(api: &Api, module: &str, style: SdkClientStyle) -> String {
         &format!("require_relative \"response_validation\"\n\nmodule {module}\n"),
         1,
     );
-    out.push_str("  class KajiCancellationError < StandardError; end\n  class ApiError < StandardError\n    attr_reader :status, :body\n    def initialize(status, body)\n      @status = status\n      @body = body\n      super(\"API request failed with status #{status}\")\n    end\n  end\n\n  class Client\n    def initialize(base_url:, api_key: nil, bearer_token: nil, headers: {}, timeout: 30, transport: nil, middleware: [], validate_responses: false, max_attempts: 1, retry_base_delay: 0.5, retry_max_delay: 30, cancelled: nil, token_provider: nil)\n      @base_url = base_url.sub(%r{/$}, \"\")\n      @api_key = api_key\n      @bearer_token = bearer_token\n      @headers = headers.transform_keys(&:to_s)\n      @timeout = timeout\n      raise ArgumentError, \"invalid retry configuration\" unless max_attempts.is_a?(Integer) && max_attempts.between?(1, 10) && retry_base_delay.is_a?(Numeric) && retry_max_delay.is_a?(Numeric) && retry_base_delay.finite? && retry_max_delay.finite? && retry_base_delay >= 0 && retry_base_delay <= 60 && retry_max_delay >= 0 && retry_max_delay <= 60\n      @max_attempts = max_attempts\n      @retry_base_delay = retry_base_delay.to_f\n      @retry_max_delay = retry_max_delay.to_f\n      @cancelled = cancelled\n      @token_provider = token_provider\n      @transport = transport\n      @validate_responses = validate_responses\n      @middleware = middleware.to_a.dup.freeze\n      raise ArgumentError, \"middleware must be callable\" unless @middleware.all? { |item| item.respond_to?(:call) }\n");
+    out.push_str("  class KajiCancellationError < StandardError; end\n  class KajiTimeoutError < Timeout::Error; end\n  class ApiError < StandardError\n    attr_reader :status, :body\n    def initialize(status, body)\n      @status = status\n      @body = body\n      super(\"API request failed with status #{status}\")\n    end\n  end\n\n  class Client\n    def initialize(base_url:, api_key: nil, bearer_token: nil, headers: {}, timeout: 30, transport: nil, middleware: [], validate_responses: false, max_attempts: 1, retry_base_delay: 0.5, retry_max_delay: 30, cancelled: nil, token_provider: nil)\n      @base_url = base_url.sub(%r{/$}, \"\")\n      @api_key = api_key\n      @bearer_token = bearer_token\n      @headers = headers.transform_keys(&:to_s)\n      @timeout = timeout\n      raise ArgumentError, \"invalid retry configuration\" unless max_attempts.is_a?(Integer) && max_attempts.between?(1, 10) && retry_base_delay.is_a?(Numeric) && retry_max_delay.is_a?(Numeric) && retry_base_delay.finite? && retry_max_delay.finite? && retry_base_delay >= 0 && retry_base_delay <= 60 && retry_max_delay >= 0 && retry_max_delay <= 60\n      @max_attempts = max_attempts\n      @retry_base_delay = retry_base_delay.to_f\n      @retry_max_delay = retry_max_delay.to_f\n      @cancelled = cancelled\n      @token_provider = token_provider\n      @transport = transport\n      @validate_responses = validate_responses\n      @middleware = middleware.to_a.dup.freeze\n      raise ArgumentError, \"middleware must be callable\" unless @middleware.all? { |item| item.respond_to?(:call) }\n");
     if style == SdkClientStyle::Namespaced {
         for resource in resource_operations(api).keys() {
             let _ = writeln!(
@@ -378,6 +411,18 @@ fn render_client(api: &Api, module: &str, style: SdkClientStyle) -> String {
     out
 }
 
+fn ruby_request_options_name(operation: &Operation) -> String {
+    let mut name = "request_options".to_owned();
+    while operation
+        .parameters
+        .iter()
+        .any(|parameter| ruby_identifier(&parameter.name) == name)
+    {
+        name.insert(0, '_');
+    }
+    name
+}
+
 fn render_operation(api: &Api, operation: &Operation) -> String {
     let name = ruby_identifier(&snake_case(&operation.id));
     let mut args = Vec::new();
@@ -396,6 +441,8 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
             "body: nil".into()
         });
     }
+    let request_options_name = ruby_request_options_name(operation);
+    args.push(format!("{request_options_name}: nil"));
     let signature = args.join(", ");
     let mut out = format!(
         "    def {name}({signature})\n      path = {}\n",
@@ -468,7 +515,7 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
         .unwrap_or_else(|| "nil".into());
     let _ = writeln!(
         out,
-        "      result = request({}, path, query: query, headers: headers, body: {body}, response_schemas: ResponseShapes[\"operations\"][{}], idempotency_header: {retry_header})",
+        "      result = request({}, path, query: query, headers: headers, body: {body}, response_schemas: ResponseShapes[\"operations\"][{}], idempotency_header: {retry_header}, request_options: {request_options_name})",
         ruby_string(operation.method.as_str()),
         ruby_string(&operation.id)
     );
@@ -485,7 +532,7 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
 }
 
 fn render_runtime() -> String {
-    "    private\n\n    def request(method, path, query:, headers:, body:, response_schemas: nil, idempotency_header: nil)\n      uri = URI.join(@base_url + \"/\", path.sub(%r{^/}, \"\"))\n      uri.query = URI.encode_www_form(query) unless query.empty?\n      request = Net::HTTP.const_get(method.capitalize).new(uri)\n      merged_headers = @headers.merge(headers)\n      merged_headers[\"Authorization\"] ||= \"Bearer #{@bearer_token}\" if @bearer_token\n      merged_headers[\"X-API-Key\"] ||= @api_key if @api_key\n      merged_headers.each { |key, value| request[key] = value }\n      unless body.nil?\n        request[\"Content-Type\"] ||= \"application/json\"\n        request.body = body.is_a?(String) ? body : JSON.generate(body.respond_to?(:to_h) ? body.to_h : body)\n      end\n      handler = @transport || lambda do |native_request|\n        target = native_request.uri || uri\n        Net::HTTP.start(target.hostname, target.port, use_ssl: target.scheme == \"https\", open_timeout: @timeout, read_timeout: @timeout) { |http| http.request(native_request) }\n      end\n      @middleware.reverse_each do |item|\n        following = handler\n        handler = ->(native_request) { item.call(native_request, following) }\n      end\n      response = execute_with_retry(handler, request, idempotency_header)\n      shape = nil\n      if @validate_responses && response_schemas && response.code.to_i.between?(200, 299)\n        content_type = response.respond_to?(:[]) ? response[\"Content-Type\"] : nil\n        shape = ResponseValidation.response_shape(response_schemas, response.code.to_i, content_type)\n      end\n      if shape\n        return ResponseValidation.decode(response.body, shape, ResponseShapes[\"refs\"])\n      end\n      parsed = response.body.nil? || response.body.empty? ? nil : JSON.parse(response.body) rescue response.body\n      raise ApiError.new(response.code.to_i, parsed) unless response.code.to_i.between?(200, 299)\n      parsed\n    end\n".into()
+    include_str!("request_runtime.rb.txt").into()
 }
 
 fn render_resource(api: &Api, resource: &str, operations: &[&Operation]) -> String {
@@ -514,6 +561,12 @@ fn render_resource(api: &Api, resource: &str, operations: &[&Operation]) -> Stri
             }))
             .collect::<Vec<_>>()
             .join(", ");
+        let options_name = ruby_request_options_name(operation);
+        let args = if args.is_empty() {
+            format!("{options_name}: nil")
+        } else {
+            format!("{args}, {options_name}: nil")
+        };
         let forwards = operation
             .parameters
             .iter()
@@ -529,6 +582,11 @@ fn render_resource(api: &Api, resource: &str, operations: &[&Operation]) -> Stri
             )
             .collect::<Vec<_>>()
             .join(", ");
+        let forwards = if forwards.is_empty() {
+            format!("{options_name}: {options_name}")
+        } else {
+            format!("{forwards}, {options_name}: {options_name}")
+        };
         let _ = writeln!(
             out,
             "    def {name}({args})\n      @client.{name}({forwards})\n    end\n"
@@ -618,9 +676,15 @@ fn ruby_identifier(value: &str) -> String {
     } else {
         value
     };
+    if value.starts_with(|c: char| c.is_ascii_digit()) {
+        return format!("value_{value}");
+    }
     match value.as_str() {
-        "class" | "module" | "def" | "end" | "private" | "public" | "alias" | "begin"
-        | "ensure" | "return" | "self" | "nil" | "true" | "false" => format!("{value}_"),
+        "alias" | "and" | "begin" | "break" | "case" | "class" | "def" | "defined" | "do"
+        | "else" | "elsif" | "end" | "ensure" | "false" | "for" | "if" | "in" | "module"
+        | "next" | "nil" | "not" | "or" | "redo" | "rescue" | "retry" | "return" | "self"
+        | "super" | "then" | "true" | "undef" | "unless" | "until" | "when" | "while" | "yield"
+        | "private" | "public" => format!("{value}_"),
         _ => value,
     }
 }
@@ -687,6 +751,129 @@ mod tests {
     use super::*;
     use kaji_core::{Field, HttpMethod, OperationParameter, OperationResponse};
     use std::process::Command;
+
+    #[test]
+    fn native_per_call_headers_deadlines_cancellation_and_retries_are_isolated() {
+        let api = Api {
+            name: "Example".into(),
+            operations: vec![kaji_core::Operation {
+                id: "getProbe".into(),
+                method: HttpMethod::Get,
+                path: "/probe".into(),
+                parameters: vec![],
+                request_body: None,
+                responses: vec![],
+                security: vec![],
+                annotations: Default::default(),
+            }],
+            ..Default::default()
+        };
+        let root = tempfile::tempdir().unwrap();
+        render_sdk(
+            &api,
+            "ruby",
+            Some("example-sdk"),
+            SdkClientStyle::Namespaced,
+        )
+        .unwrap()
+        .write_to(root.path())
+        .unwrap();
+        std::fs::write(
+            root.path().join("ruby/probe.rb"),
+            include_str!("request_options_probe.rb.txt"),
+        )
+        .unwrap();
+        let output = Command::new("ruby")
+            .args(["-Ilib", "probe.rb"])
+            .current_dir(root.path().join("ruby"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
+    fn native_reserved_keyword_fields_preserve_wire_names() {
+        let keys = [
+            "next", "retry", "rescue", "yield", "super", "and", "or", "when", "break", "1st",
+        ];
+        let api = Api {
+            name: "Keyword".into(),
+            schemas: vec![Schema::new(
+                "Probe",
+                SchemaValue::new(SchemaKind::Object {
+                    fields: keys
+                        .iter()
+                        .map(|name| Field {
+                            name: (*name).into(),
+                            value: SchemaValue::new(SchemaKind::String),
+                            required: true,
+                            annotations: Default::default(),
+                        })
+                        .collect(),
+                    additional_properties: AdditionalProperties::Forbidden,
+                }),
+            )],
+            ..Default::default()
+        };
+        let mut api = api;
+        api.schemas.insert(
+            0,
+            Schema::new(
+                "ForwardAlias",
+                SchemaValue::reference("#/components/schemas/Probe"),
+            ),
+        );
+        api.schemas.insert(
+            0,
+            Schema::new(
+                "ForwardUnion",
+                SchemaValue::new(SchemaKind::OneOf {
+                    variants: vec![
+                        SchemaValue::reference("#/components/schemas/Probe"),
+                        SchemaValue::new(SchemaKind::Boolean),
+                    ],
+                }),
+            ),
+        );
+        api.schemas.insert(
+            0,
+            Schema::new("Flag", SchemaValue::new(SchemaKind::Boolean)),
+        );
+        let root = tempfile::tempdir().unwrap();
+        render_sdk(&api, "ruby", Some("keyword-sdk"), SdkClientStyle::Flat)
+            .unwrap()
+            .write_to(root.path())
+            .unwrap();
+        let output = Command::new("ruby")
+            .args([
+                "-Ilib",
+                "-rkeyword_sdk",
+                "-e",
+                r#"
+wire = %w[next retry rescue yield super and or when break 1st].to_h { |key| [key, "value:#{key}"] }
+model = KeywordSdk::Models::Probe.from_hash(wire)
+raise 'keyword model failed' unless model.next_ == 'value:next' && model.value_1st == 'value:1st'
+raise 'wire names changed' unless model.to_h == wire
+raise 'forward alias lost model decoding' unless KeywordSdk::Models::ForwardAlias.from_hash(wire).is_a?(KeywordSdk::Models::Probe)
+raise 'forward alias constructor failed' unless KeywordSdk::Models::ForwardAlias.new(next_: 'works').next_ == 'works'
+raise 'union wire value changed' unless KeywordSdk::Models::ForwardUnion.from_hash(wire) == wire && KeywordSdk::Models::ForwardUnion.from_hash(false) == false
+raise 'union shape missing' unless KeywordSdk::Models::ForwardUnion.wire_shape[0] == 'union'
+raise 'boolean alias failed' unless KeywordSdk::Models::Flag.from_hash(false) == false
+"#,
+            ])
+            .current_dir(root.path().join("ruby"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 
     #[test]
     fn author_bundled_middleware_is_registered_without_customer_configuration() {
@@ -889,7 +1076,7 @@ end
         assert!(
             tree.get("sdk/lib/example_api_sdk/client.rb")
                 .unwrap()
-                .contains("def get_contact(contact_id:)")
+                .contains("def get_contact(contact_id:, request_options: nil)")
         );
         let root = tempfile::tempdir().unwrap();
         tree.write_to(root.path()).unwrap();

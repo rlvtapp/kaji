@@ -7,12 +7,19 @@ import java.util.UUID;
 public interface MultipartBody {
  Encoded encode();
  record Encoded(String contentType, byte[] bytes) {}
+ record RawBody(String contentType,byte[] bytes) implements MultipartBody {public RawBody {contentType=mediaType(contentType);bytes=java.util.Objects.requireNonNull(bytes).clone();}@Override public byte[] bytes(){return bytes.clone();}@Override public Encoded encode(){return new Encoded(contentType,bytes());}}
  record FilePart(String filename,String contentType,byte[] bytes) {
   public FilePart {filename=headerParameter(filename);if(contentType==null||!contentType.matches("[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+"))throw new IllegalArgumentException("invalid multipart file media type");bytes=java.util.Objects.requireNonNull(bytes,"multipart bytes").clone();}
   @Override public byte[] bytes(){return bytes.clone();}
   public static FilePart bytes(byte[] bytes){return new FilePart("blob","application/octet-stream",bytes);}
  }
- record Part(String name,String value,FilePart file) {}
+ record Part(String name,String value,FilePart file,String contentType) {
+  public Part(String name,String value,FilePart file){this(name,value,file,null);}
+ }
+ static String json(Object value){try{return new com.fasterxml.jackson.databind.ObjectMapper().registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule()).writeValueAsString(value);}catch(Exception error){throw new IllegalArgumentException("Invalid multipart JSON part");}}
+ static String scalar(Object value){var node=new com.fasterxml.jackson.databind.ObjectMapper().registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule()).valueToTree(value);return node.isTextual()?node.asText():node.toString();}
+ static void addExtra(List<Part> parts,String name,Object value){if(value==null)return;headerParameter(name);if(value instanceof FilePart file){parts.add(new Part(name,null,file));return;}if(value instanceof Iterable<?> items){for(var item:items)addExtra(parts,name,item);return;}var node=new com.fasterxml.jackson.databind.ObjectMapper().registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule()).valueToTree(value);if(node.isArray()){for(var item:node)addExtra(parts,name,item);return;}boolean scalar=node.isValueNode();parts.add(new Part(name,scalar?scalar(value):json(value),null,scalar?"text/plain":"application/json"));}
+ static String mediaType(String value){if(value==null||!value.matches("[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+"))throw new IllegalArgumentException("invalid multipart media type");return value;}
  static String headerParameter(String value){if(value==null||value.isEmpty()||!value.chars().allMatch(c->c>=32&&c<=126&&c!=34&&c!=92))throw new IllegalArgumentException("invalid multipart header parameter");return value;}
  static String quote(String value){return headerParameter(value).replace("\\","\\\\").replace("\"","\\\"");}
  static Encoded encodeParts(List<Part> parts){
@@ -21,7 +28,7 @@ public interface MultipartBody {
    var header="--"+boundary+"\r\nContent-Disposition: form-data; name=\""+quote(part.name())+"\"";
    byte[] data;
    if(part.file()!=null){header+="; filename=\""+quote(part.file().filename())+"\"\r\nContent-Type: "+part.file().contentType();data=part.file().bytes();}
-   else{header+="\r\nContent-Type: text/plain; charset=utf-8";data=part.value().getBytes(StandardCharsets.UTF_8);}
+   else{header+="\r\nContent-Type: "+(part.contentType()==null?"text/plain; charset=utf-8":mediaType(part.contentType()));data=part.value().getBytes(StandardCharsets.UTF_8);}
    output.writeBytes((header+"\r\n\r\n").getBytes(StandardCharsets.UTF_8));output.writeBytes(data);output.writeBytes("\r\n".getBytes(StandardCharsets.US_ASCII));
   }
   output.writeBytes(("--"+boundary+"--\r\n").getBytes(StandardCharsets.US_ASCII));return new Encoded("multipart/form-data; boundary="+boundary,output.toByteArray());

@@ -1,0 +1,3 @@
+/// Native scoped request options. Headers are copied; timeouts apply to each HTTP attempt.
+#[derive(Clone, Debug, Default)]
+pub struct CallOptions { pub headers: reqwest::header::HeaderMap, pub timeout: Option<Duration> }

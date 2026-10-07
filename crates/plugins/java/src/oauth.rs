@@ -1,0 +1,85 @@
+use super::*;
+use kaji_core::engine::{Meta, Plugin, PluginContext};
+pub struct OAuth {
+    meta: Meta,
+}
+pub fn oauth() -> OAuth {
+    OAuth { meta: Meta::new() }
+}
+impl Plugin<Java> for OAuth {
+    fn kind(&self) -> &'static str {
+        "java-oauth"
+    }
+    fn meta(&self) -> &Meta {
+        &self.meta
+    }
+    fn generate(&self, cx: &mut PluginContext<'_, Java>) -> Result<()> {
+        let namespace = java_package_name(
+            cx.settings
+                .package_name
+                .as_deref()
+                .unwrap_or(&format!("io.kaji.{}", package_segment(&cx.api.name))),
+        );
+        for (name, source) in [
+            ("OAuthClientCredentials", include_str!("oauth.java.txt")),
+            ("OAuthHttpClient", include_str!("oauth_http.java.txt")),
+        ] {
+            cx.files.emit(GeneratedFile::new(
+                format!(
+                    "src/main/java/{}/{}.java",
+                    namespace.replace('.', "/"),
+                    name
+                ),
+                source.replace("__PACKAGE__", &namespace),
+            )?)?;
+        }
+        Ok(())
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    #[ignore = "requires native JDK17 and Maven"]
+    fn native_oauth_cache_singleflight_replay_origin_and_interruption() {
+        let api = Api {
+            name: "OAuth".into(),
+            ..Default::default()
+        };
+        let tree = kaji_core::engine::Packages::new()
+            .package(
+                crate::package("sdk")
+                    .name("io.kaji.oauth")
+                    .with(crate::sdk())
+                    .with(oauth()),
+            )
+            .generate(&api, None)
+            .unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        tree.write_to(dir.path()).unwrap();
+        let cwd = dir.path().join("sdk");
+        std::fs::create_dir_all(cwd.join("src/test/java/io/kaji/oauth")).unwrap();
+        std::fs::write(
+            cwd.join("src/test/java/io/kaji/oauth/OAuthProbe.java"),
+            include_str!("oauth_probe.java.txt"),
+        )
+        .unwrap();
+        let output = std::process::Command::new("mvn")
+            .args([
+                "-q",
+                "test-compile",
+                "org.codehaus.mojo:exec-maven-plugin:3.5.0:java",
+                "-Dexec.mainClass=io.kaji.oauth.OAuthProbe",
+                "-Dexec.classpathScope=test",
+            ])
+            .current_dir(cwd)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}

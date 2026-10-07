@@ -212,9 +212,10 @@ fn operation_test(
         _ => return Err("text/binary/SSE response needs a native smoke adapter".into()),
     };
     let has_input = !operation.parameters.is_empty() || operation.request_body.is_some();
+    let request = super::operation_request_name(api, operation);
     let input_setup = if has_input {
         format!(
-            "var input {name}Request;if err:=json.Unmarshal([]byte({}),&input);err!=nil{{t.Fatal(err)}}",
+            "var input {request};if err:=json.Unmarshal([]byte({}),&input);err!=nil{{t.Fatal(err)}}",
             quote(&serde_json::to_string(&Value::Object(input)).unwrap())
         )
     } else {

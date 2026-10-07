@@ -1,0 +1,7 @@
+    /** Returns an independent call scope, sharing the HTTP driver, middleware and hooks. */
+    public Client forCall(ClientCallOptions options) {
+        java.util.Objects.requireNonNull(options);
+        var headers = new java.util.TreeMap<String,String>(String.CASE_INSENSITIVE_ORDER);
+        headers.putAll(defaultHeaders);headers.putAll(options.headers());
+        return new Client(new ClientConfig(baseUrl,apiKey,apiKeyHeader,apiKeyPrefix,headers,httpClient,options.timeout()==null?timeout:options.timeout(),retry,hooks));
+    }

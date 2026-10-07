@@ -160,6 +160,8 @@ fn generate_typescript_sdk(
         "// This module is created once and never overwritten by Kaji.\n// Add stable helpers, exports, or product-specific wrappers here.\nexport {}\n",
     )?)?;
     for file in kaji_barrels(
+        &tree,
+        root,
         &sdk_api,
         profile.group_by_tag,
         client_name.as_deref(),
@@ -188,6 +190,8 @@ const BARREL_EXPORTS_PER_FILE: usize = 100;
 /// writes every symbol into `index.ts`: consumers retain normal root imports
 /// while TypeScript only has to parse small barrel modules at each level.
 fn kaji_barrels(
+    tree: &GeneratedTree,
+    root: &str,
     api: &Api,
     group_by_tag: bool,
     client_name: Option<&str>,
@@ -204,10 +208,25 @@ fn kaji_barrels(
     if let Some(client_name) = client_name {
         output.push_str(&format!("export {{ {client_name} }} from './client'\n"));
     }
-    output.push_str("export { createClient } from './.kaji/client'\nexport type { ClientConfig, ClientInstance, ClientMiddleware, MiddlewareNext, MiddlewareResponse } from './.kaji/client'\n");
+    output.push_str("export { createClient } from './.kaji/client'\nexport type { ClientConfig, ClientInstance, RequestOptions, ClientMiddleware, MiddlewareNext, MiddlewareResponse } from './.kaji/client'\n");
     output.push_str("export * from './models'\nexport * from './clients'\n");
     files.push(("index.ts".into(), output));
 
+    let schema_symbols: std::collections::BTreeSet<String> = api
+        .schemas
+        .iter()
+        .filter_map(|schema| {
+            tree.get(format!(
+                "{root}/models/{}.ts",
+                crate::models::schema_file_identifier(&schema.name)
+            ))
+        })
+        .flat_map(exported_symbols)
+        .collect();
+    let mut reserved_symbols: std::collections::BTreeSet<String> = tree
+        .iter()
+        .flat_map(|(_, source)| exported_symbols(source))
+        .collect();
     let schema_paths = api
         .schemas
         .iter()
@@ -250,14 +269,49 @@ fn kaji_barrels(
             .iter()
             .map(|operation| format!("./{}", operation_model_file_identifier(&operation.id)))
             .collect::<Vec<_>>();
-        let model_chunks = render_barrel_chunks(
-            &mut files,
-            &model_dir,
-            "operation_types",
-            &model_exports,
-            type_export,
-            None,
-        )?;
+        let mut model_chunks = Vec::new();
+        for (index, chunk) in model_exports.chunks(BARREL_EXPORTS_PER_FILE).enumerate() {
+            let name = format!("operation_types_{:04}", index + 1);
+            let mut contents = String::new();
+            for path in chunk {
+                let source = tree
+                    .get(format!(
+                        "{root}/{model_dir}/{}.ts",
+                        path.trim_start_matches("./")
+                    ))
+                    .expect("operation model emitted");
+                let symbols = exported_symbols(source);
+                if symbols.iter().any(|symbol| schema_symbols.contains(symbol)) {
+                    let exports = symbols
+                        .into_iter()
+                        .map(|symbol| {
+                            if !schema_symbols.contains(&symbol) {
+                                return symbol;
+                            }
+                            let base = format!("{symbol}Operation");
+                            let mut alias = base.clone();
+                            let mut suffix = 2;
+                            while !reserved_symbols.insert(alias.clone()) {
+                                alias = format!("{base}{suffix}");
+                                suffix += 1;
+                            }
+                            format!("{symbol} as {alias}")
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    let export = if export_runtime_types {
+                        "export"
+                    } else {
+                        "export type"
+                    };
+                    contents.push_str(&format!("{export} {{ {exports} }} from '{path}'\n"));
+                } else {
+                    contents.push_str(&format!("{type_export} '{path}'\n"));
+                }
+            }
+            files.push((format!("{model_dir}/{name}.ts"), contents));
+            model_chunks.push(name);
+        }
         let client_exports = operations
             .iter()
             .map(|operation| {
@@ -306,6 +360,19 @@ fn kaji_barrels(
     files.push(("models/index.ts".into(), model_index));
     files.push(("clients/index.ts".into(), client_index));
     Ok(files)
+}
+
+fn exported_symbols(source: &str) -> Vec<String> {
+    source
+        .lines()
+        .filter_map(|line| {
+            line.strip_prefix("export type ")
+                .or_else(|| line.strip_prefix("export const "))
+                .or_else(|| line.strip_prefix("export enum "))
+                .and_then(|rest| rest.split_whitespace().next())
+                .map(str::to_owned)
+        })
+        .collect()
 }
 
 fn render_barrel_chunks(
@@ -1167,7 +1234,7 @@ export interface Codec { encode?: (value: unknown) => BodyInit | undefined; deco
 export interface StandardSchema { readonly ['~standard']?: { readonly validate: (value: unknown) => { value?: unknown; issues?: readonly unknown[] } | Promise<{ value?: unknown; issues?: readonly unknown[] }> } }
 export type Validator = StandardSchema | ((value: unknown) => void | Promise<void>)
 export interface ClientValidation { request?: Validator; response?: Validator }
-export interface ClientConfig { baseUrl?: string; apiKey?: string; apiKeyHeader?: string; apiKeyPrefix?: string; auth?: SecurityCredentials; headers?: HeadersInit; fetch?: typeof globalThis.fetch; retry?: RetryConfig | false; middleware?: readonly ClientMiddleware[]; validateResponses?: boolean; hooks?: ClientHooks; codecs?: Record<string, Codec>; validation?: ClientValidation; multipartEncoder?: MultipartEncoder }
+export interface ClientConfig { timeoutMs?: number; baseUrl?: string; apiKey?: string; apiKeyHeader?: string; apiKeyPrefix?: string; auth?: SecurityCredentials; headers?: HeadersInit; fetch?: typeof globalThis.fetch; retry?: RetryConfig | false; middleware?: readonly ClientMiddleware[]; validateResponses?: boolean; hooks?: ClientHooks; codecs?: Record<string, Codec>; validation?: ClientValidation; multipartEncoder?: MultipartEncoder }
 export type ParameterStyle = { style?: 'simple' | 'label' | 'matrix' | 'form' | 'spaceDelimited' | 'pipeDelimited' | 'deepObject'; explode?: boolean }
 export type ParameterStyles = Partial<Record<'path' | 'query' | 'header' | 'cookie', Record<string, ParameterStyle>>>
 export type FormPartHeader = { required?: boolean; style?: ParameterStyle['style']; explode?: boolean; allowReserved?: boolean; schema_definition?: unknown; example_json?: string }
@@ -1176,9 +1243,9 @@ export type FormEncodings = Record<string, Record<string, FormEncoding>>
 export type FormPartHeaders = Record<string, Record<string, Record<string, unknown>>>
 export type MultipartPart = { name: string; value: string | Blob; contentType?: string; headers?: Record<string, string> }
 export interface MultipartEncoder { encode(parts: readonly MultipartPart[]): { body: BodyInit; contentType: string } }
-export type RequestConfig = { method: string; url: string; body?: unknown; path?: Record<string, unknown>; query?: Record<string, unknown>; headers?: HeadersInit | Record<string, unknown>; cookies?: Record<string, unknown>; throwOnError?: boolean; security?: SecurityDescriptor[][]; contentType?: { request?: string }; responseType?: 'stream'; styles?: ParameterStyles; formEncodings?: FormEncodings; formHeaders?: FormPartHeaders; validation?: ClientValidation; validateResponses?: boolean; paginationUrl?: string; idempotencyHeader?: string }
+export type RequestConfig = { requestOptions?: RequestOptions; method: string; url: string; body?: unknown; path?: Record<string, unknown>; query?: Record<string, unknown>; headers?: HeadersInit | Record<string, unknown>; cookies?: Record<string, unknown>; throwOnError?: boolean; security?: SecurityDescriptor[][]; contentType?: { request?: string }; responseType?: 'stream'; styles?: ParameterStyles; formEncodings?: FormEncodings; formHeaders?: FormPartHeaders; validation?: ClientValidation; validateResponses?: boolean; paginationUrl?: string; idempotencyHeader?: string }
 export type ClientInstance = (request: RequestConfig) => Promise<unknown>
-export type Options<T, ThrowOnError extends boolean> = T & { client?: ClientInstance; throwOnError?: ThrowOnError; formHeaders?: FormPartHeaders; validation?: ClientValidation }
+export type Options<T, ThrowOnError extends boolean> = T & { requestOptions?: RequestOptions; client?: ClientInstance; throwOnError?: ThrowOnError; formHeaders?: FormPartHeaders; validation?: ClientValidation }
 export type SuccessOf<T> = T[Extract<keyof T, `2${string}`>]
 type StatusCode<S> = S extends `${infer Code extends number}` ? Code : number
 type MediaResult<S, T> = T extends { contentType: infer ContentType extends string; data: infer Data } ? { status: StatusCode<S>; contentType: ContentType; data: Data; headers: Headers } : { status: StatusCode<S>; contentType: string; data: T; headers: Headers }
@@ -1305,7 +1372,7 @@ const applySecurity = (headers: Headers, query: Record<string, unknown>, securit
   }
 }
 const retryableStatus = (status: number) => status === 408 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504
-const retryAllowed = (method: string, headers: Headers, idempotencyHeader?: string) => ['GET', 'PUT', 'DELETE'].includes(method.toUpperCase()) || (['POST', 'PATCH'].includes(method.toUpperCase()) && (!!headers.get('idempotency-key')?.trim() || (!!idempotencyHeader && !!headers.get(idempotencyHeader)?.trim())))
+const retryAllowed = (method: string, headers: Headers, idempotencyHeader?: string) => ['GET', 'HEAD', 'OPTIONS', 'TRACE', 'QUERY', 'PUT', 'DELETE'].includes(method.toUpperCase()) || (['POST', 'PATCH'].includes(method.toUpperCase()) && (!!headers.get('idempotency-key')?.trim() || (!!idempotencyHeader && !!headers.get(idempotencyHeader)?.trim())))
 const retryHeaderDelay = (value: string | null | undefined, milliseconds: boolean): number | undefined => {
   if (!value) return undefined
   const trimmed = value.trim()
@@ -1317,20 +1384,23 @@ const retryHeaderDelay = (value: string | null | undefined, milliseconds: boolea
   const timestamp = Date.parse(trimmed)
   return Number.isFinite(timestamp) ? Math.max(0, timestamp - Date.now()) : undefined
 }
-const retryDelay = async (attempt: number, retry: RetryConfig, retryAfter?: string | null, retryAfterMilliseconds?: string | null) => {
+const retryDelay = async (attempt: number, retry: RetryConfig, retryAfter?: string | null, retryAfterMilliseconds?: string | null, signal?: AbortSignal) => {
   const fromHeader = retryHeaderDelay(retryAfterMilliseconds, true) ?? retryHeaderDelay(retryAfter, false)
   const exponential = (retry.initialDelayMs ?? 250) * 2 ** attempt
   const delay = Math.max(0, Math.min(fromHeader ?? exponential, retry.maxDelayMs ?? 8_000))
-  await new Promise<void>((resolve) => setTimeout(resolve, delay))
+  await requestRetryPause(delay, signal)
 }
-const createTransport = (config: ClientConfig = {}): ClientInstance => async ({ method, url, body, path, query, headers, cookies, throwOnError: _throwOnError, security, contentType, responseType, styles, formEncodings, formHeaders, validation, paginationUrl, idempotencyHeader }) => {
+const createTransport = (config: ClientConfig = {}): ClientInstance => async ({ method, url, body, path, query, headers, cookies, throwOnError: _throwOnError, security, contentType, responseType, styles, formEncodings, formHeaders, validation, paginationUrl, idempotencyHeader, requestOptions }) => {
+  const signal = requestOptions?.signal
   const mergedHeaders = new Headers(config.headers)
   if (config.apiKey) mergedHeaders.set(config.apiKeyHeader ?? 'authorization', `${config.apiKeyPrefix ?? 'Bearer '}${config.apiKey}`)
   new Headers(headers as HeadersInit).forEach((value, key) => mergedHeaders.set(key, value))
+  new Headers(requestOptions?.headers).forEach((value, key) => mergedHeaders.set(key, value))
   const resolvedQuery = { ...(query ?? {}) }
   applySecurity(mergedHeaders, resolvedQuery, security, config.auth)
   for (const [name, value] of Object.entries(cookies ?? {})) { if (value !== undefined && value !== null) mergedHeaders.append('cookie', `${name}=${serializePath(name, value, styleFor(styles, 'cookie', name))}`) }
   for (const [name, value] of Object.entries(headers as Record<string, unknown> ?? {})) if (styles?.header?.[name]) mergedHeaders.set(name, serializePath(name, value, styleFor(styles, 'header', name)))
+  new Headers(requestOptions?.headers).forEach((value, key) => mergedHeaders.set(key, value))
   const requestUrl = paginationUrl ? resolvePaginationUrl(paginationUrl, config.baseUrl) : `${config.baseUrl ?? ''}${resolveUrl(url, path, resolvedQuery, styles)}`
   const request = { method, url: requestUrl, body, path, query: resolvedQuery, headers: mergedHeaders }
   await validate(validation?.request ?? config.validation?.request, body)
@@ -1339,19 +1409,20 @@ const createTransport = (config: ClientConfig = {}): ClientInstance => async ({ 
   const maxAttempts = retry && retryAllowed(method, mergedHeaders, idempotencyHeader) ? Math.max(1, retry.maxAttempts ?? 3) : 1
   let response!: Response
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      signal?.throwIfAborted()
     try {
-      response = await (config.fetch ?? globalThis.fetch)(requestUrl, { method, body: requestBody(body, mergedHeaders, contentType?.request, config.codecs, formEncodings, formHeaders, config.multipartEncoder), headers: mergedHeaders })
+      response = await (config.fetch ?? globalThis.fetch)(requestUrl, { method, body: requestBody(body, mergedHeaders, contentType?.request, config.codecs, formEncodings, formHeaders, config.multipartEncoder), headers: mergedHeaders, signal })
       if (attempt + 1 < maxAttempts && retryableStatus(response.status)) {
-        await retryDelay(attempt, retry ?? {}, response.headers.get('retry-after'), response.headers.get('retry-after-ms'))
+        await retryDelay(attempt, retry ?? {}, response.headers.get('retry-after'), response.headers.get('retry-after-ms'), signal)
         continue
       }
       break
     } catch (error) {
-      if ((typeof error === 'object' && error !== null && 'name' in error && error.name === 'AbortError') || attempt + 1 >= maxAttempts) {
+      if (signal?.aborted || (typeof error === 'object' && error !== null && 'name' in error && error.name === 'AbortError') || attempt + 1 >= maxAttempts) {
         await config.hooks?.onError?.(error, request)
         throw error
       }
-      await retryDelay(attempt, retry ?? {})
+      await retryDelay(attempt, retry ?? {}, undefined, undefined, signal)
     }
   }
   await config.hooks?.afterResponse?.({ request, status: response.status, response: response.clone() })
@@ -1394,7 +1465,8 @@ export interface MiddlewareResponse { status: number; contentType: string; data:
 export const createClient = (config: ClientConfig = {}): ClientInstance => {
   const transport = createTransport(config)
   const middleware = [...(config.middleware ?? [])]
-  return (request) => {
+  return (request) => withRequestControl(request.requestOptions, config.timeoutMs, async (requestOptions) => {
+    request = { ...request, requestOptions }
     const dispatch = (index: number, current: RequestConfig): Promise<unknown> => {
       const handler = middleware[index]
       if (!handler) return transport(current)
@@ -1406,7 +1478,7 @@ export const createClient = (config: ClientConfig = {}): ClientInstance => {
       }))
     }
     return dispatch(0, { ...request, path: request.path ? { ...request.path } : undefined, query: request.query ? { ...request.query } : undefined, headers: (request.headers instanceof Headers ? new Headers(request.headers) : Array.isArray(request.headers) ? request.headers.map(([name, value]) => [name, value]) : request.headers ? { ...request.headers } : undefined) as RequestConfig['headers'], cookies: request.cookies ? { ...request.cookies } : undefined }).then((response) => (request.validateResponses ?? config.validateResponses) && request.responseType !== 'stream' && request.method.toUpperCase() !== 'HEAD' ? checkResponseEnvelope(response, request.jsonPlan) : response)
-  }
+  })
 }
 export const client = createClient()
 export const resolveResponse = <T extends { status: number; data: unknown }, ThrowOnError extends boolean>(promise: Promise<T>, throwOnError: ThrowOnError): Promise<ResponseResult<T, ThrowOnError>> => (throwOnError ? promise.then((result) => result.data) : promise) as Promise<ResponseResult<T, ThrowOnError>>
@@ -1426,7 +1498,7 @@ export interface Codec { encode?: (value: unknown) => unknown; decode?: (value: 
 export interface StandardSchema { readonly ['~standard']?: { readonly validate: (value: unknown) => { value?: unknown; issues?: readonly unknown[] } | Promise<{ value?: unknown; issues?: readonly unknown[] }> } }
 export type Validator = StandardSchema | ((value: unknown) => void | Promise<void>)
 export interface ClientValidation { request?: Validator; response?: Validator }
-export interface ClientConfig { baseUrl?: string; apiKey?: string; apiKeyHeader?: string; apiKeyPrefix?: string; auth?: SecurityCredentials; headers?: Record<string, string>; client?: AxiosInstance; retry?: RetryConfig | false; middleware?: readonly ClientMiddleware[]; validateResponses?: boolean; hooks?: ClientHooks; codecs?: Record<string, Codec>; validation?: ClientValidation; multipartEncoder?: MultipartEncoder }
+export interface ClientConfig { timeoutMs?: number; baseUrl?: string; apiKey?: string; apiKeyHeader?: string; apiKeyPrefix?: string; auth?: SecurityCredentials; headers?: Record<string, string>; client?: AxiosInstance; retry?: RetryConfig | false; middleware?: readonly ClientMiddleware[]; validateResponses?: boolean; hooks?: ClientHooks; codecs?: Record<string, Codec>; validation?: ClientValidation; multipartEncoder?: MultipartEncoder }
 export type ParameterStyle = { style?: 'simple' | 'label' | 'matrix' | 'form' | 'spaceDelimited' | 'pipeDelimited' | 'deepObject'; explode?: boolean }
 export type ParameterStyles = Partial<Record<'path' | 'query' | 'header' | 'cookie', Record<string, ParameterStyle>>>
 export type FormPartHeader = { required?: boolean; style?: ParameterStyle['style']; explode?: boolean; allowReserved?: boolean; schema_definition?: unknown; example_json?: string }
@@ -1435,9 +1507,9 @@ export type FormEncodings = Record<string, Record<string, FormEncoding>>
 export type FormPartHeaders = Record<string, Record<string, Record<string, unknown>>>
 export type MultipartPart = { name: string; value: unknown; contentType?: string; headers?: Record<string, string> }
 export interface MultipartEncoder { encode(parts: readonly MultipartPart[]): { body: unknown; contentType: string } }
-export type RequestConfig = { method: string; url: string; body?: unknown; path?: Record<string, unknown>; query?: Record<string, unknown>; headers?: Record<string, unknown>; cookies?: Record<string, unknown>; throwOnError?: boolean; security?: SecurityDescriptor[][]; contentType?: { request?: string }; responseType?: 'stream'; styles?: ParameterStyles; formEncodings?: FormEncodings; formHeaders?: FormPartHeaders; validation?: ClientValidation; validateResponses?: boolean; paginationUrl?: string; idempotencyHeader?: string }
+export type RequestConfig = { requestOptions?: RequestOptions; method: string; url: string; body?: unknown; path?: Record<string, unknown>; query?: Record<string, unknown>; headers?: Record<string, unknown>; cookies?: Record<string, unknown>; throwOnError?: boolean; security?: SecurityDescriptor[][]; contentType?: { request?: string }; responseType?: 'stream'; styles?: ParameterStyles; formEncodings?: FormEncodings; formHeaders?: FormPartHeaders; validation?: ClientValidation; validateResponses?: boolean; paginationUrl?: string; idempotencyHeader?: string }
 export type ClientInstance = (request: RequestConfig) => Promise<unknown>
-export type Options<T, ThrowOnError extends boolean> = T & { client?: ClientInstance; throwOnError?: ThrowOnError; formHeaders?: FormPartHeaders; validation?: ClientValidation }
+export type Options<T, ThrowOnError extends boolean> = T & { requestOptions?: RequestOptions; client?: ClientInstance; throwOnError?: ThrowOnError; formHeaders?: FormPartHeaders; validation?: ClientValidation }
 export type SuccessOf<T> = T[Extract<keyof T, `2${string}`>]
 type StatusCode<S> = S extends `${infer Code extends number}` ? Code : number
 type MediaResult<S, T> = T extends { contentType: infer ContentType extends string; data: infer Data } ? { status: StatusCode<S>; contentType: ContentType; data: Data; headers: Record<string, unknown> } : { status: StatusCode<S>; contentType: string; data: T; headers: Record<string, unknown> }
@@ -1537,7 +1609,7 @@ const applySecurity = (headers: Record<string, string>, query: Record<string, un
   }
 }
 const retryableStatus = (status: number) => status === 408 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504
-const retryAllowed = (method: string, headers: Record<string, string>, idempotencyHeader?: string) => ['GET', 'PUT', 'DELETE'].includes(method.toUpperCase()) || (['POST', 'PATCH'].includes(method.toUpperCase()) && Object.entries(headers).some(([key, value]) => !!value.trim() && (key.toLowerCase() === 'idempotency-key' || (!!idempotencyHeader && key.toLowerCase() === idempotencyHeader.toLowerCase()))))
+const retryAllowed = (method: string, headers: Record<string, string>, idempotencyHeader?: string) => ['GET', 'HEAD', 'OPTIONS', 'TRACE', 'QUERY', 'PUT', 'DELETE'].includes(method.toUpperCase()) || (['POST', 'PATCH'].includes(method.toUpperCase()) && Object.entries(headers).some(([key, value]) => !!value.trim() && (key.toLowerCase() === 'idempotency-key' || (!!idempotencyHeader && key.toLowerCase() === idempotencyHeader.toLowerCase()))))
 const retryHeaderDelay = (value: string | null | undefined, milliseconds: boolean): number | undefined => {
   if (!value) return undefined
   const trimmed = value.trim()
@@ -1549,21 +1621,24 @@ const retryHeaderDelay = (value: string | null | undefined, milliseconds: boolea
   const timestamp = Date.parse(trimmed)
   return Number.isFinite(timestamp) ? Math.max(0, timestamp - Date.now()) : undefined
 }
-const retryDelay = async (attempt: number, retry: RetryConfig, retryAfter?: string | null, retryAfterMilliseconds?: string | null) => {
+const retryDelay = async (attempt: number, retry: RetryConfig, retryAfter?: string | null, retryAfterMilliseconds?: string | null, signal?: AbortSignal) => {
   const fromHeader = retryHeaderDelay(retryAfterMilliseconds, true) ?? retryHeaderDelay(retryAfter, false)
   const exponential = (retry.initialDelayMs ?? 250) * 2 ** attempt
   const delay = Math.max(0, Math.min(fromHeader ?? exponential, retry.maxDelayMs ?? 8_000))
-  await new Promise<void>((resolve) => setTimeout(resolve, delay))
+  await requestRetryPause(delay, signal)
 }
 const createTransport = (config: ClientConfig = {}): ClientInstance => {
   const headers = { ...config.headers }
   if (config.apiKey) headers[config.apiKeyHeader ?? 'authorization'] = `${config.apiKeyPrefix ?? 'Bearer '}${config.apiKey}`
   const instance = config.client ?? axios.create({ baseURL: config.baseUrl, headers })
-  return async ({ method, url, body, path, query, headers: requestHeaders, cookies, throwOnError: _throwOnError, security, contentType, responseType, styles, formEncodings, formHeaders, validation, paginationUrl, idempotencyHeader }) => {
+  return async ({ method, url, body, path, query, headers: requestHeaders, cookies, throwOnError: _throwOnError, security, contentType, responseType, styles, formEncodings, formHeaders, validation, paginationUrl, idempotencyHeader, requestOptions }) => {
+    const signal = requestOptions?.signal
     const resolvedHeaders: Record<string, string> = { ...headers, ...Object.fromEntries(Object.entries(requestHeaders ?? {}).map(([key, value]) => [key, String(value)])) }
+    new Headers(requestOptions?.headers).forEach((value, key) => { resolvedHeaders[key] = value })
     const resolvedQuery = { ...(query ?? {}) }
     applySecurity(resolvedHeaders, resolvedQuery, security, config.auth)
     for (const [name, value] of Object.entries(requestHeaders ?? {})) if (styles?.header?.[name]) resolvedHeaders[name] = serializePath(name, value, styleFor(styles, 'header', name))
+    new Headers(requestOptions?.headers).forEach((value, key) => { resolvedHeaders[key] = value })
     if (contentType?.request && !contentType.request.startsWith('multipart/form-data')) resolvedHeaders['content-type'] ??= contentType.request
     if (cookies) resolvedHeaders.cookie = [...(resolvedHeaders.cookie ? [resolvedHeaders.cookie] : []), ...Object.entries(cookies).filter(([, value]) => value !== undefined && value !== null).map(([name, value]) => `${name}=${serializePath(name, value, styleFor(styles, 'cookie', name))}`)].join('; ')
     const requestUrl = paginationUrl ? resolvePaginationUrl(paginationUrl, config.baseUrl) : resolvePath(url, path, styles)
@@ -1573,22 +1648,23 @@ const createTransport = (config: ClientConfig = {}): ClientInstance => {
     const retry = config.retry === false ? undefined : config.retry ?? {}
     const maxAttempts = retry && retryAllowed(method, resolvedHeaders, idempotencyHeader) ? Math.max(1, retry.maxAttempts ?? 3) : 1
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      signal?.throwIfAborted()
       let response
       try {
-        response = await instance.request({ method, url: requestUrl, data: encodeBody(body, resolvedHeaders, contentType?.request, config.codecs, formEncodings, formHeaders, config.multipartEncoder), params: serializeQuery(resolvedQuery, styles), headers: resolvedHeaders, responseType: responseType === 'stream' ? 'stream' : undefined, validateStatus: () => true })
+        response = await instance.request({ method, url: requestUrl, data: encodeBody(body, resolvedHeaders, contentType?.request, config.codecs, formEncodings, formHeaders, config.multipartEncoder), params: serializeQuery(resolvedQuery, styles), headers: resolvedHeaders, signal, responseType: responseType === 'stream' ? 'stream' : undefined, validateStatus: () => true })
       } catch (error) {
         // validateStatus above keeps HTTP responses out of this branch. Only
         // adapter/network failures retry; a hook, codec, or validator failure
         // must remain a single terminal outcome.
-        if (axios.isCancel(error) || !axios.isAxiosError(error) || attempt + 1 >= maxAttempts) {
+        if (signal?.aborted || axios.isCancel(error) || !axios.isAxiosError(error) || attempt + 1 >= maxAttempts) {
           await config.hooks?.onError?.(error, request)
           throw error
         }
-        await retryDelay(attempt, retry ?? {})
+        await retryDelay(attempt, retry ?? {}, undefined, undefined, signal)
         continue
       }
       if (attempt + 1 < maxAttempts && retryableStatus(response.status)) {
-        await retryDelay(attempt, retry ?? {}, response.headers['retry-after'], response.headers['retry-after-ms'])
+        await retryDelay(attempt, retry ?? {}, response.headers['retry-after'], response.headers['retry-after-ms'], signal)
         continue
       }
       const mediaType = String(response.headers['content-type'] ?? '')
@@ -1636,7 +1712,8 @@ export interface MiddlewareResponse { status: number; contentType: string; data:
 export const createClient = (config: ClientConfig = {}): ClientInstance => {
   const transport = createTransport(config)
   const middleware = [...(config.middleware ?? [])]
-  return (request) => {
+  return (request) => withRequestControl(request.requestOptions, config.timeoutMs, async (requestOptions) => {
+    request = { ...request, requestOptions }
     const dispatch = (index: number, current: RequestConfig): Promise<unknown> => {
       const handler = middleware[index]
       if (!handler) return transport(current)
@@ -1648,7 +1725,7 @@ export const createClient = (config: ClientConfig = {}): ClientInstance => {
       }))
     }
     return dispatch(0, { ...request, path: request.path ? { ...request.path } : undefined, query: request.query ? { ...request.query } : undefined, headers: (request.headers instanceof Headers ? new Headers(request.headers) : Array.isArray(request.headers) ? request.headers.map(([name, value]) => [name, value]) : request.headers ? { ...request.headers } : undefined) as RequestConfig['headers'], cookies: request.cookies ? { ...request.cookies } : undefined }).then((response) => (request.validateResponses ?? config.validateResponses) && request.responseType !== 'stream' && request.method.toUpperCase() !== 'HEAD' ? checkResponseEnvelope(response, request.jsonPlan) : response)
-  }
+  })
 }
 export const client = createClient()
 export const resolveResponse = <T extends { status: number; data: unknown }, ThrowOnError extends boolean>(promise: Promise<T>, throwOnError: ThrowOnError): Promise<ResponseResult<T, ThrowOnError>> => (throwOnError ? promise.then((result) => result.data) : promise) as Promise<ResponseResult<T, ThrowOnError>>
@@ -1657,7 +1734,7 @@ export const resolveResponse = <T extends { status: number; data: unknown }, Thr
         }
     };
     let runtime = runtime.replace("paginationUrl?: string; idempotencyHeader?: string }", "paginationUrl?: string; idempotencyHeader?: string; jsonPlan?: JsonPlan }")
-        .replace("validation, paginationUrl, idempotencyHeader })", "validation, paginationUrl, idempotencyHeader, jsonPlan })")
+        .replace("validation, paginationUrl, idempotencyHeader, requestOptions })", "validation, paginationUrl, idempotencyHeader, requestOptions, jsonPlan })")
         .replace("formHeaders, config.multipartEncoder)", "formHeaders, config.multipartEncoder, jsonPlan)")
         .replace("multipartEncoder?: MultipartEncoder) =>", "multipartEncoder?: MultipartEncoder, jsonPlan?: JsonPlan) =>")
         .replace("return JSON.stringify(body)", "return jsonPlan?.lossless ? stringifyJson(body, requestJsonShape(jsonPlan, mediaType), jsonPlan.refs) : JSON.stringify(body)")
@@ -1672,7 +1749,12 @@ export const resolveResponse = <T extends { status: number; data: unknown }, Thr
         .replace("const stream = raw instanceof Response ? raw.body : raw as ReadableStream<Uint8Array> | null", "const stream = raw instanceof Response ? raw.body : (raw && typeof raw === 'object' && 'data' in raw ? raw.data : raw) as ReadableStream<Uint8Array> | null")
         .replace("await validate(validation?.response ?? config.validation?.response, data)", "if (responseType !== 'stream') await validate(validation?.response ?? config.validation?.response, data)")
         .replace("yield JSON.parse(data) as T", "yield (jsonPlan ? parseJson(data, responseJsonShape(jsonPlan, eventStreamStatus(raw), 'text/event-stream'), jsonPlan.refs) : JSON.parse(data)) as T");
-    format!("{}\n{}", runtime, crate::json::RUNTIME)
+    format!(
+        "{}\n{}\n{}",
+        runtime,
+        include_str!("request_control.ts.txt"),
+        crate::json::RUNTIME
+    )
 }
 
 fn render_security_types(security_schemes: Option<&SecuritySchemeCatalog>) -> String {
@@ -2066,7 +2148,7 @@ mod tests {
         assert!(runtime.contains("export interface StandardSchema"));
         assert!(runtime.contains("await config.hooks?.afterResponse?.({ request, status: response.status, headers: response.headers as Record<string, unknown>, data })\n        if (response.status >= 400"));
         assert!(runtime.contains(
-            "if (axios.isCancel(error) || !axios.isAxiosError(error) || attempt + 1 >= maxAttempts)"
+            "if (signal?.aborted || axios.isCancel(error) || !axios.isAxiosError(error) || attempt + 1 >= maxAttempts)"
         ));
         assert!(
             runtime.contains("validate(validation?.request ?? config.validation?.request, body)")

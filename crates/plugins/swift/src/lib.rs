@@ -9,6 +9,7 @@ mod webhooks;
 pub use webhooks::{Webhooks, webhooks};
 mod bundled;
 mod cursor_pagination;
+mod multipart;
 mod open_enums;
 mod package;
 mod pagination;
@@ -54,21 +55,8 @@ pub(crate) fn render_sdk(
         }
     }
 
-    for operation in &api.operations {
-        if operation.request_body.as_ref().is_some_and(|body| {
-            body.media_types.iter().any(|media| {
-                media
-                    .content_type
-                    .to_ascii_lowercase()
-                    .starts_with("multipart/")
-            })
-        }) {
-            bail!(
-                "Swift operation '{}' requires multipart encoding, which the native Swift SDK does not yet support",
-                operation.id
-            );
-        }
-    }
+    let prepared = multipart::prepare(api)?;
+    let api = &prepared;
     let root = normalized_root(output_dir)?;
     let package = package_name
         .filter(|value| !value.trim().is_empty())
@@ -77,6 +65,7 @@ pub(crate) fn render_sdk(
     let module = type_name(&package);
     let pagination = pagination::render(api)?;
     let mut tree = GeneratedTree::default();
+    multipart::emit(api, &root, &module, &mut tree)?;
     insert(
         &mut tree,
         &root,
@@ -748,22 +737,36 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
         );
     }
     if let Some(body) = &operation.request_body {
-        let content_type = body
-            .media_types
-            .first()
-            .map(|media| media.content_type.as_str())
-            .unwrap_or("application/json");
-        let _ = writeln!(
-            output,
-            "{indent}    request.setValue({content_type:?}, forHTTPHeaderField: \"Content-Type\")"
-        );
-        if body.required {
-            let _ = writeln!(output, "{indent}    request.httpBody = try encode(body)");
+        if multipart::body_type(operation).is_some() {
+            if body.required {
+                let _ = writeln!(
+                    output,
+                    "{indent}    let encoded = try body.kajiEncoded()\n{indent}    request.httpBody = encoded.body\n{indent}    request.setValue(encoded.contentType, forHTTPHeaderField: \"Content-Type\")"
+                );
+            } else {
+                let _ = writeln!(
+                    output,
+                    "{indent}    if let body {{\n{indent}        let encoded = try body.kajiEncoded()\n{indent}        request.httpBody = encoded.body\n{indent}        request.setValue(encoded.contentType, forHTTPHeaderField: \"Content-Type\")\n{indent}    }}"
+                );
+            }
         } else {
+            let content_type = body
+                .media_types
+                .first()
+                .map(|media| media.content_type.as_str())
+                .unwrap_or("application/json");
             let _ = writeln!(
                 output,
-                "{indent}    if let body {{ request.httpBody = try encode(body) }}"
+                "{indent}    request.setValue({content_type:?}, forHTTPHeaderField: \"Content-Type\")"
             );
+            if body.required {
+                let _ = writeln!(output, "{indent}    request.httpBody = try encode(body)");
+            } else {
+                let _ = writeln!(
+                    output,
+                    "{indent}    if let body {{ request.httpBody = try encode(body) }}"
+                );
+            }
         }
     }
     let retry_header = kaji_core::idempotency::resolved(operation)
@@ -868,18 +871,22 @@ fn operation_parameters(operation: &Operation) -> Vec<ParameterRender> {
         })
         .collect::<Vec<_>>();
     if let Some(body) = &operation.request_body {
-        let ty = body
-            .media_types
-            .iter()
-            .find(|media| {
-                media.content_type == "application/json" || media.content_type.ends_with("+json")
-            })
-            .or_else(|| body.media_types.first())
-            .and_then(|media| media.schema.as_ref())
-            .map_or_else(
-                || "JSONValue".to_owned(),
-                |schema| swift_type(schema, !body.required),
-            );
+        let ty = if let Some(ty) = multipart::body_type(operation) {
+            format!("{ty}{}", if body.required { "" } else { "?" })
+        } else {
+            body.media_types
+                .iter()
+                .find(|media| {
+                    media.content_type == "application/json"
+                        || media.content_type.ends_with("+json")
+                })
+                .or_else(|| body.media_types.first())
+                .and_then(|media| media.schema.as_ref())
+                .map_or_else(
+                    || "JSONValue".to_owned(),
+                    |schema| swift_type(schema, !body.required),
+                )
+        };
         values.push(ParameterRender {
             signature: format!("body: {ty}{}", if body.required { "" } else { " = nil" }),
         });
@@ -1455,7 +1462,7 @@ precondition(value["optional"] == nil)
             render_sdk(&api, "swift", None, SdkClientStyle::Flat)
                 .unwrap_err()
                 .to_string()
-                .contains("requires multipart encoding")
+                .contains("multipart root")
         );
     }
 

@@ -1,0 +1,11 @@
+# Native multipart uploads
+
+Multipart operations use a separate `<Operation>MultipartBody` value. JSON models keep their ordinary Codable types. Binary parts accept `KajiMultipartFile(data:filename:contentType:headers:)`; optional parts are omitted, false/zero/empty strings are preserved, and arrays produce repeated parts. Objects and object-array members use JSON encoding. Explicit `form` scalar-array encoding with `explode: false` uses one comma-separated part.
+
+If the operation declares JSON and multipart alternatives, select `<Operation>RequestBody.multipart(...)` or `.json(...)`. Each request selects its matching Content-Type; MIME requests include a fresh checked boundary.
+
+Use `partHeaders: [partName: [headerName: value]]` for declared per-part headers. Required header names are checked before transport execution. File-level headers also participate. Content-Type follows the field encoding or file's media type; Content-Disposition and Content-Length cannot be replaced through these dictionaries. Header names/values and ASCII filenames are checked to prevent MIME header injection. Customization still runs through the ordinary HTTP driver and middleware.
+
+The final body is buffered as Foundation Data. The default `maximumBodyBytes` is 32 MiB, including framing; explicit limits may be between 1 byte and 256 MiB. At most 1,024 parts are emitted. JSONEncoder may allocate temporary JSON data before the final body limit is checked. This API does not stream files from disk. Cancellation is checked while preparing parts and framing, and URLSession cancellation remains active during HTTP execution. POST/PATCH requests keep the normal idempotency retry guard.
+
+Generation rejects open/union/nullable roots, nullable parts, ambiguous JSON alternatives, unsupported styles, ambiguous media types and nested file arrays. JSON parts with explicit form-object serialization require an adapter. These diagnostics occur before SDK files are written. Generated operation smoke tests report multipart as requiring the dedicated MIME test adapter.

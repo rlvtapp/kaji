@@ -77,6 +77,7 @@ impl Contract for Client {
 pub struct Workspace {
     pub(crate) operation_tests: bool,
     pub(crate) webhooks: bool,
+    pub(crate) oauth: bool,
     pub(crate) models: bool,
     pub(crate) tests: bool,
     pub(crate) operations: bool,
@@ -120,6 +121,9 @@ impl Workspace {
             cx.files
                 .emit(GeneratedFile::new("src/client/mod.rs", runtime)?)?;
         }
+        if cx.workspace.oauth {
+            exports.push_str("pub mod oauth;\npub use oauth::*;\n");
+        }
         if cx.workspace.webhooks {
             exports.push_str("pub mod webhooks;\npub use webhooks::*;\n");
         }
@@ -137,7 +141,7 @@ impl Workspace {
             .unwrap_or_else(|| format!("{}-sdk", render::kebab_case(&cx.api.name)));
         cx.files.emit(GeneratedFile::new(
             "Cargo.toml",
-            render::render_cargo_toml_for_api(&name, cx.api) + if cx.workspace.webhooks { "hmac = \"0.12\"\nsha2 = \"0.10\"\nbase64 = \"0.22\"\n" } else { "" } + if cx.workspace.operation_tests { "\n[dev-dependencies]\nhttp = \"1\"\ntokio = { version = \"1\", features = [\"macros\", \"rt-multi-thread\"] }\n" } else { "" },
+            render::render_cargo_toml_for_api(&name, cx.api) + if cx.workspace.oauth && !cx.workspace.webhooks { "base64 = \"0.22\"\n" } else { "" } + if cx.workspace.webhooks { "hmac = \"0.12\"\nsha2 = \"0.10\"\nbase64 = \"0.22\"\n" } else { "" } + if cx.workspace.operation_tests { "\n[dev-dependencies]\nhttp = \"1\"\ntokio = { version = \"1\", features = [\"macros\", \"rt-multi-thread\"] }\n" } else { "" },
         )?)
     }
 }
@@ -249,6 +253,7 @@ impl Plugin<Rust> for Provider {
             crate_name: cx.settings.package_name.clone(),
             client_style: SdkClientStyle::Flat,
             operation_prefix: self.prefix.clone(),
+            open_unions: cx.settings.open_unions,
         };
         match self.part {
             Part::Models => {

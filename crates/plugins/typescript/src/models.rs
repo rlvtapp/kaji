@@ -120,9 +120,73 @@ impl ModelRenderer {
             {
                 collect_references(schema, &mut references);
             }
+            // Operation-local Body/Response aliases may shadow component imports.
+            let bare = render_operation(operation, options, "");
+            let locals: BTreeSet<String> = bare
+                .lines()
+                .filter_map(|line| {
+                    line.strip_prefix("export type ")
+                        .or_else(|| line.strip_prefix("export const "))
+                        .and_then(|rest| rest.split_whitespace().next())
+                        .map(str::to_owned)
+                })
+                .collect();
+            let mut reserved = locals.clone();
+            reserved.extend(
+                references
+                    .iter()
+                    .filter_map(|name| type_names.get(name))
+                    .cloned(),
+            );
+            let mut aliases = BTreeMap::new();
+            for reference in &references {
+                let name = type_names
+                    .get(reference)
+                    .cloned()
+                    .unwrap_or_else(|| type_identifier(reference));
+                if locals.contains(&name) {
+                    let base = format!("{name}Model");
+                    let mut alias = base.clone();
+                    let mut suffix = 2;
+                    while !reserved.insert(alias.clone()) {
+                        alias = format!("{base}{suffix}");
+                        suffix += 1;
+                    }
+                    aliases.insert(reference.clone(), alias);
+                }
+            }
             let notice =
                 reference_notice(&notice, &path, schema_output_dir, &references, &type_names)?;
-            GeneratedFile::new(path, render_operation(operation, options, &notice))
+            let mut aliased_notice = notice;
+            for (reference, alias) in &aliases {
+                let name = type_names
+                    .get(reference)
+                    .cloned()
+                    .unwrap_or_else(|| type_identifier(reference));
+                aliased_notice = aliased_notice.replace(
+                    &format!("import type {{ {name} }}"),
+                    &format!("import type {{ {name} as {alias} }}"),
+                );
+            }
+            let mut local_api = Api {
+                operations: vec![operation.clone()],
+                ..Default::default()
+            };
+            crate::json::visit_api(&mut local_api, &mut |value| {
+                if let Some(alias) = value
+                    .kind
+                    .reference_name()
+                    .and_then(|name| aliases.get(name))
+                {
+                    value
+                        .extensions
+                        .insert("x-kaji-type-name".into(), Value::String(alias.clone()));
+                }
+            });
+            GeneratedFile::new(
+                path,
+                render_operation(&local_api.operations[0], options, &aliased_notice),
+            )
         });
 
         schemas.chain(operations).collect()

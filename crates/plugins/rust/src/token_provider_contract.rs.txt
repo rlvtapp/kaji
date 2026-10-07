@@ -1,0 +1,9 @@
+#[derive(Debug, Clone, Copy)]
+pub struct TokenProviderError;
+impl std::fmt::Display for TokenProviderError { fn fmt(&self,f:&mut std::fmt::Formatter<'_>)->std::fmt::Result {f.write_str("OAuth token acquisition failed")} }
+impl std::error::Error for TokenProviderError {}
+pub type TokenProviderFuture<'a> = std::pin::Pin<Box<dyn std::future::Future<Output=Result<String, TokenProviderError>> + Send + 'a>>;
+pub trait BearerTokenProvider: Send + Sync {
+    fn token(&self) -> TokenProviderFuture<'_>;
+    fn invalidate(&self, rejected: &str);
+}

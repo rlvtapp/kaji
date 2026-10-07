@@ -1,0 +1,42 @@
+require 'example_sdk'
+Response = Struct.new(:code, :body) do
+  def [](name); name.downcase == 'content-type' ? 'application/json' : nil; end
+end
+seen = []
+provider = Object.new
+def provider.token(**); raise 'explicit Authorization overwritten'; end
+middleware = ->(request, following) { raise 'middleware missed override' unless request['X-Trace'] == 'call'; following.call(request) }
+transport = ->(request) { seen << request; Response.new('200', '{}') }
+client = ExampleSdk::Client.new(base_url: 'http://example.invalid', headers: {'X-Trace'=>'global'}, middleware: [middleware], transport: transport, token_provider: provider)
+options = {headers: {'X-Trace'=>'call','authorization'=>'Bearer own'}, timeout: 0.2}
+client.get_probe(request_options: options)
+raise 'caller mutated' unless options == {headers: {'X-Trace'=>'call','authorization'=>'Bearer own'}, timeout: 0.2}
+raise 'wire headers lost' unless seen.last['Authorization'] == 'Bearer own'
+started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+stalled = ExampleSdk::Client.new(base_url: 'http://example.invalid', transport: ->(_) { sleep 2; Response.new('200','{}') }, max_attempts: 3)
+begin
+  stalled.get_probe(request_options: {timeout: 0.03})
+  raise 'timeout did not terminate request'
+rescue ExampleSdk::KajiTimeoutError
+  raise 'timeout scope too long' if Process.clock_gettime(Process::CLOCK_MONOTONIC) - started > 0.5
+end
+calls = 0
+retrying = ExampleSdk::Client.new(base_url: 'http://example.invalid', transport: ->(_) { calls += 1; Response.new('503','{}') }, max_attempts: 3, retry_base_delay: 1)
+begin
+  retrying.get_probe(request_options: {timeout: 0.03})
+  raise 'retry deadline reset'
+rescue ExampleSdk::KajiTimeoutError
+  raise 'retried after deadline' unless calls == 1
+end
+begin
+  retrying.get_probe(request_options: {cancelled: -> {true}})
+  raise 'cancellation ignored'
+rescue ExampleSdk::KajiCancellationError
+  raise 'cancelled call reached driver' unless calls == 1
+end
+fast = ExampleSdk::Client.new(base_url: 'http://example.invalid', timeout: 1, transport: ->(_) { sleep 0.04; Response.new('200','{}') })
+failed = Thread.new do
+  begin; fast.get_probe(request_options: {timeout: 0.01}); raise 'missing timeout'; rescue ExampleSdk::KajiTimeoutError; true; end
+end
+passed = Thread.new { fast.get_probe(request_options: {timeout: 0.3}) }
+raise 'concurrent controls leaked' unless failed.value && passed.value == {}

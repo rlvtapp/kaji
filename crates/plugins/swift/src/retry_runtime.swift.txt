@@ -11,7 +11,7 @@
     private func executeWithRetry(_ request: URLRequest, idempotencyHeader: String?) async throws -> (Data,URLResponse) {
         let method=request.httpMethod?.uppercased() ?? "GET"
         let key=request.value(forHTTPHeaderField:idempotencyHeader ?? "Idempotency-Key")?.trimmingCharacters(in:.whitespacesAndNewlines) ?? ""
-        let safe=["GET","HEAD","OPTIONS","PUT","DELETE"].contains(method) || (["POST","PATCH"].contains(method) && !key.isEmpty)
+        let safe=["GET","HEAD","OPTIONS","TRACE","QUERY","PUT","DELETE"].contains(method) || (["POST","PATCH"].contains(method) && !key.isEmpty)
         var attempt=0
         while true {
             try Task.checkCancellation();attempt+=1;hooks.forEach{$0.willSend(request)}

@@ -1,0 +1,2 @@
+        using var deadline = _callTimeout is TimeSpan limit ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken) : null;
+        if (deadline is not null) { deadline.CancelAfter(_callTimeout!.Value); cancellationToken = deadline.Token; }
