@@ -1,0 +1,91 @@
+openapi: 3.1.0
+info:
+  title: Widgets
+  version: 1.0.0
+servers:
+  - url: https://api.example.test
+security:
+  - bearer: []
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+  schemas:
+    CreateWidget:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: {type: string}
+        enabled: {type: boolean}
+    UpdateWidget:
+      type: object
+      additionalProperties: false
+      properties:
+        name: {type: string}
+        enabled: {type: boolean}
+    Widget:
+      type: object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id: {type: string, readOnly: true}
+        name: {type: string}
+        enabled: {type: boolean}
+paths:
+  /widgets:
+    post:
+      operationId: createWidget
+      tags: [Widgets]
+      summary: Create a widget
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateWidget'}
+            example: {name: Example, enabled: true}
+      responses:
+        '201':
+          description: Created widget
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Widget'}
+              example: {id: w1, name: Example, enabled: true}
+  /widgets/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: {type: string}
+    get:
+      operationId: getWidget
+      tags: [Widgets]
+      responses:
+        '200':
+          description: Widget
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Widget'}
+              example: {id: w1, name: Example, enabled: true}
+        '404': {description: Widget absent}
+    patch:
+      operationId: updateWidget
+      tags: [Widgets]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateWidget'}
+      responses:
+        '200':
+          description: Updated widget
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Widget'}
+    delete:
+      operationId: deleteWidget
+      tags: [Widgets]
+      responses:
+        '204': {description: Widget deleted}
+        '404': {description: Widget already absent}

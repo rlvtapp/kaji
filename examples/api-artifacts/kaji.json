@@ -1,0 +1,51 @@
+{
+  "$schema": "../../schemas/v1/kaji.schema.json",
+  "openapi": {
+    "input": "openapi.yaml",
+    "name": "Widgets",
+    "version": "1.0.0"
+  },
+  "output": {
+    "path": "generated"
+  },
+  "packages": [
+    {
+      "language": "postman",
+      "path": "postman",
+      "plugins": [
+        {
+          "name": "collection",
+          "output": "widgets.postman_collection.json",
+          "strict": true
+        },
+        {
+          "name": "environment",
+          "output": "widgets.postman_environment.json"
+        }
+      ]
+    },
+    {
+      "language": "terraform",
+      "path": "terraform",
+      "plugins": [
+        {
+          "name": "provider",
+          "provider_name": "widgets",
+          "module": "example.com/terraform-provider-widgets",
+          "infer": false,
+          "resources": [
+            {
+              "name": "widget",
+              "create": "createWidget",
+              "read": "getWidget",
+              "update": "updateWidget",
+              "delete": "deleteWidget",
+              "id_parameter": "id",
+              "id_field": "id"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

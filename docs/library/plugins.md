@@ -10,7 +10,7 @@ use kaji::{prelude::*, ts};
 let package = ts::package("typescript")
     .name("@acme/pet-store")
     .with(ts::sdk().fetch())
-    .with(ts::zod().output("validation"));
+    .with(ts::composition::zod().output("validation"));
 ```
 
 Use one package per transport and layout. Package configuration owns names and

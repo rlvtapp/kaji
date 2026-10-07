@@ -62,3 +62,10 @@ package it publishes. It needs no `NPM_TOKEN`; only its final publish job has
 The tag version must exactly match `packages/cli/package.json`. Publish a
 release only after the tag is protected and the trusted-publisher relationship
 has been configured in npm.
+
+## Generated SDK repositories
+
+Optional `kaji sdk init` scaffolds build/test and release workflows from
+plugin-emitted package metadata. See [SDK automation](sdk-automation.md) for
+independent versions, diff sizing, custom registries, repository synchronization,
+and required repository setup. Review with `--dry-run` before writing the files.

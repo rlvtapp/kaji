@@ -1,0 +1,63 @@
+{
+  "$schema": "../../schemas/v1/kaji.schema.json",
+  "openapi": {
+    "input": "openapi.yaml",
+    "name": "Notes",
+    "version": "1.0.0"
+  },
+  "output": {
+    "path": "generated"
+  },
+  "packages": [
+    {
+      "language": "typescript",
+      "path": "typescript",
+      "name": "@example/notes",
+      "client_style": "flat",
+      "plugins": [
+        {
+          "name": "sdk",
+          "transport": "fetch",
+          "client_name": "Notes"
+        }
+      ],
+      "middleware": [
+        {
+          "source": "middleware/author-policy.ts",
+          "path": "middleware/author-policy.ts",
+          "symbol": "authorPolicy"
+        }
+      ],
+      "customizations": [
+        {
+          "mode": "add",
+          "source": "tests/verify.cjs",
+          "path": "tests/verify.cjs"
+        }
+      ],
+      "release": {
+        "build": [
+          {
+            "program": "npm",
+            "args": [
+              "run",
+              "build"
+            ]
+          }
+        ],
+        "test": [
+          {
+            "program": "node",
+            "args": [
+              "tests/verify.cjs"
+            ]
+          }
+        ],
+        "publisher": {
+          "registry": "npm",
+          "release_type": "node"
+        }
+      }
+    }
+  ]
+}

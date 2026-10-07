@@ -1,0 +1,29 @@
+openapi: 3.1.0
+info:
+  title: Notes
+  version: 1.0.0
+servers:
+  - url: https://api.example.com
+paths:
+  /notes:
+    get:
+      operationId: listNotes
+      responses:
+        '200':
+          description: Available notes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Note'
+components:
+  schemas:
+    Note:
+      type: object
+      required: [id, title]
+      properties:
+        id:
+          type: string
+        title:
+          type: string

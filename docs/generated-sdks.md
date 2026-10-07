@@ -1,278 +1,245 @@
-# Generated SDKs
+# Use a generated SDK
 
-Every selected target is emitted as an isolated package. This lets a release
-publish, version, and test language SDKs independently while all of them come
-from the same API contract.
+A generated SDK is a normal package in its language ecosystem: install it, import its public client, configure your API origin and call an operation from your contract. Any middleware bundled by the SDK author is already enabled. Application developers only configure extra middleware when their application needs additional behavior.
 
-## Choose: raw API building blocks or a full SDK
+If you are generating and distributing these packages, start with [SDK customization](sdk-customization.md) and [SDK publishing](sdk-publishing.md). This guide describes the resulting customer experience and can inform the documentation you distribute with an SDK.
 
-This is the most important output decision.
+## Start with a real contract
 
-**Raw output** gives your application the generated types and one function per
-OpenAPI operation. It is best when your app already has an HTTP client,
-dependency-injection setup, or API wrapper convention and only wants Kaji to
-own the contract types and request serialization.
+The examples below use [the Notes contract](../examples/cli-basic/openapi.yaml), which declares:
 
-```rust
-use kaji::{prelude::*, ts, generate};
+- `GET /notes/{noteId}`, operation ID `getNote`;
+- a required string path parameter `noteId`;
+- a JSON `Note` response containing `id` and `body`.
 
-let tree = generate(
-    &api,
-    ProfileSet::new("sdk")
-        .package(ts::package("typescript").with(ts::sdk().fetch().raw())),
-)?;
+Generate flat clients so all three examples use the direct operation method:
+
+```sh
+kaji generate examples/cli-basic/openapi.yaml \
+  --output generated --language typescript,python,go \
+  --name Notes --client-style flat --typescript-client-name Notes
 ```
 
-The TypeScript package exports operation functions and types:
+This produces the TypeScript package `@kaji/notes-fetch`, the Python import package `notes_sdk`, and the Go module `notes`. The package names here are from this command, not names you should assume for a different SDK. Inspect your generated manifest and public entry point when adapting the examples.
+
+Run a Notes API at `http://localhost:4010`, or use Kaji's contract mock in another terminal:
+
+```sh
+kaji mock serve examples/cli-basic/openapi.yaml --port 4010
+```
+
+The Notes contract does not require credentials. The configuration sections below explain how to add them for APIs that do.
+
+## TypeScript: install, call and inspect HTTP results
+
+These examples assume a TypeScript application with a bundler that resolves
+extensionless imports. The generated package uses ESM with bundler module
+resolution; direct Node ESM use may need an additional build adapter. The
+[bundled middleware example](../examples/bundled-middleware/README.md) shows an
+isolated native test build without changing the published package format.
+
+Build the package before installing it in your application:
+
+```sh
+cd generated/typescript
+npm install
+npm run build
+# From your application directory:
+npm install /absolute/path/to/generated/typescript
+```
+
+The package root exports `Notes`, the raw `getNote` function, models and `createClient`. Here is a complete application module:
 
 ```ts
-import { getContact, type Contact } from "@relevate/email-api";
+import { Notes } from '@kaji/notes-fetch'
 
-const contact: Contact = await getContact({
-  client: myConfiguredClient,
-  path: { contactId: "contact_123" },
-});
+const client = new Notes({ baseUrl: 'http://localhost:4010' })
+const result = await client.getNote({
+  path: { noteId: 'note_123' },
+  throwOnError: false,
+})
+
+if (result.status === 200) {
+  console.log(result.data.id, result.data.body)
+}
+console.log('HTTP status:', result.status)
 ```
 
-There is no generated `new RelevateEmail(...)` class in raw mode. You supply
-an optional configured transport client to each operation, or use the generated
-default transport and per-request options. The typed request and
-response definitions are still generated normally.
+Without `throwOnError: false`, a successful ordinary operation resolves to its decoded body and a non-success response throws. The envelope form keeps HTTP status, content type, headers and decoded data available. The TypeScript envelope union describes declared statuses; an undeclared server response can fall outside that static contract. Transport, decoding and validation failures can still reject the promise; handle those with your application's usual `try/catch`.
 
-**Full SDK output** adds the product-style instantiated client on top of the
-same raw functions and types. It is the default for TypeScript and is the
-normal shape for native-language targets.
-
-```rust
-use kaji::{prelude::*, ts, generate};
-
-let tree = generate(
-    &api,
-    ProfileSet::new("sdk")
-        .package(ts::package("typescript")
-            .with(ts::sdk().fetch().client_name("RelevateEmail"))),
-)?;
-```
+The raw function uses the same request shape:
 
 ```ts
-import { RelevateEmail } from "@relevate/email-sdk";
+import { createClient, getNote } from '@kaji/notes-fetch'
 
-const client = new RelevateEmail({
-  baseUrl: "https://api.relevate.example",
-  apiKey: process.env.RELEVATE_API_KEY,
-});
-
-const contact = await client.contacts.get({ path: { contactId: "contact_123" } });
+const transport = createClient({ baseUrl: 'http://localhost:4010' })
+const note = await getNote({ client: transport, path: { noteId: 'note_123' } })
+console.log(note.body)
 ```
 
-The full client owns its configured base URL, credentials, retries, hooks, and
-operation binding. It is the ergonomic choice for most SDK consumers.
+For a generated full client, `client.transport` exposes that configured transport to framework helpers or raw functions. Raw-only generation omits the product client class; generate it with `ts::sdk().fetch().raw()` or the CLI's `--typescript-surface raw`.
 
-TypeScript full clients also expose their configured `transport`. This is useful
-when a generated framework helper calls the raw operation functions: pass
-`client: sdk.transport`, rather than constructing a second HTTP client.
+Configure `apiKey`, `apiKeyHeader`, `apiKeyPrefix`, `headers` or the runtime's structured `auth` credentials as appropriate to the contract. Fetch accepts a custom `fetch` implementation; Axios accepts its native instance through `client`. Fetch timeout/cancellation belongs to the injected Fetch implementation rather than an invented `ClientConfig.timeout` field. For example:
 
 ```ts
-const sdk = new RelevateEmail({ baseUrl: "https://api.relevate.example" });
-const query = useGetContact({ client: sdk.transport, path: { contactId: "contact_123" } });
-```
+import { Notes } from '@kaji/notes-fetch'
 
-Path, query, header, and body values use the generated operation's grouped
-options rather than a completed URL. Ordinary TypeScript operations resolve to
-the decoded success body. Pass `throwOnError: false` when the caller needs the
-typed status/result envelope for declared success and error responses. Streaming
-operations have a separate stream result surface.
-
-### TypeScript transport and validation controls
-
-The Fetch and Axios runtimes preserve declared parameter styles for path,
-query, header, and cookie values, select the operation's request media type,
-and return a status-discriminated response envelope internally. By default,
-non-2xx responses throw `ApiError`; pass `throwOnError: false` when the caller
-needs to inspect declared success and error responses by `status`.
-
-Each result also exposes the actual `contentType`. When a response status has
-multiple declared representations, `contentType` narrows `data` to that media
-type's generated shape. Multipart and urlencoded bodies additionally honor
-OpenAPI's per-property `encoding` settings for content type, style, explode,
-and reserved characters.
-
-Use `codecs` for representations the runtime cannot safely parse by itself,
-such as XML or YAML. A codec may supply `encode` and/or `decode` and is keyed
-by media type (with `*/*` as a fallback):
-
-```ts
-const client = createClient({
-  codecs: {
-    'application/xml': { decode: xml => parseXml(xml), encode: value => toXml(value) },
+const client = new Notes({
+  baseUrl: 'http://localhost:4010',
+  fetch: async (input, init) => {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 5000)
+    try {
+      return await fetch(input, { ...init, signal: controller.signal })
+    } finally {
+      clearTimeout(timer)
+    }
   },
+  retry: { maxAttempts: 1 },
 })
 ```
 
-Runtime validation is opt-in and uses the Standard Schema V1 interface, so it
-does not require a direct Zod dependency. Generate `zod.ts` alongside the SDK,
-then install its per-operation request or response validator globally or for a
-single call:
+That timer bounds each Fetch attempt through response headers. It does not bound subsequent stream consumption or the entire logical operation.
 
-```ts
-import { kajiOperationSchemas } from './zod'
+## Python: native models and optional async I/O
 
-const client = createClient({
-  validation: { response: kajiOperationSchemas.getContact.responses['200']['application/json'] },
-})
-```
-Names and exact request fields in these examples depend on your OpenAPI document.
+Install the generated package into your application's environment:
 
-### Full-client layouts
-
-The full client can be namespaced or flat:
-
-```text
-namespaced (default)  client.contacts.get({ path: { contactId } })
-flat                  client.getContact({ path: { contactId } })
+```sh
+python -m pip install ./generated/python
 ```
 
-Select this with `language::sdk().flat()` or `.namespaced()` for every maintained
-SDK language, including Rust. Shared defaults can use
-`Common::default().client_style(SdkClientStyle::Flat)`.
-In the CLI, use `--client-style flat`; TypeScript raw output uses
-`--typescript-surface raw`.
+The package root exports `Client`, `ApiError`, generated models and OAuth helpers:
 
-## Public shapes
+```python
+from notes_sdk import ApiError, Client
 
-The default is resource namespaces. Kaji chooses the first OpenAPI tag; if an
-operation has no tag, it uses a stable meaningful path segment.
-
-```text
-namespaced: client.contacts.list(...)
-flat:       client.listContacts(...)
-raw TS:     listContacts({ client, ... })
+client = Client("http://localhost:4010", timeout=5.0, max_retries=0)
+try:
+    note = client.get_note(note_id="note_123")
+    print(note.id, note.body)
+except ApiError as error:
+    print("HTTP response:", error.status_code, error.body)
 ```
 
-Direct operation APIs remain available in TypeScript even when the class
-client is generated. Native targets retain their direct methods alongside
-namespaces for callers who prefer direct operation access.
+A declared HTTP error may use a more specific generated subclass. Transport errors retain their native exception behavior. JSON success objects become generated dataclasses; use `Model.from_dict(...)` to decode a dictionary and `to_wire(model)` from the package's `runtime` module to recover the wire representation. Unknown properties and missing-versus-null handling follow the generated schema, rather than treating every object as closed.
 
-## Language packages
+Use `bearer_token=...`, `api_key=...` or `headers={...}` for static credentials. `token_provider` receives `None` on initial lookup and a rejected token when the SDK requests refresh. `OAuthClientCredentials` provides coordinated caching for client-credentials authentication; a managed 401 refresh is bounded to one replay. Explicit Authorization headers and a static bearer token take precedence over a provider.
 
-| Target | Package highlights | Consumer requirements |
+Async output is an author choice: enable Python's SDK plugin `async_client` option, then install the generated optional dependency:
+
+```sh
+python -m pip install './generated/python[async]'
+```
+
+The async package exports `AsyncClient` and uses native httpx I/O with the same models:
+
+```python
+import asyncio
+from notes_sdk import AsyncClient
+
+async def main():
+    async with AsyncClient("http://localhost:4010", timeout=5.0) as client:
+        note = await client.get_note(note_id="note_123")
+        print(note.body)
+
+asyncio.run(main())
+```
+
+Use an async token provider with `AsyncClient`. If you inject `http_client`, you own that client's lifetime; an SDK-created httpx client is closed by `async with`. Cancellation propagates through the async transport and closes SDK-owned responses. Synchronous Python uses urllib, and its timeout is a transport timeout rather than an operation-wide deadline.
+
+## Go: context deadlines and native HTTP configuration
+
+For the local generated module, add a replacement from your application module:
+
+```sh
+go mod edit -require=notes@v0.0.0
+go mod edit -replace=notes=/absolute/path/to/generated/go
+```
+
+For a published SDK, use the actual `module` path from its `go.mod` and install its release with `go get MODULE@VERSION` instead. This local example is a complete `main.go`:
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+    "net/http"
+    "time"
+
+    sdk "notes"
+)
+
+func main() {
+    client, err := sdk.NewClient(sdk.ClientConfig{
+        BaseURL: "http://localhost:4010",
+        HTTPClient: &http.Client{Timeout: 5 * time.Second},
+        Retry: &sdk.RetryConfig{MaxAttempts: 1},
+    })
+    if err != nil { log.Fatal(err) }
+
+    ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
+    note, err := client.GetNote(ctx, &sdk.GetNoteRequest{NoteID: "note_123"})
+    if err != nil { log.Fatal(err) }
+    fmt.Println(note.ID, note.Body)
+}
+```
+
+After saving `main.go`, run `go mod tidy` and `go run .`.
+
+The context bounds the logical call, including retry waits; `http.Client.Timeout` bounds a native request. Configure static credentials with `APIKey`, `APIKeyHeader` and `APIKeyPrefix`—set `APIKeyPrefix: "Bearer"` when your service expects a bearer prefix. `HTTPClient` accepts the generated `KajiHTTPClient` interface, so a native client or decorator can replace execution without changing operation signatures.
+
+Declared non-success responses become operation-specific errors; inspect the generated operation error types with `errors.As`. Encoding/transport/decoding errors are returned through Go's normal `error` result. The generated client consumes and closes buffered response bodies.
+
+## Find the entry point in every language
+
+The generated README, native manifest and source declarations are the authority for your package's exact name. Common entry points are:
+
+| Target | Installation/build | Public customer entry point |
 | --- | --- | --- |
-| Rust | Cargo crate, Serde models, Reqwest client | Rust and Cargo |
-| TypeScript Fetch | ESM package, generated models/clients/runtime | modern Fetch-capable JS runtime or browser |
-| TypeScript Axios | ESM package with Axios transport | Node/browser plus Axios package dependency |
-| Go | `go.mod`, typed models, standard-library HTTP | Go 1.22+ |
-| Python | `pyproject.toml`, dataclasses, standard-library HTTP | Python 3.10+ |
-| PHP | `composer.json`, PSR-18/PSR-7 transport interfaces | PHP 8.2+ and Composer dependencies |
-| Java | Gradle and Maven metadata, typed JDK client | Java 17+ and declared Maven dependencies |
-| .NET | `.csproj`, typed `HttpClient` client | .NET SDK compatible with the generated project |
-| Elixir | `mix.exs`, Finch client, typed modules | Elixir/Mix and declared Hex dependencies |
+| TypeScript | `npm install`, `npm run build` | Package root: configured client class, raw operations, models, `createClient` |
+| Python | `python -m pip install PATH`; optional `[async]` extra | Native import package: `Client`, optional `AsyncClient`, models, `ApiError` |
+| Go | `go get MODULE@VERSION`, or local module replacement | Package `NewClient(ClientConfig)`, context-taking methods, request structs |
+| Rust | Cargo dependency with version or `path` | Crate `Client`, generated operation/model modules; `with_transport` for execution |
+| PHP | Composer path/released package dependency | Generated namespace `Client`, PSR-18 client passed to its constructor |
+| Java | Generated Maven or Gradle package | Generated package `Client`, `ClientConfig`, model package |
+| C# | Project/package reference | Generated namespace `KajiClient(HttpClient, KajiClientOptions)` |
+| Ruby | `gem build`, local/released gem installation | Generated require name and module `Client.new(...)` |
+| Swift | Swift Package Manager dependency | `KajiClient(options: KajiClientOptions(...))` |
+| Elixir | Local/released Mix dependency | Generated namespace `Client.new(...)` and API/resource modules |
 
-Install and compile the generated package with its own ecosystem tooling. Kaji
-does not silently fetch third-party dependencies during generation.
+Flat and namespaced clients use the same underlying operation implementation. Namespaces derive from tags or meaningful path segments. Direct methods remain available. Parameter spelling is native: the Notes fixture uses TypeScript `noteId`, Python `note_id` and Go `NoteID`; do not copy method names from an unrelated contract.
 
-## Common runtime contract
+## Pagination and streaming depend on the contract
 
-Kaji uses native APIs in every language. The retry policy below is shared by
-the maintained SDK targets; the lifecycle ordering is the stable contract for
-the TypeScript, Rust, and Go runtimes. Other targets expose their native hook
-surfaces and are documented by the generated package while they converge on
-this contract. This is the behavior to rely on when writing a wrapper, an
-observability adapter, or a cross-language integration.
+A list response alone does not create a pager. Kaji needs declared pagination inputs and response selectors, typically through the contract's `x-pagination` metadata or explicit generation configuration. Pagination helpers keep using the generated operation's authentication, serialization and error handling. URL continuation helpers validate the origin before carrying credentials forward.
 
-### Credentials and request lifecycle
+For supported Python contracts, direct helpers are named `<operation>_pages`; namespaced resources also expose their page helper. Synchronous helpers yield pages; async helpers use `async for`. TypeScript, Go and Rust expose their own generated page helper types/functions. Inspect the generated operation reference to distinguish a page from an item: a pager does not universally flatten arrays into individual models.
 
-The generated client first resolves its configured base URL, caller headers,
-and OpenAPI security requirements. It then serializes the request and invokes
-the transport. Static credentials are configured at client construction; use a
-custom transport or the target's lifecycle hook when credentials need dynamic
-refreshing or signing.
+An operation declaring `text/event-stream` can generate an event-stream surface in supported targets. Treat it as a resource whose consumption must finish or close. Retries cover connection establishment, not application reconnection after events arrive. Resume tokens, deduplication and `Last-Event-ID` policy belong to the API/application. The Notes fixture has neither pagination nor SSE, so no such methods are invented in its examples.
 
-For the TypeScript, Rust, and Go hook APIs, the events have these meanings:
+## Know the runtime coverage you distribute
 
-- `beforeRequest` / `before_request` runs once for a logical operation, after
-  Kaji has assembled the request and before its first transport attempt.
-- `afterResponse` / `after_response` runs once for the final HTTP response,
-  including a final non-2xx response. Retryable intermediate responses are not
-  reported.
-- `onError` / `on_error` runs once when the final outcome is a transport,
-  decoding, validation, or HTTP error. A final non-2xx response therefore
-  invokes both `afterResponse` and `onError`.
+| Target | Retry/paging/streaming summary | Extension boundary |
+| --- | --- | --- |
+| TypeScript Fetch/Axios | Conservative retries; declared pagination and SSE | Logical-call middleware, hooks, native driver injection, optional codecs/validation |
+| Python | Conservative retries; declared cursor/offset/URL pages and SSE; async is opt-in | Per-attempt sync/async middleware and native async driver; lifecycle callbacks; managed OAuth |
+| Go | Conservative retries; declared cursor/offset/URL pages and SSE | Per-attempt `KajiMiddleware`, injectable `KajiHTTPClient`, lifecycle hooks |
+| Rust | Conservative retries; declared pagination/SSE supported by generated operation surface | Per-attempt `MiddlewareTransport`, native `Transport`, lifecycle hooks |
+| PHP / Java / C# | Native retry and contract-dependent paging/streaming surfaces | Native HTTP client/decorator injection; target-specific hooks where emitted |
+| Elixir | Native retries; contract-dependent paging/SSE | Buffered request middleware; separate streaming driver; lifecycle callbacks |
+| Swift | Buffered async calls; no generated automatic retry/SSE middleware surface | `KajiTransport`, `KajiMiddlewareTransport`, URLSession, lifecycle hooks |
+| Ruby | Buffered calls; no generated automatic retry/SSE surface | Callable transport and middleware |
 
-Hook payloads are target-native. Treat them as observability and policy
-boundaries: avoid logging headers or bodies unless your application has made a
-deliberate redaction decision. Hooks must not assume they receive one event per
-retry attempt.
+This table identifies usable boundaries rather than asserting identical capabilities. Check generated source and package tests for the specific contract/media type you distribute. Native transports classify status and decode errors at different points; a middleware chain is not automatically a schema validator.
 
-### Retries, cancellation, and streams
+For runtime retries, TypeScript/Rust/Go default to three total attempts. Python expresses the corresponding setting as `max_retries=2`. Eligible methods/statuses still depend on the generated operation and replay safety; POST requires an idempotency key. Set TypeScript `retry: false`, Go/Rust one total attempt, or Python `max_retries=0` when the application owns retry policy. Do not assume Swift or Ruby shares that default.
 
-All maintained SDKs default to three **total** attempts, with a 250 ms initial
-delay, exponential backoff, and an 8 second cap. Set `maxAttempts` (or the
-target-native equivalent) to `1` to disable retries. Kaji retries only `GET`,
-`PUT`, `PATCH`, and `DELETE`, plus `POST` carrying an `Idempotency-Key` header.
-It retries transport failures and HTTP `408`, `429`, `500`, `502`, `503`, and
-`504`. A valid `Retry-After` value takes precedence, subject to the same cap.
+Lifecycle hooks are notifications with native timing, not a portable replacement for middleware. Python's `before_request` runs per attempt; TypeScript/Go/Rust logical-call hooks have different timing. Use the [runtime middleware guide](guides/runtime-middleware.md) to choose the correct extension point.
 
-In targets that expose caller cancellation/deadlines, cancellation stops
-retrying. Event streams use this retry policy only while establishing the
-initial connection; reconnecting after events have started is application
-policy, because Kaji will not invent a resume token or `Last-Event-ID`
-behavior.
+## Keep improvements when regenerating
 
-### Supported runtime features
-
-Where declared by the OpenAPI contract and supported by the target, Kaji
-generates:
-
-- operation request/response models and declared non-2xx errors;
-- OpenAPI security metadata and configured credentials;
-- conservative retries for safe methods and idempotent POSTs;
-- declared cursor, offset/limit, or URL pagination helpers;
-- SSE/event-stream and binary upload/download surfaces;
-- lifecycle hooks or transport configuration in the target's idiom.
-
-Read the generated package's `README.md` and `STYLE_GUIDE.md` first: they are
-the exact API for that particular contract and target. Kaji intentionally does
-not promise that two languages use identical method spellings; it aims for a
-native public API in each ecosystem while retaining one behavior contract.
-
-## Generated versus user-owned files
-
-Treat generated models, operations, manifests, and runtime helpers as
-replaceable output. Make durable changes in the OpenAPI source, configuration,
-or a wrapper package.
-
-For structured TypeScript packages, `custom/index.ts` is special: Kaji creates
-it if absent and preserves it on future materialization. Use it for stable
-exports, product helpers, or a small wrapper around the generated class.
-
-## Existing npm manifests
-
-When materializing generated output, Kaji reads an existing `package.json` and
-appends missing generated requirements. Custom scripts, repository metadata,
-workspace settings, and other user-owned fields are preserved. Required file
-lists are combined without duplicates.
-
-Existing dependency declarations keep their version range and category. For
-example, TypeScript pinned in `devDependencies` remains pinned, and a TanStack
-package already configured as an optional peer is not duplicated in
-`dependencies`. Missing dependencies are added where the generator declares
-them. Kaji does not infer whether a custom version range is compatible; run
-your package build after generation.
-
-The recipe's generated package name and version are authoritative, as are
-matching generated export entries. Custom export entries remain available.
-Invalid existing JSON or malformed dependency maps fail generation before
-any generated files are written; the existing manifest is retained.
-
-This merge happens when writing the generated tree to disk, including through
-the Rust library's `GeneratedTree::write_to`. In-memory generation still
-returns the standalone generated manifest. Artifact-only profiles that do not
-emit a manifest do not modify an existing one.
-
-## Per-operation documentation
-
-The embedded compiler preserves OpenAPI operation metadata and extensions in
-Kaji's normalized Rust AST. This gives documentation tooling and future package
-README generation the same source contract as SDK generation. Today, rely on
-the generated package README and the source OpenAPI operation for precise
-request examples.
+Put generator-author customization in the source-controlled recipe or plugin, including bundled middleware sources and explicit code overlays. Regeneration can then reproduce the distributed behavior. Ordinary SDK consumers keep application wrappers outside the installed package. Read [SDK customization](sdk-customization.md) for author-owned source registration, and [SDK publishing](sdk-publishing.md) for packaging, exact-tag verification and release automation.

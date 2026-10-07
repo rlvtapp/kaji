@@ -242,14 +242,18 @@ Every package contains:
 | `path` | Yes | Package directory below `output.path`. |
 | `name` | No | Ecosystem package identity for SDK languages. |
 | `client_style` | No | Package-level `namespaced` or `flat` override. |
+| `version` | No | Independent SDK package version. |
+| `release` | No | Optional build/test/publisher metadata; see [SDK automation](sdk-automation.md). |
 | `plugins` | Yes | Plugins emitted into this package. Names are validated; unknown names are errors. |
 
 ### SDK languages
 
 `rust`, `go`, `python`, `php`, `java`, `csharp`, `elixir`, `ruby`, and `swift` require exactly
 one `{ "name": "sdk" }` plugin. Go accepts `jobs`, a bounded generation worker
-count. The other current SDK plugins have no package-specific JSON options
-beyond package name and client style.
+count. Python accepts `async_client: true` on `sdk` and optional `webhooks` and
+`roundtrips` consumer plugins. Java accepts opt-in `open_enums: true`. Native
+Rust/Go library APIs also expose [independent providers](native-sdk-providers.md);
+their CLI recipes still use the complete SDK.
 
 `symfony` requires one `sdk` plugin. It produces a Symfony bundle that wraps the
 portable PHP SDK; set `sdk_package` when its Composer name differs from Kaji's
@@ -257,8 +261,16 @@ default `kaji/<api>-sdk`.
 
 ### TypeScript
 
-The TypeScript `sdk` plugin is optional only when you are adding helper files to
-an existing package yourself. When present, it appears exactly once and accepts:
+TypeScript supports the convenient `sdk` plugin or independent `models`,
+`transport`, `operations`, and `client` providers. Give instances unique `id`
+values and select dependencies through `uses.models`, `uses.transport`, or
+`uses.operations`. An unbound role requires exactly one compatible provider.
+Providers use `output` for a module or directory; helper consumers use it for
+a directory. Complete `sdk` and explicit providers cannot be mixed. Native
+providers support customized imports without `clients_import`. See the
+[TypeScript plugin reference](../crates/plugins/typescript/README.md).
+
+When present, `sdk` appears exactly once and accepts:
 
 | SDK field | Values / default | Meaning |
 | --- | --- | --- |
@@ -267,6 +279,8 @@ an existing package yourself. When present, it appears exactly once and accepts:
 | `client_name` | API-derived | Exported full-client class name. |
 | `group_by_tag` | `true` | Organize operation and client modules by OpenAPI tag. |
 | `throw_on_error` | `true` | Default typed-operation error behavior. |
+| `integer_as_string` | `false` | Represent all integer schemas as strings. |
+| `int64` | `number`, `string`, `bigint` | Representation for int64 schemas, with schema-directed codecs for lossless modes. |
 
 Additional TypeScript plugins are `zod`, `tanstack-react-query`,
 `tanstack-vue-query`, `swr`, `faker`, `msw`, and `cypress`.
@@ -276,13 +290,13 @@ Their shared fields are:
 | Field | Default | Meaning |
 | --- | --- | --- |
 | `output` | Package root | Subdirectory beneath the package for this artifact. |
-| `clients_import` | `./clients` | Import path from a hook artifact to generated operation functions. Relevant to TanStack/SWR. |
+| `clients_import` | `./clients` | Legacy standalone helper imports; native consumers instead use `uses.operations`. |
+| `id` / `uses` | automatic binding | Select native model/operation providers by instance name. |
 | `group_by_tag` | `true` | Must match the SDK layout when hooks import its operation modules. |
 
-When Kaji owns the package manifest through `sdk`, it adds dependencies for
-Zod, TanStack, SWR, Faker, and MSW, plus Cypress as a development dependency
-when selected. Cypress configuration and framework peer dependencies remain
-application-owned. See [auxiliary generators](auxiliary-generators.md)
+Native providers finalize manifests with Zod/Faker/MSW runtime dependencies,
+query framework peer dependencies, and Cypress as a development dependency.
+Application setup and Cypress configuration remain application-owned. See [auxiliary generators](auxiliary-generators.md)
 for behavioral limitations and framework-specific setup.
 
 ### Documentation and mock packages
@@ -297,6 +311,23 @@ for behavioral limitations and framework-specific setup.
 The generated mock is useful across every generated SDK, but it is not a
 complete behavioral simulation. Read [contract mocking](mocking.md) before
 using it for integration tests.
+
+## Package source customizations
+
+SDK packages can also declare `middleware` entries with `source`, `path`, and
+`symbol`; Python async output additionally needs `async_symbol`. Kaji copies each
+native source module and enables it in the generated HTTP runtime by default.
+SDK customers need no registration. Supported source layouts and factory ABIs
+are listed in [SDK customization](sdk-customization.md). Unsupported targets or
+transport ABIs fail explicitly. See the [complete runnable example](../examples/bundled-middleware/README.md)
+for generation, an executable policy test, and release metadata.
+
+Every package accepts a `customizations` array. Each entry sets `mode` to `add`,
+`replace`, or `patch`, a destination `path` relative to that package, and a
+UTF-8 `source` relative to the config file. A patch also sets `find`, which must
+match exactly once. These source overlays run after package finalization and
+remain subject to safe regeneration and drift checks. See [SDK customization](sdk-customization.md)
+for examples, ownership rules, and runtime middleware.
 
 ## Console output and automation
 

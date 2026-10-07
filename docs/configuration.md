@@ -71,15 +71,39 @@ one TypeScript SDK plugin uses one transport.
 | `generate(&api, release)` | Render packages into a `GeneratedTree`. |
 | `generate_with_security_catalog(&api, release, Some(&catalog))` | Include named OpenAPI security definitions with an in-memory API. |
 | `generate_openapi(path, name, version, release)` | Read current compiler artifacts, including required schema and security catalogs, and generate. |
-| `tree.write_to(directory)` | Write generated files, preserving explicitly custom files. |
+| `tree.check(directory)` | Compare expected output with its destination without writing. |
+| `tree.write_to(directory)` | Validate/materialize owned output while preserving custom and unrelated files. |
 
 A release must contain at least one package. Unsafe paths, overlapping file
 owners, and invalid plugin contracts fail generation. Adding a package or plugin
 twice is not a deduplication mechanism.
 
-Generated files are overwritten, not automatically pruned. Use a fresh output
-directory after removing or renaming operations, schemas, or packages. Writes
-are not transactional. TypeScript `custom/index.ts` is a create-once file.
+Generated output is tracked by `.kaji/ownership.json` with stable owners and
+content fingerprints. `tree.write_to` refuses to overwrite locally edited owned
+files, removes only unchanged obsolete owned files, and preserves unrelated
+files. TypeScript `custom/index.ts` is create-once. `tree.check(directory)` returns
+added/modified/removed paths without writing; use it before materialization when
+reviewing drift. Preflight validates the proposed output, but filesystem I/O
+failures can still interrupt writing: materialization is not an atomic directory
+transaction. See [safe regeneration](safe-regeneration.md) for legacy adoption,
+manifest merge rules, and conflict resolution.
+
+### SDK-author customization and delivery
+
+Use [SDK customization](sdk-customization.md) for `Package::middleware` and
+`Package::customize`: source is supplied by the author, scoped to one package,
+and applied before output is materialized. Bundled middleware is wired into the
+supported language's default runtime; added overlays alone are not automatic
+registration. Unsupported middleware languages/paths or incompatible runtime
+providers fail generation. Compile and test supplied source with native tools;
+Kaji does not execute it during generation.
+
+For release-enabled packages, [SDK automation](sdk-automation.md) explains
+optional package metadata, native build/test commands, independent version
+handling, generated SDK PRs, and Release Please. [Publishing](sdk-publishing.md)
+covers registry trust and tagged artifacts. Metadata does not publish a package
+by itself. Keep this reference for typed settings, and follow those guides for
+the complete author workflow.
 
 ### Shared defaults
 

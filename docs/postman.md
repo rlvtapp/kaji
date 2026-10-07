@@ -1,0 +1,98 @@
+# Generate Postman collections
+
+Kaji exports portable Collection 2.1 JSON through an independent Postman plugin.
+It uses the same normalized API and security catalog as SDK generation. You can
+ship a collection beside your SDK without depending on a generated client.
+These commands require a build containing the new target; the published 0.4.0
+launcher does not contain it.
+
+## Generate a collection and environment
+
+The [combined example](../examples/api-artifacts/README.md) generates Postman
+exports and a Terraform provider from one specification. A Postman-only recipe
+package looks like this:
+
+```json
+{
+  "language": "postman",
+  "path": "postman",
+  "plugins": [
+    {"name": "collection", "output": "api.postman_collection.json", "strict": true},
+    {"name": "environment", "output": "api.postman_environment.json"}
+  ]
+}
+```
+
+Run `kaji generate --config kaji.json`. Alternatively select `--language postman`
+in a direct generate command; default filenames are `collection.json` and
+`environment.json`. `all` remains the SDK-only shortcut.
+
+Import the collection and environment into Postman. Select the environment and
+supply your API origin and credentials locally. Exported credentials start blank;
+the environment is create-once so regenerating does not overwrite your values.
+Keep populated environment files outside source control. The collection remains
+owned generated output and participates in `generate --check` and safe cleanup.
+
+## Review the exported requests
+
+Requests are grouped by tags by default. Set `group_by_tag: false` to group by the first path segment. IDs are deterministic, and each request retains its operation identity,
+method, path and documentation. JSON, URL-encoded, multipart and binary bodies
+are handled separately. Declared examples take precedence over bounded schema
+samples. Schema `writeOnly`, sensitive fields and familiar credential names are
+redacted from examples.
+
+Operation-level server precedence comes from the compiler; server defaults and
+variables are retained. Set `base_url` on the collection plugin to override the
+exported origin. Multiple servers or authentication alternatives must be reviewed
+alongside the generated diagnostics. Credential placeholders do not acquire OAuth
+tokens: obtain tokens using your own login flow and supply them locally.
+
+The collection plugin writes a diagnostics file alongside its output. CLI recipe
+`strict` defaults to true and rejects error-level unsupported mappings. The native
+collection builder and direct target report diagnostics by default; call
+`.strict(true)` when incomplete exports should fail generation. Incomplete requests
+are marked in their descriptions. Review diagnostics before running a collection;
+a valid Collection schema alone does not prove correct API behavior.
+
+## Customize through plugins
+
+The native API exposes `RequestExamples`, `CollectionDocument`, and
+`EnvironmentTemplate` typed contracts. Bind named handles when your package has
+multiple providers:
+
+```rust
+use kaji::{postman, prelude::*};
+let examples = postman::examples();
+let collection = postman::collection()
+    .using_examples(examples.handle())
+    .strict(true);
+let environment = postman::environment().using_collection(collection.handle());
+let package = postman::package("postman")
+    .with(examples)
+    .with(collection)
+    .with(environment);
+```
+
+A custom example provider can supply operation/media-specific values; the renderer
+still applies redaction. Replace the collection renderer with your own plugin when
+you need custom scripts or a different serialization strategy. Kaji does not import
+JavaScript from the specification or execute requests during generation.
+
+## Validate before distributing
+
+The editable [Postman check action](../packages/postman-check/README.md) validates
+exports against the pinned official Collection 2.1 schema, verifies unique request
+IDs and checks that secret environment values stay blank. It does not run requests.
+Copy its source into your repository or use a revision that includes the action:
+
+```yaml
+- uses: ./path/to/postman-check
+  with:
+    collection: generated/postman/api.postman_collection.json
+    environment: generated/postman/api.postman_environment.json
+```
+
+Execution through Postman or Newman is a separate, deliberate test step. Use an
+explicit sandbox/mock URL and test fixtures, especially for create/delete operations.
+Portable export and validation are implemented; remote workspace synchronization
+and GitHub Release asset publishing remain separate follow-up work.

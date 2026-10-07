@@ -2,7 +2,7 @@
 
 ## Generate your API's entire developer ecosystem from one contract.
 
-Kaji turns a Swagger 2.0 or OpenAPI 3.0/3.1 document into production-ready SDKs,
+Kaji turns a Swagger 2.0 or OpenAPI 3.0/3.1 document into SDK source,
 API CLIs, mocks, validation, framework integrations, documentation, and MCP
 tools. Generate for TypeScript, Rust, Go, Python, PHP, Java, C#/.NET, Elixir,
 Ruby, and Swift from the same contract, with Symfony integration packages.
@@ -46,6 +46,27 @@ need, then run `npx @relevate/kaji generate` again whenever the contract changes
 `@relevate/kaji` is a small Node launcher for bundled native executables;
 installed npm users do not need Rust or Go.
 The generator itself is Rust, with a bundled Go OpenAPI compiler.
+
+## For SDK authors
+
+Start with [the SDK-author documentation](docs/README.md). The complete workflow
+is to generate a package, ship your own policies, test the generated code, then
+review SDK and release pull requests before publication.
+
+| Next step | Guide |
+| --- | --- |
+| Generate and understand your first SDK | [CLI quickstart](docs/cli/quickstart.md) |
+| Bundle middleware that customers do not have to register | [Executable author example](examples/bundled-middleware/README.md) |
+| Customize one language package | [SDK customization](docs/sdk-customization.md) |
+| Preserve custom work when the contract changes | [Safe regeneration](docs/safe-regeneration.md) |
+| Generate CI, sync, and release workflows | [SDK repository automation](docs/sdk-automation.md) |
+| Export Postman collections and typed Terraform providers | [API artifacts example](examples/api-artifacts/README.md) |
+| Publish checked release tags | [SDK publishing](docs/sdk-publishing.md) |
+
+The newer middleware and delivery APIs are available in this source tree. Use
+the [source build](docs/source-customization.md) until your chosen published
+launcher includes them. Workflow scaffolding does not provision a GitHub App or
+registry account; the delivery guides explain that setup and its verification.
 
 Python users can install the same native CLI through pip:
 
@@ -147,6 +168,11 @@ contract and target. Read the [generated SDK guide](docs/generated-sdks.md)
 before choosing a runtime integration; this is not a promise of identical
 features or API spelling in every language.
 
+SDK customers can customize transport behavior with middleware. SDK authors can
+add, replace, or patch source in one language package through their recipe;
+regeneration reapplies the override. See [SDK customization](docs/sdk-customization.md)
+for language-specific middleware and package-scoped source examples.
+
 ## Rust interface
 
 For embedding Kaji or writing custom plugins, a typed Rust interface is also
@@ -189,7 +215,9 @@ Start with the [documentation home](docs/README.md), then choose a workflow:
 Existing detailed references remain available: [complete CLI reference](docs/cli.md),
 [`kaji.json` schema reference](docs/config-file.md), [configuration](docs/configuration.md),
 [auxiliary generators](docs/auxiliary-generators.md), and
-[plugin authoring](docs/typed-plugins.md).
+[plugin authoring](docs/typed-plugins.md). The current
+[safe regeneration](docs/safe-regeneration.md), and
+[SDK automation](docs/sdk-automation.md), including remaining verification gaps.
 
 ## Runnable examples
 

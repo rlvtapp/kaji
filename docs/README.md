@@ -1,34 +1,54 @@
 # Kaji documentation
 
-Release notes: [Kaji 0.4.0](releases/0.4.0.md).
-Previous release: [Kaji 0.3.0](releases/0.3.0.md).
+Kaji turns an OpenAPI contract into SDK packages and related artifacts. The main workflow is for **SDK authors who own the generated code and its releases**: keep a recipe, bundle your policies, review regeneration, and deliver tested versions to customers.
 
-Kaji supports two generation workflows. Both use the same compiler and SDK
-renderers; choose the one that fits where generation belongs.
+If you already received an SDK, start with [using generated SDKs](generated-sdks.md) and its package-local README. You do not need Kaji to use that package.
 
-| If you want to… | Start here |
+## SDK authors: from a contract to a released package
+
+Start with a local Swagger 2.0 or OpenAPI 3.0/3.1 document and a supported Kaji installation. Building the output also needs the target language's toolchain. Publishing later requires an SDK repository, registry identity, and configured authentication; generation itself does not create those accounts or publish anything.
+
+| Step | Read and do | What you have afterwards |
+| --- | --- | --- |
+| 1. Generate | [CLI quickstart](cli/quickstart.md) uses the small local Notes contract. [CLI workflow](cli/README.md) explains installation and repeatable recipes. | A `kaji.json`, generated package, and an output check you can repeat. |
+| 2. Shape your SDK | [Recipe configuration](cli/config.md) selects packages/plugins. [SDK customization](sdk-customization.md) bundles author middleware and source overrides. | Package-specific behavior shipped to customers by default, with customization sources kept beside the recipe. |
+| 3. Validate changes | [Safe regeneration](safe-regeneration.md), [testing guide](guides/testing.md), and [verification overview](verification.md). | A reviewable generated diff and native build/behavioral checks. |
+| 4. Send an SDK update | [SDK repository automation](sdk-automation.md) configures metadata, local setup, and generated SDK PRs. [GitHub Actions arrangements](github-actions.md) cover spec relay, scheduled fetches and remote inspection. | Editable checks and synchronization workflows for the source or a separate SDK repository. |
+| 5. Release and publish | [Publishing generated SDKs](sdk-publishing.md) explains Release Please integration, native manifests/tags, registry prerequisites, and publication checks. | Independently versioned, tested packages published through the chosen registry workflow. |
+
+The delivery sequence is **contract change → generated SDK PR → merge → Release Please version/changelog PR → merge → release tag → checks → publication**. The automation and publishing guides explain which files are scaffolded locally and which repository permissions, environments, and registry trust relationships you must configure yourself. Use a launcher containing the commands in those guides; [source customization](source-customization.md) explains unpublished builds and forks.
+
+For complete projects, use [examples](../examples/README.md). If your contract is remote or private, read [discovery and download](discovery.md) or [CLI recipes](cli/recipes.md) before committing source credentials or workflow settings.
+
+## SDK users: install and call the delivered package
+
+The generated package's README is the first reference for its installation, exports, authentication, and native requirements. The [generated SDK guide](generated-sdks.md) explains client layouts, models, errors, and capabilities across languages. For application-level request policies, follow [runtime middleware](guides/runtime-middleware.md); an author's bundled policy is already enabled.
+
+Choose the guide for the task around your client: [TypeScript helpers](guides/typescript-helpers.md) for validation/data fetching, [contract mocking](mocking.md) for local APIs, or [testing generated SDKs](guides/testing.md) for executable fixtures. Those artifacts are selected by the SDK author; they are not automatically present in every package.
+
+## Plugin developers: extend generation through contracts
+
+Use the [Rust library workflow](library/README.md) when generation belongs in a tool or when you need a native custom plugin. Follow [plugin composition](library/plugins.md), then the [typed plugin reference](typed-plugins.md) to provide or consume contracts and control package finalization. [Architecture](architecture.md) explains the compiler boundary and neutral model; [native SDK providers](native-sdk-providers.md) documents Rust/Go transport composition and runtime extension boundaries.
+
+Native Rust plugins are composed through the library API. Installing an arbitrary plugin does not register it in `kaji.json`; the CLI exposes its bundled registry. Keep target-specific behavior in the plugin, and use [source customization](source-customization.md) if you need to extend the CLI or delivery actions.
+
+## Find a focused guide
+
+| Topic | Guide |
 | --- | --- |
-| Understand why Relevate built Kaji | [Why Relevate built Kaji](why-kaji.md) |
-| Generate from a repository, script, or CI job | [CLI workflow](cli/README.md) |
-| Embed generation in a Rust application | [Rust library workflow](library/README.md) |
-| Understand generated code | [Generated SDK guide](generated-sdks.md) |
-| Add helpers, mocks, or documentation artifacts | [Auxiliary generators](auxiliary-generators.md) |
+| All CLI commands or typed settings | [CLI reference](cli.md), [configuration reference](configuration.md) |
+| Large contracts and compiler artifacts | [Large specifications](large-specs.md), [OpenAPI compiler](openapi-compiler.md) |
+| Extra generated outputs | [Auxiliary generators](auxiliary-generators.md), [ReDoc/MCP artifacts](guides/artifacts.md) |
+| API command-line clients | [TypeScript API CLI](typescript-cli.md), [Rust API CLI](rust-cli.md) |
+| CI, App authentication, and broker setup | [CI integration](ci-integration.md), [GitHub App](github-app.md), [OIDC broker](github-app-broker.md) |
+| Native model fixtures | [Shared SDK fixtures](shared-sdk-fixtures.md) |
+| Product background and release changes | [Why Kaji](why-kaji.md), [0.4.0 release](releases/0.4.0.md), [0.3.0 release](releases/0.3.0.md) |
 
-## Common journeys
+## Capability and verification boundaries
 
-- **First SDK:** [CLI quickstart](cli/quickstart.md).
-- **Find a public contract:** [OpenAPI discovery and download](discovery.md).
-- **Committed recipe:** [`kaji.json` guide](cli/config.md).
-- **Several packages from one contract:** [CLI recipes](cli/recipes.md).
-- **Zod, TanStack, SWR, Faker, MSW, and Cypress:** [TypeScript helpers](guides/typescript-helpers.md).
-- **A Node.js API command-line client:** [TypeScript API CLI](typescript-cli.md).
-- **A distributable native API CLI:** [Rust API CLI](rust-cli.md).
-- **Native mock API, scenarios, and Docker fixtures:** [contract mocking](mocking.md).
-- **Mock server and test layers:** [testing generated SDKs](guides/testing.md).
-- **ReDoc and MCP output:** [generated artifacts](guides/artifacts.md).
-- **Automation:** [CI integration](ci-integration.md).
-- **Custom generation:** [library quickstart](library/quickstart.md) and
-  [plugin composition](library/plugins.md).
+A generated source snapshot, a native compile, a mock lifecycle test, and a live registry upload prove different things. Read [verification](verification.md), [native providers](native-sdk-providers.md), and the relevant language guide before choosing production checks. Some native tests require a toolchain and run explicitly; bounded [schema fixtures](shared-sdk-fixtures.md) are not exhaustive protocol tests. Add tests for your API's authentication, errors, pagination, and any bundled policy.
 
-See [examples](../examples/README.md) for copyable projects, from a minimal CLI
-recipe to a complete frontend stack and an embedded Rust application.
+
+## API artifacts
+
+Generate [Postman collections](postman.md) and [typed Terraform providers](terraform-provider.md) beside your SDKs. The [combined example](../examples/api-artifacts/README.md) includes a recipe and editable CI checks.
