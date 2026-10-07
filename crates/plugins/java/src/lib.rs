@@ -55,6 +55,19 @@ fn render_sdk_with_policy(
     style: SdkClientStyle,
     open_enums: bool,
 ) -> Result<GeneratedTree> {
+    for operation in &api.operations {
+        let extension = operation
+            .annotations
+            .get("x-kaji-pagination")
+            .or_else(|| operation.annotations.get("x-speakeasy-pagination"));
+        if extension
+            .and_then(|extension| extension.get("type"))
+            .and_then(Value::as_str)
+            == Some("page")
+        {
+            kaji_core::pagination::normalize_pagination(api, operation, None)?;
+        }
+    }
     let root = normalized_output_dir(output_dir)?;
     let package = package_name
         .filter(|name| !name.trim().is_empty())
@@ -256,7 +269,7 @@ fn style_guide(api: &Api, package: &str, style: SdkClientStyle) -> String {
         }
     };
     format!(
-        "# {} Java SDK style guide\n\nPackage: `{package}`.\n\n{surface}\n\n## Pagination\n\nA declared safe cursor or offset/limit contract adds `{{operation}}Pages(input)`, a lazy `Iterable` of the operation's normal response type. It reuses the ordinary operation for every page. Cursor inputs may be string query, header, or required path parameters; path cursors require an initial value under OpenAPI. Offset/page inputs remain optional integer query parameters. Body continuations stay explicit rather than being guessed.\n\n## Media and streaming\n\nNon-JSON success responses are returned as `byte[]`; non-JSON request bodies accept `byte[]`. A `text/event-stream` operation returns `Stream<String>` containing event data lines. Close that stream when finished.\n",
+        "# {} Java SDK style guide\n\nPackage: `{package}`.\n\n{surface}\n\n## Pagination\n\nA declared safe cursor or offset/limit contract adds `{{operation}}Pages(input)`, a lazy `Iterable` of the operation's normal response type. It reuses the ordinary operation for every page. Cursor inputs may be string query, header, or required path parameters; path cursors require an initial value under OpenAPI. Legacy offset/page inputs use optional direct integer query parameters; referenced integer control schemas do not receive helpers. declared `type: page` also accepts required integer query inputs and validates `outputs.results` against the response schema. Omitted pages default to 1 and offsets to 0; explicit zero is preserved. Results-based helpers stop on empty or short arrays, guard integer overflow, and reject negative inputs or nonpositive limits. Cursor and same-origin URL helpers stop on repeated continuations. Every helper stops after 10,000 pages. JSONPath field/array selectors and RFC 6901 pointers are supported. Body continuations stay explicit rather than being guessed.\n\n## Media and streaming\n\nNon-JSON success responses are returned as `byte[]`; non-JSON request bodies accept `byte[]`. A `text/event-stream` operation returns `Stream<String>` containing event data lines. Close that stream when finished.\n",
         api.name
     )
 }
@@ -544,26 +557,41 @@ fn render_client_base(api: &Api, package: &str) -> String {
             r#"
     /** Conservative JSONPath evaluator for declared pagination outputs. */
     private static JsonNode kajiJsonPath(JsonNode value, String path) {
-        if (value == null || path == null || !path.startsWith("$")) return null;
-        var current = value;
-        for (var segment : path.substring(1).split("\\.")) {
-            if (segment.isEmpty()) continue;
-            var bracket = segment.indexOf('[');
-            var key = bracket < 0 ? segment : segment.substring(0, bracket);
-            if (!key.isEmpty()) {
-                if (!current.isObject()) return null;
-                current = current.get(key);
+        if (value == null || path == null) return null;
+        if (path.startsWith("/")) {
+            var current = value;
+            for (var token : path.substring(1).split("/", -1)) {
+                var key = token.replace("~1", "/").replace("~0", "~");
+                if (current.isObject()) current = current.get(key);
+                else if (current.isArray() && key.matches("0|[1-9][0-9]*")) {
+                    try { var index = Integer.parseInt(key); current = index < current.size() ? current.get(index) : null; }
+                    catch (NumberFormatException error) { return null; }
+                } else return null;
                 if (current == null) return null;
             }
-            if (bracket >= 0) {
-                if (!segment.endsWith("]") || !current.isArray()) return null;
+            return current;
+        }
+        if (!path.startsWith("$")) return null;
+        var current = value;
+        int position = 1;
+        while (position < path.length()) {
+            if (path.charAt(position) == '.') {
+                int start = ++position;
+                while (position < path.length() && path.charAt(position) != '.' && path.charAt(position) != '[') position++;
+                if (position == start || !current.isObject()) return null;
+                current = current.get(path.substring(start, position));
+            } else if (path.charAt(position) == '[') {
+                int end = path.indexOf(']', position);
+                if (end < 0 || !current.isArray()) return null;
                 try {
-                    var index = Integer.parseInt(segment.substring(bracket + 1, segment.length() - 1));
+                    long index = Long.parseLong(path.substring(position + 1, end));
                     if (index < 0) index = current.size() + index;
                     if (index < 0 || index >= current.size()) return null;
-                    current = current.get(index);
+                    current = current.get((int) index);
                 } catch (NumberFormatException error) { return null; }
-            }
+                position = end + 1;
+            } else return null;
+            if (current == null) return null;
         }
         return current;
     }
@@ -841,6 +869,14 @@ fn java_pagination(operation: &Operation) -> Option<JavaPagination> {
         .as_object()?;
     let inputs = extension.get("inputs")?.as_array()?;
     let outputs = extension.get("outputs")?.as_object()?;
+    for (role, selector) in outputs {
+        if matches!(
+            role.as_str(),
+            "nextUrl" | "nextCursor" | "results" | "numPages"
+        ) {
+            kaji_core::pagination::Selector::parse(selector.as_str()?).ok()?;
+        }
+    }
     match extension.get("type").and_then(Value::as_str) {
         Some("url") => Some(JavaPagination::Url {
             next_url_path: outputs.get("nextUrl")?.as_str()?.to_owned(),
@@ -849,7 +885,7 @@ fn java_pagination(operation: &Operation) -> Option<JavaPagination> {
             field: java_cursor_parameter_field(operation, inputs)?,
             next_cursor_path: outputs.get("nextCursor")?.as_str()?.to_owned(),
         }),
-        Some("offsetLimit") => {
+        Some("offsetLimit" | "page") => {
             let page = java_pagination_query_field(operation, inputs, "page", true);
             let offset = java_pagination_query_field(operation, inputs, "offset", true);
             let step = match (page, offset) {
@@ -866,7 +902,11 @@ fn java_pagination(operation: &Operation) -> Option<JavaPagination> {
                 .and_then(Value::as_str)
                 .map(str::to_owned);
             match &step {
-                JavaOffsetStep::Page { .. } if num_pages_path.is_none() => return None,
+                JavaOffsetStep::Page { .. }
+                    if num_pages_path.is_none() && results_path.is_none() =>
+                {
+                    return None;
+                }
                 JavaOffsetStep::Offset { .. } if results_path.is_none() => return None,
                 _ => {}
             }
@@ -928,7 +968,16 @@ fn java_pagination_query_field(
     }
     let name = declared.get("name")?.as_str()?;
     let parameter = operation.parameters.iter().find(|parameter| {
-        parameter.name == name && parameter.location == "query" && !parameter.required
+        parameter.name == name
+            && parameter.location == "query"
+            && (!parameter.required
+                || operation
+                    .annotations
+                    .get("x-kaji-pagination")
+                    .or_else(|| operation.annotations.get("x-speakeasy-pagination"))
+                    .and_then(|extension| extension.get("type"))
+                    .and_then(Value::as_str)
+                    == Some("page"))
     })?;
     match (
         integer,
@@ -976,7 +1025,7 @@ fn render_pagination_operation(
             (
                 field.as_str(),
                 format!(
-                    "                var cursor = kajiJsonPath(mapper.valueToTree(page), {next_cursor_path:?});\n                if (cursor == null || !cursor.isTextual() || cursor.asText().isEmpty()) {{ done = true; return page; }}\n                current = {copy}(current, cursor.asText());\n                return page;"
+                    "                var cursor = kajiJsonPath(mapper.valueToTree(page), {next_cursor_path:?});\n                if (cursor == null || !cursor.isTextual() || cursor.asText().isEmpty() || cursor.asText().equals(current.{field}())) {{ done = true; return page; }}\n                current = {copy}(current, cursor.asText());\n                return page;"
                 ),
             )
         }
@@ -988,15 +1037,28 @@ fn render_pagination_operation(
         } => match step {
             JavaOffsetStep::Page { field } => {
                 let copy = format!("{request_name}With{}", type_name(field));
-                (
-                    field.as_str(),
-                    format!(
-                        "                var currentValue = current.{field}();\n                var numPages = kajiJsonPath(mapper.valueToTree(page), {:?});\n                if (currentValue == null || numPages == null || !numPages.canConvertToLong()) {{ done = true; return page; }}\n                var nextValue = currentValue + 1L;\n                if (nextValue > numPages.asLong()) {{ done = true; return page; }}\n                current = {copy}(current, nextValue);\n                return page;",
-                        num_pages_path
-                            .as_deref()
-                            .expect("validated page pagination")
-                    ),
-                )
+                if num_pages_path.is_none() {
+                    let results = results_path.as_deref().expect("validated page results");
+                    let limit = limit_field
+                        .as_deref()
+                        .map_or_else(|| "null".to_owned(), |limit| format!("current.{limit}()"));
+                    (
+                        field.as_str(),
+                        format!(
+                            "                var results = kajiJsonPath(mapper.valueToTree(page), {results:?});\n                Long limit = {limit};\n                if (results == null || !results.isArray() || results.size() == 0 || (limit != null && results.size() < limit) || current.{field}() == Long.MAX_VALUE) {{ done = true; return page; }}\n                current = {copy}(current, current.{field}() + 1L);\n                return page;"
+                        ),
+                    )
+                } else {
+                    (
+                        field.as_str(),
+                        format!(
+                            "                var currentValue = current.{field}();\n                var numPages = kajiJsonPath(mapper.valueToTree(page), {:?});\n                if (currentValue == null || currentValue == Long.MAX_VALUE || numPages == null || !numPages.isIntegralNumber() || !numPages.canConvertToLong()) {{ done = true; return page; }}\n                var nextValue = currentValue + 1L;\n                if (nextValue > numPages.asLong()) {{ done = true; return page; }}\n                current = {copy}(current, nextValue);\n                return page;",
+                            num_pages_path
+                                .as_deref()
+                                .expect("validated page pagination")
+                        ),
+                    )
+                }
             }
             JavaOffsetStep::Offset { field } => {
                 let limit = limit_field
@@ -1006,7 +1068,7 @@ fn render_pagination_operation(
                 (
                     field.as_str(),
                     format!(
-                        "                var currentValue = current.{field}();\n                var results = kajiJsonPath(mapper.valueToTree(page), {:?});\n                if (currentValue == null || results == null || !results.isArray()) {{ done = true; return page; }}\n                var resultCount = results.size();\n                Long limit = {limit};\n                if (resultCount == 0 || (limit != null && resultCount < limit)) {{ done = true; return page; }}\n                current = {copy}(current, currentValue + resultCount);\n                return page;",
+                        "                var currentValue = current.{field}();\n                var results = kajiJsonPath(mapper.valueToTree(page), {:?});\n                if (currentValue == null || results == null || !results.isArray()) {{ done = true; return page; }}\n                var resultCount = results.size();\n                Long limit = {limit};\n                if (resultCount == 0 || (limit != null && resultCount < limit)) {{ done = true; return page; }}\n                if (currentValue > Long.MAX_VALUE - resultCount) {{ done = true; return page; }}\n                current = {copy}(current, currentValue + resultCount);\n                return page;",
                         results_path
                             .as_deref()
                             .expect("validated offset pagination")
@@ -1020,9 +1082,34 @@ fn render_pagination_operation(
         .find(|parameter| field_name(&parameter.name) == field)
         .map(parameter_type)
         .expect("validated pagination field is an operation parameter");
+    let initial = match pagination {
+        JavaPagination::OffsetLimit {
+            step, limit_field, ..
+        } => {
+            let default = if matches!(step, JavaOffsetStep::Page { .. }) {
+                1
+            } else {
+                0
+            };
+            let copy = format!("{request_name}With{}", type_name(field));
+            let mut checks = format!(
+                "        if (input.{field}() != null && input.{field}() < 0) throw new IllegalArgumentException(\"pagination must be nonnegative\");\n"
+            );
+            if let Some(limit) = limit_field {
+                checks.push_str(&format!("        if (input.{limit}() != null && input.{limit}() <= 0) throw new IllegalArgumentException(\"pagination limit must be positive\");\n"));
+            }
+            (
+                checks,
+                format!("input.{field}() == null ? {copy}(input, {default}L) : input"),
+            )
+        }
+        _ => (String::new(), "input".into()),
+    };
+    let checks = initial.0;
+    let initial = initial.1;
     let _ = writeln!(
         output,
-        "    /** Lazily fetches normal response pages using this operation's declared pagination contract. */\n    public java.lang.Iterable<{response}> {pages_method}({request_name} input) {{\n        Objects.requireNonNull(input, \"input\");\n        return () -> new java.util.Iterator<>() {{\n            private {request_name} current = input;\n            private boolean done;\n\n            @Override public boolean hasNext() {{ return !done; }}\n\n            @Override public {response} next() {{\n                if (done) throw new java.util.NoSuchElementException();\n                var page = {method}(current);\n{continuation}\n            }}\n        }};\n    }}\n"
+        "    /** Lazily fetches normal response pages using this operation's declared pagination contract. */\n    public java.lang.Iterable<{response}> {pages_method}({request_name} input) {{\n        Objects.requireNonNull(input, \"input\");\n{checks}        return () -> new java.util.Iterator<>() {{\n            private {request_name} current = {initial};\n            private boolean done;\n            private int pageCount;\n\n            @Override public boolean hasNext() {{ return !done; }}\n\n            @Override public {response} next() {{\n                if (done) throw new java.util.NoSuchElementException();\n                if (++pageCount >= 10000) done = true;\n                var page = {method}(current);\n{continuation}\n            }}\n        }};\n    }}\n"
     );
     render_pagination_request_copy(output, operation, &request_name, field, &field_type);
 }
@@ -1111,7 +1198,7 @@ fn render_url_pagination_operation(
     };
     let _ = writeln!(
         output,
-        "    /** Lazily follows same-origin URL pages from this operation's declared contract. */\n    public java.lang.Iterable<{response}> {method}Pages({request_name} input) {{\n        Objects.requireNonNull(input, \"input\");\n        return () -> new java.util.Iterator<>() {{\n            private boolean first = true;\n            private boolean done;\n            private String nextUrl;\n\n            @Override public boolean hasNext() {{ return !done; }}\n\n            @Override public {response} next() {{\n                if (done) throw new java.util.NoSuchElementException();\n                var page = first ? {method}(input) : {continuation}(input, nextUrl);\n                first = false;\n                var next = kajiJsonPath(mapper.valueToTree(page), {next_url_path:?});\n                if (next == null || !next.isTextual() || next.asText().isEmpty()) done = true;\n                else nextUrl = next.asText();\n                return page;\n            }}\n        }};\n    }}\n\n    /** Private URL continuation that retains generated request policy. */\n    private {response} {continuation}({request_name} input, String paginationUrl) {{\n{try_open}        var headers = new java.util.LinkedHashMap<String, String>();\n{headers}        var response = requestPaginationUrlWithRetry({:?}, paginationUrl, headers, {body});\n        return decode(response, {}.class);\n{error_mapping}\n    }}\n",
+        "    /** Lazily follows same-origin URL pages from this operation's declared contract. */\n    public java.lang.Iterable<{response}> {method}Pages({request_name} input) {{\n        Objects.requireNonNull(input, \"input\");\n        return () -> new java.util.Iterator<>() {{\n            private boolean first = true;\n            private boolean done;\n            private String nextUrl;\n            private int pageCount;\n\n            @Override public boolean hasNext() {{ return !done; }}\n\n            @Override public {response} next() {{\n                if (done) throw new java.util.NoSuchElementException();\n                if (++pageCount >= 10000) done = true;\n                var page = first ? {method}(input) : {continuation}(input, nextUrl);\n                first = false;\n                var next = kajiJsonPath(mapper.valueToTree(page), {next_url_path:?});\n                if (next == null || !next.isTextual() || next.asText().isEmpty() || next.asText().equals(nextUrl)) done = true;\n                else nextUrl = next.asText();\n                return page;\n            }}\n        }};\n    }}\n\n    /** Private URL continuation that retains generated request policy. */\n    private {response} {continuation}({request_name} input, String paginationUrl) {{\n{try_open}        var headers = new java.util.LinkedHashMap<String, String>();\n{headers}        var response = requestPaginationUrlWithRetry({:?}, paginationUrl, headers, {body});\n        return decode(response, {}.class);\n{error_mapping}\n    }}\n",
         operation.method.as_str(),
         response_class(schema),
     );
@@ -1843,7 +1930,7 @@ mod tests {
                     annotations: Default::default(),
                 }],
                 additional_properties: AdditionalProperties::Schema {
-                    value: Box::new(string()),
+                    value: Box::new(SchemaValue::new(SchemaKind::String)),
                 },
             }),
         ));
@@ -2211,6 +2298,39 @@ mod tests {
             "public java.lang.Iterable<Contact> listPages(Client.ListContactsRequest input)"
         ));
         assert!(sources.contains("return client.listContactsPages(input);"));
+    }
+
+    #[test]
+    fn declared_page_results_have_defaults_bounds_and_validated_selectors() {
+        let mut source = contact_api();
+        let operation = &mut source.operations[0];
+        operation.request_body = None;
+        operation.parameters = vec![OperationParameter {
+            name: "page".into(),
+            location: "query".into(),
+            required: false,
+            schema: Some(integer()),
+            description: None,
+            annotations: BTreeMap::new(),
+        }];
+        operation.responses = vec![kaji_core::OperationResponse::json(
+            "200",
+            SchemaValue::new(SchemaKind::Array {
+                items: Box::new(SchemaValue::new(SchemaKind::String)),
+            }),
+        )];
+        operation.annotations.insert("x-kaji-pagination".into(), serde_json::json!({"type":"page", "inputs":[{"name":"page","type":"page"}], "outputs":{"results":"$"}}));
+        let rendered = rendered_java(&render_test_sdk(&source, "java", None).unwrap());
+        assert!(rendered.contains("input.page() == null ?"));
+        assert!(rendered.contains("(input, 1L) : input"));
+        assert!(rendered.contains("results.size() == 0"));
+        assert!(rendered.contains("current.page() == Long.MAX_VALUE"));
+        assert!(rendered.contains("++pageCount >= 10000"));
+        source.operations[0]
+            .annotations
+            .get_mut("x-kaji-pagination")
+            .unwrap()["outputs"]["results"] = serde_json::json!("$.missing");
+        assert!(render_test_sdk(&source, "java", None).is_err());
     }
 
     #[test]

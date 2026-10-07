@@ -1,0 +1,51 @@
+import Foundation
+
+public enum KajiPaginationError: Error, Sendable { case invalidPage, invalidLimit, invalidResults, pageOverflow, pageLimit }
+public struct KajiPageSequence<Element: Sendable>: AsyncSequence, Sendable {
+    public typealias AsyncIterator = Iterator
+    let page: Int
+    let limit: Int?
+    let fetch: @Sendable (Int) async throws -> (Element, Int)
+    public func makeAsyncIterator() -> Iterator { Iterator(page: page, limit: limit, fetch: fetch) }
+    public struct Iterator: AsyncIteratorProtocol {
+        var page: Int
+        let limit: Int?
+        let fetch: @Sendable (Int) async throws -> (Element, Int)
+        var count = 0
+        var done = false
+        var overflow = false
+        public mutating func next() async throws -> Element? {
+            try Task.checkCancellation()
+            if done { return nil }
+            if overflow { throw KajiPaginationError.pageOverflow }
+            if page < 0 { throw KajiPaginationError.invalidPage }
+            if count >= 10000 { throw KajiPaginationError.pageLimit }
+            if let limit, limit <= 0 { throw KajiPaginationError.invalidLimit }
+            let (response, size) = try await fetch(page)
+            count += 1
+            if size == 0 || (limit != nil && size < limit!) { done = true }
+            else if page == Int.max { overflow = true }
+            else { page += 1 }
+            return response
+        }
+    }
+}
+internal enum KajiSelectorSegment: Sendable { case field(String), index(Int) }
+internal func kajiPageCount<T: Encodable>(_ response: T, _ segments: [KajiSelectorSegment]) throws -> Int {
+    var value: Any = try JSONSerialization.jsonObject(with: JSONEncoder().encode(response), options: [.fragmentsAllowed])
+    for segment in segments {
+        switch segment {
+        case .field(let key):
+            if let map = value as? [String: Any], let next = map[key] { value = next }
+            else if let array = value as? [Any], let index = Int(key), index >= 0, String(index) == key, index < array.count { value = array[index] }
+            else { throw KajiPaginationError.invalidResults }
+        case .index(let index):
+            guard let array = value as? [Any] else { throw KajiPaginationError.invalidResults }
+            let actual = index < 0 ? array.count + index : index
+            guard actual >= 0, actual < array.count else { throw KajiPaginationError.invalidResults }
+            value = array[actual]
+        }
+    }
+    guard let results = value as? [Any] else { throw KajiPaginationError.invalidResults }
+    return results.count
+}

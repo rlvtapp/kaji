@@ -1,0 +1,49 @@
+    /** Read declared JSON Pointer or JSONPath field/index selectors without evaluation. */
+    private static function kajiJsonPath(mixed $value, string $path): mixed
+    {
+        $pointer = str_starts_with($path, '/');
+        if ($pointer) {
+            if (preg_match('/~(?![01])/', $path) === 1) { return null; }
+            $segments = array_map(static fn(string $part): string => str_replace(['~1','~0'], ['/','~'], $part), explode('/', substr($path, 1)));
+        } elseif (str_starts_with($path, '$')) {
+            $segments = []; $rest = substr($path, 1);
+            while ($rest !== '') {
+                if (preg_match('/^(?:\.([^\.\[\]]+)|\[(-?\d+)\])/', $rest, $match) !== 1) { return null; }
+                $segments[] = isset($match[2]) && $match[2] !== '' ? (int) $match[2] : $match[1];
+                $rest = substr($rest, strlen($match[0]));
+            }
+        } else { return null; }
+        $current = $value;
+        foreach ($segments as $segment) {
+            if ($current instanceof \JsonSerializable) { $current = $current->jsonSerialize(); }
+            if (is_object($current)) { $current = get_object_vars($current); }
+            if (!is_array($current)) { return null; }
+            if (array_is_list($current)) {
+                if ($pointer && (!is_string($segment) || preg_match('/^(?:0|[1-9][0-9]*)$/D', $segment) !== 1)) { return null; }
+                $index = (int) $segment;
+                if (!$pointer && !is_int($segment)) { return null; }
+                if ($index < 0) { $index += count($current); }
+                if (!array_key_exists($index, $current)) { return null; }
+                $current = $current[$index];
+            } else {
+                if (!array_key_exists($segment, $current)) { return null; }
+                $current = $current[$segment];
+            }
+        }
+        return $current;
+    }
+
+    /** Copy a generated JSON body while preserving its declared class. */
+    private static function kajiWithBodyValue(mixed $body, string $wireName, mixed $value): mixed
+    {
+        if (is_array($body)) { $copy = $body; $copy[$wireName] = $value; return $copy; }
+        if ($body instanceof \JsonSerializable && method_exists($body::class, 'fromArray')) {
+            $data = $body->jsonSerialize();
+            if (is_object($data)) { $data = get_object_vars($data); }
+            if (!is_array($data)) { throw new \TypeError('body pagination requires an object JSON body'); }
+            $data[$wireName] = $value; $class = $body::class;
+            return $class::fromArray($data);
+        }
+        throw new \TypeError('body pagination requires a generated model or array JSON body');
+    }
+

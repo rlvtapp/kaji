@@ -6,6 +6,7 @@
 //! reason}` results for every operation.
 
 mod bundled;
+mod page_pagination;
 use std::{collections::BTreeMap, fmt::Write};
 
 use anyhow::{Result, bail};
@@ -60,6 +61,9 @@ fn render_sdk(
         .unwrap_or_else(|| format!("{}-sdk", package_slug(&api.name)));
     let app = elixir_identifier(&package);
     let module = pascal_case(&package);
+    for operation in &api.operations {
+        page_pagination::render(api, operation)?;
+    }
     let mut tree = GeneratedTree::default();
 
     insert(
@@ -141,14 +145,14 @@ fn render_sdk(
                 &mut tree,
                 root,
                 &format!("lib/{app}/resources/{file_name}.ex"),
-                render_resource_facade(&module, &resource, &operations),
+                render_resource_facade(&module, api, &resource, &operations),
             )?;
             for (index, chunk) in operations.chunks(RESOURCE_METHODS_PER_FILE).enumerate() {
                 insert(
                     &mut tree,
                     root,
                     &format!("lib/{app}/resources/{file_name}/chunk_{:04}.ex", index + 1),
-                    render_resource_chunk(&module, &resource, chunk, index),
+                    render_resource_chunk(&module, api, &resource, chunk, index),
                 )?;
             }
         }
@@ -157,7 +161,17 @@ fn render_sdk(
         &mut tree,
         root,
         "README.md",
-        render_readme(api, &package, &module, client_style),
+        render_readme(api, &package, &module, client_style)
+            + if api.operations.iter().any(|operation| {
+                page_pagination::render(api, operation)
+                    .ok()
+                    .flatten()
+                    .is_some()
+            }) {
+                "\n## Page-number pagination\n\nDeclared page-number operations expose `<operation>_pages(client, options)`, a lazy stream of `{:ok, full_response}` pages. Use `Enum.take/2` or other stream consumers; each demand calls the original operation with retained options and an updated page. Optional page defaults to 1; explicit 0 is preserved; required page must be supplied. Empty and short pages are yielded and terminate iteration (short pages require a positive declared limit). Invalid controls, malformed results, operation errors, or the 10,000-page guard yield one `{:error, reason}` and halt. Page controls in request bodies are rejected during generation.\n"
+            } else {
+                ""
+            },
     )?;
     insert(
         &mut tree,
@@ -316,13 +330,24 @@ fn render_client(module: &str) -> String {
   end
 
   @doc false
-  @spec json_path(term(), String.t()) :: term() | nil
+  @spec json_path(term(), String.t() | list()) :: term() | nil
   def json_path(value, path) when is_binary(path) do
     value
     |> JSON.to_wire()
     |> do_json_path(String.trim_leading(path, "$."))
   end
 
+  def json_path(value, segments) when is_list(segments), do: selector_path(JSON.to_wire(value), segments)
+  defp selector_path(value, []), do: value
+  defp selector_path(value, [{:field, key} | rest]) when is_map(value), do: selector_path(Map.get(value, key), rest)
+  defp selector_path(value, [{:field, key} | rest]) when is_list(value) do
+    case Integer.parse(key) do
+      {index, ""} when index >= 0 -> if Integer.to_string(index) == key, do: selector_path(Enum.at(value, index), rest), else: nil
+      _ -> nil
+    end
+  end
+  defp selector_path(value, [{:index, index} | rest]) when is_list(value), do: selector_path(Enum.at(value, index), rest)
+  defp selector_path(_, _), do: nil
   defp do_json_path(value, ""), do: value
   defp do_json_path(value, path) when is_map(value) do
     [segment | rest] = String.split(path, ".", parts: 2)
@@ -606,7 +631,12 @@ fn render_api_facade(module: &str, api: &Api) -> String {
                 output,
                 "\n  def {name}(client, options \\\\ []), do: Operations{index:04}.{name}(client, options)"
             );
-            if cursor_pagination(operation).is_some() {
+            if cursor_pagination(operation).is_some()
+                || page_pagination::render(api, operation)
+                    .ok()
+                    .flatten()
+                    .is_some()
+            {
                 let _ = writeln!(
                     output,
                     "  def {name}_pages(client, options \\\\ []), do: Operations{index:04}.{name}_pages(client, options)"
@@ -634,7 +664,12 @@ fn render_operation_chunk(
     output
 }
 
-fn render_resource_facade(module: &str, resource: &str, operations: &[&Operation]) -> String {
+fn render_resource_facade(
+    module: &str,
+    api: &Api,
+    resource: &str,
+    operations: &[&Operation],
+) -> String {
     let mut output = format!(
         "{NOTICE}\ndefmodule {module}.Resources.{resource} do\n  @moduledoc \"Resource-namespaced operations for {resource}.\"\n\n"
     );
@@ -649,7 +684,12 @@ fn render_resource_facade(module: &str, resource: &str, operations: &[&Operation
                 output,
                 "  def {name}(client, options \\\\ []), do: Chunk{index:04}.{name}(client, options)"
             );
-            if cursor_pagination(operation).is_some() {
+            if cursor_pagination(operation).is_some()
+                || page_pagination::render(api, operation)
+                    .ok()
+                    .flatten()
+                    .is_some()
+            {
                 let _ = writeln!(
                     output,
                     "  def {name}_pages(client, options \\\\ []), do: Chunk{index:04}.{name}_pages(client, options)"
@@ -663,6 +703,7 @@ fn render_resource_facade(module: &str, resource: &str, operations: &[&Operation
 
 fn render_resource_chunk(
     module: &str,
+    api: &Api,
     resource: &str,
     operations: &[&Operation],
     index: usize,
@@ -676,7 +717,12 @@ fn render_resource_chunk(
             output,
             "\n  @spec {name}(Client.t(), keyword()) :: {{:ok, term()}} | {{:error, term()}}\n  def {name}(client, options \\\\ []), do: API.{name}(client, options)"
         );
-        if cursor_pagination(operation).is_some() {
+        if cursor_pagination(operation).is_some()
+            || page_pagination::render(api, operation)
+                .ok()
+                .flatten()
+                .is_some()
+        {
             let _ = writeln!(
                 output,
                 "\n  @spec {name}_pages(Client.t(), keyword()) :: Enumerable.t()\n  def {name}_pages(client, options \\\\ []), do: API.{name}_pages(client, options)"
@@ -841,6 +887,9 @@ fn render_operation(module: &str, api: &Api, operation: &Operation) -> String {
         output.push_str("    end\n");
     }
     output.push_str("  end\n\n");
+    if let Some(page) = page_pagination::render(api, operation).ok().flatten() {
+        output.push_str(&page);
+    }
     if let Some(pagination) = cursor_pagination(operation) {
         output.push_str(&render_cursor_paginator(operation, &pagination));
     }

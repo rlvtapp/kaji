@@ -7,6 +7,7 @@
 
 mod bundled;
 mod package;
+mod pagination;
 pub use package::{PackageExt, Settings, Swift, package, sdk};
 
 use std::collections::BTreeMap;
@@ -34,6 +35,7 @@ pub(crate) fn render_sdk(
         .map(str::to_owned)
         .unwrap_or_else(|| format!("{}-sdk", kebab_case(&api.name)));
     let module = type_name(&package);
+    let pagination = pagination::render(api)?;
     let mut tree = GeneratedTree::default();
     insert(
         &mut tree,
@@ -45,7 +47,12 @@ pub(crate) fn render_sdk(
         &mut tree,
         &root,
         "README.md",
-        readme(api, &package, &module, style),
+        readme(api, &package, &module, style)
+            + if pagination.is_empty() {
+                ""
+            } else {
+                "\n## Page-number pagination\n\nDeclared page-number operations expose `<operation>Pages(...)`, an `AsyncSequence` of full decoded pages. Iterate with `for try await page in client.<operation>Pages(...)`. Requests run only when the iterator advances and retain the ordinary operation transport, middleware, headers, and body. Optional page defaults to 1; explicit 0 is preserved. Required page remains a required argument. A positive declared limit stops after a short page; an empty page always stops and is yielded once. Invalid controls, malformed results selectors, integer overflow, and 10,000 pages terminate with `KajiPaginationError`. Cancellation is checked before each request. Page/limit must be nonnullable scalar integer parameter controls; body-bound controls are rejected during generation.\n"
+            },
     )?;
     insert(
         &mut tree,
@@ -77,15 +84,23 @@ pub(crate) fn render_sdk(
         &mut tree,
         &root,
         &format!("Sources/{module}/Operations.swift"),
-        render_operations(api),
+        render_operations(api).replace("\n}\n", &format!("\n{pagination}\n}}\n")),
     )?;
+    if !pagination.is_empty() {
+        insert(
+            &mut tree,
+            &root,
+            &format!("Sources/{module}/Pagination.swift"),
+            include_str!("page_runtime.swift.txt").into(),
+        )?;
+    }
     if style == SdkClientStyle::Namespaced {
         for (resource, operations) in operation_groups(api) {
             insert(
                 &mut tree,
                 &root,
                 &format!("Sources/{module}/Resources/{resource}Resource.swift"),
-                render_resource(&resource, &operations),
+                render_resource(api, &resource, &operations),
             )?;
         }
     }
@@ -557,7 +572,7 @@ fn operation_groups(api: &Api) -> BTreeMap<String, Vec<&Operation>> {
     groups
 }
 
-fn render_resource(resource: &str, operations: &[&Operation]) -> String {
+fn render_resource(api: &Api, resource: &str, operations: &[&Operation]) -> String {
     let property = identifier(&lower_camel(resource));
     let mut output = format!(
         "{NOTICE}\nimport Foundation\n\npublic extension KajiClient {{\n    var {property}: {resource}Resource {{ {resource}Resource(client: self) }}\n}}\n\npublic struct {resource}Resource {{\n    private let client: KajiClient\n    internal init(client: KajiClient) {{ self.client = client }}\n"
@@ -594,6 +609,18 @@ fn render_resource(resource: &str, operations: &[&Operation]) -> String {
             );
         }
         output.push_str("    }\n");
+    }
+    let mut resource_api = api.clone();
+    resource_api
+        .operations
+        .retain(|operation| operations.iter().any(|item| item.id == operation.id));
+    if let Ok(pages) = pagination::render(&resource_api) {
+        output.push_str(
+            &pages
+                .replace("    func ", "    public func ")
+                .replace("self.", "client.")
+                .replace("{ current in", "{ [client] current in"),
+        );
     }
     output.push_str("}\n");
     output
