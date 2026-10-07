@@ -291,6 +291,22 @@ fn kaji_retry_after(headers: &reqwest::header::HeaderMap) -> Option<Duration> {
     httpdate::parse_http_date(value).ok().map(|time| time.duration_since(std::time::SystemTime::now()).unwrap_or(Duration::ZERO))
 }
 "#);
+    output.push_str(r#"
+#[allow(dead_code)]
+fn kaji_query_pairs<T: Serialize>(name: &str, value: &T, style: &str, explode: bool) -> Vec<(String, String)> {
+    let value = serde_json::to_value(value).unwrap_or(serde_json::Value::Null);
+    match value {
+        serde_json::Value::Array(values) => {
+            if style == "form" && explode { values.iter().map(|value| (name.to_owned(), kaji_query_value(value))).collect() }
+            else {
+                let delimiter = match style { "spaceDelimited" => " ", "pipeDelimited" => "|", _ => "," };
+                vec![(name.to_owned(), values.iter().map(kaji_query_value).collect::<Vec<_>>().join(delimiter))]
+            }
+        }
+        value => vec![(name.to_owned(), kaji_query_value(&value))],
+    }
+}
+"#);
     if has_pagination {
         output.push_str(render_pagination_runtime());
     }
@@ -1212,16 +1228,26 @@ fn render_parameter_use(output: &mut String, parameter: &OperationParameter) {
             }
         }
         "query" => {
+            let style = parameter
+                .annotations
+                .get("style")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("form");
+            let explode = parameter
+                .annotations
+                .get("explode")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(style == "form");
             if parameter.required {
                 let _ = writeln!(
                     output,
-                    "        query.push(({:?}.into(), kaji_query_value(&{field})));",
+                    "        query.extend(kaji_query_pairs({:?}, &{field}, {style:?}, {explode}));",
                     parameter.name,
                 );
             } else {
                 let _ = writeln!(
                     output,
-                    "        if let Some(value) = {field}.as_ref() {{ query.push(({:?}.into(), kaji_query_value(value))); }}",
+                    "        if let Some(value) = {field}.as_ref() {{ query.extend(kaji_query_pairs({:?}, value, {style:?}, {explode})); }}",
                     parameter.name,
                 );
             }
@@ -1338,6 +1364,8 @@ fn resource_name(operation: &Operation) -> String {
                 .map(rust_field_name)
         })
         .unwrap_or_else(|| "api".into())
+        .trim_start_matches("r#")
+        .to_owned()
 }
 
 fn is_version_segment(segment: &str) -> bool {
@@ -1352,20 +1380,24 @@ fn resource_accessor_name(resource: &str, direct_methods: &[String]) -> String {
     if direct_methods.iter().any(|method| method == resource) {
         format!("{resource}_resource")
     } else {
-        resource.into()
+        rust_field_name(resource)
     }
 }
 
 fn resource_method_name(direct: &str, resource: &str) -> String {
     let singular = resource.strip_suffix('s').unwrap_or(resource);
-    direct
+    let method = direct
         .strip_suffix(resource)
         .or_else(|| direct.strip_suffix(singular))
         .or_else(|| direct.strip_prefix(resource))
         .map(|method| method.trim_matches('_'))
         .filter(|method| !method.is_empty())
-        .unwrap_or(direct)
-        .into()
+        .unwrap_or(direct);
+    if method.starts_with("r#") {
+        method.into()
+    } else {
+        rust_field_name(method)
+    }
 }
 
 pub(crate) fn render_readme(api: &Api, crate_name: &str, config: &RenderOptions) -> String {
@@ -1541,15 +1573,22 @@ pub(crate) fn rust_field_name(name: &str) -> String {
     }
     let output = output.trim_matches('_').to_owned();
     match output.as_str() {
-        "type" | "match" | "ref" | "self" | "super" | "crate" | "move" | "mod" | "struct"
-        | "enum" | "use" => format!("r#{output}"),
+        "self" | "super" | "crate" => format!("{output}_value"),
+        "as" | "async" | "await" | "break" | "const" | "continue" | "dyn" | "else" | "enum"
+        | "extern" | "false" | "fn" | "for" | "if" | "impl" | "in" | "let" | "loop" | "match"
+        | "mod" | "move" | "mut" | "pub" | "ref" | "return" | "static" | "struct" | "trait"
+        | "true" | "type" | "unsafe" | "use" | "where" | "while" | "abstract" | "become"
+        | "box" | "do" | "final" | "gen" | "macro" | "override" | "priv" | "try" | "typeof"
+        | "unsized" | "virtual" | "yield" => format!("r#{output}"),
         "" => "value".into(),
         _ => output,
     }
 }
 
 pub(crate) fn kebab_case(name: &str) -> String {
-    rust_field_name(name).replace('_', "-")
+    rust_field_name(name)
+        .trim_start_matches("r#")
+        .replace('_', "-")
 }
 
 #[cfg(test)]

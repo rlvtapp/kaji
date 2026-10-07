@@ -1347,7 +1347,7 @@ const createTransport = (config: ClientConfig = {}): ClientInstance => async ({ 
       }
       break
     } catch (error) {
-      if (attempt + 1 >= maxAttempts) {
+      if ((typeof error === 'object' && error !== null && 'name' in error && error.name === 'AbortError') || attempt + 1 >= maxAttempts) {
         await config.hooks?.onError?.(error, request)
         throw error
       }
@@ -1580,7 +1580,7 @@ const createTransport = (config: ClientConfig = {}): ClientInstance => {
         // validateStatus above keeps HTTP responses out of this branch. Only
         // adapter/network failures retry; a hook, codec, or validator failure
         // must remain a single terminal outcome.
-        if (!axios.isAxiosError(error) || attempt + 1 >= maxAttempts) {
+        if (axios.isCancel(error) || !axios.isAxiosError(error) || attempt + 1 >= maxAttempts) {
           await config.hooks?.onError?.(error, request)
           throw error
         }
@@ -2065,7 +2065,9 @@ mod tests {
         assert!(runtime.contains("config.codecs"));
         assert!(runtime.contains("export interface StandardSchema"));
         assert!(runtime.contains("await config.hooks?.afterResponse?.({ request, status: response.status, headers: response.headers as Record<string, unknown>, data })\n        if (response.status >= 400"));
-        assert!(runtime.contains("if (!axios.isAxiosError(error) || attempt + 1 >= maxAttempts)"));
+        assert!(runtime.contains(
+            "if (axios.isCancel(error) || !axios.isAxiosError(error) || attempt + 1 >= maxAttempts)"
+        ));
         assert!(
             runtime.contains("validate(validation?.request ?? config.validation?.request, body)")
         );

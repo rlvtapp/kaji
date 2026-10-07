@@ -82,6 +82,10 @@ fn render_sdk(
             render_model_exports(schemas),
         )?)?;
     }
+    tree.insert(GeneratedFile::new(
+        format!("{root}/src/{module}/models/_model_codec.py"),
+        include_str!("model_codec.py"),
+    )?)?;
     for schema in &api.schemas {
         tree.insert(GeneratedFile::new(
             format!(
@@ -324,10 +328,29 @@ fn render_resource_exports(resources: &[String]) -> String {
 
 fn render_model(schema: &Schema) -> String {
     let mut output = format!(
-        "{NOTICE}from __future__ import annotations\n\nfrom dataclasses import dataclass, field\nfrom typing import Any, Literal\n\n"
+        "{NOTICE}from __future__ import annotations\n\nfrom dataclasses import dataclass, field\nfrom typing import Any, Literal\nfrom ._model_codec import decode_model_value\n\n"
     );
     render_schema(&mut output, schema);
     output
+}
+
+fn python_decode_shape(value: &SchemaValue) -> String {
+    match &value.kind {
+        SchemaKind::Reference { reference } => format!(
+            "(\"ref\", {:?})",
+            python_type_name(reference.rsplit('/').next().unwrap_or(reference))
+        ),
+        SchemaKind::Array { items } => format!("(\"array\", {})", python_decode_shape(items)),
+        SchemaKind::Object { fields, .. } => format!(
+            "(\"object\", {{{}}})",
+            fields
+                .iter()
+                .map(|field| format!("{:?}: {}", field.name, python_decode_shape(&field.value)))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        _ => "None".into(),
+    }
 }
 
 fn render_schema(output: &mut String, schema: &Schema) {
@@ -411,6 +434,12 @@ fn render_schema(output: &mut String, schema: &Schema) {
                         format!("value[{key:?}]", key = item.name)
                     } else {
                         format!("value.get({key:?})", key = item.name)
+                    };
+                    let shape = python_decode_shape(&item.value);
+                    let accessor = if shape == "None" {
+                        accessor
+                    } else {
+                        format!("decode_model_value({accessor}, {shape})")
                     };
                     let _ = writeln!(output, "            {field_name}={accessor},");
                 }
@@ -592,6 +621,7 @@ class BaseClient:
     ) -> Any:
         url = f"{{self.base_url}}{{path}}"
         if query:
+            query = {{name: ([str(item).lower() if isinstance(item, bool) else item for item in value] if isinstance(value, (list, tuple)) else str(value).lower() if isinstance(value, bool) else value) for name, value in query.items()}}
             encoded = urlencode({{key: value for key, value in query.items() if value is not None}}, doseq=True)
             if encoded:
                 url = f"{{url}}?{{encoded}}"
@@ -2342,6 +2372,43 @@ async def main():
     else: raise AssertionError('repeated 401 accepted')
     assert transport.tokens == ['Bearer token2', 'Bearer token3']
     assert issuer.calls == 3
+    # Cancellation while leading a refresh or waiting for its lock must release
+    # ownership and leave the previous cached token available for a later retry.
+    class BlockingIssuer:
+        def __init__(self): self.calls=0; self.started=asyncio.Event(); self.release=asyncio.Event()
+        async def post(self, url, **options):
+            self.calls+=1
+            if self.calls==2:
+                self.started.set(); await self.release.wait()
+            return TokenResponse('fresh'+str(self.calls))
+    blocking=BlockingIssuer();managed=AsyncOAuthClientCredentials('https://auth.example/token','id','secret',http_client=blocking)
+    assert await managed(None)=='fresh1'
+    leader=asyncio.create_task(managed('fresh1'));await blocking.started.wait()
+    waiter=asyncio.create_task(managed('fresh1'));await asyncio.sleep(0)
+    waiter.cancel()
+    try:await waiter
+    except asyncio.CancelledError:pass
+    else:raise AssertionError('cancelled refresh waiter returned a token')
+    assert blocking.calls==2
+    leader.cancel()
+    try:await leader
+    except asyncio.CancelledError:pass
+    else:raise AssertionError('cancelled refresh leader returned a token')
+    assert not managed._lock.locked() and managed._token=='fresh1'
+    assert await managed('fresh1')=='fresh3' and blocking.calls==3
+    # Transport cancellation must bypass retry/error hooks and permit reuse.
+    class BlockingTransport:
+        def __init__(self):self.calls=0;self.started=asyncio.Event()
+        def build_request(self,method,url,**options):return options
+        async def send(self,request,stream=False):
+            self.calls+=1;self.started.set();await asyncio.Event().wait()
+    terminal=BlockingTransport();errors=[]
+    cancelled_client=AsyncClient('https://unused.example',http_client=terminal,max_retries=10,on_error=errors.append)
+    pending=asyncio.create_task(cancelled_client.health());await terminal.started.wait();pending.cancel()
+    try:await pending
+    except asyncio.CancelledError:pass
+    else:raise AssertionError('transport cancellation swallowed')
+    assert terminal.calls==1 and errors==[]
 asyncio.run(main())
 "#;
         let status = Command::new("python3")
@@ -3570,6 +3637,46 @@ asyncio.run(run())
             output.status.success(),
             "{}{}",
             String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    #[test]
+    fn native_nested_reference_arrays_decode_models_and_round_trip_wire() {
+        let mut source = api();
+        source.schemas.push(Schema::new(
+            "ContactPage",
+            SchemaValue::new(SchemaKind::Object {
+                fields: vec![Field {
+                    name: "items".into(),
+                    required: true,
+                    annotations: Default::default(),
+                    value: SchemaValue::new(SchemaKind::Array {
+                        items: Box::new(SchemaValue::reference("#/components/schemas/Contact")),
+                    }),
+                }],
+                additional_properties: AdditionalProperties::Forbidden,
+            }),
+        ));
+        let root = tempfile::tempdir().unwrap();
+        render_sdk(&source, "sdk", Some("probe-sdk"), SdkClientStyle::Flat)
+            .unwrap()
+            .write_to(root.path())
+            .unwrap();
+        let script = r#"from probe_sdk.models import ContactPage,Contact
+from probe_sdk.runtime import to_wire
+wire={'items':[{'id':'one'},{'id':'two','display-name':None}]}
+page=ContactPage.from_dict(wire)
+assert all(isinstance(item,Contact) for item in page.items)
+assert [item.id for item in page.items]==['one','two'] and to_wire(page)==wire
+"#;
+        let output = std::process::Command::new("python3")
+            .args(["-c", script])
+            .env("PYTHONPATH", root.path().join("sdk/src"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
             String::from_utf8_lossy(&output.stderr)
         );
     }

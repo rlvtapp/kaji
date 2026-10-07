@@ -794,17 +794,20 @@ mod tests {
             .generate(&api(), None)
             .unwrap();
         let call = tree.get("ts/api/calls/listContacts.ts").unwrap();
-        assert!(call.contains("from '../../custom/request'"), "{call}");
+        assert!(call.contains("from '../../custom/request.js'"), "{call}");
         assert!(
-            call.contains("from '../../domain/types/ListContacts'"),
+            call.contains("from '../../domain/types/ListContacts.js'"),
             "{call}"
         );
         let client = tree.get("ts/api/client.ts").unwrap();
         assert!(client.contains("export class Contacts"), "{client}");
-        assert!(client.contains("from './calls/listContacts'"), "{client}");
+        assert!(
+            client.contains("from './calls/listContacts.js'"),
+            "{client}"
+        );
         let query = tree.get("ts/ui/queries.ts").unwrap();
         assert!(
-            query.contains("from \"../api/calls/listContacts\""),
+            query.contains("from \"../api/calls/listContacts.js\""),
             "{query}"
         );
         assert!(tree.get("ts/.kaji/client.ts").is_none());
@@ -859,7 +862,7 @@ mod tests {
         assert!(
             tree.get("ts/vue-query.ts")
                 .unwrap()
-                .contains("from \"./clients/contacts/listContacts\"")
+                .contains("from \"./clients/contacts/listContacts.js\"")
         );
     }
     #[test]

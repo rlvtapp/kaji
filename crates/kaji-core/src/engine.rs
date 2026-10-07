@@ -156,6 +156,11 @@ pub trait Language: Send + Sync + Sized + 'static {
     fn finalize(_cx: &mut FinalizeContext<'_, Self>) -> Result<()> {
         Ok(())
     }
+    /// Adapt assembled generated files for the target runtime after middleware
+    /// bundling and before explicit author source overlays. Default is unchanged.
+    fn finalize_files(_tree: &mut GeneratedTree) -> Result<()> {
+        Ok(())
+    }
     /// Bundle SDK-author runtime middleware and register it in generated clients.
     /// Called with package-relative output after finalization and post plugins.
     fn bundle_middleware(
@@ -658,6 +663,7 @@ impl<L: Language> Package<L> {
             }
             tree = staged;
         }
+        L::finalize_files(&mut tree)?;
         crate::customization::apply_code_customizations(&mut tree, &self.customizations)?;
         let mut output = GeneratedTree::default();
         let dir = checked_path(Path::new(&self.dir))?;

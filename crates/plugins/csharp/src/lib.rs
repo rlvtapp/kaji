@@ -185,9 +185,16 @@ fn render_schema(output: &mut String, schema: &Schema) {
                 } else {
                     ""
                 };
+                let preserve_null = if field.required
+                    && (field.value.nullable || field.value.optional || field.value.nullish)
+                {
+                    "    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]\n"
+                } else {
+                    ""
+                };
                 let _ = writeln!(
                     output,
-                    "    [JsonPropertyName({:?})]\n    public {required}{field_type} {property} {{ get; init; }}",
+                    "    [JsonPropertyName({:?})]\n{preserve_null}    public {required}{field_type} {property} {{ get; init; }}",
                     field.name,
                 );
             }
@@ -1299,6 +1306,49 @@ mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn required_nullable_and_optional_omission_are_distinct() {
+        let mut nullable = SchemaValue::new(SchemaKind::String);
+        nullable.nullable = true;
+        let schema = Schema::new(
+            "WireInput",
+            SchemaValue::new(SchemaKind::Object {
+                fields: vec![
+                    Field {
+                        name: "enabled".into(),
+                        value: SchemaValue::new(SchemaKind::Boolean),
+                        required: true,
+                        annotations: Default::default(),
+                    },
+                    Field {
+                        name: "count".into(),
+                        value: SchemaValue::new(SchemaKind::Integer),
+                        required: true,
+                        annotations: Default::default(),
+                    },
+                    Field {
+                        name: "note".into(),
+                        value: nullable,
+                        required: true,
+                        annotations: Default::default(),
+                    },
+                    Field {
+                        name: "missing".into(),
+                        value: SchemaValue::new(SchemaKind::String),
+                        required: false,
+                        annotations: Default::default(),
+                    },
+                ],
+                additional_properties: AdditionalProperties::Forbidden,
+            }),
+        );
+        let model = render_model(&schema, "Example");
+        assert!(model.contains(
+            "[JsonPropertyName(\"note\")]\n    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]"
+        ));
+        assert!(model.contains("[JsonPropertyName(\"missing\")]\n    public string? Missing"));
+    }
 
     #[test]
     fn normalized_page_and_offset_helpers_preserve_arguments_and_bounds() {

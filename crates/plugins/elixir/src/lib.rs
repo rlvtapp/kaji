@@ -610,7 +610,14 @@ fn render_model(module: &str, schema: &Schema) -> String {
                     elixir_identifier(&field.name)
                 );
             }
-            output.push_str("    ]\n    |> Enum.reject(fn {_key, value} -> is_nil(value) end)\n    |> Map.new(fn {key, value} -> {key, JSON.to_wire(value)} end)\n  end\n\n  @spec from_map(map()) :: t()\n  def from_map(map) do\n    %__MODULE__{\n");
+            let required_keys = fields
+                .iter()
+                .filter(|field| field.required)
+                .map(|field| format!("\"{}\"", escape_elixir_string(&field.name)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            output.push_str(&format!("    ]\n    |> Enum.reject(fn {{key, value}} -> is_nil(value) and key not in [{required_keys}] end)\n"));
+            output.push_str("    |> Map.new(fn {key, value} -> {key, JSON.to_wire(value)} end)\n  end\n\n  @spec from_map(map()) :: t()\n  def from_map(map) do\n    %__MODULE__{\n");
             for field in fields {
                 let access = format!("Map.get(map, \"{}\")", escape_elixir_string(&field.name));
                 let _ = writeln!(
@@ -1510,6 +1517,108 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires Elixir; dependency-free model required-null probe"]
+    fn native_required_null_and_optional_omission() {
+        let mut nullable = SchemaValue::new(SchemaKind::String);
+        nullable.nullable = true;
+        let schema = Schema::new(
+            "WireInput",
+            SchemaValue::new(SchemaKind::Object {
+                fields: vec![
+                    Field {
+                        name: "enabled".into(),
+                        value: SchemaValue::new(SchemaKind::Boolean),
+                        required: true,
+                        annotations: Default::default(),
+                    },
+                    Field {
+                        name: "count".into(),
+                        value: SchemaValue::new(SchemaKind::Integer),
+                        required: true,
+                        annotations: Default::default(),
+                    },
+                    Field {
+                        name: "note".into(),
+                        value: nullable,
+                        required: true,
+                        annotations: Default::default(),
+                    },
+                    Field {
+                        name: "missing".into(),
+                        value: SchemaValue::new(SchemaKind::String),
+                        required: false,
+                        annotations: Default::default(),
+                    },
+                ],
+                additional_properties: AdditionalProperties::Forbidden,
+            }),
+        );
+        let model = render_model("Probe", &schema);
+        let script = String::from("defmodule Probe.JSON do\n def to_wire(value), do: value\nend\n")
+            + &model
+            + r#"
+model=struct!(Probe.Models.WireInput,enabled: false,count: 0,note: nil)
+expected=%{"enabled"=>false,"count"=>0,"note"=>nil}
+if Probe.Models.WireInput.to_map(model)!=expected, do: raise("required-null serialization assertion")
+restored=Probe.Models.WireInput.from_map(expected)
+if Probe.Models.WireInput.to_map(restored)!=expected, do: raise("roundtrip presence assertion")
+"#;
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("probe.exs");
+        std::fs::write(&path, script).unwrap();
+        let result = std::process::Command::new("elixir")
+            .arg(path)
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
+
+    #[test]
+    fn required_nullable_and_optional_omission_are_distinct() {
+        let mut nullable = SchemaValue::new(SchemaKind::String);
+        nullable.nullable = true;
+        let schema = Schema::new(
+            "WireInput",
+            SchemaValue::new(SchemaKind::Object {
+                fields: vec![
+                    Field {
+                        name: "enabled".into(),
+                        value: SchemaValue::new(SchemaKind::Boolean),
+                        required: true,
+                        annotations: Default::default(),
+                    },
+                    Field {
+                        name: "count".into(),
+                        value: SchemaValue::new(SchemaKind::Integer),
+                        required: true,
+                        annotations: Default::default(),
+                    },
+                    Field {
+                        name: "note".into(),
+                        value: nullable,
+                        required: true,
+                        annotations: Default::default(),
+                    },
+                    Field {
+                        name: "missing".into(),
+                        value: SchemaValue::new(SchemaKind::String),
+                        required: false,
+                        annotations: Default::default(),
+                    },
+                ],
+                additional_properties: AdditionalProperties::Forbidden,
+            }),
+        );
+        let model = render_model("Probe", &schema);
+        assert!(model.contains("is_nil(value) and key not in [\"enabled\", \"count\", \"note\"]"));
+        assert!(model.contains("{\"missing\", model.missing}"));
+    }
+
+    #[test]
     fn generates_a_deterministic_typed_mix_package() {
         let first = render_test_sdk(&api(), "sdk/elixir", Some("example-api-sdk")).unwrap();
         let second = render_test_sdk(&api(), "sdk/elixir", Some("example-api-sdk")).unwrap();
@@ -1881,6 +1990,14 @@ defmodule TransportProbe do
     assert {"X-Request-Key", "provided"} in provided_first
     Probe.API.Operations0000.create_item(client, x_request_key: "")
     assert_receive({:key, empty});assert {"X-Request-Key", ""} in empty;refute_receive({:key, _})
+    Probe.API.Operations0000.create_item(client, x_request_key: "   ")
+    assert_receive({:key, blank});assert {"X-Request-Key", "   "} in blank;refute_receive({:key, _})
+    Probe.Client.request(client, :post, "/items", [], [], nil, :json, :text)
+    assert_receive({:key, _});refute_receive({:key, _})
+    Probe.Client.request(client, :post, "/items", [], [{"Idempotency-Key", "provided"}], nil, :json, :text)
+    assert_receive({:key, standard_first});assert_receive({:key, standard_second});assert standard_first == standard_second
+    Probe.Client.request(client, :post, "/items", [], [{"Idempotency-Key", " "}], nil, :json, :text)
+    assert_receive({:key, _});refute_receive({:key, _})
 
     Probe.Client.request(client, :patch, "/items", [], [{"X-Request-Key", key}], nil, :json, :text)
     assert_receive({:key, _});refute_receive({:key, _})

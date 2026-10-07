@@ -113,6 +113,10 @@ const {manual}=require('./compiled/clients/manual.js');const {unsafeWrite}=requi
  calls=0;before=keys.length;await assert.rejects(()=>manual({client}));assert.equal(keys.length,before+1);assert.equal(keys.at(-1)==null,true);
  calls=0;before=keys.length;await manual({client,headers:{'X-Key':'manual'}});assert.deepEqual(keys.slice(before),['manual','manual']);
  let observed;await write({client:async request=>{observed=request;return {status:200,data:'ok',headers:{},contentType:'application/json'}}});assert.match(observed.headers['X-Key'],/^[0-9a-f-]{36}$/);assert.equal(observed.idempotencyHeader,'X-Key');
+ let canceledCalls=0;const canceled=new DOMException('aborted','AbortError');
+ const canceledConfig=process.argv[2]==='fetch'?{fetch:async()=>{canceledCalls++;throw canceled}}:{client:axios.create({adapter:async()=>{canceledCalls++;throw new axios.CanceledError('aborted')}})};
+ const canceledClient=runtime.createClient({...canceledConfig,baseUrl:'https://example.test',retry:{maxAttempts:3,initialDelayMs:0,maxDelayMs:0}});
+ await assert.rejects(()=>canceledClient({method:'GET',url:'/canceled'}),error=>process.argv[2]==='fetch'?error===canceled:axios.isCancel(error));assert.equal(canceledCalls,1);
  const originalTimeout=globalThis.setTimeout;const delays=[];
  globalThis.setTimeout=(callback,delay)=>{delays.push(delay);return originalTimeout(callback,0)};
  for(const [headers,expected] of [

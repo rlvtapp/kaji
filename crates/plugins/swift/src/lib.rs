@@ -195,7 +195,7 @@ fn json_value() -> String {
 
 fn client_runtime() -> String {
     let runtime = format!(
-        "{NOTICE}\nimport Foundation\n#if canImport(FoundationNetworking)\nimport FoundationNetworking\n#endif\n\npublic struct KajiClientOptions: Sendable {{\n    public var baseURL: URL\n    public var headers: [String: String]\n    public var timeout: TimeInterval\n\n    public init(baseURL: URL, headers: [String: String] = [:], timeout: TimeInterval = 30) {{\n        self.baseURL = baseURL\n        self.headers = headers\n        self.timeout = timeout\n    }}\n}}\n\npublic enum KajiAPIError: Error, Sendable {{\n    case invalidURL(String)\n    case invalidResponse\n    case status(code: Int, body: Data)\n}}\n\n/// Receives lifecycle notifications without requiring a logging framework.\npublic protocol KajiClientHook: Sendable {{\n    func willSend(_ request: URLRequest)\n    func didReceive(_ response: HTTPURLResponse, body: Data)\n}}\n\npublic final class KajiClient: @unchecked Sendable {{\n    private let options: KajiClientOptions\n    private let session: URLSession\n    private let hooks: [any KajiClientHook]\n    private let encoder = JSONEncoder()\n    private let decoder = JSONDecoder()\n\n    public init(options: KajiClientOptions, session: URLSession = .shared, hooks: [any KajiClientHook] = []) {{\n        self.options = options\n        self.session = session\n        self.hooks = hooks\n    }}\n\n    internal func makeRequest(method: String, path: String, query: [URLQueryItem] = []) throws -> URLRequest {{\n        guard var components = URLComponents(url: options.baseURL.appendingPathComponent(path.trimmingCharacters(in: CharacterSet(charactersIn: \"/\"))), resolvingAgainstBaseURL: false) else {{\n            throw KajiAPIError.invalidURL(path)\n        }}\n        components.queryItems = query.isEmpty ? nil : query\n        guard let url = components.url else {{ throw KajiAPIError.invalidURL(path) }}\n        var request = URLRequest(url: url, timeoutInterval: options.timeout)\n        request.httpMethod = method\n        request.setValue(\"application/json\", forHTTPHeaderField: \"Accept\")\n        for (name, value) in options.headers {{ request.setValue(value, forHTTPHeaderField: name) }}\n        return request\n    }}\n\n    internal func send<T: Decodable>(_ request: URLRequest, as type: T.Type) async throws -> T {{\n        hooks.forEach {{ $0.willSend(request) }}\n        let (data, response) = try await session.data(for: request)\n        guard let http = response as? HTTPURLResponse else {{ throw KajiAPIError.invalidResponse }}\n        hooks.forEach {{ $0.didReceive(http, body: data) }}\n        guard (200..<300).contains(http.statusCode) else {{ throw KajiAPIError.status(code: http.statusCode, body: data) }}\n        return try decoder.decode(T.self, from: data)\n    }}\n\n    internal func sendVoid(_ request: URLRequest) async throws {{\n        hooks.forEach {{ $0.willSend(request) }}\n        let (data, response) = try await session.data(for: request)\n        guard let http = response as? HTTPURLResponse else {{ throw KajiAPIError.invalidResponse }}\n        hooks.forEach {{ $0.didReceive(http, body: data) }}\n        guard (200..<300).contains(http.statusCode) else {{ throw KajiAPIError.status(code: http.statusCode, body: data) }}\n    }}\n\n    internal func encode<T: Encodable>(_ body: T) throws -> Data {{ try encoder.encode(body) }}\n}}\n\nextension String {{\n    var kajiPathComponent: String {{ addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? self }}\n}}\n"
+        "{NOTICE}\nimport Foundation\n#if canImport(FoundationNetworking)\nimport FoundationNetworking\n#endif\n\npublic struct KajiClientOptions: Sendable {{\n    public var baseURL: URL\n    public var headers: [String: String]\n    public var timeout: TimeInterval\n\n    public init(baseURL: URL, headers: [String: String] = [:], timeout: TimeInterval = 30) {{\n        self.baseURL = baseURL\n        self.headers = headers\n        self.timeout = timeout\n    }}\n}}\n\npublic enum KajiAPIError: Error, Sendable {{\n    case invalidURL(String)\n    case invalidResponse\n    case status(code: Int, body: Data)\n}}\n\n/// Receives lifecycle notifications without requiring a logging framework.\npublic protocol KajiClientHook: Sendable {{\n    func willSend(_ request: URLRequest)\n    func didReceive(_ response: HTTPURLResponse, body: Data)\n}}\n\npublic final class KajiClient: @unchecked Sendable {{\n    private let options: KajiClientOptions\n    private let session: URLSession\n    private let hooks: [any KajiClientHook]\n    private let encoder = JSONEncoder()\n    private let decoder = JSONDecoder()\n\n    public init(options: KajiClientOptions, session: URLSession = .shared, hooks: [any KajiClientHook] = []) {{\n        self.options = options\n        self.session = session\n        self.hooks = hooks\n    }}\n\n    internal func makeRequest(method: String, path: String, query: [URLQueryItem] = []) throws -> URLRequest {{\n        guard var components = URLComponents(url: options.baseURL, resolvingAgainstBaseURL: false), let operationPath = URLComponents(string: path.replacingOccurrences(of: \"?\", with: \"%3F\").replacingOccurrences(of: \"#\", with: \"%23\"))?.percentEncodedPath else {{\n            throw KajiAPIError.invalidURL(path)\n        }}\n        let basePath = components.percentEncodedPath.trimmingCharacters(in: CharacterSet(charactersIn: \"/\"))\n        components.percentEncodedPath = (basePath.isEmpty ? \"\" : \"/\" + basePath) + \"/\" + operationPath.trimmingCharacters(in: CharacterSet(charactersIn: \"/\"))\n        components.queryItems = query.isEmpty ? nil : query\n        guard let url = components.url else {{ throw KajiAPIError.invalidURL(path) }}\n        var request = URLRequest(url: url, timeoutInterval: options.timeout)\n        request.httpMethod = method\n        request.setValue(\"application/json\", forHTTPHeaderField: \"Accept\")\n        for (name, value) in options.headers {{ request.setValue(value, forHTTPHeaderField: name) }}\n        return request\n    }}\n\n    internal func send<T: Decodable>(_ request: URLRequest, as type: T.Type) async throws -> T {{\n        hooks.forEach {{ $0.willSend(request) }}\n        let (data, response) = try await session.data(for: request)\n        guard let http = response as? HTTPURLResponse else {{ throw KajiAPIError.invalidResponse }}\n        hooks.forEach {{ $0.didReceive(http, body: data) }}\n        guard (200..<300).contains(http.statusCode) else {{ throw KajiAPIError.status(code: http.statusCode, body: data) }}\n        return try decoder.decode(T.self, from: data)\n    }}\n\n    internal func sendVoid(_ request: URLRequest) async throws {{\n        hooks.forEach {{ $0.willSend(request) }}\n        let (data, response) = try await session.data(for: request)\n        guard let http = response as? HTTPURLResponse else {{ throw KajiAPIError.invalidResponse }}\n        hooks.forEach {{ $0.didReceive(http, body: data) }}\n        guard (200..<300).contains(http.statusCode) else {{ throw KajiAPIError.status(code: http.statusCode, body: data) }}\n    }}\n\n    internal func encode<T: Encodable>(_ body: T) throws -> Data {{ try encoder.encode(body) }}\n}}\n\nextension String {{\n    var kajiPathComponent: String {{ addingPercentEncoding(withAllowedCharacters: CharacterSet(charactersIn: \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~\")) ?? self }}\n}}\n"
     );
     runtime.replace("public final class KajiClient: @unchecked Sendable {", r#"
 /// Replace execution or compose middleware around the Foundation transport.
@@ -439,7 +439,7 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
     };
     let _ = writeln!(
         output,
-        "{indent}    {request_binding} request = try makeRequest(method: {:?}, path: \"{}\", query: [",
+        "{indent}    {request_binding} request = try makeRequest(method: {:?}, path: \"{}\", query: ([",
         operation.method.as_str(),
         swift_path_literal(&path)
     );
@@ -449,21 +449,55 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
         .filter(|parameter| parameter.location == "query")
     {
         let value = identifier(&parameter.name);
-        if parameter.required {
-            let _ = writeln!(
-                output,
-                "{indent}        URLQueryItem(name: {:?}, value: String(describing: {value})),",
+        let array = parameter
+            .schema
+            .as_ref()
+            .is_some_and(|schema| matches!(schema.kind, SchemaKind::Array { .. }));
+        let expression = if array {
+            let values = if parameter.required {
+                value.clone()
+            } else {
+                format!("({value} ?? [])")
+            };
+            if parameter
+                .annotations
+                .get("explode")
+                .and_then(serde_json::Value::as_bool)
+                == Some(false)
+            {
+                if parameter.required {
+                    format!(
+                        "[URLQueryItem(name: {:?}, value: {values}.map {{ String(describing: $0) }}.joined(separator: \",\"))]",
+                        parameter.name
+                    )
+                } else {
+                    format!(
+                        "{value}.map {{ [URLQueryItem(name: {:?}, value: $0.map {{ String(describing: $0) }}.joined(separator: \",\"))] }} ?? []",
+                        parameter.name
+                    )
+                }
+            } else {
+                format!(
+                    "{values}.map {{ URLQueryItem(name: {:?}, value: String(describing: $0)) }}",
+                    parameter.name
+                )
+            }
+        } else if parameter.required {
+            format!(
+                "[URLQueryItem(name: {:?}, value: String(describing: {value}))]",
                 parameter.name
-            );
+            )
         } else {
-            let _ = writeln!(
-                output,
-                "{indent}        {value}.map {{ URLQueryItem(name: {:?}, value: String(describing: $0)) }},",
+            format!(
+                "{value}.map {{ [URLQueryItem(name: {:?}, value: String(describing: $0))] }} ?? []",
                 parameter.name
-            );
-        }
+            )
+        };
+        let _ = writeln!(output, "{indent}        {expression},");
     }
-    output.push_str(&format!("{indent}    ].compactMap {{ $0 }})\n"));
+    output.push_str(&format!(
+        "{indent}    ] as [[URLQueryItem]]).flatMap {{ $0 }})\n"
+    ));
     for parameter in operation
         .parameters
         .iter()
@@ -856,15 +890,18 @@ actor Events {
 struct Mock:KajiTransport {
  let events:Events
  func execute(_ request:URLRequest) async throws -> (Data,URLResponse) {
+  precondition(request.url!.absoluteString.contains("/prefix%2Fkeep/items"))
   await events.add(request.value(forHTTPHeaderField:"X-Once")!)
   return(Data("1".utf8),HTTPURLResponse(url:request.url!,statusCode:200,httpVersion:nil,headerFields:[:])!)
  }
 }
 @main struct Probe {
  static func main() async throws {
-  let events=Events();let client=KajiClient(options:.init(baseURL:URL(string:"https://unused.test")!),transport:Mock(events:events))
-  _ = try await client.createItem();_ = try await client.createItem();_ = try await client.createItem(xOnce:"durable-key")
-  let keys=await events.snapshot();precondition(keys.count==3);precondition(keys[0] != keys[1]);precondition(UUID(uuidString:keys[0]) != nil);precondition(keys[2]=="durable-key")
+  let events=Events();let client=KajiClient(options:.init(baseURL:URL(string:"https://unused.test/prefix%2Fkeep/")!),transport:Mock(events:events))
+  _ = try await client.createItem();_ = try await client.createItem();_ = try await client.createItem(xOnce:"durable-key");_ = try await client.createItem(xOnce:"")
+  let literal = try client.makeRequest(method: "GET", path: "/literal?x#y")
+  precondition(literal.url!.absoluteString == "https://unused.test/prefix%2Fkeep/literal%3Fx%23y")
+  let keys=await events.snapshot();precondition(keys.count==4);precondition(keys[0] != keys[1]);precondition(UUID(uuidString:keys[0]) != nil);precondition(keys[2]=="durable-key");precondition(keys[3]=="");precondition(keys[0].split(separator:"-")[2].first=="4")
  }
 }
 "#).unwrap();
@@ -1099,6 +1136,14 @@ precondition(value["optional"] == nil)
             .unwrap();
         let output = Command::new("swift")
             .args(["build", "--disable-sandbox"])
+            .env(
+                "CLANG_MODULE_CACHE_PATH",
+                directory.path().join("clang-cache"),
+            )
+            .env(
+                "SWIFTPM_MODULECACHE_OVERRIDE",
+                directory.path().join("swift-cache"),
+            )
             .current_dir(directory.path().join("sdk"))
             .output()
             .unwrap();

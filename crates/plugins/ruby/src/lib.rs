@@ -141,11 +141,58 @@ fn style_guide(api: &Api, module: &str, style: SdkClientStyle) -> String {
 
 fn render_models(api: &Api, module: &str) -> String {
     let mut out = format!("{NOTICE}require \"json\"\n\nmodule {module}\n  module Models\n");
+    out.push_str(r#"    def self.decode_model_value(value, shape)
+      return value if value.nil? || shape.nil?
+      kind, inner = shape
+      if kind == 'ref'
+        model = const_get(inner, false) if const_defined?(inner, false)
+        return model.from_hash(value) if model && model.respond_to?(:from_hash) && value.is_a?(Hash)
+      elsif kind == 'array' && value.is_a?(Array)
+        return value.map { |item| decode_model_value(item, inner) }
+      elsif kind == 'object' && value.is_a?(Hash)
+        return value if inner.empty?
+        return value.each_with_object({}) { |(name, item), output| output[name] = decode_model_value(item, inner[name]) }
+      end
+      value
+    end
+    def self.to_wire(value)
+      return value.map { |item| to_wire(item) } if value.is_a?(Array)
+      return value.each_with_object({}) { |(name, item), output| output[name] = to_wire(item) } if value.is_a?(Hash)
+      return value.to_h if value.respond_to?(:to_h) && !value.nil?
+      value
+    end
+
+"#);
     for schema in &api.schemas {
         out.push_str(&render_model(api, schema));
     }
     out.push_str("  end\nend\n");
     out
+}
+
+fn ruby_decode_shape(value: &SchemaValue) -> String {
+    match &value.kind {
+        SchemaKind::Reference { reference } => format!(
+            "[\"ref\", {}]",
+            ruby_string(&pascal_case(
+                reference.rsplit('/').next().unwrap_or(reference)
+            ))
+        ),
+        SchemaKind::Array { items } => format!("[\"array\", {}]", ruby_decode_shape(items)),
+        SchemaKind::Object { fields, .. } => format!(
+            "[\"object\", {{{}}}]",
+            fields
+                .iter()
+                .map(|field| format!(
+                    "{} => {}",
+                    ruby_string(&field.name),
+                    ruby_decode_shape(&field.value)
+                ))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        _ => "nil".into(),
+    }
 }
 
 fn render_model(api: &Api, schema: &Schema) -> String {
@@ -204,9 +251,10 @@ fn render_model(api: &Api, schema: &Schema) -> String {
                 .iter()
                 .map(|field| {
                     format!(
-                        "{}: value[{}]",
+                        "{}: Models.decode_model_value(value[{}], {})",
                         ruby_identifier(&field.name),
-                        ruby_string(&field.name)
+                        ruby_string(&field.name),
+                        ruby_decode_shape(&field.value)
                     )
                 })
                 .collect::<Vec<_>>()
@@ -258,7 +306,7 @@ fn render_model(api: &Api, schema: &Schema) -> String {
                 };
                 let _ = writeln!(
                     out,
-                    "        value[{}] = {id}{condition}",
+                    "        value[{}] = Models.to_wire({id}){condition}",
                     ruby_string(&field.name)
                 );
             }
@@ -373,7 +421,7 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
         let id = ruby_identifier(&parameter.name);
         let _ = writeln!(
             out,
-            "      path = path.gsub({}, CGI.escape({id}.to_s))",
+            "      path = path.gsub({}, CGI.escape({id}.to_s).gsub(\"+\", \"%20\"))",
             ruby_string(&format!("{{{}}}", parameter.name))
         );
     }
@@ -1029,6 +1077,113 @@ raise unless seen[0].match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-
             output.status.success(),
             "{}{}",
             String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    #[test]
+    fn native_malformed_json_is_explicitly_permissive_until_validation_enabled() {
+        use kaji_core::{HttpMethod, OperationResponse};
+        let api = Api {
+            name: "Malformed".into(),
+            operations: vec![Operation {
+                id: "getPayload".into(),
+                method: HttpMethod::Get,
+                path: "/payload".into(),
+                responses: vec![OperationResponse::json(
+                    "200",
+                    SchemaValue::new(SchemaKind::String),
+                )],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let root = tempfile::tempdir().unwrap();
+        render_sdk(&api, "ruby", Some("probe-sdk"), SdkClientStyle::Flat)
+            .unwrap()
+            .write_to(root.path())
+            .unwrap();
+        let script = r#"require 'probe_sdk'
+class Response
+ attr_reader :code,:body
+ def initialize(code,body);@code=code;@body=body;end
+ def [](key);'application/json';end
+end
+calls=0;reply=Response.new('200','{malformed SECRET')
+transport=->(_){calls+=1;reply}
+permissive=ProbeSdk::Client.new(base_url:'https://unused.example',transport:transport)
+raise 'legacy decode behavior changed' unless permissive.get_payload=='{malformed SECRET' && calls==1
+strict=ProbeSdk::Client.new(base_url:'https://unused.example',transport:transport,validate_responses:true)
+begin;strict.get_payload;raise 'malformed JSON accepted';rescue ProbeSdk::ResponseDecodeError=>error;raise 'payload leaked' if error.message.include?('SECRET');end
+raise 'strict decode retried' unless calls==2
+reply=Response.new('503','{malformed SECRET')
+begin;permissive.get_payload;raise 'status accepted';rescue ProbeSdk::ApiError=>error;raise unless error.status==503 && error.body=='{malformed SECRET';end
+raise 'Ruby invented retry' unless calls==3
+"#;
+        let output = std::process::Command::new("ruby")
+            .args(["-Ilib", "-e", script])
+            .current_dir(root.path().join("ruby"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    #[test]
+    fn native_nested_reference_arrays_decode_models_and_round_trip_wire() {
+        let field = |name: &str, value: SchemaValue| kaji_core::Field {
+            name: name.into(),
+            value,
+            required: true,
+            annotations: Default::default(),
+        };
+        let api = Api {
+            name: "Nested".into(),
+            schemas: vec![
+                Schema::new(
+                    "Contact",
+                    SchemaValue::new(SchemaKind::Object {
+                        fields: vec![field("id", SchemaValue::new(SchemaKind::String))],
+                        additional_properties: AdditionalProperties::Any,
+                    }),
+                ),
+                Schema::new(
+                    "ContactPage",
+                    SchemaValue::new(SchemaKind::Object {
+                        fields: vec![field(
+                            "items",
+                            SchemaValue::new(SchemaKind::Array {
+                                items: Box::new(SchemaValue::reference(
+                                    "#/components/schemas/Contact",
+                                )),
+                            }),
+                        )],
+                        additional_properties: AdditionalProperties::Forbidden,
+                    }),
+                ),
+            ],
+            ..Default::default()
+        };
+        let root = tempfile::tempdir().unwrap();
+        render_sdk(&api, "sdk", Some("probe-sdk"), SdkClientStyle::Flat)
+            .unwrap()
+            .write_to(root.path())
+            .unwrap();
+        let script = r#"require 'probe_sdk'
+wire={'items'=>[{'id'=>'one'},{'id'=>'two','future'=>nil}]}
+page=ProbeSdk::Models::ContactPage.from_hash(wire)
+raise unless page.items.all?{|item|item.is_a?(ProbeSdk::Models::Contact)} && page.items.map(&:id)==['one','two']
+raise unless page.to_h==wire && JSON.parse(JSON.generate(page.to_h))==wire
+"#;
+        let output = std::process::Command::new("ruby")
+            .args(["-Ilib", "-e", script])
+            .current_dir(root.path().join("sdk"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
             String::from_utf8_lossy(&output.stderr)
         );
     }

@@ -2708,6 +2708,40 @@ func TestScopedKeys(t *testing.T) {
             String::from_utf8_lossy(&output.stderr)
         );
     }
+    #[test]
+    fn generated_backoff_cancellation_closes_response_and_preserves_cause() {
+        let root = tempfile::tempdir().unwrap();
+        render_test_sdk(&contact_api(), "sdk", Some("email"))
+            .unwrap()
+            .write_to(root.path())
+            .unwrap();
+        fs::write(root.path().join("sdk/cancellation_test.go"), r#"package email
+import("context";"errors";"io";"net/http";"testing";"time")
+type trackedBody struct {closed bool}
+func (body *trackedBody) Read([]byte)(int,error){return 0,io.EOF}
+func (body *trackedBody) Close()error{body.closed=true;return nil}
+func TestCancelBackoff(t *testing.T){
+ ctx,cancel:=context.WithCancel(context.Background());defer cancel();calls:=0;body:=&trackedBody{}
+ transport:=KajiHTTPClientFunc(func(request *http.Request)(*http.Response,error){calls++;if request.Context()!=ctx{t.Fatal("lost cancellation context")};cancel();return &http.Response{StatusCode:503,Header:http.Header{},Body:body},nil})
+ client,err:=NewClient(ClientConfig{BaseURL:"https://example.test",HTTPClient:transport,Retry:&RetryConfig{MaxAttempts:3,InitialDelay:time.Hour,MaxDelay:time.Hour}});if err!=nil{t.Fatal(err)}
+ done:=make(chan error,1);go func(){_,err:=client.GetContact(ctx,nil);done<-err}()
+ select{case err:=<-done:if !errors.Is(err,context.Canceled){t.Fatalf("lost cause: %v",err)};case<-time.After(time.Second):t.Fatal("cancellation did not interrupt retry backoff")}
+ if calls!=1||!body.closed{t.Fatal("extra request or unclosed retry response")}
+}
+"#).unwrap();
+        let output = Command::new("go")
+            .args(["test", "-race", "./..."])
+            .current_dir(root.path().join("sdk"))
+            .env("GOCACHE", "/private/tmp/kaji-go-cache")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 }
 
 mod bundled_middleware;

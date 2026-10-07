@@ -324,7 +324,7 @@ fn render_object_model(
 ) -> String {
     let open = !matches!(additional_properties, AdditionalProperties::Forbidden);
     let mut output = format!(
-        "package {package}.model;\n\nimport com.fasterxml.jackson.annotation.JsonAnyGetter;\nimport com.fasterxml.jackson.annotation.JsonAnySetter;\nimport com.fasterxml.jackson.annotation.JsonIgnoreProperties;\nimport com.fasterxml.jackson.annotation.JsonProperty;\nimport com.fasterxml.jackson.databind.JsonNode;\nimport java.util.Collections;\nimport java.util.LinkedHashMap;\nimport java.util.List;\nimport java.util.Map;\n\n{NOTICE}\n"
+        "package {package}.model;\n\nimport com.fasterxml.jackson.annotation.JsonAnyGetter;\nimport com.fasterxml.jackson.annotation.JsonAnySetter;\nimport com.fasterxml.jackson.annotation.JsonIgnoreProperties;\nimport com.fasterxml.jackson.annotation.JsonInclude;\nimport com.fasterxml.jackson.annotation.JsonProperty;\nimport com.fasterxml.jackson.databind.JsonNode;\nimport java.util.Collections;\nimport java.util.LinkedHashMap;\nimport java.util.List;\nimport java.util.Map;\n\n{NOTICE}\n"
     );
     if !open {
         output.push_str("@JsonIgnoreProperties(ignoreUnknown = true)\n");
@@ -333,8 +333,13 @@ fn render_object_model(
     let mut components = fields
         .iter()
         .map(|field| {
+            let omit = if field.required {
+                ""
+            } else {
+                "        @JsonInclude(JsonInclude.Include.NON_NULL)\n"
+            };
             format!(
-                "        @JsonProperty({:?}) {} {}",
+                "{omit}        @JsonProperty({:?}) {} {}",
                 field.name,
                 java_type(&field.value),
                 field_name(&field.name)
@@ -1927,6 +1932,49 @@ mod tests {
             .map(|(_, contents)| contents)
             .collect::<Vec<_>>()
             .join("\n")
+    }
+
+    #[test]
+    fn required_nullable_and_optional_omission_are_distinct() {
+        let mut nullable = SchemaValue::new(SchemaKind::String);
+        nullable.nullable = true;
+        let schema = Schema::new(
+            "WireInput",
+            SchemaValue::new(SchemaKind::Object {
+                fields: vec![
+                    Field {
+                        name: "enabled".into(),
+                        value: SchemaValue::new(SchemaKind::Boolean),
+                        required: true,
+                        annotations: Default::default(),
+                    },
+                    Field {
+                        name: "count".into(),
+                        value: SchemaValue::new(SchemaKind::Integer),
+                        required: true,
+                        annotations: Default::default(),
+                    },
+                    Field {
+                        name: "note".into(),
+                        value: nullable,
+                        required: true,
+                        annotations: Default::default(),
+                    },
+                    Field {
+                        name: "missing".into(),
+                        value: SchemaValue::new(SchemaKind::String),
+                        required: false,
+                        annotations: Default::default(),
+                    },
+                ],
+                additional_properties: AdditionalProperties::Forbidden,
+            }),
+        );
+        let model = super::render_model(&schema, "example", false);
+        assert!(model.contains(
+            "@JsonInclude(JsonInclude.Include.NON_NULL)\n        @JsonProperty(\"missing\")"
+        ));
+        assert!(model.contains("        @JsonProperty(\"note\") String note"));
     }
 
     #[test]

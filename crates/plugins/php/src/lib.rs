@@ -308,7 +308,7 @@ fn render_object_model(
             if field.value.nullable {
                 let _ = writeln!(
                     output,
-                    "            {field_name}: $source === null ? null : {value},"
+                    "            {field_name}: {source} === null ? null : {value},"
                 );
             } else {
                 let _ = writeln!(output, "            {field_name}: {value},");
@@ -316,7 +316,7 @@ fn render_object_model(
         } else {
             let _ = writeln!(
                 output,
-                "            {field_name}: array_key_exists({}, $data) && $source !== null ? {value} : null,",
+                "            {field_name}: array_key_exists({}, $data) && {source} !== null ? {value} : null,",
                 php_string(&field.name)
             );
         }
@@ -519,6 +519,29 @@ fn render_client(api: &Api, namespace: &str, style: SdkClientStyle) -> String {
         .rfind("\n}\n")
         .expect("generated PHP client has a class closing brace");
     output.insert_str(close, sse_runtime);
+    output = output.replace(
+        "http_build_query($query, '', '&', PHP_QUERY_RFC3986)",
+        "$this->kajiQueryString($query)",
+    );
+    let query_runtime = r#"
+    /** OpenAPI form/explode query scalars and repeated list values. */
+    private function kajiQueryString(array $query): string
+    {
+        $pairs = [];
+        foreach ($query as $name => $value) {
+            foreach (is_array($value) ? $value : [$value] as $item) {
+                if ($item === null) continue;
+                $scalar = is_bool($item) ? ($item ? 'true' : 'false') : (string)$item;
+                $pairs[] = rawurlencode((string)$name) . '=' . rawurlencode($scalar);
+            }
+        }
+        return implode('&', $pairs);
+    }
+"#;
+    let close = output
+        .rfind("\n}\n")
+        .expect("PHP client class closing brace");
+    output.insert_str(close, query_runtime);
     output
 }
 
@@ -1721,6 +1744,118 @@ mod tests {
             }],
             annotations: BTreeMap::new(),
         }
+    }
+
+    #[test]
+    #[ignore = "requires PHP 8.2+; dependency-free model/query wire probe"]
+    fn native_required_null_and_scalar_query_serialization() {
+        let mut nullable = SchemaValue::new(SchemaKind::String);
+        nullable.nullable = true;
+        let schema = Schema::new(
+            "WireInput",
+            SchemaValue::new(SchemaKind::Object {
+                fields: vec![
+                    Field {
+                        name: "enabled".into(),
+                        value: SchemaValue::new(SchemaKind::Boolean),
+                        required: true,
+                        annotations: Default::default(),
+                    },
+                    Field {
+                        name: "count".into(),
+                        value: SchemaValue::new(SchemaKind::Integer),
+                        required: true,
+                        annotations: Default::default(),
+                    },
+                    Field {
+                        name: "note".into(),
+                        value: nullable,
+                        required: true,
+                        annotations: Default::default(),
+                    },
+                    Field {
+                        name: "missing".into(),
+                        value: SchemaValue::new(SchemaKind::String),
+                        required: false,
+                        annotations: Default::default(),
+                    },
+                ],
+                additional_properties: AdditionalProperties::Forbidden,
+            }),
+        );
+        let model = render_model(&schema, "Example", &Default::default());
+        let client = render_client(&api(), "Example", SdkClientStyle::Flat);
+        let start = client
+            .find("    private function kajiQueryString(")
+            .unwrap();
+        let end = client.rfind("\n}\n").unwrap();
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("Model.php"), model).unwrap();
+        let script = format!(
+            "<?php\nrequire __DIR__.'/Model.php';\nclass Probe {{ {}\n public function encode(array $query):string {{return $this->kajiQueryString($query);}} }}\n",
+            &client[start..end]
+        ) + r#"
+$model=Example\Models\WireInput::fromArray(['enabled'=>false,'count'=>0,'note'=>null]);
+$encoded=json_decode(json_encode($model, JSON_THROW_ON_ERROR),true,flags:JSON_THROW_ON_ERROR);
+if($encoded!==['enabled'=>false,'count'=>0,'note'=>null])throw new Exception('model null/presence assertion');
+$query=(new Probe())->encode(['text'=>'héllo 雪','flag'=>false,'count'=>0,'tags'=>['a','b'],'missing'=>null]);
+if($query!=='text=h%C3%A9llo%20%E9%9B%AA&flag=false&count=0&tags=a&tags=b')throw new Exception('scalar query assertion');
+"#;
+        std::fs::write(root.path().join("probe.php"), script).unwrap();
+        let result = std::process::Command::new("php")
+            .arg(root.path().join("probe.php"))
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
+
+    #[test]
+    fn required_nullable_and_optional_omission_are_distinct() {
+        let mut nullable = SchemaValue::new(SchemaKind::String);
+        nullable.nullable = true;
+        let schema = Schema::new(
+            "WireInput",
+            SchemaValue::new(SchemaKind::Object {
+                fields: vec![
+                    Field {
+                        name: "enabled".into(),
+                        value: SchemaValue::new(SchemaKind::Boolean),
+                        required: true,
+                        annotations: Default::default(),
+                    },
+                    Field {
+                        name: "count".into(),
+                        value: SchemaValue::new(SchemaKind::Integer),
+                        required: true,
+                        annotations: Default::default(),
+                    },
+                    Field {
+                        name: "note".into(),
+                        value: nullable,
+                        required: true,
+                        annotations: Default::default(),
+                    },
+                    Field {
+                        name: "missing".into(),
+                        value: SchemaValue::new(SchemaKind::String),
+                        required: false,
+                        annotations: Default::default(),
+                    },
+                ],
+                additional_properties: AdditionalProperties::Forbidden,
+            }),
+        );
+        let model = render_model(&schema, "Example", &Default::default());
+        assert!(!model.contains("$source"));
+        assert!(model.contains("note: $data['note'] === null ? null"));
+        assert!(model.contains("$value['note'] = $this->note"));
+        let client = render_client(&api(), "Example", SdkClientStyle::Flat);
+        assert!(client.contains("$scalar = is_bool($item) ? ($item ? 'true' : 'false')"));
+        assert!(client.contains("foreach (is_array($value) ? $value : [$value] as $item)"));
     }
 
     #[test]

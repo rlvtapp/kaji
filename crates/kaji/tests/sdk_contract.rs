@@ -248,7 +248,7 @@ fn all_first_party_packages_preserve_the_public_sdk_contract() {
         assert!(client.contains("readonly contacts"));
         assert!(client.contains("listPages"));
         assert!(client.contains("kajiJsonPath"));
-        assert!(barrel.contains("export * from './custom'"));
+        assert!(barrel.contains("export * from './custom/index.js'"));
         assert!(custom.contains("never overwritten by Kaji"));
         assert!(runtime.contains("export class ApiError"));
         assert!(runtime.contains("SecurityCredentials"));

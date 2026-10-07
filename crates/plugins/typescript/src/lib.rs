@@ -2,6 +2,7 @@
 mod bundled_middleware;
 mod clients;
 pub mod composition;
+mod esm;
 mod json;
 mod models;
 mod render;
@@ -41,6 +42,9 @@ impl Language for TypeScript {
     type Workspace = Workspace;
     fn finalize(cx: &mut FinalizeContext<'_, Self>) -> Result<()> {
         workspace::finalize(cx)
+    }
+    fn finalize_files(tree: &mut kaji_core::GeneratedTree) -> Result<()> {
+        esm::finalize(tree)
     }
     fn bundle_middleware(
         tree: &mut kaji_core::GeneratedTree,
@@ -416,7 +420,7 @@ mod tests {
         assert!(
             tree.get("ts/models/schemas_0001.ts")
                 .unwrap()
-                .contains("export * from './Status'")
+                .contains("export * from './Status.js'")
         );
         assert!(
             tree.get("ts/models/Status.ts")
@@ -424,7 +428,7 @@ mod tests {
                 .contains("as const")
         );
         let operation = tree.get("ts/clients/listContacts.ts").unwrap();
-        assert!(operation.contains("from '../.kaji/client'"));
+        assert!(operation.contains("from '../.kaji/client.js'"));
         assert!(operation.contains("ThrowOnError extends boolean = false"));
         assert!(tree.get("ts/client.ts").is_none());
     }
@@ -462,12 +466,12 @@ mod tests {
         let resource_operations = tree
             .get("ts/resources/contacts/operations_0001.ts")
             .unwrap();
-        assert!(root.contains("import { ContactsClient } from './resources/contacts'"));
+        assert!(root.contains("import { ContactsClient } from './resources/contacts.js'"));
         assert!(!root.contains("import { listContacts }"));
         assert!(resource.contains("export class ContactsClient"));
         assert!(
             resource_operations
-                .contains("import { listContacts } from '../../clients/contacts/listContacts'")
+                .contains("import { listContacts } from '../../clients/contacts/listContacts.js'")
         );
         assert!(resource_operations.contains(", client }"));
         assert!(!resource_operations.contains("this.client"));
@@ -493,8 +497,8 @@ mod tests {
             .generate(&source, None)
             .unwrap();
         let root = tree.get("ts/index.ts").unwrap();
-        assert!(root.contains("export * from './models'"));
-        assert!(root.contains("export * from './clients'"));
+        assert!(root.contains("export * from './models/index.js'"));
+        assert!(root.contains("export * from './clients/index.js'"));
         assert!(!root.contains("listContacts100"));
         assert!(tree.get("ts/clients/contacts/operations_0002.ts").is_some());
         assert!(
@@ -561,7 +565,7 @@ mod tests {
             let models = tree
                 .get(format!("{package}/models/contacts/ListContacts.ts"))
                 .unwrap();
-            assert!(models.contains("import type { Contact } from '../Contact'"));
+            assert!(models.contains("import type { Contact } from '../Contact.js'"));
             let runtime = tree.get(format!("{package}/.kaji/client.ts")).unwrap();
             assert!(runtime.contains("SuccessOf<T> = T[Extract<keyof T, `2${string}`>]"));
             assert!(

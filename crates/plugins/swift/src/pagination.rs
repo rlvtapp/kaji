@@ -251,18 +251,54 @@ import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
+actor Calls {
+ private var count = 0
+ func record() { count += 1 }
+ func snapshot() -> Int { count }
+}
 struct Driver: KajiTransport {
+ let calls: Calls
  func execute(_ request: URLRequest) async throws -> (Data, URLResponse) {
+  await calls.record()
   precondition(request.value(forHTTPHeaderField: "page") == "0")
   return (Data("[]".utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
  }
 }
+struct Blocking: KajiTransport {
+ let calls: Calls
+ func execute(_ request: URLRequest) async throws -> (Data, URLResponse) {
+  await calls.record()
+  try await Task.sleep(nanoseconds: 60_000_000_000)
+  throw CancellationError()
+ }
+}
 @main struct Test {
  static func main() async throws {
-  let client = KajiClient(options: .init(baseURL: URL(string: "https://example.com")!), transport: Driver())
+  let calls = Calls()
+  let client = KajiClient(options: .init(baseURL: URL(string: "https://example.com")!), transport: Driver(calls: calls))
   var iterator = client.pets.listPetsPages(page: 0).makeAsyncIterator()
   let first = try await iterator.next(); precondition(first == [])
   let end = try await iterator.next(); precondition(end == nil)
+  let before = await calls.snapshot(); precondition(before == 1)
+  let cancelled = Task {
+   while !Task.isCancelled { await Task.yield() }
+   var pages = client.listPetsPages(page: 0).makeAsyncIterator()
+   do { _ = try await pages.next(); preconditionFailure("cancelled paginator sent request") }
+   catch is CancellationError {} catch { preconditionFailure("wrong cancellation error") }
+  }
+  cancelled.cancel(); await cancelled.value
+  let after = await calls.snapshot(); precondition(after == 1)
+  let blockedCalls = Calls()
+  let blocked = KajiClient(options: .init(baseURL: URL(string: "https://example.com")!), transport: Blocking(calls: blockedCalls))
+  let pending = Task {
+   var pages = blocked.listPetsPages(page: 0).makeAsyncIterator()
+   return try await pages.next()
+  }
+  while await blockedCalls.snapshot() == 0 { await Task.yield() }
+  pending.cancel()
+  do { _ = try await pending.value; preconditionFailure("in-flight cancellation swallowed") }
+  catch is CancellationError {}
+  let attempts = await blockedCalls.snapshot(); precondition(attempts == 1)
  }
 }
 "#).unwrap();

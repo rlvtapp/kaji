@@ -46,7 +46,7 @@ fn community_consumer_uses_real_types_and_shared_package_dependencies() {
     .unwrap();
     assert_eq!(
         tree.get("sdk/models/custom/consumer.ts"),
-        Some("import type { Contact } from \"../generated/models\";\n")
+        Some("import type { Contact } from \"../generated/models.js\";\n")
     );
     assert!(tree.get("sdk/models/generated/models.ts").is_some());
     let manifest: serde_json::Value =
