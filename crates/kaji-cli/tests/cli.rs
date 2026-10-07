@@ -506,7 +506,7 @@ fn named_provider_recipe_and_release_version_survive_regeneration() {
         serde_json::to_vec_pretty(&manifest)
             .unwrap()
             .into_iter()
-            .chain([b'\n'])
+            .chain(*b"\n")
             .collect::<Vec<_>>()
     );
 }
