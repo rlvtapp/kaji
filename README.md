@@ -1,11 +1,35 @@
 # Kaji
 
-## Generate your API's entire developer ecosystem from one contract.
+Generate SDKs and API tools from one OpenAPI contract. Keep the source,
+customizations, checks, and releases under your control.
 
-Kaji turns a Swagger 2.0 or OpenAPI 3.0/3.1 document into SDK source,
-API CLIs, Postman collections, Terraform providers, mocks, validation,
-framework integrations, documentation, and MCP tools. Generate for TypeScript, Rust, Go, Python, PHP, Java, C#/.NET, Elixir,
-Ruby, and Swift from the same contract, with Symfony integration packages.
+Kaji generates TypeScript, Rust, Go, Python, PHP, Java, C#/.NET, Elixir, Ruby,
+and Swift SDKs, plus API CLIs, Postman collections, Terraform providers,
+frontend helpers, mocks, documentation, and MCP tools. Its typed Rust plugin
+system lets you compose or extend generation for your own needs.
+
+## What do you want to do?
+
+| Your goal | Start here | Kaji helps you |
+| --- | --- | --- |
+| Generate my first SDK | [Quickstart](docs/cli/quickstart.md) | Turn an OpenAPI file into a package you can build and use. |
+| Ship SDKs to my customers | [SDK author guides](docs/README.md) | Generate, customize, check, and release packages. |
+| Add my own HTTP behavior | [Bundled middleware example](examples/bundled-middleware/README.md) | Ship policies that run without customer setup. |
+| Modify generated code safely | [Customization](docs/sdk-customization.md) | Apply package overrides and preserve custom files across regeneration. |
+| Automate GitHub delivery | [Repository automation](docs/sdk-automation.md) | Open SDK PRs and give each language repository its own workflows. |
+| Publish an SDK release | [Publishing](docs/sdk-publishing.md) | Check released tags and configure supported trusted publishers. |
+| Generate Postman or Terraform artifacts | [Artifact example](examples/api-artifacts/README.md) | Export collections or build typed providers from supported CRUD resources. |
+| Build frontend hooks or validation | [TypeScript helpers](docs/guides/typescript-helpers.md) | Add query helpers, Zod schemas, fixtures, and mocks. |
+| Build a plugin or embed Kaji | [Rust library guides](docs/library/README.md) | Compose typed providers and add custom generation. |
+| Give an AI access to my API or generator | [MCP guide](docs/mcp-server.md) | Expose API operations or local generation tools. |
+| Ask a question or report a problem | [Get help](#get-help) | Share your goal or a reproducible issue. |
+
+**Trying 0.5.0?** This branch contains the new features. Until the release is
+published, follow the [source build guide](docs/source-customization.md).
+See the [changelog](CHANGELOG.md#050--2026-10-07) for scope and limitations.
+
+<details>
+<summary>Explore what Kaji generates</summary>
 
 ```text
 OpenAPI
@@ -25,10 +49,10 @@ Kaji
   └── AI            MCP
 ```
 
-The goal is not just to produce an SDK. It is to keep every developer-facing
-surface of an API aligned with the contract that defines it. Read [why Relevate
-built Kaji](docs/why-kaji.md) for the problem that made us build it and what we
-are committing to keep free.
+</details>
+
+Read [why we built Kaji](docs/why-kaji.md) for the project’s goals and its
+commitment to stay free.
 
 ## Quick start
 
@@ -229,70 +253,40 @@ with permission to write workflow files. Routine generation uses scoped tokens.
 See [repository automation](docs/sdk-automation.md), [editable GitHub Actions](docs/github-actions.md),
 and [publishing](docs/sdk-publishing.md) for the complete setup.
 
-## Documentation
+## Get help
 
-Start with the [documentation home](docs/README.md), then choose a workflow:
+Tell us what you want to generate, your target language, and where you are stuck.
+[Open a GitHub issue](https://github.com/rlvtapp/kaji/issues/new) for questions,
+bugs, or feature requests. For a bug, include your Kaji version, a minimal
+`kaji.json`, a small OpenAPI example, the command you ran, and the actual versus
+expected result. Remove credentials before sharing files.
 
-- **[Why Kaji](docs/why-kaji.md):** the problem Kaji solves, its scope, and its
-  no-monetization commitment.
+### Ask AI about Kaji
 
-- **[CLI workflow](docs/cli/README.md):** quickstart, recipes, command reference,
-  and reproducible `kaji.json` configuration.
-- **[Rust library workflow](docs/library/README.md):** embedded generation,
-  package composition, and native plugin development.
-- **[Generated SDK guide](docs/generated-sdks.md):** runtime behavior and target
-  requirements.
-- **[TypeScript API CLI](docs/typescript-cli.md) and [Rust API CLI](docs/rust-cli.md):**
-  distributable API commands, OAuth, API keys, profiles, and extensions.
-- **[TypeScript helpers](docs/guides/typescript-helpers.md),
-  [testing](docs/guides/testing.md), and [generated artifacts](docs/guides/artifacts.md):**
-  validation, hooks, fixtures, mocks, API docs, and MCP output.
-- **[CI integration](docs/ci-integration.md), [mocking](docs/mocking.md), and
-  [large-spec guidance](docs/large-specs.md):** adopt generation safely in a
-  production repository.
+[Open ChatGPT](https://chatgpt.com/) or use your preferred assistant with our
+[AI context and prompts](docs/ai.md). Copy this prompt and replace the brackets:
 
-Existing detailed references remain available: [complete CLI reference](docs/cli.md),
-[`kaji.json` schema reference](docs/config-file.md), [configuration](docs/configuration.md),
-[auxiliary generators](docs/auxiliary-generators.md), and
-[plugin authoring](docs/typed-plugins.md). The current
-[safe regeneration](docs/safe-regeneration.md), and
-[SDK automation](docs/sdk-automation.md), including remaining verification gaps.
+```text
+Help me use Kaji to [my goal] for [language]. I am using version [version].
+Start with https://github.com/rlvtapp/kaji/blob/0.5.0/docs/ai.md and follow
+its links to the relevant guides. Check the source for that version before
+suggesting config fields or commands. Give me a minimal working recipe,
+verification steps, and any documented limitations.
+```
 
-## Runnable examples
+The link opens a new chat; copy the prompt into it. Assistants that cannot
+browse will need you to paste the relevant docs or provide a local checkout.
+For tools that can interact with Kaji directly, see [MCP](docs/mcp-server.md).
 
-- [Bundled middleware](examples/bundled-middleware/README.md): ship SDK author
-  policies without requiring customers to register them.
-- [Postman and Terraform](examples/api-artifacts/README.md): generate, validate,
-  and build API artifacts alongside your SDKs.
+## More examples and references
 
-- [Symfony SDK](examples/symfony-sdk/README.md): generate a PHP SDK and its
-  Symfony integration bundle together.
-- [Manifest merging](examples/manifest-merging/README.md): preserve custom npm
-  scripts, pinned TypeScript, and optional TanStack peers across generation.
-- [Native Rust CLI](examples/rust-cli/README.md): generate and build a native
-  command-line client with terminal prompts and command references.
-
-- [Examples index](examples/README.md): choose a minimal CLI recipe, a
-  multi-package build, or an embedded Rust application.
-- [CLI basic](examples/cli-basic/README.md): a small contract and one
-  reproducible TypeScript SDK recipe.
-- [CLI multi-package](examples/cli-multi-package/README.md): TypeScript, Go,
-  documentation, and a mock service from one contract.
-- [API CLI](examples/typescript-cli/README.md): TypeScript and Rust command-line
-  clients with OAuth, profiles, and nested commands.
-- [Mock scenarios](examples/mock-scenarios/README.md): run a native mock
-  locally or generate Docker fixtures with contract-owned conditional responses.
-- [React Query consumer](examples/react-query-consumer/README.md): wire a
-  generated SDK and TanStack hooks into an application.
-- [MCP API tools](examples/mcp-api-tools/README.md): expose a contract through
-  a local stdio MCP server.
-- [Rust embedded](examples/rust-embedded/README.md): call Kaji from an
-  application instead of a shell command.
-- [Complete TypeScript stack](examples/typescript-stack/README.md): Fetch and
-  Axios SDKs, plus Zod, TanStack React/Vue Query, SWR, Faker, MSW, Cypress, and
-  the shared HTTP mock server from one small OpenAPI contract.
-- [Microsoft Graph](examples/microsoft-graph/README.md): a URL-backed,
-  large-contract Fetch and Go generation demo.
+Browse the [documentation home](docs/README.md) or [examples index](examples/README.md).
+Start with [bundled middleware](examples/bundled-middleware/README.md),
+[Postman and Terraform](examples/api-artifacts/README.md),
+[React Query](examples/react-query-consumer/README.md), or
+[embedded Rust](examples/rust-embedded/README.md).
+The [recipe reference](docs/config-file.md) and [plugin reference](docs/typed-plugins.md)
+cover the full configuration and extension interfaces.
 
 ## License
 
