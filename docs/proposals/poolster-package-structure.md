@@ -1,10 +1,12 @@
 # Poolster: name and package structure proposal
 
-Status: **proposal only** · 2026-10-08. No package, command, crate, config file, or
-repository has been renamed. Keep `@relevate/kaji` as the Node SDK while this is
-being decided. Nothing in this document schedules a release.
+Status: **selected plan, implemented in source on `poolster-sdk-layout`** ·
+2026-10-08. Publication remains disabled. The GitHub repository is still
+`rlvtapp/kaji`; its URL and source directory paths remain until a separate
+repository move. This document retains the original naming tradeoffs and
+release checklist.
 
-## Worked scenario: Poolster
+## Selected name: Poolster
 
 Use **Poolster** for the whole product in this worked scenario. The name describes
 the stable center that coordinates source inputs, generation plugins, and output
@@ -31,7 +33,7 @@ The root import `@relevate/poolster` is the canonical SDK entry point; `/sdk`
 can be retained as a harmless alias if migration experience calls for it. Do not
 create a second npm package named `poolster-sdk`.
 
-### Unii is also viable as a naming candidate
+### Earlier naming alternative: Unii
 
 The package architecture does not depend on the word Poolster. If **Unii** is
 chosen instead, substitute these roots throughout the maps below:
@@ -56,7 +58,8 @@ with **no active versions**. This is not evidence of a currently installable
 package. Whether our account can claim the unscoped name must be verified
 before publication. An unrelated [UNii security product](https://unii-security.com/en/)
 also uses the word; this calls for normal brand clearance, not an automatic
-rejection. No final product name is selected in this proposal.
+rejection. Poolster was selected for the source migration; registry and legal
+clearance still precede any public release.
 
 ## Public npm packages
 
@@ -81,14 +84,12 @@ installs both may get two OpenAPI compiler copies under this initial layout.
 Extracting a shared compiler package is worth considering only after measuring
 that cost against the extra release and resolution complexity.
 
-The current `@relevate/kaji` also exposes `kaji-sdk`. Move that JS config runner
-to the `poolster` command when the rename is implemented, so the final public
-layout has one command. `poolster generate` should discover
-`poolster.config.mjs`/`.cjs` and, once a TypeScript loader is implemented,
-`poolster.config.ts`. Static JSON configuration can remain supported for the
-native CLI. A JS/TS config dynamically loads the separately installed SDK and
-reports a clear install instruction if it is absent. The Node SDK remains
-usable directly without installing the CLI.
+The former `@relevate/kaji` exposed `kaji-sdk`. The renamed `poolster` command
+discovers `poolster.config.mjs`, `.cjs`, and `.js` for JavaScript recipes; the
+Rust CLI reads `poolster.json` for static configuration. A TypeScript config
+loader remains deferred until its runtime strategy and supported Node versions
+have tests. A JavaScript config loads the separately installed SDK; the Node SDK
+also works directly without installing the CLI.
 
 ### Language output plugins
 
@@ -245,10 +246,10 @@ import { createPoolster } from '@relevate/poolster';
 const result = await createPoolster(config).generate({ write: false });
 ```
 
-The snippets show the intended final experience; `poolster` and
-`createPoolster` are not current commands/APIs. A `.ts` config needs a defined
-loader strategy and tests on every supported Node version before being
-advertised. Plain `.mjs` plus JSDoc and exported types work without that step.
+The snippets show the source interface on the implementation branch; these
+packages have not been published. A `.ts` config needs a defined loader
+strategy and tests on every supported Node version before being advertised.
+Plain `.mjs` plus JSDoc and exported types work without that step.
 The parallel installation names would be `npx poolster` for npm CLI users,
 `pip install poolster` for Python CLI users, and `cargo add poolster` for Rust
 embedding. Homebrew and a shell installer can be considered later. Neither is
@@ -273,7 +274,7 @@ the current source directories for one migration commit is acceptable if it
 reduces review noise. The important boundary is in the manifests and dependency
 graph, not the folder names.
 
-## Migration plan, when a rename is actually approved
+## Release checklist after the source rename
 
 1. Decide the brand and check npm, PyPI, crates.io, the BOIP/KVK name checker,
    repository names, and domains. A registry 404 is not a reservation or legal
@@ -287,10 +288,9 @@ graph, not the folder names.
    404 for `poolster` on 2026-10-08; those results can change.
    If Unii is preferred, verify that the fully unpublished npm name can be
    claimed by our account; the remaining package split is the same.
-2. In one reviewable branch, rename npm, Cargo, and PyPI manifests, generated
-   package templates, config discovery, bin names, types, examples, docs,
-   release metadata, and CI workflows. Keep a machine-readable old-to-new
-   name map for the sweep.
+2. Review the coordinated npm, Cargo, PyPI, config, binary, example, docs, and
+   CI naming changes on `poolster-sdk-layout`. Source directories remain
+   stable. The [name map](poolster-name-map.json) records public old-to-new names.
 3. Test CLI-only, SDK-only, and combined installs on every supported platform.
    Exercise JS + Rust input/output plugins together; run emitted SDK builds
    and cross-language runtime probes. Verify no plugin is activated by install.
@@ -299,17 +299,16 @@ graph, not the folder names.
    that is a breaking npm change even without the Poolster rename. Write one
    explicit migration path rather than two successive public renames.
 5. Publish native platform packages before their launchers only after the
-   entire package graph and migration notes are approved. None of this is
-   needed to keep developing under Kaji now.
+   entire package graph and migration notes are approved. Keep release jobs
+   gated until then.
 
-## Decision before implementation
+## Selected package structure
 
-The proposed structure has **one product name and two top-level npm packages**:
+The selected structure has **one product name and two top-level npm packages**:
 an unscoped package for the command and `@relevate/<name>` for the SDK, followed
 by individually selected input/output plugins and an optional all-plugins
-bundle. Poolster is the complete worked example; the Unii substitutions above
-show the alternative. Keep the current Kaji names in code until we choose the
-brand and explicitly start the migration. The most significant architecture
+bundle. Poolster is selected; the Unii substitutions above record the earlier
+alternative. The most significant architecture
 decision is whether true per-language native payloads must ship with the first
 release under a new name;
 the current packages offer independent selection but a shared native addon.

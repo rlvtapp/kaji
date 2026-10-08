@@ -1,8 +1,8 @@
 # Poolster implementation map
 
-Status: proposal only. Keep developing under Kaji until a rename and release
-are explicitly chosen. This map supplements the [package naming proposal](poolster-package-structure.md)
-with the concrete work required by today's repository.
+Status: source rename in progress on `poolster-sdk-layout`; publication disabled.
+This map supplements the [package naming plan](poolster-package-structure.md)
+with the boundaries and remaining release work in this repository.
 
 ## Keep the existing boundaries
 
@@ -17,11 +17,10 @@ with the concrete work required by today's repository.
 
 Cargo package names can change without moving these directories. Keep paths
 stable for the first naming change, then decide whether directory moves help.
-The Rust SDK should re-export the core API without requiring every language
-plugin by default. Rust consumers add the plugin crates they select. The CLI
-and NAPI addon can link the built-in plugin set they expose. This requires a
-coordinated API migration through the CLI, NAPI addon, examples, and tests
-because `kaji` currently re-exports all 16 output plugin crates.
+The Rust SDK facade starts without language plugins by default. Rust consumers
+add the plugin crates they select. The CLI and NAPI addon link the built-in
+plugin set they expose. Rust examples and tests exercise this explicit
+dependency boundary.
 
 The other source and distribution paths keep distinct jobs:
 
@@ -63,20 +62,19 @@ let profiles = ProfileSet::new("generated")
 let files = generate(&api, profiles)?;
 ```
 
-This is a target API sketch, not a command that works with today's Kaji names.
+This is a compact API sketch. Packages remain unpublished under the new names.
 
 ## Rust distribution boundary
 
 All 26 Rust workspace crates currently have `publish = false`, and their local
-dependencies use paths without registry versions. The SDK facade currently
-re-exports all 16 output plugins, so a future crates.io `poolster` package
-would pull in the full plugin graph. Make plugin selection explicit before
-publishing it. Publishable path dependencies need registry versions and an
+dependencies use paths without registry versions. The SDK facade previously
+re-exported all 16 output plugins; its default feature set is now
+slim. Publishable path dependencies still need registry versions and an
 ordered release. Keep `poolster-node` unpublished because it ships via npm.
 
 The Rust CLI remains a workspace implementation, but it is not a public Rust
 install. The npm and PyPI packages already bundle the prebuilt Rust executable
-and adjacent Go `kaji-openapi` compiler. Keep that two-binary runtime layout;
+and adjacent Go `poolster-openapi` compiler. Keep that two-binary runtime layout;
 there is no need to embed Go in the executable for these distribution paths.
 Do not advertise `cargo install poolster`: that name is reserved for the SDK.
 Homebrew, a shell installer, and GitHub Release downloads can be considered
@@ -84,11 +82,10 @@ later, after the npm/PyPI CLI distribution is established.
 
 ## Suggested sequence
 
-1. **Untangle source layout first.** Apply the [code organization guidelines](../code-organization.md)
-   to the CLI and one plugin; move one plugin's templates and probes out of
-   `src/`. Do not combine this with package renames.
-2. **Slim the Rust SDK facade.** Make plugin selection explicit for Rust users,
-   retain clear migration examples, and test Rust embedding with only one
+1. **Continue source layout cleanup.** Apply the [code organization guidelines](../code-organization.md)
+   to the CLI and plugins; move templates and probes out of `src/` as those
+   modules are split.
+2. **Verify the slim Rust SDK facade.** Test Rust embedding with only one
    language and one input plugin installed.
 3. **Rename manifests and public commands together.** Update Cargo, npm, and
    PyPI names, JS config discovery, environment variables, examples, docs, and
@@ -103,5 +100,6 @@ later, after the npm/PyPI CLI distribution is established.
    from the existing platform matrix. Verify exact versions and installation
    behavior before enabling any public publish job.
 
-The current release workflow publishes npm packages and PyPI wheels but has no
-crates.io job. Nothing in this map enables one or publishes a package.
+The release workflow defines npm and PyPI publication jobs behind an explicit
+repository variable. It has no crates.io job. Nothing in this map enables one
+or publishes a package.
