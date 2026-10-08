@@ -1,16 +1,18 @@
-# Kaji Python plugin
+# Poolster Python plugin
 
-`kaji-plugin-python` renders SDK packages from Kaji's neutral API model,
+`poolster-plugin-python` renders SDK packages from Poolster's neutral API model,
 using a standard-library Python client. All generation runs in Rust.
 
 ```rust
-use kaji::{python, prelude::*};
+use poolster::prelude::*;
+use poolster_plugin_python::PackageExt as _;
+use poolster_plugin_python as python;
 
 let release = ProfileSet::new("sdk")
     .package(python::package("python")
         .name("email-sdk")
         .with(python::sdk()));
-let tree = kaji::generate(&api, release)?;
+let tree = poolster::generate(&api, release)?;
 tree.write_to("generated")?;
 ```
 
@@ -20,9 +22,9 @@ Namespaced clients expose methods such as `client.contacts.get(...)`;
 flat clients use `client.get_contact(...)`. Operation arguments and model names
 come from your API contract.
 
-When depending on this plugin without the `kaji` facade, import
-`kaji_plugin_python::PackageExt` and compose its package through
-`kaji_core::engine::Packages`. Supply a security catalog when your API
+When depending on this plugin without the `poolster` facade, import
+`poolster_plugin_python::PackageExt` and compose its package through
+`poolster_core::engine::Packages`. Supply a security catalog when your API
 declares named security schemes.
 
 See [configuration](../../../docs/configuration.md) for every generation option
@@ -37,13 +39,13 @@ native Python `bytes`.
 
 When an operation explicitly declares `x-kaji-pagination` (or compatible
 `x-speakeasy-pagination`) with `type: cursor`, an existing cursor parameter,
-and `outputs.nextCursor`, Kaji also emits a synchronous page iterator such as
+and `outputs.nextCursor`, Poolster also emits a synchronous page iterator such as
 `client.list_contacts_pages(cursor=None)`. In namespaced mode the same helper
 is available as `client.contacts.list_pages(...)`. Paths support object fields
 and array indexes, including `[-1]`; undeclared or unresolvable pagers are not
 generated.
 
-`type: url` declarations produce the same page iterator. Kaji follows the
+`type: url` declarations produce the same page iterator. Poolster follows the
 declared link only through the original generated operation, retaining its
 method, headers, authentication and body encoding. A continuation whose scheme
 or authority differs from the initial API request is rejected rather than

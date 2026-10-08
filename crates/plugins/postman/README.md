@@ -1,10 +1,10 @@
 # Postman plugin
 
-Generate a portable Postman Collection 2.1 from Kaji's normalized API. Generation
+Generate a portable Postman Collection 2.1 from Poolster's normalized API. Generation
 does not execute requests, import specification scripts, or write to Postman.
 
 ```rust
-use kaji_plugin_postman::{self as postman, PackageExt};
+use poolster_plugin_postman::{self as postman, PackageExt};
 let fixtures = postman::examples();
 let collection = postman::collection()
     .using_examples(fixtures.handle())
@@ -43,12 +43,12 @@ JSON, URL-encoded, multipart/file and opaque binary bodies use distinct modes.
 Declared samples precede bounded schema samples. Sensitive credential names,
 `writeOnly` and `x-sensitive` schemas are scrubbed; credentials start blank.
 
-Run ordinary behavior tests with `cargo test -p kaji-plugin-postman`. The ignored
+Run ordinary behavior tests with `cargo test -p poolster-plugin-postman`. The ignored
 `validates_actual_official_draft04_schema` test validates generated representations
 using Python `jsonschema`; set `KAJI_TEST_PYTHON` and `PYTHONPATH` as needed:
 
 ```sh
-cargo test -p kaji-plugin-postman validates_actual_official_draft04_schema -- --ignored
+cargo test -p poolster-plugin-postman validates_actual_official_draft04_schema -- --ignored
 ```
 
 The unmodified pinned schema in `tests/schema/collection-v2.1.0.json` comes from

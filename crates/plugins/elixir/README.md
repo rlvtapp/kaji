@@ -1,16 +1,18 @@
-# Kaji Elixir plugin
+# Poolster Elixir plugin
 
-`kaji-plugin-elixir` renders SDK packages from Kaji's neutral API model,
+`poolster-plugin-elixir` renders SDK packages from Poolster's neutral API model,
 using a Finch/Jason client. All generation runs in Rust.
 
 ```rust
-use kaji::{elixir, prelude::*};
+use poolster::prelude::*;
+use poolster_plugin_elixir::PackageExt as _;
+use poolster_plugin_elixir as elixir;
 
 let release = ProfileSet::new("sdk")
     .package(elixir::package("elixir")
         .name("email-sdk")
         .with(elixir::sdk()));
-let tree = kaji::generate(&api, release)?;
+let tree = poolster::generate(&api, release)?;
 tree.write_to("generated")?;
 ```
 
@@ -21,9 +23,9 @@ Namespaced packages add modules such as
 keep `<Sdk>.API` operations. Both use a configured `<Sdk>.Client` and explicit
 `{:ok, value}` / `{:error, reason}` results.
 
-When depending on this plugin without the `kaji` facade, import
-`kaji_plugin_elixir::PackageExt` and compose its package through
-`kaji_core::engine::Packages`. Supply a security catalog when your API
+When depending on this plugin without the `poolster` facade, import
+`poolster_plugin_elixir::PackageExt` and compose its package through
+`poolster_core::engine::Packages`. Supply a security catalog when your API
 declares named security schemes.
 
 See [configuration](../../../docs/configuration.md) for every generation option

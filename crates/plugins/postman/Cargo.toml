@@ -5,7 +5,7 @@ edition = "2024"
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "Portable Postman Collection 2.1 generator for Kaji"
+description = "Portable Postman Collection 2.1 generator for Poolster"
 publish = false
 
 [dependencies]

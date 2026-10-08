@@ -1,10 +1,12 @@
-# Kaji TypeScript plugin
+# Poolster TypeScript plugin
 
 Generate a Fetch or Axios SDK, a standalone types package, or auxiliary
 validation/frontend artifacts. Generation runs entirely in Rust.
 
 ```rust
-use kaji::{prelude::*, ts};
+use poolster::prelude::*;
+use poolster_plugin_ts::PackageExt as _;
+use poolster_plugin_ts as ts;
 
 let release = ProfileSet::new("sdk")
     .package(ts::package("typescript")
@@ -16,7 +18,7 @@ let release = ProfileSet::new("sdk")
                 enum_type: ts::EnumType::AsConst,
                 ..Default::default()
             })));
-let tree = kaji::generate(&api, release)?;
+let tree = poolster::generate(&api, release)?;
 tree.write_to("generated")?;
 ```
 
@@ -46,8 +48,8 @@ existing layout and publishes the same model, transport and operation contracts.
 Query consumers resolve actual published symbols rather than constructing imports.
 
 ```rust
-use kaji_plugin_typescript::{self as ts, composition as c};
-use kaji_core::engine::Packages;
+use poolster_plugin_typescript::{self as ts, composition as c};
+use poolster_core::engine::Packages;
 
 let models = c::models().output("domain/models");
 let runtime = c::transport().output("runtime/request");
@@ -127,7 +129,7 @@ capabilities. Opt-in compiler/runtime tests use existing local dependencies:
 KAJI_TSC_JS=/absolute/path/to/typescript/lib/tsc.js \
 KAJI_TS_NODE_MODULES=/absolute/path/to/consumer/node_modules \
 KAJI_AXIOS_NODE_MODULES=/absolute/path/to/axios-consumer/node_modules \
-cargo test -p kaji-plugin-typescript --lib -- --ignored
+cargo test -p poolster-plugin-typescript --lib -- --ignored
 ```
 
 The auxiliary dependency directory needs React/Vue Query, SWR, Zod, Faker, MSW
@@ -138,12 +140,12 @@ Fetch/Axios responses, request encoding and SSE at signed 64-bit boundaries.
 
 Generated Fetch and Axios clients accept `middleware` in `ClientConfig`, including
 through the SDK class constructor. Import its types from the generated
-`.kaji/client` module for the SDK convenience recipe (or the configured
+`.poolster/client` module for the SDK convenience recipe (or the configured
 transport output directory). SDK packages also export these types and
 `createClient` from their entrypoint.
 
 ```ts
-import { createClient, type ClientMiddleware, type MiddlewareResponse } from './.kaji/client'
+import { createClient, type ClientMiddleware, type MiddlewareResponse } from './.poolster/client'
 
 const customerPolicy: ClientMiddleware = async (request, next) => {
   try {

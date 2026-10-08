@@ -5,6 +5,7 @@ using a standard-library HTTP client. All generation runs in Rust.
 
 ```rust
 use poolster::prelude::*;
+use poolster_plugin_go::PackageExt as _;
 use poolster_plugin_go as go;
 
 let release = ProfileSet::new("sdk")

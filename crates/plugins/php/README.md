@@ -1,16 +1,18 @@
-# Kaji PHP plugin
+# Poolster PHP plugin
 
-`kaji-plugin-php` renders SDK packages from Kaji's neutral API model,
+`poolster-plugin-php` renders SDK packages from Poolster's neutral API model,
 using a PHP 8.2+ PSR-18/PSR-7 client. All generation runs in Rust.
 
 ```rust
-use kaji::{php, prelude::*};
+use poolster::prelude::*;
+use poolster_plugin_php::PackageExt as _;
+use poolster_plugin_php as php;
 
 let release = ProfileSet::new("sdk")
     .package(php::package("php")
         .name("email-sdk")
         .with(php::sdk()));
-let tree = kaji::generate(&api, release)?;
+let tree = poolster::generate(&api, release)?;
 tree.write_to("generated")?;
 ```
 
@@ -19,9 +21,9 @@ SDKs are namespaced by default. Choose `php::sdk().flat()` or
 Namespaced clients expose accessors such as `$client->contacts()->get(...)`;
 flat clients use `$client->getContact(...)`. See [STYLE_GUIDE.md](STYLE_GUIDE.md).
 
-When depending on this plugin without the `kaji` facade, import
-`kaji_plugin_php::PackageExt` and compose its package through
-`kaji_core::engine::Packages`. Supply a security catalog when your API
+When depending on this plugin without the `poolster` facade, import
+`poolster_plugin_php::PackageExt` and compose its package through
+`poolster_core::engine::Packages`. Supply a security catalog when your API
 declares named security schemes.
 
 See [configuration](../../../docs/configuration.md) for every generation option
@@ -39,12 +41,12 @@ An operation that explicitly declares `x-kaji-pagination` (or compatible
 `x-speakeasy-pagination`) with `type: cursor`, an existing cursor parameter,
 and `outputs.nextCursor` receives a lazy `\Generator`, for example
 `$client->listPetsPages(cursor: null)`. Namespaced clients mirror it at
-`$client->pets()->listPages(...)`. Kaji supports declared object fields and
+`$client->pets()->listPages(...)`. Poolster supports declared object fields and
 array indexes (including `[-1]`) in the output path and skips any pager that
 cannot be resolved against the operation declaration.
 
 Declared `text/event-stream` operations return the untouched PSR-7
-`StreamInterface`. Kaji does not buffer, parse, or reconnect it: PSR-18 does
+`StreamInterface`. Poolster does not buffer, parse, or reconnect it: PSR-18 does
 not require every implementation to expose a live network stream. Applications
 that need live SSE should select a stream-capable PSR-18 client and own event
 decoding plus `Last-Event-ID`/reconnection policy.
@@ -57,7 +59,7 @@ an API property would collide with its generated name. Unknown JSON object/array
 identity is still limited by associative-array decoding in the PHP runtime.
 
 SDK authors can bundle customer middleware through `Package::middleware` or
-`kaji.config.json` `middleware` entries with `source`, `path`, and `symbol`.
+`poolster.json` `middleware` entries with `source`, `path`, and `symbol`.
 Use a `.php` path under `src` and a class in the generated namespace with
 `public static function wrap(\Psr\Http\Client\ClientInterface $next): \Psr\Http\Client\ClientInterface`.
 The source is required and the returned PSR-18 decorator is enabled automatically

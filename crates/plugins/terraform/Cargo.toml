@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "Terraform provider generator for Kaji"
+description = "Terraform provider generator for Poolster"
 publish = false
 
 [dependencies]

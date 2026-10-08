@@ -1,8 +1,8 @@
-# kaji-input-capnproto
+# poolster-input-capnproto
 
 Native `capnproto` input provider. Register `CapnProtoInput` directly with
-`kaji_core::input::InputRegistry`, or enable `capnproto` in `kaji-inputs`.
-The provider publishes `CapnProtoDocument` for typed consumers in Kaji's plugin graph.
+`poolster_core::input::InputRegistry`, or enable `capnproto` in `poolster-inputs`.
+The provider publishes `CapnProtoDocument` for typed consumers in Poolster's plugin graph.
 
 Source inspection requires the official `capnp` compiler on PATH. Use
 `load_with_includes(path, includes)` to resolve repository-wide absolute imports.

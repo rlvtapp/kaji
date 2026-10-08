@@ -1,8 +1,8 @@
-# kaji-input-protobuf
+# poolster-input-protobuf
 
 Native `protobuf` input provider. Register `ProtobufInput` directly with
-`kaji_core::input::InputRegistry`, or enable `protobuf` in `kaji-inputs`.
-The provider publishes `ProtobufDocument` for typed consumers in Kaji's plugin graph.
+`poolster_core::input::InputRegistry`, or enable `protobuf` in `poolster-inputs`.
+The provider publishes `ProtobufDocument` for typed consumers in Poolster's plugin graph.
 
 The parser supports proto2 and proto3, including imports, standard well-known
 schemas, nested messages/enums, field defaults, oneofs and RPC streaming.

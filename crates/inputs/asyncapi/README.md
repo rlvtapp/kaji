@@ -1,5 +1,5 @@
-# kaji-input-asyncapi
+# poolster-input-asyncapi
 
 Native `asyncapi` input provider. Register `AsyncApiInput` directly with
-`kaji_core::input::InputRegistry`, or enable `asyncapi` in `kaji-inputs`.
-The provider publishes `AsyncApiDocument` for typed consumers in Kaji's plugin graph.
+`poolster_core::input::InputRegistry`, or enable `asyncapi` in `poolster-inputs`.
+The provider publishes `AsyncApiDocument` for typed consumers in Poolster's plugin graph.

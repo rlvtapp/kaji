@@ -1,8 +1,8 @@
-# Kaji input plugins
+# Poolster input plugins
 
 Native input providers for GraphQL, AsyncAPI, Arazzo, Protobuf and Cap'n Proto.
-Providers register through `kaji_core::input::InputRegistry` and publish native
-typed contracts to generator consumers. Each provider lives in its own `kaji-input-*` crate under `crates/inputs/`.
+Providers register through `poolster_core::input::InputRegistry` and publish native
+typed contracts to generator consumers. Each provider lives in its own `poolster-input-*` crate under `crates/inputs/`.
 This crate reexports them and builds a default registry. Features select
 which provider crates are linked; all five are enabled by default.
 

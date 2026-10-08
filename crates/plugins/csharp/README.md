@@ -1,16 +1,18 @@
-# Kaji C#/.NET plugin
+# Poolster C#/.NET plugin
 
-`kaji-plugin-csharp` renders C#/.NET SDK packages from Kaji's neutral API model,
+`poolster-plugin-csharp` renders C#/.NET SDK packages from Poolster's neutral API model,
 using a .NET 8 HttpClient client. All generation runs in Rust.
 
 ```rust
-use kaji::{csharp, prelude::*};
+use poolster::prelude::*;
+use poolster_plugin_csharp::PackageExt as _;
+use poolster_plugin_csharp as csharp;
 
 let release = ProfileSet::new("sdk")
     .package(csharp::package("csharp")
         .name("email-sdk")
         .with(csharp::sdk()));
-let tree = kaji::generate(&api, release)?;
+let tree = poolster::generate(&api, release)?;
 tree.write_to("generated")?;
 ```
 
@@ -20,17 +22,17 @@ Namespaced packages expose resources such as
 `client.Contacts.CreateContactAsync(...)`; flat packages keep methods directly
 on the client. Groups follow the first OpenAPI tag or a meaningful path resource.
 
-`kaji::dotnet` remains a backwards-compatible facade alias. When depending on
-this plugin without the `kaji` facade, import
-`kaji_plugin_csharp::PackageExt` and compose its package through
-`kaji_core::engine::Packages`. Supply a security catalog when your API
+`poolster::dotnet` remains a backwards-compatible facade alias. When depending on
+this plugin without the `poolster` facade, import
+`poolster_plugin_csharp::PackageExt` and compose its package through
+`poolster_core::engine::Packages`. Supply a security catalog when your API
 declares named security schemes.
 
 See [configuration](../../../docs/configuration.md) for every generation option
 and the generated package's README for exact operation signatures.
 
 SDK authors can bundle customer middleware through `Package::middleware` or
-`kaji.config.json` `middleware` entries with `source`, `path`, and `symbol`.
+`poolster.json` `middleware` entries with `source`, `path`, and `symbol`.
 The source is copied and registered automatically; SDK callers do not configure
 middleware. The symbol names a class in the generated namespace with
 `public static HttpClient Wrap(HttpClient next)`. Use a compiled `.cs` path
@@ -47,5 +49,5 @@ Operation/resource partial classes and declared error classes use a 128 KiB
 byte-aware grouping budget. Oversized object models emit typed partial records,
 including when presence preservation is enabled. Public model and client names
 remain unchanged. Indivisible signatures/enums are retained with exact file/byte
-entries in `.kaji/source-layout-diagnostics.json`; no source declaration is sliced.
+entries in `.poolster/source-layout-diagnostics.json`; no source declaration is sliced.
 Generated-file ownership protects local edits during regeneration.

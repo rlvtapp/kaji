@@ -1,16 +1,18 @@
-# Kaji Java plugin
+# Poolster Java plugin
 
-`kaji-plugin-java` renders SDK packages from Kaji's neutral API model,
+`poolster-plugin-java` renders SDK packages from Poolster's neutral API model,
 using a Java 17+ HttpClient/Jackson client. All generation runs in Rust.
 
 ```rust
-use kaji::{java, prelude::*};
+use poolster::prelude::*;
+use poolster_plugin_java::PackageExt as _;
+use poolster_plugin_java as java;
 
 let release = ProfileSet::new("sdk")
     .package(java::package("java")
         .name("email-sdk")
         .with(java::sdk()));
-let tree = kaji::generate(&api, release)?;
+let tree = poolster::generate(&api, release)?;
 tree.write_to("generated")?;
 ```
 
@@ -20,9 +22,9 @@ Namespaced clients expose resources such as `client.contacts().get(input)`;
 flat clients use `client.getContact(input)`. Generated packages include Maven
 and Gradle metadata. See [STYLE_GUIDE.md](STYLE_GUIDE.md).
 
-When depending on this plugin without the `kaji` facade, import
-`kaji_plugin_java::PackageExt` and compose its package through
-`kaji_core::engine::Packages`. Supply a security catalog when your API
+When depending on this plugin without the `poolster` facade, import
+`poolster_plugin_java::PackageExt` and compose its package through
+`poolster_core::engine::Packages`. Supply a security catalog when your API
 declares named security schemes.
 
 See [configuration](../../../docs/configuration.md) for every generation option
@@ -45,7 +47,7 @@ retain their existing generated record behavior. Record fields still do not
 distinguish omitted optional properties from explicit null values.
 
 SDK authors can bundle customer middleware through `Package::middleware` or
-`kaji.config.json` `middleware` entries with `source`, `path`, and `symbol`.
+`poolster.json` `middleware` entries with `source`, `path`, and `symbol`.
 The source is copied into the generated package and registered automatically;
 SDK callers do not configure middleware. Java's symbol names a class in the
 client package with `public static HttpClient wrap(HttpClient next)`. Put it at
@@ -62,5 +64,5 @@ methods. Existing declaration-count ceilings still apply. Large typed model
 holders also use field-part superclass files; Jackson annotations, inherited
 getters, fluent setters, presence types and extra-property guards remain active.
 Single enum/method/request declarations that exceed the budget remain intact and
-are listed with their exact path and bytes in `.kaji/source-layout-diagnostics.json`.
+are listed with their exact path and bytes in `.poolster/source-layout-diagnostics.json`.
 Generated-file ownership refuses regeneration over local edits.

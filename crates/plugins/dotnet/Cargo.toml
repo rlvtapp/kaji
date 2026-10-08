@@ -5,7 +5,7 @@ edition = "2024"
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "Deprecated compatibility facade for Kaji's C# SDK generator"
+description = "Deprecated compatibility facade for Poolster's C# SDK generator"
 publish = false
 
 [dependencies]

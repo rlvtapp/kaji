@@ -1,16 +1,18 @@
-# Kaji Rust plugin
+# Poolster Rust plugin
 
 Generate a Cargo SDK with Serde models, a Reqwest client, typed operation
 requests, and resource accessors.
 
 ```rust
-use kaji::{prelude::*, rust};
+use poolster::prelude::*;
+use poolster_plugin_rust::PackageExt as _;
+use poolster_plugin_rust as rust;
 
 let release = ProfileSet::new("sdk")
     .package(rust::package("rust")
         .name("email-sdk")
         .with(rust::sdk().namespaced()));
-let tree = kaji::generate(&api, release)?;
+let tree = poolster::generate(&api, release)?;
 tree.write_to("generated")?;
 ```
 
@@ -24,7 +26,7 @@ Request bodies are separate arguments. Exact method names and signatures are
 documented in each generated package.
 
 For an in-memory API with named security schemes, supply its security catalog;
-`kaji::generate_openapi` loads the bundled compiler's catalog automatically.
+`poolster::generate_openapi` loads the bundled compiler's catalog automatically.
 
 [Configuration reference](../../../docs/configuration.md) ·
 [Generated SDKs](../../../docs/generated-sdks.md)
@@ -33,7 +35,7 @@ Operations and resource facades group complete request/error/method declarations
 under a 128 KiB byte budget, in addition to the existing declaration-count limit.
 Model structs retain their native public fields in individual files. An atomic
 struct, enum or operation larger than the budget is retained intact and reported
-in `.kaji/source-layout-model-diagnostics.json` or
-`.kaji/source-layout-operation-diagnostics.json`. This avoids changing field access
+in `.poolster/source-layout-model-diagnostics.json` or
+`.poolster/source-layout-operation-diagnostics.json`. This avoids changing field access
 or replacing typed models with generic JSON to meet a physical file limit.
 Generated-file ownership protects local edits during regeneration.

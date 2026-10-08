@@ -153,6 +153,8 @@ paths:
         type: cursor
         inputs:
           cursor: cursor
+      x-poolster-custom:
+        enabled: true
       responses:
         '200':
           description: OK
@@ -176,8 +178,8 @@ paths:
 	if err := json.Unmarshal(data, &operation); err != nil {
 		t.Fatalf("decode operation: %v", err)
 	}
-	if operation.Extensions["x-mint"] == nil || operation.Extensions["x-rlvt"] == nil || operation.Extensions["x-kaji-mock"] == nil || operation.Extensions["x-kaji-pagination"] == nil {
-		t.Fatalf("expected docs and Kaji extensions, got %#v", operation.Extensions)
+	if operation.Extensions["x-mint"] == nil || operation.Extensions["x-rlvt"] == nil || operation.Extensions["x-kaji-mock"] == nil || operation.Extensions["x-kaji-pagination"] == nil || operation.Extensions["x-poolster-custom"] == nil {
+		t.Fatalf("expected docs and Poolster extensions, got %#v", operation.Extensions)
 	}
 	mock := operation.Extensions["x-kaji-mock"].(map[string]any)
 	scenarios := mock["scenarios"].([]any)

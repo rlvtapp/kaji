@@ -1,9 +1,15 @@
-# Kaji Rust API
+# Poolster Rust API
 
 Compose language-scoped SDK packages from one API contract.
 
 ```rust
-use kaji::{go, mock, prelude::*, rust, ts};
+use poolster::{mock, prelude::*};
+use poolster_plugin_go::PackageExt as _;
+use poolster_plugin_go as go;
+use poolster_plugin_rust::PackageExt as _;
+use poolster_plugin_rust as rust;
+use poolster_plugin_typescript::PackageExt as _;
+use poolster_plugin_typescript as ts;
 
 let release = ProfileSet::new("sdk")
     .common(Common::default().package_version("1.0.0"))
@@ -14,7 +20,7 @@ let release = ProfileSet::new("sdk")
     .package(go::package("go").with(go::sdk().flat().jobs(4)))
     .package(mock::package("mock-server").with(mock::server().port(5000)));
 
-let tree = kaji::generate(&api, release)?;
+let tree = poolster::generate(&api, release)?;
 tree.write_to("generated")?;
 ```
 
@@ -24,14 +30,15 @@ pass its definitions to `generate_with_security_catalog`.
 
 ## Custom input adapters
 
-`kaji_core::Adapter` is the input extension point. It returns an `AdaptedApi`
-containing Kaji's neutral `Api` plus its named security catalog, so language
+`poolster_core::Adapter` is the input extension point. It returns an `AdaptedApi`
+containing Poolster's neutral `Api` plus its named security catalog, so language
 plugins remain independent of the source format:
 
 ```rust
 use anyhow::Result;
-use kaji::{ProfileSet, generate_with_adapter, ts};
-use kaji_core::{AdaptedApi, Adapter, Api, SecuritySchemeCatalog};
+use poolster::{ProfileSet, generate_with_adapter};
+use poolster_plugin_typescript as ts;
+use poolster_core::{AdaptedApi, Adapter, Api, SecuritySchemeCatalog};
 
 struct CompanyContract;
 
@@ -51,7 +58,7 @@ The bundled OpenAPI path is an `OpenApiSidecar` adapter and remains available
 through `generate_openapi`. Output extension remains language plugins; there is
 no separate output-parser interface to implement.
 
-The prelude imports language package extension traits. Set package identity with
+Add each language plugin as a dependency and import its crate explicitly. Set package identity with
 `.name(...)`, shared defaults with `.common(...)`, and individual generator
 options on `.with(language::sdk()...)`.
 

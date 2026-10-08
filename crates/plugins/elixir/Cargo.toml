@@ -5,7 +5,7 @@ edition = "2024"
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "Native Elixir SDK generator for Kaji"
+description = "Native Elixir SDK generator for Poolster"
 publish = false
 
 [dependencies]

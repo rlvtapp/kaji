@@ -19,7 +19,7 @@ func validateDocumentVersion(data []byte) error {
 		if strings.HasPrefix(header.OpenAPI, "3.0.") || strings.HasPrefix(header.OpenAPI, "3.1.") || strings.HasPrefix(header.OpenAPI, "3.2.") {
 			return nil
 		}
-		return fmt.Errorf("unsupported OpenAPI version %q: Kaji supports 3.0/3.1/3.2; newer versions require compiler support, not changing the version string", header.OpenAPI)
+		return fmt.Errorf("unsupported OpenAPI version %q: Poolster supports 3.0/3.1/3.2; newer versions require compiler support, not changing the version string", header.OpenAPI)
 	}
 	if header.Swagger == "2.0" {
 		return nil

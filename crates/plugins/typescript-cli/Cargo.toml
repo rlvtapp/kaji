@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "TypeScript API CLI generator for Kaji"
+description = "TypeScript API CLI generator for Poolster"
 publish = false
 
 [dependencies]
