@@ -57,6 +57,8 @@ jobs:
           node packages/npm/sdk/test-support/assert-generated-runtime.mjs "$POOLSTER_EXAMPLE_OUTPUT/web"
       - name: Verify release examples
         run: python scripts/check-release-examples.py
+      - name: Test Rust publication ordering and recovery
+        run: python scripts/test-publish-crates.py
       - name: Generate cross-language SDK fixture
         run: >-
           target/debug/poolster generate crates/cli/tests/fixtures/pets.yaml

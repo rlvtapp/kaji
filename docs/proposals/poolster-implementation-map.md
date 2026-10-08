@@ -89,10 +89,10 @@ later, after the npm/PyPI CLI distribution is established.
 3. **Review the implemented rename and layout.** Cargo, npm, and
    PyPI names, JS config discovery, environment variables, examples, docs, and
    release metadata follow the package naming plan and repository layout.
-4. **Prepare only the Rust SDK for crates.io.** Add versioned publishable
-   dependencies, test `cargo package`, and test a fresh consumer using
-   `poolster` with one explicitly selected plugin. Keep the internal CLI crate
-   unpublished; add an SDK-only crates.io job only after that graph is ready.
+4. **Validate the prepared Rust SDK publication.** Versioned dependencies and
+   an SDK-only crates.io job are implemented. Check packaging and a fresh
+   consumer using `poolster` with one explicitly selected plugin before release.
+   The internal CLI and Node bridge remain unpublished.
 5. **Release each ecosystem deliberately.** Publish Rust dependencies before
    the SDK; publish npm platform packages before launchers; publish PyPI wheels
    from the existing platform matrix. Verify exact versions and installation
