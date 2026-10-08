@@ -32,7 +32,7 @@ fn render(api: &Api, sdk: &NativeSdk, bound: usize) -> Result<(String, Value)> {
         bound > 0 && bound <= 128,
         "operation test bound must be 1..128"
     );
-    let api = operation_samples::clean_api(api);
+    let api = prepare_api(&operation_samples::clean_api(api));
     let mut code = String::new();
     let mut cases = vec![];
     let mut unsupported = vec![];
@@ -59,7 +59,7 @@ fn render(api: &Api, sdk: &NativeSdk, bound: usize) -> Result<(String, Value)> {
                         .unwrap();
                     args.push(format!(
                         "{}: JsonSerializer.Deserialize<{}>({})!",
-                        camel_case(&parameter.name),
+                        parameter_name(parameter),
                         csharp_type(parameter.schema.as_ref().unwrap(), !parameter.required),
                         serde_json::to_string(&value["value"].to_string())?
                     ));

@@ -297,25 +297,29 @@ impl Plugin<Rust> for Provider {
     }
 }
 pub(crate) fn model_contract(api: &kaji_core::Api) -> Models {
+    let prepared = render::prepare_api(api);
     Models {
         symbols: api
             .schemas
             .iter()
-            .map(|schema| {
+            .zip(prepared.schemas.iter())
+            .map(|(schema, native)| {
                 (
                     schema.name.clone(),
-                    format!("crate::models::{}", render::type_name(&schema.name)),
+                    format!("crate::models::{}", render::type_name(&native.name)),
                 )
             })
             .collect(),
     }
 }
 pub(crate) fn operation_contract(api: &kaji_core::Api, prefix: Option<String>) -> Operations {
+    let prepared = render::prepare_api(api);
     Operations {
         methods: api
             .operations
             .iter()
-            .map(|operation| {
+            .zip(prepared.operations.iter())
+            .map(|(operation, native)| {
                 (
                     operation.id.clone(),
                     format!(
@@ -324,7 +328,7 @@ pub(crate) fn operation_contract(api: &kaji_core::Api, prefix: Option<String>) -
                             .as_ref()
                             .map(|prefix| format!("{}_", render::rust_field_name(prefix)))
                             .unwrap_or_default(),
-                        render::rust_field_name(&operation.id)
+                        render::rust_field_name(&native.id)
                     ),
                 )
             })

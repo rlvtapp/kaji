@@ -16,6 +16,7 @@ use kaji_core::{
 #[cfg(test)]
 mod model_compat_tests;
 mod multipart;
+mod native_names;
 mod operation_samples;
 mod operation_tests;
 mod presence;
@@ -71,25 +72,9 @@ fn render_sdk_with_policy(
     client_style: SdkClientStyle,
     open_enums: bool,
 ) -> Result<GeneratedTree> {
+    let prepared = prepare_api(api);
+    let api = &prepared;
     multipart::validate(api)?;
-
-    for schema in &api.schemas {
-        if let SchemaKind::Object { fields, .. } = &schema.value.kind {
-            let mut names = std::collections::BTreeMap::new();
-            for field in fields {
-                let native = pascal_case(&field.name);
-                if let Some(previous) = names.insert(native.clone(), &field.name) {
-                    anyhow::bail!(
-                        "csharp model '{}' properties '{}' and '{}' collide as native identifier '{}'",
-                        schema.name,
-                        previous,
-                        field.name,
-                        native
-                    );
-                }
-            }
-        }
-    }
 
     for operation in &api.operations {
         let extension = operation
@@ -227,19 +212,12 @@ fn render_schema_with_policy(output: &mut String, schema: &Schema, open_enums: b
             fields,
             additional_properties,
         } => {
+            let names =
+                native_names::field_names(fields, pascal_case, &[&name, "EqualityContract"]);
             let _ = writeln!(output, "public sealed record {name}");
             output.push_str("{\n");
             for field in fields {
-                let mut property = pascal_case(&field.name);
-                if property == name {
-                    property.push_str("Value");
-                }
-                while fields
-                    .iter()
-                    .any(|other| other.name != field.name && pascal_case(&other.name) == property)
-                {
-                    property.push('_');
-                }
+                let property = names[&field.name].clone();
                 let field_type = csharp_type(&field.value, !field.required);
                 let required = if field.required && is_reference_type(&field.value) {
                     "required "
@@ -261,10 +239,7 @@ fn render_schema_with_policy(output: &mut String, schema: &Schema, open_enums: b
             }
             if !matches!(additional_properties, AdditionalProperties::Forbidden) {
                 let mut property = "AdditionalProperties".to_owned();
-                while fields
-                    .iter()
-                    .any(|field| pascal_case(&field.name) == property)
-                {
+                while fields.iter().any(|field| names[&field.name] == property) {
                     property.push('_');
                 }
                 let _ = writeln!(
@@ -309,9 +284,13 @@ fn render_schema_with_policy(output: &mut String, schema: &Schema, open_enums: b
             output.push_str("[JsonConverter(typeof(JsonStringEnumConverter))]\n");
             let _ = writeln!(output, "public enum {name}");
             output.push_str("{\n");
+            let mut members = std::collections::BTreeSet::from([name.clone()]);
             for (index, value) in schema.value.enum_values.iter().enumerate() {
                 let value = value.as_str().unwrap_or_default();
-                let member = enum_member_name(value, index);
+                let mut member = enum_member_name(value, index);
+                while !members.insert(member.clone()) {
+                    member.push('_');
+                }
                 let _ = writeln!(output, "    {member},");
             }
             output.push_str("}\n");
@@ -389,7 +368,7 @@ fn render_client(api: &Api, namespace: &str, client_style: SdkClientStyle) -> St
     );
     if client_style == SdkClientStyle::Namespaced {
         for group in operation_groups(api) {
-            let resource = resource_name(&group);
+            let resource = group.clone();
             let _ = writeln!(
                 output,
                 "    /// <summary>Operations in the {group} resource.</summary>\n    public {resource}Resource {resource} {{ get; }}"
@@ -401,7 +380,7 @@ fn render_client(api: &Api, namespace: &str, client_style: SdkClientStyle) -> St
         let assignments = operation_groups(api)
             .into_iter()
             .map(|group| {
-                let resource = resource_name(&group);
+                let resource = group.clone();
                 format!("        {resource} = new {resource}Resource(this);\n")
             })
             .collect::<String>();
@@ -510,7 +489,7 @@ fn render_operation(output: &mut String, operation: &Operation) {
     let mut required_parameters = Vec::new();
     let mut optional_parameters = Vec::new();
     for parameter in &operation.parameters {
-        let parameter_name = camel_case(&parameter.name);
+        let parameter_name = parameter_name(parameter);
         let parameter_type = if parameter.location == "querystring" {
             if parameter.required {
                 "string".into()
@@ -577,7 +556,7 @@ fn render_operation(output: &mut String, operation: &Operation) {
         .iter()
         .filter(|parameter| parameter.location == "path")
     {
-        let name = camel_case(&parameter.name);
+        let name = parameter_name(parameter);
         let serialized = if parameter_json_content(parameter) {
             format!("JsonSerializer.Serialize({name},JsonOptions)")
         } else {
@@ -595,7 +574,7 @@ fn render_operation(output: &mut String, operation: &Operation) {
         .iter()
         .filter(|parameter| parameter.location == "query")
     {
-        let name = camel_case(&parameter.name);
+        let name = parameter_name(parameter);
         if parameter_json_content(parameter) {
             let guard = if parameter.required {
                 "true".to_owned()
@@ -616,7 +595,7 @@ fn render_operation(output: &mut String, operation: &Operation) {
         {
             let _ = writeln!(
                 output,
-                "        if ({name} is not null) foreach (var item in {name}) query.Add(new KeyValuePair<string, string?>({:?}, ParameterString(item)));",
+                "        if ({name} is not null) foreach (var kajiQueryItem in {name}) query.Add(new KeyValuePair<string, string?>({:?}, ParameterString(kajiQueryItem)));",
                 parameter.name
             );
         } else {
@@ -637,7 +616,7 @@ fn render_operation(output: &mut String, operation: &Operation) {
         .iter()
         .filter(|p| p.location == "querystring")
     {
-        let name = camel_case(&parameter.name);
+        let name = parameter_name(parameter);
         let _ = writeln!(
             output,
             "        if (!string.IsNullOrEmpty({name})) {{ ValidateWholeQuery({name}); kajiRequestPath += \"?\" + {name}; }}"
@@ -653,13 +632,13 @@ fn render_operation(output: &mut String, operation: &Operation) {
         .iter()
         .filter(|parameter| parameter.location == "header")
     {
-        let name = camel_case(&parameter.name);
+        let name = parameter_name(parameter);
         let serialized = if parameter_json_content(parameter) {
             format!("JsonSerializer.Serialize({name},JsonOptions)")
         } else {
             format!("ParameterString({name})")
         };
-        let guard = if parameter.required && parameter_json_content(parameter) {
+        let guard = if parameter.required {
             "true".to_owned()
         } else {
             format!("{name} is not null")
@@ -675,13 +654,13 @@ fn render_operation(output: &mut String, operation: &Operation) {
         .iter()
         .filter(|p| p.location == "cookie")
     {
-        let name = camel_case(&parameter.name);
+        let name = parameter_name(parameter);
         let serialized = if parameter_json_content(parameter) {
             format!("JsonSerializer.Serialize({name},JsonOptions)")
         } else {
             format!("ParameterString({name})")
         };
-        let guard = if parameter.required && parameter_json_content(parameter) {
+        let guard = if parameter.required {
             "true".to_owned()
         } else {
             format!("{name} is not null")
@@ -1066,7 +1045,7 @@ fn facade_parameters(operation: &Operation) -> Vec<String> {
                     .map(|schema| csharp_type(schema, !parameter.required))
                     .unwrap_or_else(|| "JsonElement".into())
             },
-            camel_case(&parameter.name),
+            parameter_name(parameter),
             if parameter.required { "" } else { " = default" },
         );
         if parameter.required {
@@ -1107,7 +1086,7 @@ fn facade_arguments(operation: &Operation) -> Vec<String> {
     let mut required = Vec::new();
     let mut optional = Vec::new();
     for parameter in &operation.parameters {
-        let name = camel_case(&parameter.name);
+        let name = parameter_name(parameter);
         if parameter.required {
             required.push(name);
         } else {
@@ -1179,6 +1158,11 @@ fn resource_name(value: &str) -> String {
     let name = pascal_case(value);
     if name == "GeneratedValue" {
         "Default".into()
+    } else if matches!(
+        name.as_str(),
+        "System" | "Task" | "Math" | "JsonSerializer" | "Guid" | "Uri"
+    ) {
+        format!("{name}Api")
     } else {
         name
     }
@@ -1316,7 +1300,7 @@ fn csharp_type(value: &SchemaValue, optional: bool) -> String {
 }
 
 fn nullable_type(base: String, nullable: bool) -> String {
-    if !nullable {
+    if !nullable || base.ends_with('?') {
         return base;
     }
     format!("{base}?")
@@ -1616,6 +1600,71 @@ fn xml_escape(value: &str) -> String {
         .replace('\'', "&apos;")
 }
 
+fn prepare_api(api: &Api) -> Api {
+    native_names::prepare(
+        api,
+        pascal_case,
+        pascal_case,
+        &[
+            "Value",
+            "String",
+            "Boolean",
+            "Int32",
+            "Int64",
+            "Double",
+            "Decimal",
+            "Byte",
+            "Object",
+            "Task",
+            "ValueTask",
+            "Type",
+            "Exception",
+            "System",
+            "Math",
+            "Guid",
+            "Uri",
+            "List",
+            "Dictionary",
+            "DateTime",
+            "DateOnly",
+            "DateTimeOffset",
+            "HttpStatusCode",
+            "Encoding",
+            "HttpClient",
+            "HttpRequestMessage",
+            "HttpResponseMessage",
+            "HttpMethod",
+            "HttpContent",
+            "JsonElement",
+            "JsonDocument",
+            "JsonSerializer",
+            "JsonSerializerOptions",
+            "JsonConverter",
+            "JsonConverterFactory",
+            "Utf8JsonReader",
+            "Utf8JsonWriter",
+            "KajiClient",
+            "KajiClientOptions",
+            "KajiCallOptions",
+            "ApiException",
+            "Presence",
+            "OrderedMultipart",
+            "OrderedMultipartPart",
+            "MultipartFile",
+        ],
+    )
+}
+
+fn parameter_name(parameter: &OperationParameter) -> String {
+    camel_case(
+        parameter
+            .annotations
+            .get("kaji.native_argument")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or(&parameter.name),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -1886,6 +1935,19 @@ mod tests {
     }
 
     #[test]
+    fn model_names_cannot_shadow_generated_resource_types() {
+        for name in ["LinksResource", "HttpStatusCode", "Encoding"] {
+            let mut source = api();
+            source.schemas[0].name = name.to_owned();
+            let prepared = prepare_api(&source);
+            assert_eq!(prepared.schemas[0].name, format!("{name}Model"));
+            assert_eq!(source.schemas[0].name, name);
+            let repeated = prepare_api(&prepared);
+            assert_eq!(repeated.schemas[0].name, format!("{name}Model"));
+        }
+    }
+
+    #[test]
     fn generates_a_deterministic_dotnet_package() {
         let first = render_test_sdk(&api(), "sdk/dotnet", Some("example-api-sdk")).unwrap();
         let second = render_test_sdk(&api(), "sdk/dotnet", Some("example-api-sdk")).unwrap();
@@ -2016,11 +2078,12 @@ mod tests {
             .unwrap()
             .media_types[0]
             .content_type = "multipart/form-data".into();
+        let multipart = render_test_sdk(&source, "sdk/dotnet", None).unwrap();
         assert!(
-            render_test_sdk(&source, "sdk/dotnet", None)
-                .unwrap_err()
-                .to_string()
-                .contains("Multipart root must be an object")
+            multipart
+                .get("sdk/dotnet/DownloadContactMultipartBody.cs")
+                .unwrap()
+                .contains("IReadOnlyList<OrderedMultipartPart>")
         );
     }
 

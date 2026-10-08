@@ -16,7 +16,7 @@ pub(super) fn validate(api: &Api, operation: &Operation) -> Result<()> {
         }
         for parameter in &operation.parameters {
             if matches!(
-                camel_case(&parameter.name).as_str(),
+                parameter_name(parameter).as_str(),
                 "kajiURL"
                     | "paginationURL"
                     | "nextURL"
@@ -84,7 +84,7 @@ pub(super) fn validate(api: &Api, operation: &Operation) -> Result<()> {
         }
     }
     for parameter in &operation.parameters {
-        let name = camel_case(&parameter.name);
+        let name = parameter_name(parameter);
         if matches!(
             name.as_str(),
             "currentValue"

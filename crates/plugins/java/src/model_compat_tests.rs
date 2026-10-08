@@ -80,6 +80,48 @@ fn api() -> Api {
     };
     ordered.annotations.insert("kaji.request_content".into(),serde_json::json!([{"content_type":"multipart/mixed","prefix_encoding":[{"contentType":"application/json","headers":{"X-Part":{"required":true,"example_json":"\"v1\""}}},{"contentType":"multipart/mixed","prefixEncoding":[{"contentType":"text/plain","headers":{"X-Child":{"required":true,"example_json":"\"child\""}}}]}],"item_encoding":{"contentType":"application/octet-stream"}}]));
     api.operations.push(ordered);
+    api.operations.push(Operation {
+        id: "collisionWire".into(),
+        method: kaji_core::HttpMethod::Get,
+        path: "/collision".into(),
+        parameters: [
+            ("notify", "query"),
+            ("filter-a", "query"),
+            ("filter_a", "query"),
+            ("notify", "header"),
+        ]
+        .into_iter()
+        .map(|(name, location)| kaji_core::OperationParameter {
+            name: name.into(),
+            location: location.into(),
+            required: true,
+            schema: Some(SchemaValue::new(SchemaKind::String)),
+            description: None,
+            annotations: Default::default(),
+        })
+        .collect(),
+        ..Default::default()
+    });
+
+    api.schemas.push(Schema::new(
+        "Large",
+        SchemaValue::new(SchemaKind::Object {
+            fields: (0..260)
+                .map(|index| kaji_core::Field {
+                    name: format!("field{index}"),
+                    required: index == 0,
+                    value: {
+                        let mut value = SchemaValue::new(SchemaKind::String);
+                        value.nullable = index == 0;
+                        value
+                    },
+                    annotations: Default::default(),
+                })
+                .collect(),
+            additional_properties: AdditionalProperties::Any,
+        }),
+    ));
+
     let mut params = Operation {
         id: "jsonParameters".into(),
         method: kaji_core::HttpMethod::Get,
@@ -157,6 +199,10 @@ public final class ModelsProbe extends ClientBase {
  private ModelsProbe(){super(new ClientConfig("https://example.test",null));}
  public static void main(String[] args)throws Exception {
   var mapper=new ObjectMapper();
+  var large=mapper.readValue("{\"field0\":null,\"field259\":\"last\",\"future\":{\"nested\":false}}",Large.class);
+  var roundtrip=mapper.readTree(mapper.writeValueAsString(large));
+  if(!roundtrip.has("field0") || !roundtrip.get("field0").isNull() || roundtrip.has("field1") || !roundtrip.get("field259").asText().equals("last") || !roundtrip.path("future").path("nested").isBoolean())throw new AssertionError("large typed model roundtrip");
+
   var runtime=new ModelsProbe();
   var records=mapper.readTree("[false,0,null,{\"future\":\"雪\"}]");
   for(var media:new String[]{"application/x-ndjson","application/json-seq"}) {
@@ -167,6 +213,7 @@ public final class ModelsProbe extends ClientBase {
   var server=com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1",0),0);
   var parts=java.util.List.of(OrderedMultipart.Part.json("metadata",mapper.readTree("{\"future\":\"雪\"}")),OrderedMultipart.Part.nested("nested",java.util.List.of(OrderedMultipart.Part.bytes("child","false".getBytes(java.nio.charset.StandardCharsets.UTF_8),"text/plain"))),OrderedMultipart.Part.bytes("file",new byte[]{0,(byte)255},"application/octet-stream"));
   server.createContext("/params",exchange->{try{if(exchange.getRequestURI().getRawPath().equals("/params/null")){if(!exchange.getRequestURI().getRawQuery().equals("filter=null")||!exchange.getRequestHeaders().getFirst("x-json").equals("null")||!exchange.getRequestHeaders().getFirst("Cookie").equals("cookie=null"))throw new AssertionError("required null content wire");exchange.sendResponseHeaders(204,-1);return;}if(!exchange.getRequestURI().getRawPath().equals("/params/%22hello%20world%22")||!exchange.getRequestURI().getRawQuery().equals("filter=%22query%22")||!exchange.getRequestHeaders().getFirst("x-json").equals("\"header\"")||!exchange.getRequestHeaders().getFirst("Cookie").equals("cookie=%22cookie%22"))throw new AssertionError("JSON parameter wire");exchange.sendResponseHeaders(204,-1);}finally{exchange.close();}});
+  server.createContext("/collision",exchange->{try{if(!exchange.getRequestURI().getRawQuery().equals("notify=notify&filter-a=dash&filter_a=underscore") || !exchange.getRequestHeaders().getFirst("notify").equals("header"))throw new AssertionError("allocated arguments changed wire names"); exchange.sendResponseHeaders(204,-1);}finally{exchange.close();}});
   server.createContext("/ordered",exchange->{try{var raw=exchange.getRequestBody().readAllBytes();var text=new String(raw,java.nio.charset.StandardCharsets.UTF_8);if(!exchange.getRequestHeaders().getFirst("Content-Type").startsWith("multipart/mixed")||!text.contains("X-Part: v1")||!text.contains("X-Child: child")||!text.contains("Content-Disposition: attachment"))throw new AssertionError("ordered MIME wire");exchange.sendResponseHeaders(204,-1);}finally{exchange.close();}});
   server.createContext("/sequence",exchange->{try {
    if(!exchange.getRequestURI().getRawQuery().equals("zero=0&false=false&name=%E9%9B%AA"))throw new AssertionError("query wire");
@@ -179,6 +226,7 @@ public final class ModelsProbe extends ClientBase {
    client.jsonParameters(new Client.JsonParametersRequest("hello world","query","header","cookie"));
    client.jsonParameters(new Client.JsonParametersRequest(null,null,null,null));
    client.ordered(new Client.OrderedRequest(new OrderedMultipartBody(parts)));
+   client.collisionWire(new Client.CollisionWireRequest("notify","dash","underscore","header"));
    var result=client.sequence(new Client.SequenceRequest("zero=0&false=false&name=%E9%9B%AA",mapper.convertValue(records,new com.fasterxml.jackson.core.type.TypeReference<java.util.List<JsonNode>>(){})));
    if(!result.equals(records))throw new AssertionError("sequence response wire");
   }finally{server.stop(0);}

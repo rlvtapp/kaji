@@ -7,6 +7,8 @@ pub(crate) fn render(
     open_enums: bool,
     preserve: bool,
 ) -> Result<GeneratedTree> {
+    let prepared = prepare_api(api);
+    let api = &prepared;
     let mut tree = render_sdk_with_policy(api, dir, name, style, open_enums)?;
     if !preserve {
         return Ok(tree);
@@ -26,6 +28,21 @@ pub(crate) fn render(
     );
     for schema in &api.schemas {
         if let SchemaKind::Object { fields, .. } = &schema.value.kind {
+            let names = native_names::field_names(
+                fields,
+                field_name,
+                &[
+                    "clone",
+                    "getClass",
+                    "toString",
+                    "hashCode",
+                    "equals",
+                    "wait",
+                    "notify",
+                    "notifyAll",
+                    "finalize",
+                ],
+            );
             let mut source = render_model(schema, &package, open_enums);
             for field in fields.iter().filter(|f| !f.required) {
                 source = source.replace(
@@ -33,25 +50,34 @@ pub(crate) fn render(
                         "@JsonProperty({:?}) {} {}",
                         field.name,
                         java_type(&field.value),
-                        field_name(&field.name)
+                        names[&field.name].clone()
                     ),
                     &format!(
                         "@JsonProperty({:?}) Presence<{}> {}",
                         field.name,
                         java_type(&field.value),
-                        field_name(&field.name)
+                        names[&field.name].clone()
                     ),
                 );
             }
             // Convenience constructors must accept the same presence types as record components.
             for field in fields.iter().filter(|f| !f.required) {
                 source = source.replace(
-                    &format!("{} {}", java_type(&field.value), field_name(&field.name)),
+                    &format!("{} {}", java_type(&field.value), names[&field.name].clone()),
                     &format!(
                         "Presence<{}> {}",
                         java_type(&field.value),
-                        field_name(&field.name)
+                        names[&field.name].clone()
                     ),
+                );
+            }
+            for field in fields.iter().filter(|field| !field.required) {
+                let native = &names[&field.name];
+                let ty = java_type(&field.value);
+                let model = type_name(&schema.name);
+                source = source.replace(
+                    &format!("public {model} {native}({ty} value)"),
+                    &format!("public {model} {native}(Presence<{ty}> value)"),
                 );
             }
             tree.replace(GeneratedFile::new(

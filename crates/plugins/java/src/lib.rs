@@ -8,6 +8,7 @@
 #[cfg(test)]
 mod model_compat_tests;
 mod multipart;
+mod native_names;
 mod operation_samples;
 mod operation_tests;
 mod presence;
@@ -69,25 +70,9 @@ fn render_sdk_with_policy(
     style: SdkClientStyle,
     open_enums: bool,
 ) -> Result<GeneratedTree> {
+    let prepared = prepare_api(api);
+    let api = &prepared;
     multipart::validate(api)?;
-
-    for schema in &api.schemas {
-        if let SchemaKind::Object { fields, .. } = &schema.value.kind {
-            let mut names = std::collections::BTreeMap::new();
-            for field in fields {
-                let native = field_name(&field.name);
-                if let Some(previous) = names.insert(native.clone(), &field.name) {
-                    anyhow::bail!(
-                        "java model '{}' properties '{}' and '{}' collide as native identifier '{}'",
-                        schema.name,
-                        previous,
-                        field.name,
-                        native
-                    );
-                }
-            }
-        }
-    }
 
     for operation in &api.operations {
         let extension = operation
@@ -378,6 +363,63 @@ fn render_object_model(
     additional_properties: &AdditionalProperties,
     package: &str,
 ) -> String {
+    let names = native_names::field_names(
+        fields,
+        field_name,
+        &[
+            "clone",
+            "getClass",
+            "toString",
+            "hashCode",
+            "equals",
+            "wait",
+            "notify",
+            "notifyAll",
+            "finalize",
+        ],
+    );
+    if fields.len() > 200 {
+        let mut source = format!(
+            "package {package}.model;\nimport com.fasterxml.jackson.annotation.*;\nimport com.fasterxml.jackson.databind.JsonNode;\nimport java.util.*;\npublic final class {name} {{\n"
+        );
+        if matches!(additional_properties, AdditionalProperties::Forbidden) {
+            source = source.replace(
+                "public final class",
+                "@JsonIgnoreProperties(ignoreUnknown = true)\npublic final class",
+            );
+        }
+        for field in fields {
+            let native = &names[&field.name];
+            let ty = java_type(&field.value);
+            let omit = if field.required {
+                ""
+            } else {
+                "@JsonInclude(JsonInclude.Include.NON_NULL) "
+            };
+            let _ = writeln!(
+                source,
+                "    {omit}@JsonProperty({:?}) private {ty} {native};\n    public {ty} {native}() {{ return {native}; }}\n    public {name} {native}({ty} value) {{ this.{native} = value; return this; }}",
+                field.name
+            );
+        }
+        if !matches!(additional_properties, AdditionalProperties::Forbidden) {
+            let ty = match additional_properties {
+                AdditionalProperties::Schema { value } => java_type(value),
+                _ => "Object".into(),
+            };
+            let known = fields
+                .iter()
+                .map(|field| format!("{:?}", field.name))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let _ = writeln!(
+                source,
+                "    private final Map<String,{ty}> kajiExtra = new LinkedHashMap<>();\n    @JsonAnyGetter public Map<String,{ty}> kajiAdditionalProperties() {{ return Collections.unmodifiableMap(kajiExtra); }}\n    @JsonAnySetter public void kajiAdditionalProperty(String name, {ty} value) {{ if (Set.of({known}).contains(name)) throw new IllegalArgumentException(\"additional property shadows declared field\"); kajiExtra.put(name,value); }}"
+            );
+        }
+        source.push_str("}\n");
+        return source;
+    }
     let open = !matches!(additional_properties, AdditionalProperties::Forbidden);
     let mut output = format!(
         "package {package}.model;\n\nimport com.fasterxml.jackson.annotation.JsonAnyGetter;\nimport com.fasterxml.jackson.annotation.JsonAnySetter;\nimport com.fasterxml.jackson.annotation.JsonIgnoreProperties;\nimport com.fasterxml.jackson.annotation.JsonInclude;\nimport com.fasterxml.jackson.annotation.JsonProperty;\nimport com.fasterxml.jackson.databind.JsonNode;\nimport java.util.Collections;\nimport java.util.LinkedHashMap;\nimport java.util.List;\nimport java.util.Map;\n\n{NOTICE}\n"
@@ -398,14 +440,14 @@ fn render_object_model(
                 "{omit}        @JsonProperty({:?}) {} {}",
                 field.name,
                 java_type(&field.value),
-                field_name(&field.name)
+                names[&field.name].clone()
             )
         })
         .collect::<Vec<_>>();
     let mut extra_name = "additionalProperties".to_owned();
     while fields
         .iter()
-        .any(|field| field_name(&field.name) == extra_name)
+        .any(|field| names[&field.name].clone() == extra_name)
     {
         extra_name.push('_');
     }
@@ -436,12 +478,12 @@ fn render_object_model(
         if !matches!(additional_properties, AdditionalProperties::Schema { .. }) {
             let args = fields
                 .iter()
-                .map(|field| format!("{} {}", java_type(&field.value), field_name(&field.name)))
+                .map(|field| format!("{} {}", java_type(&field.value), names[&field.name].clone()))
                 .collect::<Vec<_>>()
                 .join(", ");
             let values = fields
                 .iter()
-                .map(|field| field_name(&field.name))
+                .map(|field| names[&field.name].clone())
                 .chain(std::iter::once("Map.of()".into()))
                 .collect::<Vec<_>>()
                 .join(", ");
@@ -458,6 +500,7 @@ fn render_enum(name: &str, value: &SchemaValue, package: &str) -> String {
     let mut output = format!(
         "package {package}.model;\n\nimport com.fasterxml.jackson.annotation.JsonCreator;\nimport com.fasterxml.jackson.annotation.JsonValue;\n\n{NOTICE}\npublic enum {name} {{\n"
     );
+    let mut used = BTreeSet::new();
     for (index, item) in value.enum_values.iter().enumerate() {
         let raw = item
             .as_str()
@@ -468,7 +511,11 @@ fn render_enum(name: &str, value: &SchemaValue, package: &str) -> String {
         } else {
             ","
         };
-        let _ = writeln!(output, "    {}({raw:?}){separator}", enum_name(&raw, index));
+        let mut constant = enum_name(&raw, index);
+        while !used.insert(constant.clone()) {
+            constant.push('_');
+        }
+        let _ = writeln!(output, "    {constant}({raw:?}){separator}");
     }
     output.push_str("\n    private final String value;\n\n    ");
     let _ = writeln!(output, "{name}(String value) {{ this.value = value; }}");
@@ -483,12 +530,16 @@ fn render_open_enum(name: &str, value: &SchemaValue, package: &str) -> String {
         "package {package}.model;\n\nimport com.fasterxml.jackson.annotation.JsonCreator;\nimport com.fasterxml.jackson.annotation.JsonValue;\nimport java.util.Objects;\n\n{NOTICE}/** Extensible wire value; unknown response values are preserved. */\npublic final class {name} {{\n"
     );
     let mut constants = Vec::new();
+    let mut used = BTreeSet::new();
     for (index, item) in value.enum_values.iter().enumerate() {
         let raw = item
             .as_str()
             .map(str::to_owned)
             .unwrap_or_else(|| item.to_string());
-        let constant = enum_name(&raw, index);
+        let mut constant = enum_name(&raw, index);
+        while !used.insert(constant.clone()) {
+            constant.push('_');
+        }
         let _ = writeln!(
             output,
             "    public static final {name} {constant} = new {name}({raw:?});"
@@ -794,13 +845,13 @@ fn render_operation(output: &mut String, operation: &Operation) {
     let has_input = !parameters.is_empty() || body_schema.is_some();
     if has_input {
         let _ = writeln!(output, "    /** Inputs accepted by {operation_name}. */");
-        let _ = writeln!(output, "    public record {request_name}(");
+
         let mut fields = Vec::new();
         for parameter in &parameters {
             fields.push(format!(
                 "            {} {}",
                 parameter_type(parameter),
-                field_name(&parameter.name)
+                parameter_name(parameter)
             ));
         }
         if let Some(schema) = body_schema {
@@ -817,8 +868,21 @@ fn render_operation(output: &mut String, operation: &Operation) {
                 }
             ));
         }
-        output.push_str(&fields.join(",\n"));
-        output.push_str("\n    ) {}\n\n");
+        if fields.len() > 200 {
+            let _ = writeln!(output, "    public static final class {request_name} {{");
+            for declaration in fields {
+                let (ty, name) = declaration.trim().rsplit_once(' ').expect("typed argument");
+                let _ = writeln!(
+                    output,
+                    "        private {ty} {name};\n        public {ty} {name}() {{ return {name}; }}\n        public {request_name} {name}({ty} value) {{ this.{name} = value; return this; }}"
+                );
+            }
+            output.push_str("    }\n\n");
+        } else {
+            let _ = writeln!(output, "    public record {request_name}(");
+            output.push_str(&fields.join(",\n"));
+            output.push_str("\n    ) {}\n\n");
+        }
     }
     let response = response_surface(operation);
     let return_type = match response {
@@ -861,7 +925,7 @@ fn render_operation(output: &mut String, operation: &Operation) {
     output.push_str("        var query = new ArrayList<QueryParameter>();\n        var headers = new java.util.LinkedHashMap<String, String>();\n");
     for parameter in &parameters {
         let accessor = if has_input {
-            format!("input.{}()", field_name(&parameter.name))
+            format!("input.{}()", parameter_name(parameter))
         } else {
             String::new()
         };
@@ -1117,7 +1181,7 @@ fn java_cursor_parameter_field(operation: &Operation, inputs: &[Value]) -> Optio
     if parameter.location == "path" && !parameter.required {
         return None;
     }
-    Some(field_name(&parameter.name))
+    Some(parameter_name(parameter))
 }
 
 /// Find an optional scalar query parameter that the generated Java record can
@@ -1252,7 +1316,7 @@ fn render_pagination_operation(
     };
     let field_type = operation_parameters(operation)
         .into_iter()
-        .find(|parameter| field_name(&parameter.name) == field)
+        .find(|parameter| parameter_name(parameter) == field)
         .map(parameter_type)
         .expect("validated pagination field is an operation parameter");
     let initial = match pagination {
@@ -1297,7 +1361,7 @@ fn render_pagination_request_copy(
     let mut values: Vec<String> = operation_parameters(operation)
         .iter()
         .map(|parameter| {
-            let field = field_name(&parameter.name);
+            let field = parameter_name(parameter);
             if field == target_field {
                 "value".to_owned()
             } else {
@@ -1342,7 +1406,7 @@ fn render_url_pagination_operation(
         .iter()
         .filter(|parameter| parameter.location == "header")
         .map(|parameter| {
-            let accessor = format!("input.{}()", field_name(&parameter.name));
+            let accessor = format!("input.{}()", parameter_name(parameter));
             format!(
                 "        if ({accessor} != null) headers.put({:?}, String.valueOf({accessor}));\n",
                 parameter.name
@@ -1937,6 +2001,9 @@ fn package_version(value: &str) -> String {
 
 fn java_keywords() -> &'static [&'static str] {
     &[
+        "null",
+        "true",
+        "false",
         "abstract",
         "assert",
         "boolean",
@@ -1993,6 +2060,86 @@ fn java_keywords() -> &'static [&'static str] {
         "var",
         "yield",
     ]
+}
+
+fn prepare_api(api: &Api) -> Api {
+    native_names::prepare(
+        api,
+        type_name,
+        method_name,
+        &[
+            "Object",
+            "Module",
+            "Package",
+            "Record",
+            "ClassLoader",
+            "ClassValue",
+            "Stack",
+            "Currency",
+            "Date",
+            "Locale",
+            "UUID",
+            "Calendar",
+            "Random",
+            "Timer",
+            "TimeZone",
+            "String",
+            "Boolean",
+            "Long",
+            "Double",
+            "Integer",
+            "Short",
+            "Byte",
+            "Float",
+            "Void",
+            "Character",
+            "Number",
+            "Exception",
+            "RuntimeException",
+            "Error",
+            "Thread",
+            "System",
+            "Math",
+            "Class",
+            "Override",
+            "Iterable",
+            "Enum",
+            "Collections",
+            "Collection",
+            "List",
+            "Map",
+            "Set",
+            "Queue",
+            "Dictionary",
+            "Optional",
+            "Objects",
+            "ArrayList",
+            "JsonNode",
+            "JsonProperty",
+            "JsonCreator",
+            "JsonValue",
+            "JsonInclude",
+            "Client",
+            "ClientBase",
+            "ClientConfig",
+            "ClientHooks",
+            "RetryConfig",
+            "ApiException",
+            "Presence",
+            "MultipartBody",
+            "OrderedMultipart",
+        ],
+    )
+}
+
+fn parameter_name(parameter: &OperationParameter) -> String {
+    field_name(
+        parameter
+            .annotations
+            .get("kaji.native_argument")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or(&parameter.name),
+    )
 }
 
 #[cfg(test)]
@@ -2104,6 +2251,47 @@ mod tests {
             .map(|(_, contents)| contents)
             .collect::<Vec<_>>()
             .join("\n")
+    }
+
+    #[test]
+    fn very_large_native_models_and_inputs_avoid_jvm_constructor_limits() {
+        let fields = (0..260)
+            .map(|index| kaji_core::Field {
+                name: format!("field{index}"),
+                value: SchemaValue::new(SchemaKind::String),
+                required: false,
+                annotations: Default::default(),
+            })
+            .collect::<Vec<_>>();
+        let schema = kaji_core::Schema::new(
+            "Large",
+            SchemaValue::new(SchemaKind::Object {
+                fields,
+                additional_properties: kaji_core::AdditionalProperties::Any,
+            }),
+        );
+        let model = super::render_model(&schema, "example", false);
+        assert!(model.contains("public final class Large"));
+        assert!(model.contains("@JsonProperty(\"field259\") private String field259"));
+        assert!(model.contains("@JsonAnySetter"));
+        let operation = Operation {
+            id: "large".into(),
+            parameters: (0..260)
+                .map(|index| kaji_core::OperationParameter {
+                    name: format!("field{index}"),
+                    location: "query".into(),
+                    schema: Some(SchemaValue::new(SchemaKind::String)),
+                    required: false,
+                    description: None,
+                    annotations: Default::default(),
+                })
+                .collect(),
+            ..Default::default()
+        };
+        let mut generated = String::new();
+        super::render_operation(&mut generated, &operation);
+        assert!(generated.contains("public static final class LargeRequest"));
+        assert!(generated.contains("public LargeRequest field259(String value)"));
     }
 
     #[test]
@@ -2499,11 +2687,11 @@ mod tests {
             .unwrap()
             .media_types[0]
             .content_type = "multipart/form-data".into();
+        let multipart = render_test_sdk(&source, "java", None).unwrap();
         assert!(
-            render_test_sdk(&source, "java", None)
-                .unwrap_err()
-                .to_string()
-                .contains("Multipart root must be an object")
+            multipart
+                .iter()
+                .any(|(_, source)| source.contains("java.util.List<OrderedMultipart.Part> parts"))
         );
     }
 

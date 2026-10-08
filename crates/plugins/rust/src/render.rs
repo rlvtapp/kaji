@@ -38,6 +38,8 @@ impl Default for RenderOptions {
 }
 
 pub(super) fn generate_sdk(api: &Api, options: &RenderOptions) -> Result<GeneratedTree> {
+    let prepared = prepare_api(api);
+    let api = &prepared;
     let mut tree = GeneratedTree::default();
     for file in RustModels
         .generate(api, options)?
@@ -63,6 +65,8 @@ impl RustModels {
         api: &Api,
         options: &RenderOptions,
     ) -> Result<Vec<GeneratedFile>> {
+        let prepared = prepare_api(api);
+        let api = &prepared;
         let mut files = Vec::with_capacity(api.schemas.len() + 64);
         let mut root_index = String::new();
         for (chunk_index, schemas) in api.schemas.chunks(MODELS_PER_FILE).enumerate() {
@@ -77,7 +81,7 @@ impl RustModels {
                 let _ = writeln!(chunk_index_source, "pub use {module}::*;");
                 files.push(GeneratedFile::new(
                     format!("src/models/{chunk}/{module}.rs"),
-                    render_model(schema, options.open_unions, options.open_enums),
+                    render_model_for_api(api, schema, options.open_unions, options.open_enums),
                 )?);
             }
             files.push(GeneratedFile::new(
@@ -119,6 +123,61 @@ impl RustPackage {
     }
 }
 
+fn render_model_for_api(api: &Api, schema: &Schema, open_unions: bool, open_enums: bool) -> String {
+    fn reaches(
+        api: &Api,
+        value: &SchemaValue,
+        goal: &str,
+        seen: &mut std::collections::BTreeSet<String>,
+    ) -> bool {
+        match &value.kind {
+            SchemaKind::Reference { reference } => {
+                let target = reference.rsplit('/').next().unwrap_or(reference);
+                if target == goal {
+                    return true;
+                }
+                if !seen.insert(target.to_owned()) {
+                    return false;
+                }
+                api.schemas
+                    .iter()
+                    .find(|item| item.name == target)
+                    .is_some_and(|item| reaches(api, &item.value, goal, seen))
+            }
+            SchemaKind::Object { fields, .. } => fields
+                .iter()
+                .any(|field| reaches(api, &field.value, goal, seen)),
+            SchemaKind::OneOf { variants }
+            | SchemaKind::AnyOf { variants }
+            | SchemaKind::AllOf { variants } => variants
+                .iter()
+                .any(|variant| reaches(api, variant, goal, seen)),
+            _ => false,
+        }
+    }
+    let mut schema = schema.clone();
+    if let SchemaKind::Object { fields, .. } = &mut schema.value.kind {
+        for field in fields {
+            if matches!(field.value.kind, SchemaKind::Reference { .. })
+                && reaches(api, &field.value, &schema.name, &mut Default::default())
+            {
+                field.value.format = Some("kaji-boxed-reference".into());
+            }
+        }
+    }
+    if let SchemaKind::OneOf { variants } | SchemaKind::AnyOf { variants } = &mut schema.value.kind
+    {
+        for variant in variants {
+            if matches!(variant.kind, SchemaKind::Reference { .. })
+                && reaches(api, variant, &schema.name, &mut Default::default())
+            {
+                variant.format = Some("kaji-boxed-reference".into());
+            }
+        }
+    }
+    render_model(&schema, open_unions, open_enums)
+}
+
 fn render_model(schema: &Schema, open_unions: bool, open_enums: bool) -> String {
     let mut output = format!(
         "{NOTICE}\n\n#[allow(unused_imports)]\nuse crate::models::*;\n#[allow(unused_imports)]\nuse serde::{{Deserialize, Serialize}};\n\n"
@@ -154,10 +213,11 @@ fn render_schema(output: &mut String, schema: &Schema, open_unions: bool, open_e
             fields,
             additional_properties,
         } => {
+            let names = crate::native_names::field_names(fields, rust_field_name, &[]);
             output.push_str("#[derive(Clone, Debug, Deserialize, Serialize)]\n");
             let _ = writeln!(output, "pub struct {name} {{");
             for field in fields {
-                if field.name != rust_field_name(&field.name) {
+                if field.name != names[&field.name].clone() {
                     let _ = writeln!(output, "    #[serde(rename = {:?})]", field.name);
                 }
                 if !field.required {
@@ -175,7 +235,7 @@ fn render_schema(output: &mut String, schema: &Schema, open_unions: bool, open_e
                 let _ = writeln!(
                     output,
                     "    pub {}: {},",
-                    rust_field_name(&field.name),
+                    names[&field.name].clone(),
                     field_type
                 );
             }
@@ -190,7 +250,7 @@ fn render_schema(output: &mut String, schema: &Schema, open_unions: bool, open_e
                 let mut extra_name = "additional_properties".to_owned();
                 while fields
                     .iter()
-                    .any(|field| rust_field_name(&field.name) == extra_name)
+                    .any(|field| names[&field.name].clone() == extra_name)
                 {
                     extra_name.push('_');
                 }
@@ -250,6 +310,11 @@ fn rust_type(value: &SchemaValue) -> String {
             "serde_json::Value".into()
         }
     };
+    let base = if value.format.as_deref() == Some("kaji-boxed-reference") {
+        format!("Box<{base}>")
+    } else {
+        base
+    };
     if (value.nullable || value.nullish) && base != "()" {
         format!("Option<{base}>")
     } else {
@@ -262,6 +327,8 @@ const OPERATIONS_PER_FILE: usize = 25;
 const RESOURCE_METHODS_PER_FILE: usize = 25;
 
 fn render_client_files(api: &Api, config: &RenderOptions) -> Result<Vec<GeneratedFile>> {
+    let prepared = prepare_api(api);
+    let api = &prepared;
     let mut files = Vec::new();
     files.push(GeneratedFile::new(
         "src/client/mod.rs",
@@ -596,7 +663,7 @@ fn render_operation(operation: &Operation, config: &RenderOptions) -> String {
         .iter()
         .filter(|p| p.location == "querystring")
     {
-        let field = rust_field_name(&parameter.name);
+        let field = parameter_name(parameter);
         let value = if parameter.required {
             format!("Some(input.{field}.as_str())")
         } else {
@@ -931,7 +998,7 @@ fn rust_cursor_parameter_field(
         return None;
     }
     Some(RustPaginationField {
-        name: rust_field_name(&parameter.name),
+        name: parameter_name(parameter),
         optional: !parameter.required,
     })
 }
@@ -1241,12 +1308,12 @@ fn rust_retry_allowed(operation: &Operation) -> String {
                 if parameter.required {
                     format!(
                         "!input.{}.trim().is_empty()",
-                        rust_field_name(&parameter.name)
+                        parameter_name(parameter)
                     )
                 } else {
                     format!(
                         "input.{}.as_ref().is_some_and(|key| !kaji_query_value(key).trim().is_empty())",
-                        rust_field_name(&parameter.name)
+                        parameter_name(parameter)
                     )
                 }
             })
@@ -1439,7 +1506,7 @@ fn render_operation_request(operation: &Operation) -> String {
         operation_request_name(operation)
     );
     for parameter in &operation.parameters {
-        let name = rust_field_name(&parameter.name);
+        let name = parameter_name(parameter);
         let mut value_type = if parameter.location == "querystring" {
             "String".into()
         } else {
@@ -1467,7 +1534,7 @@ fn parameter_json_content(parameter: &OperationParameter) -> bool {
         })
 }
 fn render_parameter_use(output: &mut String, parameter: &OperationParameter) {
-    let field = format!("input.{}", rust_field_name(&parameter.name));
+    let field = format!("input.{}", parameter_name(parameter));
     if parameter_json_content(parameter) && matches!(parameter.location.as_str(), "path" | "query")
     {
         let value = if parameter.required {
@@ -1538,7 +1605,7 @@ fn render_parameter_use(output: &mut String, parameter: &OperationParameter) {
 }
 
 fn render_header_use(output: &mut String, parameter: &OperationParameter) {
-    let field = format!("input.{}", rust_field_name(&parameter.name));
+    let field = format!("input.{}", parameter_name(parameter));
     if parameter.location == "cookie" {
         let serializer = if parameter_json_content(parameter) {
             "kaji_parameter_json"
@@ -1871,6 +1938,8 @@ pub(crate) fn type_name(name: &str) -> String {
     }
     if output.is_empty() {
         "Value".into()
+    } else if output.as_bytes().first().is_some_and(u8::is_ascii_digit) {
+        format!("Value{output}")
     } else {
         output
     }
@@ -1891,7 +1960,10 @@ pub(crate) fn rust_field_name(name: &str) -> String {
             previous_is_lower = false;
         }
     }
-    let output = output.trim_matches('_').to_owned();
+    let mut output = output.trim_matches('_').to_owned();
+    if output.as_bytes().first().is_some_and(u8::is_ascii_digit) {
+        output = format!("value_{output}");
+    }
     match output.as_str() {
         "self" | "super" | "crate" => format!("{output}_value"),
         "as" | "async" | "await" | "break" | "const" | "continue" | "dyn" | "else" | "enum"
@@ -1924,6 +1996,43 @@ pub(super) fn enum_helper_name(raw: &str) -> String {
     } else {
         name
     }
+}
+
+pub(crate) fn parameter_name(parameter: &OperationParameter) -> String {
+    rust_field_name(
+        parameter
+            .annotations
+            .get("kaji.native_argument")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or(&parameter.name),
+    )
+}
+
+pub(crate) fn prepare_api(api: &Api) -> Api {
+    super::native_names::prepare(
+        api,
+        type_name,
+        rust_field_name,
+        &[
+            "String",
+            "Vec",
+            "Option",
+            "Result",
+            "Box",
+            "Value",
+            "Client",
+            "ApiResponse",
+            "RetryConfig",
+            "TokenProviderError",
+            "Transport",
+            "TransportFuture",
+            "MultipartBody",
+            "MultipartBodyError",
+            "CallOptions",
+            "RequestInfo",
+            "Arc",
+        ],
+    )
 }
 
 #[cfg(test)]

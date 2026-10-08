@@ -9,27 +9,54 @@ pub(crate) fn selected(operation: &Operation) -> bool {
         })
     })
 }
-fn ordered_plan(operation: &Operation) -> Option<serde_json::Value> {
+fn ordered_plan(api: &Api, operation: &Operation) -> Option<serde_json::Value> {
     let content = kaji_core::openapi32::request_content(operation)
         .ok()
         .and_then(|definitions| {
-            definitions
-                .into_iter()
-                .find(|item| item.content_type.starts_with("multipart/"))
+            definitions.into_iter().find(|item| {
+                item.content_type
+                    .to_ascii_lowercase()
+                    .starts_with("multipart/")
+            })
         });
     let media = operation
         .request_body
         .as_ref()?
         .media_types
         .iter()
-        .find(|media| media.content_type.starts_with("multipart/"))?;
+        .find(|media| {
+            media
+                .content_type
+                .to_ascii_lowercase()
+                .starts_with("multipart/")
+        })?;
     fn advanced(encoding: &kaji_core::openapi32::Encoding) -> bool {
-        !encoding.headers.is_empty()
+        encoding
+            .style
+            .as_deref()
+            .is_some_and(|style| style != "form")
+            || !encoding.headers.is_empty()
             || !encoding.encoding.is_empty()
             || !encoding.prefix_encoding.is_empty()
             || encoding.item_encoding.is_some()
     }
-    let needed = media.content_type != "multipart/form-data"
+    let needed = fields(api, operation).is_err()
+        || !media
+            .content_type
+            .eq_ignore_ascii_case("multipart/form-data")
+        || media.schema.as_ref().is_none_or(|schema| {
+            schema.nullable
+                || schema.nullish
+                || matches!(
+                    schema.kind,
+                    SchemaKind::Any
+                        | SchemaKind::Null
+                        | SchemaKind::String
+                        | SchemaKind::Number
+                        | SchemaKind::Integer
+                        | SchemaKind::Boolean
+                )
+        })
         || media
             .schema
             .as_ref()
@@ -187,7 +214,7 @@ fn fields(api: &Api, operation: &Operation) -> Result<Vec<kaji_core::Field>> {
 }
 pub(crate) fn validate(api: &Api) -> Result<()> {
     for op in api.operations.iter().filter(|op| selected(op)) {
-        if ordered_plan(op).is_none() {
+        if ordered_plan(api, op).is_none() {
             fields(api, op)?;
         }
     }
@@ -304,7 +331,7 @@ pub(crate) fn emit(api: &Api, root: &str, namespace: &str, tree: &mut GeneratedT
     )?)?;
     for op in api.operations.iter().filter(|op| selected(op)) {
         let name = body_name(op);
-        if let Some(plan) = ordered_plan(op) {
+        if let Some(plan) = ordered_plan(api, op) {
             let definition = serde_json::to_string(&plan)?;
             tree.insert(GeneratedFile::new(output_path(root,&format!("{name}.cs")),format!("namespace {namespace};\npublic sealed record {name} {{public required System.Collections.Generic.IReadOnlyList<OrderedMultipartPart> Parts {{get;init;}} public System.Net.Http.HttpContent ToContent()=>OrderedMultipart.Encode(Parts,{definition:?});}}\n"))?)?;
             continue;

@@ -43,7 +43,7 @@ impl Plugin<Java> for OperationTests {
             "operation test bound must be 1..128"
         );
         let sdk = cx.inputs.get::<NativeSdk>()?;
-        let api = operation_samples::clean_api(cx.api);
+        let api = prepare_api(&operation_samples::clean_api(cx.api));
         let mut code = String::new();
         let mut cases = vec![];
         let mut unsupported = vec![];
@@ -61,7 +61,17 @@ impl Plugin<Java> for OperationTests {
                     let mut input = serde_json::Map::new();
                     for parameter in fixture["parameters"].as_array().unwrap() {
                         input.insert(
-                            field_name(parameter["name"].as_str().unwrap()),
+                            parameter_name(
+                                operation
+                                    .parameters
+                                    .iter()
+                                    .find(|candidate| {
+                                        candidate.name == parameter["name"].as_str().unwrap()
+                                            && candidate.location
+                                                == parameter["location"].as_str().unwrap()
+                                    })
+                                    .unwrap(),
+                            ),
                             parameter["value"].clone(),
                         );
                     }

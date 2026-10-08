@@ -104,7 +104,7 @@ fn render_test(
         let value = format!("serde_json::from_str({json:?}).unwrap()");
         fields.push(format!(
             "{}: {}",
-            render::rust_field_name(&parameter.name),
+            render::parameter_name(parameter),
             if parameter.required {
                 value
             } else {
@@ -225,6 +225,8 @@ impl Plugin<Rust> for OperationTests {
         ]
     }
     fn generate(&self, cx: &mut PluginContext<'_, Rust>) -> Result<()> {
+        let prepared = crate::render::prepare_api(cx.api);
+        let api = &prepared;
         let client = cx.inputs.get::<Client>()?;
         let operations = cx.inputs.get::<Operations>()?;
         let transport = cx.inputs.get::<Transport>()?;
@@ -233,7 +235,7 @@ impl Plugin<Rust> for OperationTests {
         );
         let mut skipped = BTreeMap::new();
         let mut generated = 0;
-        for (index, operation) in cx.api.operations.iter().enumerate() {
+        for (index, operation) in api.operations.iter().enumerate() {
             let test = if index >= self.max_operations {
                 Err("operation count bound reached".into())
             } else if client.symbol != "crate::Client" {
@@ -241,11 +243,17 @@ impl Plugin<Rust> for OperationTests {
             } else {
                 operations
                     .methods
-                    .get(&operation.id)
+                    .get(
+                        operation
+                            .annotations
+                            .get("kaji.source_operation_id")
+                            .and_then(serde_json::Value::as_str)
+                            .unwrap_or(&operation.id),
+                    )
                     .ok_or_else(|| "operation unavailable".into())
                     .and_then(|method| {
                         render_test(
-                            cx.api,
+                            api,
                             operation,
                             method,
                             index,

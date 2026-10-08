@@ -7,6 +7,8 @@ pub(crate) fn render(
     open_enums: bool,
     preserve: bool,
 ) -> Result<GeneratedTree> {
+    let prepared = prepare_api(api);
+    let api = &prepared;
     let mut tree = render_sdk_with_policy(api, dir, name, style, open_enums)?;
     if !preserve {
         return Ok(tree);
@@ -25,19 +27,13 @@ pub(crate) fn render(
     );
     for (index, schema) in api.schemas.iter().enumerate() {
         if let SchemaKind::Object { fields, .. } = &schema.value.kind {
+            let name = pascal_case(&schema.name);
+            let names =
+                native_names::field_names(fields, pascal_case, &[&name, "EqualityContract"]);
             let mut source = render_model_with_policy(schema, &namespace, open_enums);
             for field in fields.iter().filter(|f| !f.required) {
                 let ty = csharp_type(&field.value, true);
-                let mut property = pascal_case(&field.name);
-                if property == pascal_case(&schema.name) {
-                    property.push_str("Value");
-                }
-                while fields
-                    .iter()
-                    .any(|other| other.name != field.name && pascal_case(&other.name) == property)
-                {
-                    property.push('_');
-                }
+                let property = names[&field.name].clone();
                 source = source.replace(&format!("    public {ty} {property} {{ get; init; }}"), &format!("    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]\n    public Presence<{ty}> {property} {{ get; init; }}"));
             }
             tree.replace(GeneratedFile::new(

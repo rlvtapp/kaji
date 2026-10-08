@@ -1,5 +1,6 @@
 //! Rust SDK generation through typed packages and a Reqwest-backed client.
 mod model_compatibility;
+mod native_names;
 mod oauth;
 mod open_union;
 pub use oauth::{OAuth, oauth};
