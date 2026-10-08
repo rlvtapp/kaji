@@ -14,7 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0.102"
-kaji = { path = "../kaji" }
+kaji = { path = "../kaji", features = ["all-plugins"] }
 kaji-core = { path = "../kaji-core" }
 kaji-inputs = { path = "../kaji-inputs" }
 reqwest = { version = "0.12.28", default-features = false, features = ["blocking", "multipart", "rustls-tls"] }

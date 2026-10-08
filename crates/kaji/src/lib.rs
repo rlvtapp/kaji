@@ -19,21 +19,37 @@ pub use kaji_core::release;
 ///
 /// This is the preferred name for the .NET/C# target. [`dotnet`] remains an
 /// alias so existing embedded generation profiles continue to compile.
+#[cfg(feature = "csharp")]
 pub use kaji_plugin_csharp as csharp;
+#[cfg(feature = "dotnet")]
 pub use kaji_plugin_dotnet as dotnet;
+#[cfg(feature = "elixir")]
 pub use kaji_plugin_elixir as elixir;
+#[cfg(feature = "go")]
 pub use kaji_plugin_go as go;
+#[cfg(feature = "java")]
 pub use kaji_plugin_java as java;
+#[cfg(feature = "php")]
 pub use kaji_plugin_php as php;
+#[cfg(feature = "postman")]
 pub use kaji_plugin_postman as postman;
+#[cfg(feature = "python")]
 pub use kaji_plugin_python as python;
+#[cfg(feature = "ruby")]
 pub use kaji_plugin_ruby as ruby;
+#[cfg(feature = "rust")]
 pub use kaji_plugin_rust as rust;
+#[cfg(feature = "rust-cli")]
 pub use kaji_plugin_rust_cli as rust_cli;
+#[cfg(feature = "swift")]
 pub use kaji_plugin_swift as swift;
+#[cfg(feature = "symfony")]
 pub use kaji_plugin_symfony as symfony;
+#[cfg(feature = "terraform")]
 pub use kaji_plugin_terraform as terraform;
+#[cfg(feature = "typescript")]
 pub use kaji_plugin_typescript as ts;
+#[cfg(feature = "typescript-cli")]
 pub use kaji_plugin_typescript_cli as ts_cli;
 
 pub mod prelude {
@@ -47,20 +63,35 @@ pub mod prelude {
     };
     pub use kaji_core::input::{InputContract, InputPlugin, InputProvider, InputRegistry};
     pub use kaji_core::{GeneratedFile, SdkClientStyle};
+    #[cfg(feature = "csharp")]
     pub use kaji_plugin_csharp::PackageExt as _;
+    #[cfg(feature = "elixir")]
     pub use kaji_plugin_elixir::PackageExt as _;
+    #[cfg(feature = "go")]
     pub use kaji_plugin_go::PackageExt as _;
+    #[cfg(feature = "java")]
     pub use kaji_plugin_java::PackageExt as _;
+    #[cfg(feature = "php")]
     pub use kaji_plugin_php::PackageExt as _;
+    #[cfg(feature = "postman")]
     pub use kaji_plugin_postman::PackageExt as _;
+    #[cfg(feature = "python")]
     pub use kaji_plugin_python::PackageExt as _;
+    #[cfg(feature = "ruby")]
     pub use kaji_plugin_ruby::PackageExt as _;
+    #[cfg(feature = "rust")]
     pub use kaji_plugin_rust::PackageExt as _;
+    #[cfg(feature = "rust-cli")]
     pub use kaji_plugin_rust_cli::PackageExt as _;
+    #[cfg(feature = "swift")]
     pub use kaji_plugin_swift::PackageExt as _;
+    #[cfg(feature = "symfony")]
     pub use kaji_plugin_symfony::PackageExt as _;
+    #[cfg(feature = "terraform")]
     pub use kaji_plugin_terraform::PackageExt as _;
+    #[cfg(feature = "typescript")]
     pub use kaji_plugin_typescript::PackageExt as _;
+    #[cfg(feature = "typescript-cli")]
     pub use kaji_plugin_typescript_cli::PackageExt as _;
 }
 
@@ -151,7 +182,7 @@ pub fn generate_openapi(
     generate_with_adapter(&adapter, profiles)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "go"))]
 mod tests {
     use super::*;
     use kaji_core::adapter::AdaptedApi;

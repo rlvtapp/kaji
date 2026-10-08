@@ -6,6 +6,6 @@ publish = false
 
 [dependencies]
 anyhow = "1"
-kaji = { path = "../../crates/kaji" }
+kaji = { path = "../../crates/kaji", features = ["all-plugins"] }
 
 [workspace]

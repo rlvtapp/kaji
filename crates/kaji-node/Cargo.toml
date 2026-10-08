@@ -12,7 +12,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 anyhow = "1.0.102"
-kaji = { path = "../kaji" }
+kaji = { path = "../kaji", features = ["all-plugins"] }
 kaji-core = { path = "../kaji-core" }
 kaji-inputs = { path = "../kaji-inputs" }
 napi = { version = "3", default-features = false, features = ["napi4", "async", "compat-mode"] }
