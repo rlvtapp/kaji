@@ -77,9 +77,7 @@ fn render_sdk_with_policy(
     multipart::validate(api)?;
 
     for operation in &api.operations {
-        let extension = operation
-            .annotations
-            .get("x-kaji-pagination")
+        let extension = poolster_core::poolster_extension(&operation.annotations, "pagination")
             .or_else(|| operation.annotations.get("x-speakeasy-pagination"));
         if matches!(
             extension
@@ -930,9 +928,7 @@ fn render_operation(output: &mut String, operation: &Operation) {
         );
     }
     output.push_str("    }\n\n");
-    if operation
-        .annotations
-        .get("x-kaji-pagination")
+    if poolster_core::poolster_extension(&operation.annotations, "pagination")
         .or_else(|| operation.annotations.get("x-speakeasy-pagination"))
         .and_then(|value| value.get("type"))
         .and_then(serde_json::Value::as_str)
@@ -998,9 +994,7 @@ fn render_operation_chunk(api: &Api, operations: &[Operation], namespace: &str) 
 }
 
 fn dotnet_cursor_pagination(operation: &Operation) -> Option<String> {
-    let extension = operation
-        .annotations
-        .get("x-kaji-pagination")
+    let extension = poolster_core::poolster_extension(&operation.annotations, "pagination")
         .or_else(|| operation.annotations.get("x-speakeasy-pagination"))?
         .as_object()?;
     if extension.get("type")?.as_str()? != "cursor"
@@ -1034,9 +1028,7 @@ fn render_cursor_pager(output: &mut String, operation: &Operation, next_cursor_p
     let DotnetResponseSurface::Json(response) = operation_response_surface(operation) else {
         return;
     };
-    let cursor_name = operation
-        .annotations
-        .get("x-kaji-pagination")
+    let cursor_name = poolster_core::poolster_extension(&operation.annotations, "pagination")
         .or_else(|| operation.annotations.get("x-speakeasy-pagination"))
         .and_then(serde_json::Value::as_object)
         .and_then(|extension| extension.get("inputs"))

@@ -747,9 +747,7 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
             &format!("\\({path_value})"),
         );
     }
-    let url_pagination = operation
-        .annotations
-        .get("x-kaji-pagination")
+    let url_pagination = poolster_core::poolster_extension(&operation.annotations, "pagination")
         .or_else(|| operation.annotations.get("x-speakeasy-pagination"))
         .and_then(|value| value.get("type"))
         .and_then(serde_json::Value::as_str)
@@ -1309,7 +1307,7 @@ fn render_resource(
         output.push_str("    }\n");
     }
     if operations.iter().any(|operation| {
-        operation.annotations.contains_key("x-kaji-pagination")
+        poolster_core::poolster_extension(&operation.annotations, "pagination").is_some()
             || operation.annotations.contains_key("x-speakeasy-pagination")
     }) {
         let mut resource_api = api.clone();

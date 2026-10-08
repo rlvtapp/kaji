@@ -469,10 +469,9 @@ pub(crate) fn render_operation_files(
     let mut files = Vec::new();
     let mut diagnostics = Vec::new();
     for operation in &api.operations {
-        let Some(extension) = operation
-            .annotations
-            .get("x-kaji-pagination")
-            .or_else(|| operation.annotations.get("x-speakeasy-pagination"))
+        let Some(extension) =
+            poolster_core::poolster_extension(&operation.annotations, "pagination")
+                .or_else(|| operation.annotations.get("x-speakeasy-pagination"))
         else {
             continue;
         };
@@ -940,9 +939,7 @@ fn rust_pagination(operation: &Operation) -> Option<RustPagination> {
     if response_kind(operation) != ResponseKind::Json {
         return None;
     }
-    let extension = operation
-        .annotations
-        .get("x-kaji-pagination")
+    let extension = poolster_core::poolster_extension(&operation.annotations, "pagination")
         .or_else(|| operation.annotations.get("x-speakeasy-pagination"))?
         .as_object()?;
     let empty_inputs = Vec::new();
@@ -2244,7 +2241,7 @@ impl Transport for Mock {fn execute(&self,request:reqwest::Request)->TransportFu
             schemes: Default::default(),
         });
         operation.annotations.insert(
-            "x-kaji-pagination".into(),
+            "x-poolster-pagination".into(),
             serde_json::json!({"type":"url","outputs":{"nextUrl":"/next"}}),
         );
         let api = Api {

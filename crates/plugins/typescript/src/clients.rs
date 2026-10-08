@@ -73,7 +73,7 @@ pub(crate) fn generate_operations(
                 }
             };
             let mut source = render_operation(operation, throw_on_error, security_schemes);
-            if let Some(rule) = operation.annotations.get("x-kaji-idempotency-resolved") {
+            if let Some(rule) = poolster_core::poolster_extension(&operation.annotations, "idempotency-resolved") {
                 let header = serde_json::to_string(rule.get("header").and_then(Value::as_str).unwrap())?;
                 let auto_generate = rule.get("auto_generate").and_then(Value::as_bool).unwrap_or(false);
                 source = source.replace("  const { client: request = client, ...config } = options", &format!("  const {{ client: request = client, ...config }} = options\n  const idempotencyHeaders = kajiIdempotencyHeaders(config.headers, {header}, {auto_generate})"));

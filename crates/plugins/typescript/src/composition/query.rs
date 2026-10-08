@@ -334,7 +334,11 @@ impl Plugin<TypeScript> for Query {
                             let name =
                                 crate::symbols::identifier(crate::query_helpers::name(operation));
                             values.push(format!("use{name}Suspense"));
-                            if operation.annotations.contains_key("x-kaji-pagination")
+                            if poolster_core::poolster_extension(
+                                &operation.annotations,
+                                "pagination",
+                            )
+                            .is_some()
                                 || operation.annotations.contains_key("x-speakeasy-pagination")
                             {
                                 values.push(format!("use{name}SuspenseInfinite"));

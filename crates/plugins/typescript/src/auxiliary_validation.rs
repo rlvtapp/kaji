@@ -26,17 +26,13 @@ fn integer_ratio(value: &Value) -> Option<(String, String)> {
 fn numeric(schema: &SchemaValue, bound: &Value, operator: &str) -> Option<String> {
     if matches!(schema.kind, SchemaKind::Integer)
         && matches!(
-            schema
-                .extensions
-                .get("x-kaji-integer")
+            poolster_core::poolster_extension(&schema.extensions, "integer")
                 .and_then(Value::as_str),
             Some("bigint" | "string")
         )
     {
         let (n, d) = integer_ratio(bound)?;
-        let variable = if schema
-            .extensions
-            .get("x-kaji-integer")
+        let variable = if poolster_core::poolster_extension(&schema.extensions, "integer")
             .and_then(Value::as_str)
             == Some("string")
         {
@@ -65,24 +61,21 @@ pub(crate) fn constrain(mut source: String, schema: &SchemaValue) -> String {
                     Some("false".into())
                 } else if matches!(schema.kind, SchemaKind::Integer)
                     && matches!(
-                        schema
-                            .extensions
-                            .get("x-kaji-integer")
+                        poolster_core::poolster_extension(&schema.extensions, "integer")
                             .and_then(Value::as_str),
                         Some("bigint" | "string")
                     )
                 {
                     integer_ratio(value).map(|(n, d)| {
-                        let variable = if schema
-                            .extensions
-                            .get("x-kaji-integer")
-                            .and_then(Value::as_str)
-                            == Some("string")
-                        {
-                            "BigInt(value)"
-                        } else {
-                            "value"
-                        };
+                        let variable =
+                            if poolster_core::poolster_extension(&schema.extensions, "integer")
+                                .and_then(Value::as_str)
+                                == Some("string")
+                            {
+                                "BigInt(value)"
+                            } else {
+                                "value"
+                            };
                         format!("({variable} * BigInt({d:?})) % BigInt({n:?}) === 0n")
                     })
                 } else {
@@ -116,17 +109,13 @@ pub(crate) fn constrain(mut source: String, schema: &SchemaValue) -> String {
                 "minimum" | "maximum" | "exclusiveMinimum" | "exclusiveMaximum" | "multipleOf"
             ) {
                 let guard = if matches!(
-                    schema
-                        .extensions
-                        .get("x-kaji-integer")
+                    poolster_core::poolster_extension(&schema.extensions, "integer")
                         .and_then(Value::as_str),
                     Some("string")
                 ) {
                     "typeof value !== 'string' || !/^-?\\d+$/.test(value)"
                 } else if matches!(
-                    schema
-                        .extensions
-                        .get("x-kaji-integer")
+                    poolster_core::poolster_extension(&schema.extensions, "integer")
                         .and_then(Value::as_str),
                     Some("bigint")
                 ) {

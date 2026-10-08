@@ -65,9 +65,7 @@ pub(crate) fn generate_sdk(
         bail!("SDK output directory cannot be empty")
     }
     for operation in &api.operations {
-        if operation
-            .annotations
-            .get("x-kaji-pagination")
+        if poolster_core::poolster_extension(&operation.annotations, "pagination")
             .or_else(|| operation.annotations.get("x-speakeasy-pagination"))
             .and_then(|v| v.get("type"))
             .and_then(Value::as_str)
@@ -745,9 +743,7 @@ enum Pagination {
 }
 
 fn pagination(operation: &Operation) -> Option<Pagination> {
-    let extension = operation
-        .annotations
-        .get("x-kaji-pagination")
+    let extension = poolster_core::poolster_extension(&operation.annotations, "pagination")
         .or_else(|| operation.annotations.get("x-speakeasy-pagination"))?
         .as_object()?;
     let outputs = extension.get("outputs")?.as_object()?;
@@ -2043,7 +2039,7 @@ mod tests {
                 }],
             }),
             annotations: BTreeMap::from([(
-                "x-kaji-pagination".into(),
+                "x-poolster-pagination".into(),
                 serde_json::json!({
                     "type": "cursor",
                     "inputs": [{

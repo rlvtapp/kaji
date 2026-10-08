@@ -75,9 +75,7 @@ fn render_sdk_with_policy(
     multipart::validate(api)?;
 
     for operation in &api.operations {
-        let extension = operation
-            .annotations
-            .get("x-kaji-pagination")
+        let extension = poolster_core::poolster_extension(&operation.annotations, "pagination")
             .or_else(|| operation.annotations.get("x-speakeasy-pagination"));
         if extension
             .and_then(|extension| extension.get("type"))
@@ -1260,9 +1258,7 @@ fn java_pagination(operation: &Operation) -> Option<JavaPagination> {
     if !matches!(response_surface(operation), ResponseSurface::Json(_)) {
         return None;
     }
-    let extension = operation
-        .annotations
-        .get("x-kaji-pagination")
+    let extension = poolster_core::poolster_extension(&operation.annotations, "pagination")
         .or_else(|| operation.annotations.get("x-speakeasy-pagination"))?
         .as_object()?;
     let inputs = extension.get("inputs")?.as_array()?;
@@ -1369,9 +1365,7 @@ fn java_pagination_query_field(
         parameter.name == name
             && parameter.location == "query"
             && (!parameter.required
-                || operation
-                    .annotations
-                    .get("x-kaji-pagination")
+                || poolster_core::poolster_extension(&operation.annotations, "pagination")
                     .or_else(|| operation.annotations.get("x-speakeasy-pagination"))
                     .and_then(|extension| extension.get("type"))
                     .and_then(Value::as_str)
@@ -2743,7 +2737,7 @@ mod tests {
                 items: Box::new(SchemaValue::new(SchemaKind::String)),
             }),
         )];
-        page.annotations.insert("x-kaji-pagination".into(), serde_json::json!({"type":"page","inputs":[{"name":"page","type":"page"}],"outputs":{"results":"$"}}));
+        page.annotations.insert("x-poolster-pagination".into(), serde_json::json!({"type":"page","inputs":[{"name":"page","type":"page"}],"outputs":{"results":"$"}}));
         source.operations.push(page);
         let mut keyed = source.operations[0].clone();
         keyed.id = "createKeyedItem".into();

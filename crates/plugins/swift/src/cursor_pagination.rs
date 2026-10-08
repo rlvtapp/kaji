@@ -6,9 +6,7 @@ use poolster_core::pagination::{
 pub(super) fn render(api: &Api) -> Result<String> {
     let mut output = String::new();
     for operation in &api.operations {
-        let extension = operation
-            .annotations
-            .get("x-kaji-pagination")
+        let extension = poolster_core::poolster_extension(&operation.annotations, "pagination")
             .or_else(|| operation.annotations.get("x-speakeasy-pagination"));
         if extension
             .and_then(|value| value.get("type"))

@@ -244,9 +244,7 @@ fn artifact_zod_literal(literal: &Value, schema: &SchemaValue) -> Option<String>
 
 pub(crate) fn artifact_literal(literal: &Value, schema: &SchemaValue) -> Option<String> {
     if literal.is_number() {
-        match schema
-            .extensions
-            .get("x-kaji-integer")
+        match poolster_core::poolster_extension(&schema.extensions, "integer")
             .and_then(Value::as_str)
         {
             Some("bigint") => return Some(format!("{literal}n")),
@@ -262,15 +260,15 @@ pub(crate) fn render_zod(value: &SchemaValue) -> String {
         SchemaKind::Any => "z.unknown()".to_owned(),
         SchemaKind::Null => "z.null()".to_owned(),
         SchemaKind::Boolean => "z.boolean()".to_owned(),
-        SchemaKind::Integer => match value
-            .extensions
-            .get("x-kaji-integer")
-            .and_then(Value::as_str)
-        {
-            Some("bigint") => "z.bigint()".into(),
-            Some("string") => "z.string().regex(/^-?(?:0|[1-9]\\d*)$/)".into(),
-            _ => "z.number().int()".into(),
-        },
+        SchemaKind::Integer => {
+            match poolster_core::poolster_extension(&value.extensions, "integer")
+                .and_then(Value::as_str)
+            {
+                Some("bigint") => "z.bigint()".into(),
+                Some("string") => "z.string().regex(/^-?(?:0|[1-9]\\d*)$/)".into(),
+                _ => "z.number().int()".into(),
+            }
+        }
         SchemaKind::Number => "z.number()".to_owned(),
         SchemaKind::String => "z.string()".to_owned(),
         SchemaKind::Array { items } => format!("z.array({})", render_zod(items)),

@@ -49,7 +49,7 @@ pub(crate) fn exports(
         if !swr {
             values.extend([format!("{name}Prefetch"), format!("{name}SuspenseOptions")]);
         }
-        if operation.annotations.contains_key("x-kaji-pagination")
+        if poolster_core::poolster_extension(&operation.annotations, "pagination").is_some()
             || operation.annotations.contains_key("x-speakeasy-pagination")
         {
             values.extend([

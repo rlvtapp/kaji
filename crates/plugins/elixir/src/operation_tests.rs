@@ -177,9 +177,8 @@ fn case(api: &Api, operation: &Operation) -> Result<Value> {
         "HEAD has no buffered response"
     );
     ensure!(
-        !operation
-            .annotations
-            .contains_key("x-kaji-idempotency-resolved"),
+        !poolster_core::poolster_extension(&operation.annotations, "idempotency-resolved")
+            .is_some(),
         "auto idempotency requires replay-specific fixtures"
     );
     let responses = operation

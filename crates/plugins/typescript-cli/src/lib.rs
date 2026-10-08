@@ -484,10 +484,8 @@ fn command_parts(operation: &Operation) -> Vec<String> {
             )
         })
         .map(str::to_owned);
-    let options = operation
-        .annotations
-        .get("x-kaji-cli")
-        .and_then(Value::as_object);
+    let options =
+        poolster_core::poolster_extension(&operation.annotations, "cli").and_then(Value::as_object);
     let group = options
         .and_then(|options| options.get("group"))
         .and_then(Value::as_str)

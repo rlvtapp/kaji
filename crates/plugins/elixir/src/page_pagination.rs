@@ -1,9 +1,7 @@
 use super::*;
 use poolster_core::pagination::{PaginationKind, SelectorSegment, normalize_pagination};
 pub(super) fn render(api: &Api, operation: &Operation) -> Result<Option<String>> {
-    let extension = operation
-        .annotations
-        .get("x-kaji-pagination")
+    let extension = poolster_core::poolster_extension(&operation.annotations, "pagination")
         .or_else(|| operation.annotations.get("x-speakeasy-pagination"));
     let kind = extension
         .and_then(|value| value.get("type"))

@@ -410,7 +410,9 @@ fn infer_binding(api: &Api, create: &Operation) -> Result<ResourceBinding> {
         .filter(|name| response.kind.reference_name() == Some(*name))
         .unwrap_or(suffix.strip_suffix('s').unwrap_or(suffix));
     let resolved_response = resolve_schema(api, response)?;
-    let name = if let Some(entity) = resolved_response.extensions.get("x-kaji-entity") {
+    let name = if let Some(entity) =
+        poolster_core::poolster_extension(&resolved_response.extensions, "entity")
+    {
         entity
             .as_str()
             .context("v1 x-kaji-entity must name one entity")?
@@ -822,11 +824,9 @@ fn resolve(
             .into_iter()
             .flatten()
         {
-            if let Some(policy) = field
-                .value
-                .extensions
-                .get("x-kaji-terraform")
-                .or_else(|| field.annotations.get("x-kaji-terraform"))
+            if let Some(policy) =
+                poolster_core::poolster_extension(&field.value.extensions, "terraform")
+                    .or_else(|| poolster_core::poolster_extension(&field.annotations, "terraform"))
             {
                 let policy = policy
                     .as_object()
@@ -1392,7 +1392,8 @@ pub(crate) fn attribute_name(value: &str) -> Result<String> {
 fn annotated_bindings(api: &Api) -> Result<Vec<ResourceBinding>> {
     let mut entities: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
     for op in &api.operations {
-        if let Some(value) = op.annotations.get("x-kaji-entity-operation") {
+        if let Some(value) = poolster_core::poolster_extension(&op.annotations, "entity-operation")
+        {
             let text = value
                 .as_str()
                 .context("x-kaji-entity-operation must be Entity#lifecycle string")?;

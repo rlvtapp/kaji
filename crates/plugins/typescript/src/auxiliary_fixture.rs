@@ -35,7 +35,9 @@ pub(crate) fn descriptor(schema: &SchemaValue) -> Value {
                     object.remove(key);
                 }
                 if let Some(Value::Object(extensions)) = object.get_mut("extensions") {
-                    extensions.retain(|key, _| key == "x-kaji-integer");
+                    extensions.retain(|key, _| {
+                        key == "x-poolster-integer" || key == "x-kaji-integer"
+                    });
                 }
                 for key in ["const_value", "default"] {
                     if let Some(value) = object.get_mut(key) {

@@ -144,15 +144,15 @@ pub(crate) fn render_value(value: &SchemaValue) -> String {
         SchemaKind::Any => "unknown".to_owned(),
         SchemaKind::Null => "null".to_owned(),
         SchemaKind::Boolean => "boolean".to_owned(),
-        SchemaKind::Integer => match value
-            .extensions
-            .get("x-kaji-integer")
-            .and_then(Value::as_str)
-        {
-            Some("bigint") => "bigint".into(),
-            Some("string") => "string".into(),
-            _ => "number".into(),
-        },
+        SchemaKind::Integer => {
+            match poolster_core::poolster_extension(&value.extensions, "integer")
+                .and_then(Value::as_str)
+            {
+                Some("bigint") => "bigint".into(),
+                Some("string") => "string".into(),
+                _ => "number".into(),
+            }
+        }
         SchemaKind::Number => "number".to_owned(),
         SchemaKind::String => "string".to_owned(),
         SchemaKind::Array { items } => format!("Array<{}>", render_value(items)),

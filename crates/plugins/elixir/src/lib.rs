@@ -1157,9 +1157,7 @@ struct CursorPagination {
 }
 
 fn cursor_pagination(operation: &Operation) -> Option<CursorPagination> {
-    let extension = operation
-        .annotations
-        .get("x-kaji-pagination")
+    let extension = poolster_core::poolster_extension(&operation.annotations, "pagination")
         .or_else(|| operation.annotations.get("x-speakeasy-pagination"))?
         .as_object()?;
     if extension.get("type").and_then(Value::as_str) != Some("cursor") {
@@ -1349,9 +1347,7 @@ fn render_operation_body(
             escape_elixir_string(&parameter.name),
         );
     }
-    if operation
-        .annotations
-        .get("x-kaji-pagination")
+    if poolster_core::poolster_extension(&operation.annotations, "pagination")
         .or_else(|| operation.annotations.get("x-speakeasy-pagination"))
         .and_then(|value| value.get("type"))
         .and_then(Value::as_str)
@@ -1415,19 +1411,20 @@ fn render_operation_body(
                 format!("Keyword.get(options, :{variable})")
             };
             let value = parameter_content_value(parameter, &value);
-            let value = if operation
-                .annotations
-                .get("x-kaji-idempotency-resolved")
-                .is_some_and(|policy| {
-                    policy
-                        .get("auto_generate")
-                        .and_then(serde_json::Value::as_bool)
-                        == Some(true)
-                        && policy
-                            .get("parameter_name")
-                            .and_then(serde_json::Value::as_str)
-                            == Some(parameter.name.as_str())
-                }) {
+            let value = if poolster_core::poolster_extension(
+                &operation.annotations,
+                "idempotency-resolved",
+            )
+            .is_some_and(|policy| {
+                policy
+                    .get("auto_generate")
+                    .and_then(serde_json::Value::as_bool)
+                    == Some(true)
+                    && policy
+                        .get("parameter_name")
+                        .and_then(serde_json::Value::as_str)
+                        == Some(parameter.name.as_str())
+            }) {
                 format!("case {value} do nil -> Client.idempotency_key(); provided -> provided end")
             } else {
                 value
@@ -1486,13 +1483,12 @@ fn render_operation_body(
     let body_kind = operation_body_kind(operation);
     let response_kind = operation_response_kind(operation);
     let error_types = operation_error_types(module, operation);
-    let idempotency_argument = operation
-        .annotations
-        .get("x-kaji-idempotency-resolved")
-        .and_then(|policy| policy.get("header"))
-        .and_then(serde_json::Value::as_str)
-        .map(|header| format!(", \"{}\"", escape_elixir_string(header)))
-        .unwrap_or_else(|| ", nil".into());
+    let idempotency_argument =
+        poolster_core::poolster_extension(&operation.annotations, "idempotency-resolved")
+            .and_then(|policy| policy.get("header"))
+            .and_then(serde_json::Value::as_str)
+            .map(|header| format!(", \"{}\"", escape_elixir_string(header)))
+            .unwrap_or_else(|| ", nil".into());
     let native_method = if matches!(
         &operation.method,
         poolster_core::HttpMethod::Query | poolster_core::HttpMethod::Custom(_)

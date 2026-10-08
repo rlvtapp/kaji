@@ -942,9 +942,7 @@ fn render_operation(operation: &Operation, options: &ModelOptions, notice: &str)
 /// extension. When present, Poolster emits their enum declaration before the
 /// operation model and fields refer to that generated alias.
 fn inline_enum_name(value: &SchemaValue) -> Option<&str> {
-    value
-        .extensions
-        .get("x-kaji-name")
+    poolster_core::poolster_extension(&value.extensions, "name")
         .and_then(Value::as_str)
         .filter(|name| !name.is_empty())
 }
@@ -1124,14 +1122,14 @@ fn render_value(value: &SchemaValue, options: &ModelOptions) -> String {
                 }
                 ArrayType::Generic => format!("Array<{}>", render_value(items, options)),
             },
-            SchemaKind::Reference { reference } => value
-                .extensions
-                .get("x-kaji-type-name")
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-                .unwrap_or_else(|| {
-                    type_identifier(reference.rsplit('/').next().unwrap_or(reference))
-                }),
+            SchemaKind::Reference { reference } => {
+                poolster_core::poolster_extension(&value.extensions, "type-name")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| {
+                        type_identifier(reference.rsplit('/').next().unwrap_or(reference))
+                    })
+            }
             SchemaKind::OneOf { variants } | SchemaKind::AnyOf { variants } => variants
                 .iter()
                 .map(|variant| render_value(variant, options))
