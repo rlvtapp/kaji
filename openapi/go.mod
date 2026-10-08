@@ -6,6 +6,7 @@ require github.com/pb33f/libopenapi v0.38.7 // latest as of 2026
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0
+	github.com/goccy/go-yaml v1.19.0
 	go.yaml.in/yaml/v4 v4.0.0-rc.6
 )
 

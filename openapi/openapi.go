@@ -48,31 +48,40 @@ func runWithHash(specPath, outDir string, prevHash *uint64) (uint64, bool, int, 
 	}
 	// Artifact changes must invalidate caches even when the contract is unchanged.
 	// Keep the provenance manifest's digest specific to source bytes.
-	newHash := xxhash.Sum64String(fmt.Sprintf("content-ir-3.2-v2:%016x", source.Hash))
+	newHash := xxhash.Sum64String(fmt.Sprintf("content-ir-3.2-v3:%016x", source.Hash))
 
 	if prevHash != nil && *prevHash == newHash {
 		return newHash, false, 0, nil
 	}
 
 	configuration := datamodel.NewDocumentConfiguration()
-	if len(source.Files) > 1 || len(source.Identities) > 0 {
-		configuration.ExcludeExtensionRefs = true
+	if len(source.Files) > 1 || len(source.Identities) > 0 || source.NeedsNormalization {
 		data, err = bundleLocalSources(source, specPath)
 		if err != nil {
 			return 0, false, 0, fmt.Errorf("bundle references: %w", err)
 		}
+	}
+	data, err = compatibleYAML(data)
+	if err != nil {
+		return 0, false, 0, err
 	}
 	doc, err := libopenapi.NewDocumentWithConfiguration(data, configuration)
 	if err != nil {
 		return 0, false, 0, fmt.Errorf("parse spec: %w", err)
 	}
 
+	// The upstream resolver also scans schema extension payloads independently
+	// of extension filtering. Shield their opaque keys during indexing only.
+	restoreExtensionRefs := shieldExtensionReferences(doc.GetSpecInfo().RootNode)
 	model, v3Err := doc.BuildV3Model()
+	restoreExtensionRefs()
 	if v3Err != nil && !(model != nil && onlySchemaCircularErrors(v3Err)) {
 		// libopenapi intentionally exposes separate models for Swagger 2 and
 		// OpenAPI 3: their object shapes differ materially. Keep the existing
 		// v3 compiler path intact and normalize the legacy v2 model below.
+		restoreExtensionRefs = shieldExtensionReferences(doc.GetSpecInfo().RootNode)
 		v2Model, v2Err := doc.BuildV2Model()
+		restoreExtensionRefs()
 		if v2Err != nil {
 			return 0, false, 0, fmt.Errorf("build OpenAPI model (v3: %v; v2: %w)", v3Err, v2Err)
 		}

@@ -24,14 +24,15 @@ type SourceClosureDoc struct {
 	Files  []SourceFileDoc `json:"files"`
 }
 type sourceClosure struct {
-	Documents  map[string][]byte
-	Bases      map[string]string
-	Identities map[string]string
-	Manifest   SourceClosureDoc
-	Hash       uint64
-	Files      []string
-	Base       string
-	Root       string
+	NeedsNormalization bool
+	Documents          map[string][]byte
+	Bases              map[string]string
+	Identities         map[string]string
+	Manifest           SourceClosureDoc
+	Hash               uint64
+	Files              []string
+	Base               string
+	Root               string
 }
 
 // Hash the entire bounded reference closure before considering a cache hit.
@@ -64,6 +65,7 @@ func collectSourceClosureWithOrigin(specPath string, root []byte, origin string,
 	bases := map[string]string{}
 	identities := map[string]string{}
 	totalBytes := 0
+	needsNormalization := false
 	var visit func(string, []byte) error
 	visit = func(path string, data []byte) error {
 		if !isRemoteDocument(path) {
@@ -84,7 +86,7 @@ func collectSourceClosureWithOrigin(specPath string, root []byte, origin string,
 		}
 		documents[path] = data
 		var node yaml.Node
-		if err := yaml.Unmarshal(data, &node); err != nil {
+		if err := unmarshalDocument(data, &node); err != nil {
 			return fmt.Errorf("parse local reference document %s: %w", path, err)
 		}
 		resolutionBase := path
@@ -156,7 +158,14 @@ func collectSourceClosureWithOrigin(specPath string, root []byte, origin string,
 				}
 				for i := 0; i+1 < len(n.Content); i += 2 {
 					key, value := n.Content[i], n.Content[i+1]
+					if !schemaEntries && strings.HasPrefix(key.Value, "x-") {
+						continue
+					}
 					if key.Value == "$ref" && value.Kind == yaml.ScalarNode {
+						if uri, err := url.Parse(value.Value); err == nil && isSchema && (strings.HasPrefix(uri.Fragment, "/components/schemas/") && strings.Count(uri.Fragment, "/") > 3 || strings.HasPrefix(uri.Fragment, "/paths/") || strings.HasPrefix(uri.Fragment, "/$defs/")) {
+							needsNormalization = true
+						}
+
 						if err := follow(value.Value); err != nil {
 							return err
 						}
@@ -194,7 +203,7 @@ func collectSourceClosureWithOrigin(specPath string, root []byte, origin string,
 		return nil, fmt.Errorf("local reference closure exceeds 256 MiB")
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i] < files[j] })
-	source := &sourceClosure{Base: base, Root: rootID, Files: files, Documents: documents, Bases: bases, Identities: identities}
+	source := &sourceClosure{NeedsNormalization: needsNormalization, Base: base, Root: rootID, Files: files, Documents: documents, Bases: bases, Identities: identities}
 	hash := sha256.New()
 	incremental := xxhash.New()
 	for _, path := range files {

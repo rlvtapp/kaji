@@ -70,7 +70,7 @@ func exportJSONDocument(path string, bundle bool) error {
 		if err != nil {
 			return err
 		}
-		if len(closure.Files) > 1 || len(closure.Identities) > 0 {
+		if len(closure.Files) > 1 || len(closure.Identities) > 0 || closure.NeedsNormalization {
 			data, err = bundleLocalSources(closure, path)
 			if err != nil {
 				return err
@@ -78,7 +78,7 @@ func exportJSONDocument(path string, bundle bool) error {
 		}
 	}
 	var node yaml.Node
-	if err := yaml.Unmarshal(data, &node); err != nil {
+	if err := unmarshalDocument(data, &node); err != nil {
 		return err
 	}
 	value, err := yamlNodeToInterface(&node)

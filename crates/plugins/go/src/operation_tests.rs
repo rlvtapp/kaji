@@ -274,6 +274,7 @@ func contractJSONValueEqual(left,right any)bool{
     }
 }
 "#);
+        let prepared = super::symbols::prepare(cx.api);
         let mut skipped = BTreeMap::new();
         let mut generated = 0;
         for (index, operation) in cx.api.operations.iter().enumerate() {
@@ -287,7 +288,13 @@ func contractJSONValueEqual(left,right any)bool{
                     .get(&operation.id)
                     .ok_or_else(|| "operation symbol unavailable".into())
                     .and_then(|method| {
-                        operation_test(cx.api, operation, method, index, self.options)
+                        operation_test(
+                            &prepared,
+                            &prepared.operations[index],
+                            method,
+                            index,
+                            self.options,
+                        )
                     })
             };
             match rendered {

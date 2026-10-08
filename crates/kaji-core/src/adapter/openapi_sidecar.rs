@@ -63,6 +63,8 @@ impl Adapter for OpenApiSidecar {
 
 #[derive(Debug, Deserialize)]
 struct SidecarOperation {
+    #[serde(default)]
+    kind: String,
     path: String,
     method: String,
     #[serde(default)]
@@ -231,6 +233,12 @@ pub fn load_operations(output_dir: &Path, name: String, version: String) -> Resu
             .with_context(|| format!("sidecar operation index is missing {key:?}"))?;
         let document: SidecarOperation = read_json(&output_dir.join("operations").join(file))?;
         let mut annotations = document.extensions;
+        if !document.kind.is_empty() {
+            annotations.insert(
+                "kaji.openapi.operation_kind".into(),
+                Value::String(document.kind),
+            );
+        }
         add_optional_annotation(&mut annotations, "summary", document.summary);
         add_optional_annotation(&mut annotations, "description", document.description);
         if !document.servers.is_empty() {
@@ -392,6 +400,7 @@ pub fn load_operations(output_dir: &Path, name: String, version: String) -> Resu
     } else {
         Value::Null
     };
+    disambiguate_source_operation_ids(&mut api.operations)?;
     let report = crate::vendor::normalize_api(&mut api, &root);
     let mut operation_ids = std::collections::BTreeSet::new();
     for operation in &api.operations {
@@ -404,6 +413,49 @@ pub fn load_operations(output_dir: &Path, name: String, version: String) -> Resu
     api.annotations
         .insert("kaji.vendor.report".into(), serde_json::to_value(report)?);
     Ok(api)
+}
+
+// Some public documents reuse operationId across distinct wire endpoints.
+// Rename every member of a duplicate group, independent of input ordering.
+fn disambiguate_source_operation_ids(operations: &mut [Operation]) -> Result<()> {
+    let mut counts = BTreeMap::new();
+    for operation in operations.iter() {
+        *counts.entry(operation.id.clone()).or_insert(0usize) += 1;
+    }
+    let mut used: std::collections::BTreeSet<String> = operations
+        .iter()
+        .map(|operation| operation.id.clone())
+        .collect();
+    let mut identities = std::collections::BTreeSet::new();
+    for operation in operations {
+        let kind = operation
+            .annotations
+            .get("kaji.openapi.operation_kind")
+            .and_then(Value::as_str)
+            .unwrap_or("operation");
+        let identity = format!("{kind}: {} {}", operation.method.as_str(), operation.path);
+        anyhow::ensure!(
+            identities.insert(identity.clone()),
+            "duplicate wire operation {identity}"
+        );
+        if counts[&operation.id] > 1 {
+            let hash = identity.bytes().fold(0xcbf29ce484222325u64, |hash, byte| {
+                (hash ^ u64::from(byte)).wrapping_mul(0x100000001b3)
+            });
+            let original = operation.id.clone();
+            let candidate = format!("{original}_{hash:016x}");
+            anyhow::ensure!(
+                used.insert(candidate.clone()),
+                "operation identifier collision after allocating {candidate}"
+            );
+            operation.annotations.insert(
+                "kaji.openapi.original_operation_id".into(),
+                serde_json::json!(original),
+            );
+            operation.id = candidate;
+        }
+    }
+    Ok(())
 }
 
 /// Loads reusable OpenAPI component security schemes from the Go-sidecar
@@ -855,6 +907,36 @@ fn operation_id(method: &str, path: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn repeated_source_ids_remain_distinct_and_stable_under_reordering() {
+        let operations = vec![
+            Operation {
+                id: "repeat".into(),
+                path: "/one".into(),
+                ..Default::default()
+            },
+            Operation {
+                id: "repeat".into(),
+                path: "/two".into(),
+                ..Default::default()
+            },
+        ];
+        let mut forward = operations.clone();
+        disambiguate_source_operation_ids(&mut forward).unwrap();
+        let mut reverse = operations;
+        reverse.reverse();
+        disambiguate_source_operation_ids(&mut reverse).unwrap();
+        reverse.reverse();
+        assert_eq!(forward, reverse);
+        assert_ne!(forward[0].id, forward[1].id);
+        assert_eq!(
+            forward[0].annotations["kaji.openapi.original_operation_id"],
+            "repeat"
+        );
+        forward[1].path = forward[0].path.clone();
+        assert!(disambiguate_source_operation_ids(&mut forward).is_err());
+    }
+
     #[test]
     fn openapi32_query_and_standard_methods_are_typed() {
         for (wire, method) in [

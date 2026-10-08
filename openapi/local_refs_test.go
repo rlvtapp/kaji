@@ -187,3 +187,122 @@ paths:
 		})
 	}
 }
+
+func TestNestedLocalSchemaTargetsBecomeNamedComponents(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "api.yaml")
+	source := `openapi: 3.0.3
+info: {title: Nested, version: '1'}
+components:
+  schemas:
+    Invoice:
+      type: object
+      properties:
+        currency: {$ref: '#/components/schemas/Invoice/definitions/Currency'}
+      definitions:
+        Currency:
+          type: string
+          enum: [USD, EUR]
+paths:
+  /invoice:
+    get:
+      operationId: getInvoice
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Invoice'}
+`
+	if err := os.WriteFile(path, []byte(source), 0600); err != nil {
+		t.Fatal(err)
+	}
+	output := filepath.Join(root, "artifacts")
+	if err := run(path, output); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(output, "schemas.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var catalog ComponentSchemasDoc
+	if err := json.Unmarshal(data, &catalog); err != nil {
+		t.Fatal(err)
+	}
+	names := map[string]bool{}
+	for _, schema := range catalog.Schemas {
+		names[schema.Name] = true
+	}
+
+	found := false
+	for _, schema := range catalog.Schemas {
+		if schema.Name != "Invoice" {
+			continue
+		}
+		object := schema.Schema.(map[string]any)
+		properties := object["properties"].(map[string]any)
+		currency := properties["currency"].(map[string]any)
+		target := strings.TrimPrefix(currency["$ref"].(string), "#/components/schemas/")
+		if !names[target] {
+			t.Fatalf("nested reference has no emitted model: %s", target)
+		}
+		found = true
+	}
+	if !found {
+		t.Fatal("currency field missing")
+	}
+}
+
+func TestVendorExtensionReferencesRemainLiteralAndAreNotFetched(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "api.yaml")
+	source := `openapi: 3.0.3
+info: {title: Extensions, version: '1'}
+components:
+  x-policy: {$ref: '../missing-policy.yaml'}
+  schemas:
+    x-named-model:
+      type: object
+      properties:
+        child: {$ref: '#/components/schemas/Item'}
+    Wrapper:
+      type: object
+      properties:
+        x-named-field: {$ref: '#/components/schemas/x-named-model'}
+    Item:
+      type: string
+      x-metadata: {$ref: '../missing-data.yaml'}
+paths:
+  /item:
+    get:
+      operationId: getItem
+      x-kaji-custom: {$ref: '../custom-data.yaml'}
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Item'}
+`
+	if err := os.WriteFile(path, []byte(source), 0600); err != nil {
+		t.Fatal(err)
+	}
+	closure, err := collectSourceClosure(path, []byte(source))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(closure.Files) != 1 {
+		t.Fatal("extension files entered source closure")
+	}
+	output := filepath.Join(root, "artifacts")
+	if err := run(path, output); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(output, "schemas.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"$ref": "../missing-data.yaml"`) || strings.Contains(string(data), "x-kaji-opaque-reference") {
+		t.Fatal("schema extension data was changed")
+	}
+}

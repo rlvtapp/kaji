@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"path/filepath"
@@ -29,7 +30,7 @@ func bundleLocalSources(source *sourceClosure, specPath string) ([]byte, error) 
 	documents := map[string]*yaml.Node{}
 	for path, data := range source.Documents {
 		var document yaml.Node
-		if err := yaml.Unmarshal(data, &document); err != nil {
+		if err := unmarshalDocument(data, &document); err != nil {
 			return nil, err
 		}
 		documents[path] = document.Content[0]
@@ -144,7 +145,7 @@ func bundleLocalSources(source *sourceClosure, specPath string) ([]byte, error) 
 				}
 				// Root-local references already have the correct scope and are normalized
 				// when their component declaration is visited.
-				if origin != rootPath || uri.Path != "" || uri.Host != "" {
+				if origin != rootPath || uri.Path != "" || uri.Host != "" || isSchema && !directSchemaFragment(uri.Fragment) {
 					path, fragment, target, err := locate(origin, reference.Value)
 					if err != nil {
 						return nil, err
@@ -207,6 +208,11 @@ func bundleLocalSources(source *sourceClosure, specPath string) ([]byte, error) 
 		if node.Kind == yaml.MappingNode {
 			for i := 0; i+1 < len(node.Content); i += 2 {
 				key, value := node.Content[i], node.Content[i+1]
+				if !schemaEntries && strings.HasPrefix(key.Value, "x-") {
+					result.Content = append(result.Content, cloneScalar(key), cloneLiteral(value))
+					continue
+				}
+
 				nextSchema := isSchema || schemaEntries || key.Value == "schema" || key.Value == "itemSchema"
 				nextEntries := key.Value == "schemas" && !isSchema || isSchema && (key.Value == "properties" || key.Value == "patternProperties" || key.Value == "$defs" || key.Value == "definitions")
 				if isSchema && !schemaEntries && (key.Value == "default" || key.Value == "const" || key.Value == "enum" || key.Value == "example" || key.Value == "examples") {
@@ -282,7 +288,11 @@ func bundleLocalSources(source *sourceClosure, specPath string) ([]byte, error) 
 	for _, name := range sortedSchemaNames(schemas) {
 		setMappingValue(catalog, name, schemas[name])
 	}
-	return yaml.Marshal(normalized)
+	value, err := yamlNodeToInterface(normalized)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(value)
 }
 
 func mappingValue(node *yaml.Node, key string) *yaml.Node {
@@ -336,4 +346,8 @@ func cloneLiteral(node *yaml.Node) *yaml.Node {
 		value.Content = append(value.Content, cloneLiteral(child))
 	}
 	return &value
+}
+
+func directSchemaFragment(fragment string) bool {
+	return strings.HasPrefix(fragment, "/components/schemas/") && strings.Count(fragment, "/") == 3
 }

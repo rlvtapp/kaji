@@ -20,6 +20,7 @@ mod composition;
 mod layout;
 mod operation_tests;
 mod page_pagination;
+mod symbols;
 pub use operation_tests::{OperationTests, operation_tests};
 pub mod providers;
 mod response_validation;
@@ -32,6 +33,8 @@ fn render_sdk(
     client_style: SdkClientStyle,
     jobs: usize,
 ) -> Result<GeneratedTree> {
+    let prepared = symbols::prepare(api);
+    let api = prepared.as_ref();
     let output_dir = normalized_output_dir(output_dir)?;
     let composed = composition::models(api);
     let schemas = composed.as_deref().unwrap_or(&api.schemas);
@@ -122,6 +125,14 @@ fn model_field_names(fields: &[kaji_core::Field]) -> BTreeMap<String, String> {
         .collect()
 }
 
+fn valid_json_tag_name(name: &str) -> bool {
+    !name.is_empty()
+        && name != "-"
+        && name
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || "!#$%&()*+./:;<=>?@[]^_{|}~ -".contains(ch))
+}
+
 fn render_schema(output: &mut String, schema: &Schema) {
     let name = go_type_name(&schema.name);
     match &schema.value.kind {
@@ -130,6 +141,10 @@ fn render_schema(output: &mut String, schema: &Schema) {
             additional_properties,
         } => {
             let field_names = model_field_names(fields);
+            let custom_fields: Vec<_> = fields
+                .iter()
+                .filter(|field| !valid_json_tag_name(&field.name))
+                .collect();
             let _ = writeln!(output, "type {name} struct {{");
             for field in fields {
                 let field_name = &field_names[&field.name];
@@ -138,11 +153,12 @@ fn render_schema(output: &mut String, schema: &Schema) {
                     field_type = format!("*{field_type}");
                 }
                 let omitempty = if field.required { "" } else { ",omitempty" };
-                let _ = writeln!(
-                    output,
-                    "\t{field_name} {field_type} `json:\"{}{omitempty}\"`",
-                    field.name
-                );
+                let tag = if valid_json_tag_name(&field.name) {
+                    format!("{}{omitempty}", field.name)
+                } else {
+                    "-".into()
+                };
+                let _ = writeln!(output, "\t{field_name} {field_type} `json:\"{tag}\"`");
             }
             let extra_type = match additional_properties {
                 AdditionalProperties::Schema { value } => Some(go_type(value)),
@@ -172,11 +188,19 @@ fn render_schema(output: &mut String, schema: &Schema) {
                 output.push_str("\tkajiNullFields map[string]bool\n");
             }
             output.push_str("}\n");
-            if extra_type.is_some() || !nullable.is_empty() {
+            if extra_type.is_some() || !nullable.is_empty() || !custom_fields.is_empty() {
                 let _ = writeln!(
                     output,
                     "func (model *{name}) UnmarshalJSON(data []byte) error {{\n type plain {name}; var decoded plain; if err:=json.Unmarshal(data,&decoded);err!=nil {{return err}}; *model={name}(decoded)\n var fields map[string]json.RawMessage; if err:=json.Unmarshal(data,&fields);err!=nil {{return err}}"
                 );
+                for field in &custom_fields {
+                    let key = serde_json::to_string(&field.name).unwrap();
+                    let ident = &field_names[&field.name];
+                    let _ = writeln!(
+                        output,
+                        "if raw,ok:=fields[{key}];ok {{if err:=json.Unmarshal(raw,&model.{ident});err!=nil {{return err}}}}"
+                    );
+                }
                 if !nullable.is_empty() {
                     output.push_str("model.kajiNullFields=map[string]bool{}\n");
                     for field in &nullable {
@@ -203,6 +227,20 @@ fn render_schema(output: &mut String, schema: &Schema) {
                     output,
                     "func (model {name}) MarshalJSON() ([]byte,error) {{\n type plain {name};encoded,err:=json.Marshal(plain(model));if err!=nil {{return nil,err}};var fields map[string]json.RawMessage;if err:=json.Unmarshal(encoded,&fields);err!=nil {{return nil,err}}"
                 );
+                for field in &custom_fields {
+                    let key = serde_json::to_string(&field.name).unwrap();
+                    let ident = &field_names[&field.name];
+                    if !field.required {
+                        let _ = writeln!(output, "if model.{ident}!=nil {{");
+                    }
+                    let _ = writeln!(
+                        output,
+                        "raw{ident},err:=json.Marshal(model.{ident});if err!=nil {{return nil,err}};fields[{key}]=raw{ident}"
+                    );
+                    if !field.required {
+                        output.push_str("}\n");
+                    }
+                }
                 if extra_type.is_some() {
                     let _ = writeln!(
                         output,
@@ -1562,9 +1600,14 @@ fn go_type(value: &SchemaValue) -> String {
             AdditionalProperties::Schema { value } => format!("map[string]{}", go_type(value)),
             _ => "map[string]any".into(),
         },
-        SchemaKind::Reference { reference } => {
-            go_type_name(reference.rsplit('/').next().unwrap_or(reference))
-        }
+        SchemaKind::Reference { reference } => go_type_name(
+            &reference
+                .rsplit('/')
+                .next()
+                .unwrap_or(reference)
+                .replace("~1", "/")
+                .replace("~0", "~"),
+        ),
         SchemaKind::OneOf { .. } | SchemaKind::AnyOf { .. } | SchemaKind::AllOf { .. } => {
             "json.RawMessage".into()
         }

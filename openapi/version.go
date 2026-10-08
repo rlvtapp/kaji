@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	yaml "go.yaml.in/yaml/v4"
 	"strings"
 )
 
@@ -13,7 +12,7 @@ func validateDocumentVersion(data []byte) error {
 		OpenAPI string `yaml:"openapi"`
 		Swagger string `yaml:"swagger"`
 	}
-	if err := yaml.Unmarshal(data, &header); err != nil {
+	if err := unmarshalDocument(data, &header); err != nil {
 		return fmt.Errorf("parse spec version: %w", err)
 	}
 	if header.OpenAPI != "" {

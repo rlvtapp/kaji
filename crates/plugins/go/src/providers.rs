@@ -1,5 +1,5 @@
 //! Independently selectable native Go providers and replaceable HTTP execution.
-use crate::{Go, go_type_name};
+use crate::Go;
 use anyhow::Result;
 use kaji_core::{
     GeneratedFile, SdkClientStyle,
@@ -62,7 +62,8 @@ impl Workspace {
             } else {
                 SdkClientStyle::Flat
             };
-            let runtime = crate::render_runtime(cx.api, &package, style).replace(
+            let prepared = crate::symbols::prepare(cx.api);
+            let runtime = crate::render_runtime(&prepared, &package, style).replace(
                 "httpClient = http.DefaultClient",
                 &format!(
                     "httpClient = {}",
@@ -238,20 +239,12 @@ impl Plugin<Go> for Provider {
 }
 pub(crate) fn model_contract(api: &kaji_core::Api) -> Models {
     Models {
-        symbols: api
-            .schemas
-            .iter()
-            .map(|schema| (schema.name.clone(), go_type_name(&schema.name)))
-            .collect(),
+        symbols: crate::symbols::model_symbols(api),
     }
 }
 pub(crate) fn operation_contract(api: &kaji_core::Api) -> Operations {
     Operations {
-        methods: api
-            .operations
-            .iter()
-            .map(|operation| (operation.id.clone(), go_type_name(&operation.id)))
-            .collect(),
+        methods: crate::symbols::operation_symbols(api),
     }
 }
 pub(crate) fn default_transport() -> Transport {
