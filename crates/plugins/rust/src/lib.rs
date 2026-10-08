@@ -313,7 +313,7 @@ fn native_cargo() -> std::process::Command {
     let mut command = std::process::Command::new("cargo");
     configure_native_cargo(
         &mut command,
-        std::env::var("KAJI_RUNTIME_OFFLINE").as_deref() == Ok("1"),
+        std::env::var("POOLSTER_RUNTIME_OFFLINE").as_deref() == Ok("1"),
     );
     command
 }
@@ -325,9 +325,9 @@ fn configure_native_cargo(command: &mut std::process::Command, offline: bool) {
     }
     command.env(
         "CARGO_TARGET_DIR",
-        std::env::var_os("KAJI_RUNTIME_RUST_TARGET").unwrap_or_else(|| {
+        std::env::var_os("POOLSTER_RUNTIME_RUST_TARGET").unwrap_or_else(|| {
             std::env::temp_dir()
-                .join("kaji-runtime-contract-rust-target")
+                .join("poolster-runtime-contract-rust-target")
                 .into_os_string()
         }),
     );

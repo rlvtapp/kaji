@@ -183,7 +183,7 @@ fn render_model_for_api(api: &Api, schema: &Schema, open_unions: bool, open_enum
             if matches!(field.value.kind, SchemaKind::Reference { .. })
                 && reaches(api, &field.value, &schema.name, &mut Default::default())
             {
-                field.value.format = Some("kaji-boxed-reference".into());
+                field.value.format = Some("poolster-boxed-reference".into());
             }
         }
     }
@@ -193,7 +193,7 @@ fn render_model_for_api(api: &Api, schema: &Schema, open_unions: bool, open_enum
             if matches!(variant.kind, SchemaKind::Reference { .. })
                 && reaches(api, variant, &schema.name, &mut Default::default())
             {
-                variant.format = Some("kaji-boxed-reference".into());
+                variant.format = Some("poolster-boxed-reference".into());
             }
         }
     }
@@ -332,7 +332,7 @@ fn rust_type(value: &SchemaValue) -> String {
             "serde_json::Value".into()
         }
     };
-    let base = if value.format.as_deref() == Some("kaji-boxed-reference") {
+    let base = if value.format.as_deref() == Some("poolster-boxed-reference") {
         format!("Box<{base}>")
     } else {
         base
@@ -2151,7 +2151,7 @@ mod tests {
                 annotations: BTreeMap::new(),
             }],
             annotations: BTreeMap::from([(
-                "x-kaji-idempotency".into(),
+                "x-poolster-idempotency".into(),
                 serde_json::json!({"header":"Query", "auto_generate":true}),
             )]),
             ..Default::default()
@@ -2315,18 +2315,18 @@ impl Transport for Mock {fn execute(&self,request:reqwest::Request)->TransportFu
             )],
             ..Default::default()
         };
-        operation.annotations.insert("x-kaji-pagination".into(),serde_json::json!({"type":"page","inputs":[{"name":"page","in":"parameters","type":"page"},{"name":"limit","in":"parameters","type":"limit"}],"outputs":{"results":"/items"}}));
+        operation.annotations.insert("x-poolster-pagination".into(),serde_json::json!({"type":"page","inputs":[{"name":"page","in":"parameters","type":"page"},{"name":"limit","in":"parameters","type":"limit"}],"outputs":{"results":"/items"}}));
         let mut required = operation.clone();
         required.id = "requiredItems".into();
         required.parameters[0].location = "header".into();
         required.parameters[0].required = true;
         let mut legacy = operation.clone();
         legacy.id = "legacyItems".into();
-        legacy.annotations.insert("x-kaji-pagination".into(),serde_json::json!({"type":"offsetLimit","inputs":[{"name":"page","in":"parameters","type":"page"}],"outputs":{"numPages":"$.numPages"}}));
+        legacy.annotations.insert("x-poolster-pagination".into(),serde_json::json!({"type":"offsetLimit","inputs":[{"name":"page","in":"parameters","type":"page"}],"outputs":{"numPages":"$.numPages"}}));
         let mut offset = operation.clone();
         offset.id = "offsetItems".into();
         offset.parameters[0].name = "offset".into();
-        offset.annotations.insert("x-kaji-pagination".into(),serde_json::json!({"type":"offsetLimit","inputs":[{"name":"offset","in":"parameters","type":"offset"},{"name":"limit","in":"parameters","type":"limit"}],"outputs":{"results":"/items"}}));
+        offset.annotations.insert("x-poolster-pagination".into(),serde_json::json!({"type":"offsetLimit","inputs":[{"name":"offset","in":"parameters","type":"offset"},{"name":"limit","in":"parameters","type":"limit"}],"outputs":{"results":"/items"}}));
         let api = Api {
             name: "page".into(),
             version: "1.0.0".into(),
@@ -2696,7 +2696,7 @@ impl Transport for Mock {fn execute(&self, request:reqwest::Request)->TransportF
                     }],
                     responses: vec![json_response()],
                     annotations: BTreeMap::from([(
-                        "x-kaji-pagination".into(),
+                        "x-poolster-pagination".into(),
                         serde_json::json!({
                             "type": "cursor",
                             "inputs": [{ "name": "cursor", "in": "parameters", "type": "cursor" }],
@@ -2738,7 +2738,7 @@ impl Transport for Mock {fn execute(&self, request:reqwest::Request)->TransportF
                     }],
                     responses: vec![json_response()],
                     annotations: BTreeMap::from([(
-                        "x-kaji-pagination".into(),
+                        "x-poolster-pagination".into(),
                         serde_json::json!({
                             "type": "cursor",
                             "inputs": [{ "name": "X-Page-Cursor", "in": "parameters", "type": "cursor" }],
@@ -2761,7 +2761,7 @@ impl Transport for Mock {fn execute(&self, request:reqwest::Request)->TransportF
                     }],
                     responses: vec![json_response()],
                     annotations: BTreeMap::from([(
-                        "x-kaji-pagination".into(),
+                        "x-poolster-pagination".into(),
                         serde_json::json!({
                             "type": "cursor",
                             "inputs": [{ "name": "cursor", "in": "parameters", "type": "cursor" }],
@@ -2786,7 +2786,7 @@ impl Transport for Mock {fn execute(&self, request:reqwest::Request)->TransportF
                     }],
                     responses: vec![json_response()],
                     annotations: BTreeMap::from([(
-                        "x-kaji-pagination".into(),
+                        "x-poolster-pagination".into(),
                         serde_json::json!({
                             "type": "cursor",
                             "inputs": [{ "name": "cursor", "in": "parameters", "type": "cursor" }],
@@ -2801,7 +2801,7 @@ impl Transport for Mock {fn execute(&self, request:reqwest::Request)->TransportF
                     path: "/unsafe".into(),
                     responses: vec![json_response()],
                     annotations: BTreeMap::from([(
-                        "x-kaji-pagination".into(),
+                        "x-poolster-pagination".into(),
                         serde_json::json!({
                             "type": "cursor",
                             "inputs": [{ "name": "cursor", "in": "requestBody", "type": "cursor" }],
@@ -2879,7 +2879,7 @@ impl Transport for Mock {fn execute(&self, request:reqwest::Request)->TransportF
                         }],
                     }],
                     annotations: BTreeMap::from([(
-                        "x-kaji-pagination".into(),
+                        "x-poolster-pagination".into(),
                         serde_json::json!({
                             "type": "cursor",
                             "inputs": [{ "name": "cursor", "in": "parameters", "type": "cursor" }],
