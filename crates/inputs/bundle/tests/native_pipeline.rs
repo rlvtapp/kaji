@@ -69,7 +69,7 @@ fn pipeline<C: Contract>(
 }
 fn fixture(format: &str, file: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join(format!("../inputs/{format}/tests/fixtures/{file}"))
+        .join(format!("../{format}/tests/fixtures/{file}"))
 }
 #[cfg(feature = "graphql")]
 #[test]
@@ -151,7 +151,7 @@ fn large_github_schema_reaches_documentation_output() {
 #[test]
 fn official_slack_events_reach_documentation_output() {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../inputs/asyncapi/tests/corpus/slack-rtm-3.1.yaml");
+        .join("../asyncapi/tests/corpus/slack-rtm-3.1.yaml");
     pipeline::<poolster_inputs::asyncapi::AsyncApiDocument>(
         "asyncapi",
         path,
@@ -163,7 +163,7 @@ fn official_slack_events_reach_documentation_output() {
 #[test]
 fn official_bnpl_workflow_reaches_documentation_output() {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../inputs/arazzo/tests/corpus/bnpl-1.0.yaml");
+        .join("../arazzo/tests/corpus/bnpl-1.0.yaml");
     pipeline::<poolster_inputs::arazzo::ArazzoDocument>(
         "arazzo",
         path,

@@ -36,7 +36,7 @@ typescript-cli = ["dep:poolster-plugin-typescript-cli"]
 
 [dependencies]
 anyhow = "1.0.102"
-poolster-core = { path = "../kaji-core" }
+poolster-core = { path = "../core" }
 poolster-plugin-rust = { path = "../plugins/rust", optional = true }
 poolster-plugin-typescript = { path = "../plugins/typescript", optional = true }
 poolster-plugin-typescript-cli = { path = "../plugins/typescript-cli", optional = true }

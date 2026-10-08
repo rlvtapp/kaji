@@ -91,7 +91,7 @@ fn eject(language: &str, output: &Path) -> Result<()> {
         format!(
             r#"# Your editable Poolster generator
 
-This is the maintained source workspace embedded in Poolster {}. The selected renderer is `crates/plugins/{plugin}/src/`. All language crates are included because the CLI registers them through `crates/kaji/src/lib.rs`; this keeps a complete, rebuildable plugin workspace. Runtime templates next to the Rust renderers are real generator inputs.
+This is the maintained source workspace embedded in Poolster {}. The selected renderer is `crates/plugins/{plugin}/src/`. All language crates are included because the CLI registers them through `crates/facade/src/lib.rs`; this keeps a complete, rebuildable plugin workspace. Runtime templates next to the Rust renderers are real generator inputs.
 
 ## Build and use
 
@@ -107,7 +107,7 @@ The first build downloads dependencies from Cargo/Go registries. No generation o
 
 ## Customize the generator
 
-Edit the maintained renderers or runtime source templates in `crates/plugins/{plugin}/src/`, rebuild, then regenerate. Changes affect generated SDKs; customers do not install generator code. To add a plugin, create a Rust crate using `poolster-core`'s plugin interfaces, add its workspace/dependency entries, and register it in `crates/kaji/src/lib.rs` and the CLI profile. Existing plugin `src/lib.rs` files provide working registration examples. `docs/typed-plugins.md` and other bundled documentation describe the architecture.
+Edit the maintained renderers or runtime source templates in `crates/plugins/{plugin}/src/`, rebuild, then regenerate. Changes affect generated SDKs; customers do not install generator code. To add a plugin, create a Rust crate using `poolster-core`'s plugin interfaces, add its workspace/dependency entries, and register it in `crates/facade/src/lib.rs` and the CLI profile. Existing plugin `src/lib.rs` files provide working registration examples. `docs/typed-plugins.md` and other bundled documentation describe the architecture.
 
 `EJECTED-SOURCES.json` records original SHA-256 hashes. Keep your changes in version control and compare this manifest when upgrading. Eject never overwrites an existing destination. Source files are MIT licensed; retain `LICENSE`. This is source ejection, not a runtime template override flag: use the rebuilt CLI to consume your edits.
 "#,
@@ -215,7 +215,7 @@ mod tests {
             "Cargo.toml",
             "Cargo.lock",
             "LICENSE",
-            "crates/kaji-cli/build.rs",
+            "crates/cli/build.rs",
             "crates/plugins/ruby/src/lib.rs",
             "openapi/go.mod",
             "packages/sdk-check/check.mjs",

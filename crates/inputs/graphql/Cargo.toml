@@ -9,7 +9,7 @@ description = "Native graphql input provider for Poolster"
 publish = false
 
 [dependencies]
-poolster-core = { path = "../../kaji-core" }
+poolster-core = { path = "../../core" }
 anyhow = "1.0.102"
 apollo-compiler = "1.32"
 

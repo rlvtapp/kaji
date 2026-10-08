@@ -14,9 +14,9 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0.102"
-poolster = { path = "../kaji", features = ["all-plugins"] }
-poolster-core = { path = "../kaji-core" }
-poolster-inputs = { path = "../kaji-inputs" }
+poolster = { path = "../facade", features = ["all-plugins"] }
+poolster-core = { path = "../core" }
+poolster-inputs = { path = "../inputs/bundle" }
 reqwest = { version = "0.12.28", default-features = false, features = ["blocking", "multipart", "rustls-tls"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.138"

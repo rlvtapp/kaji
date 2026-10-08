@@ -41,7 +41,7 @@ fn real_openapi_complex_models_compile_and_round_trip_with_explicit_collision_er
     let result = Command::new(compiler)
         .arg("--out")
         .arg(&artifacts)
-        .arg(root.join("crates/kaji/tests/fixtures/complex-contract.openapi.json"))
+        .arg(root.join("crates/facade/tests/fixtures/complex-contract.openapi.json"))
         .output()
         .unwrap();
     assert!(

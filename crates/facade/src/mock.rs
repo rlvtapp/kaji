@@ -1,6 +1,6 @@
 //! Runnable, language-neutral mock-server package output.
 //!
-//! The fixture generator lives in `kaji-core`: this module is the
+//! The fixture generator lives in `poolster-core`: this module is the
 //! first-party release profile that makes those fixtures immediately useful to
 //! every generated SDK. Keeping the launcher here means community fixture
 //! backends can remain target-neutral while Poolster owns the supported UX.

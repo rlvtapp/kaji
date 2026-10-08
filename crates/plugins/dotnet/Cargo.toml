@@ -9,5 +9,5 @@ description = "Deprecated compatibility facade for Poolster's C# SDK generator"
 publish = false
 
 [dependencies]
-poolster-core = { path = "../../kaji-core" }
+poolster-core = { path = "../../core" }
 poolster-plugin-csharp = { path = "../csharp" }

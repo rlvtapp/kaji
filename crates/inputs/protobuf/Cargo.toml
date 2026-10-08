@@ -9,7 +9,7 @@ description = "Native protobuf input provider for Poolster"
 publish = false
 
 [dependencies]
-poolster-core = { path = "../../kaji-core" }
+poolster-core = { path = "../../core" }
 anyhow = "1.0.102"
 protox = "0.9"
 

@@ -1,16 +1,16 @@
 [workspace]
 resolver = "3"
 members = [
-    "crates/kaji-inputs",
+    "crates/inputs/bundle",
     "crates/inputs/graphql",
     "crates/inputs/asyncapi",
     "crates/inputs/arazzo",
     "crates/inputs/protobuf",
     "crates/inputs/capnproto",
-    "crates/kaji-core",
-    "crates/kaji",
-    "crates/kaji-cli",
-    "crates/kaji-node",
+    "crates/core",
+    "crates/facade",
+    "crates/cli",
+    "crates/node",
     "crates/plugins/rust",
     "crates/plugins/typescript",
     "crates/plugins/typescript-cli",
@@ -28,7 +28,7 @@ members = [
     "crates/plugins/ruby",
     "crates/plugins/swift",
 ]
-default-members = ["crates/kaji"]
+default-members = ["crates/facade"]
 
 [workspace.package]
 version = "0.5.0"

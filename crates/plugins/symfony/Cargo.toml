@@ -10,4 +10,4 @@ publish = false
 
 [dependencies]
 anyhow = "1.0.102"
-poolster-core = { path = "../../kaji-core" }
+poolster-core = { path = "../../core" }

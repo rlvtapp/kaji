@@ -66,7 +66,7 @@ fn every_maintained_target_matches_the_approved_output_snapshot() {
     assert_eq!(
         actual, APPROVED_SNAPSHOT,
         "generated output changed; review it and intentionally update \
-         crates/kaji/tests/fixtures/all-targets.snapshot"
+         crates/facade/tests/fixtures/all-targets.snapshot"
     );
 }
 

@@ -9,6 +9,6 @@ description = "Native capnproto input provider for Poolster"
 publish = false
 
 [dependencies]
-poolster-core = { path = "../../kaji-core" }
+poolster-core = { path = "../../core" }
 anyhow = "1.0.102"
 capnp = "0.25"
