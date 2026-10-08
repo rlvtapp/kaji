@@ -5,7 +5,6 @@ pub(crate) fn plan(api: &Api, op: &Operation) -> anyhow::Result<Option<Paginatio
     let Some(raw) = op
         .annotations
         .get("x-poolster-pagination")
-        .or_else(|| op.annotations.get("x-kaji-pagination"))
         .or_else(|| op.annotations.get("x-speakeasy-pagination"))
     else {
         return Ok(None);

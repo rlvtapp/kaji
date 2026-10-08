@@ -53,7 +53,6 @@ fn render_sdk(
     let diagnostics=api.operations.iter().filter_map(|operation|pagination::plan(api,operation).err().map(|error|serde_json::json!({"operation":operation.id,"status":"unsupported","reason":error.to_string()}))).collect::<Vec<_>>();
     if api.operations.iter().any(|operation| {
         operation.annotations.contains_key("x-poolster-pagination")
-            || operation.annotations.contains_key("x-kaji-pagination")
             || operation.annotations.contains_key("x-speakeasy-pagination")
     }) {
         insert(
@@ -662,11 +661,7 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
         "    def {name}({signature})\n      path = {}\n",
         ruby_string(&operation.path)
     );
-    if let Some(policy) = operation
-        .annotations
-        .get("x-poolster-idempotency-resolved")
-        .or_else(|| operation.annotations.get("x-kaji-idempotency-resolved"))
-    {
+    if let Some(policy) = operation.annotations.get("x-poolster-idempotency-resolved") {
         if policy
             .get("auto_generate")
             .and_then(serde_json::Value::as_bool)

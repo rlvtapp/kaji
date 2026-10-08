@@ -75,7 +75,7 @@ mod tests {
                     method: poolster_core::HttpMethod::Post,
                     path: "/thing".into(),
                     annotations: BTreeMap::from([(
-                        "x-kaji-idempotency".into(),
+                        "x-poolster-idempotency".into(),
                         serde_json::json!({"header":"X-Once","auto_generate":true}),
                     )]),
                     responses: vec![poolster_core::OperationResponse {

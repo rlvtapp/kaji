@@ -284,7 +284,7 @@ mod tests {
                 media_types: vec![],
             }],
             annotations: std::collections::BTreeMap::from([(
-                "x-kaji-idempotency".into(),
+                "x-poolster-idempotency".into(),
                 serde_json::json!({"header":"X-Once","auto_generate":true}),
             )]),
             ..Default::default()
