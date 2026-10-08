@@ -81,13 +81,13 @@ fn generated_composite_provider_executes_native_framework_lifecycle() {
     command
         .args(["test", "-mod=readonly", "./..."])
         .current_dir(directory.path())
-        .env("GOCACHE", "/tmp/kaji-tf-go-cache")
+        .env("GOCACHE", "/tmp/poolster-tf-go-cache")
         .env(
             "GOMODCACHE",
-            std::env::var("KAJI_TERRAFORM_GOMODCACHE")
-                .unwrap_or_else(|_| "/tmp/kaji-tf-mod-cache".into()),
+            std::env::var("POOLSTER_TERRAFORM_GOMODCACHE")
+                .unwrap_or_else(|_| "/tmp/poolster-tf-mod-cache".into()),
         );
-    if std::env::var_os("KAJI_TERRAFORM_OFFLINE").is_some() {
+    if std::env::var_os("POOLSTER_TERRAFORM_OFFLINE").is_some() {
         command.env("GOPROXY", "off");
     }
     let output = command.output().unwrap();

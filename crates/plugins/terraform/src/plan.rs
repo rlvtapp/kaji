@@ -415,7 +415,7 @@ fn infer_binding(api: &Api, create: &Operation) -> Result<ResourceBinding> {
     {
         entity
             .as_str()
-            .context("v1 x-kaji-entity must name one entity")?
+            .context("v1 x-poolster-entity must name one entity")?
     } else {
         conventional_name
     };
@@ -830,12 +830,12 @@ fn resolve(
             {
                 let policy = policy
                     .as_object()
-                    .context("x-kaji-terraform must be an object")?;
+                    .context("x-poolster-terraform must be an object")?;
                 ensure!(
                     policy
                         .keys()
                         .all(|key| matches!(key.as_str(), "replacement" | "sensitive")),
-                    "v1 x-kaji-terraform supports only replacement and sensitive; other controls need implementation"
+                    "v1 x-poolster-terraform supports only replacement and sensitive; other controls need implementation"
                 );
                 if let Some(replacement) = policy.get("replacement") {
                     ensure!(
@@ -1396,7 +1396,7 @@ fn annotated_bindings(api: &Api) -> Result<Vec<ResourceBinding>> {
         {
             let text = value
                 .as_str()
-                .context("x-kaji-entity-operation must be Entity#lifecycle string")?;
+                .context("x-poolster-entity-operation must be Entity#lifecycle string")?;
             let parts: Vec<_> = text.split('#').collect();
             ensure!(
                 parts.len() == 2 && ["create", "read", "update", "delete"].contains(&parts[1]),
@@ -1662,7 +1662,7 @@ mod tests {
                 _ => "delete",
             };
             op.annotations.insert(
-                "x-kaji-entity-operation".into(),
+                "x-poolster-entity-operation".into(),
                 serde_json::json!(format!("Project#{lifecycle}")),
             );
         }
@@ -1749,7 +1749,7 @@ mod tests {
             unreachable!()
         };
         fields[1].value.extensions.insert(
-            "x-kaji-terraform".into(),
+            "x-poolster-terraform".into(),
             serde_json::json!({"replacement":true}),
         );
         assert!(analyze(&api, &[binding()], false).is_err());

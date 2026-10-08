@@ -167,7 +167,7 @@ fn go_mod(module: &str) -> String {
 }
 fn main_go(module: &str, provider: &str) -> String {
     format!(
-        "package main\n\nimport (\n  \"context\"\n  \"log\"\n  \"github.com/hashicorp/terraform-plugin-framework/providerserver\"\n  \"{module}/internal/provider\"\n)\n\nvar version = \"dev\"\n\nfunc main() {{\n  err := providerserver.Serve(context.Background(), provider.New(version), providerserver.ServeOpts{{Address: \"registry.terraform.io/kaji/{provider}\"}})\n  if err != nil {{ log.Fatal(err) }}\n}}\n"
+        "package main\n\nimport (\n  \"context\"\n  \"log\"\n  \"github.com/hashicorp/terraform-plugin-framework/providerserver\"\n  \"{module}/internal/provider\"\n)\n\nvar version = \"dev\"\n\nfunc main() {{\n  err := providerserver.Serve(context.Background(), provider.New(version), providerserver.ServeOpts{{Address: \"registry.terraform.io/poolster/{provider}\"}})\n  if err != nil {{ log.Fatal(err) }}\n}}\n"
     )
 }
 fn provider_go(provider: &str, resources: &[ResolvedResource]) -> String {
@@ -313,7 +313,7 @@ mod tests {
         assert!(
             tree.get("terraform/main.go")
                 .unwrap()
-                .contains("registry.terraform.io/kaji/acme")
+                .contains("registry.terraform.io/poolster/acme")
         );
     }
 

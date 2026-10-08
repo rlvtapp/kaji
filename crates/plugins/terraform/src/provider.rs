@@ -147,7 +147,11 @@ impl Plugin<Terraform> for Provider {
                 .as_deref()
                 .unwrap_or(&inferred_name),
         )?;
-        let namespace = cx.settings.registry_namespace.as_deref().unwrap_or("kaji");
+        let namespace = cx
+            .settings
+            .registry_namespace
+            .as_deref()
+            .unwrap_or("poolster");
         ensure!(
             namespace
                 .chars()
@@ -173,12 +177,12 @@ impl Plugin<Terraform> for Provider {
         let mut tree = crate::typed_render::render(cx.api, &catalog, &module, &provider)?;
         for path in ["main.go", "README.md"] {
             let contents = tree.get(path).unwrap().replace(
-                "registry.terraform.io/kaji/",
+                "registry.terraform.io/poolster/",
                 &format!("registry.terraform.io/{namespace}/"),
             );
             let contents = if path == "README.md" {
                 contents.replace(
-                    &format!("source = \"kaji/{provider}\""),
+                    &format!("source = \"poolster/{provider}\""),
                     &format!("source = \"{namespace}/{provider}\""),
                 )
             } else {

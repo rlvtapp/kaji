@@ -143,15 +143,15 @@ fn generated_provider_executes_native_framework_lifecycle() {
         GO_TEST,
     )
     .unwrap();
-    let cache = std::env::var("KAJI_TERRAFORM_GOMODCACHE")
-        .unwrap_or_else(|_| "/tmp/kaji-tf-mod-cache".into());
+    let cache = std::env::var("POOLSTER_TERRAFORM_GOMODCACHE")
+        .unwrap_or_else(|_| "/tmp/poolster-tf-mod-cache".into());
     let mut command = Command::new("go");
     command
         .args(["test", "-mod=mod", "./..."])
         .current_dir(root.path())
-        .env("GOCACHE", "/tmp/kaji-tf-go-cache")
+        .env("GOCACHE", "/tmp/poolster-tf-go-cache")
         .env("GOMODCACHE", cache);
-    if std::env::var_os("KAJI_TERRAFORM_OFFLINE").is_some() {
+    if std::env::var_os("POOLSTER_TERRAFORM_OFFLINE").is_some() {
         command.env("GOPROXY", "off");
     }
     let output = command.output().unwrap();
@@ -189,13 +189,13 @@ fn generated_provider_executes_native_framework_lifecycle() {
         let mut tidy = Command::new("go");
         tidy.args(["mod", "tidy"])
             .current_dir(directory.path())
-            .env("GOCACHE", "/tmp/kaji-tf-go-cache")
+            .env("GOCACHE", "/tmp/poolster-tf-go-cache")
             .env(
                 "GOMODCACHE",
-                std::env::var("KAJI_TERRAFORM_GOMODCACHE")
-                    .unwrap_or_else(|_| "/tmp/kaji-tf-mod-cache".into()),
+                std::env::var("POOLSTER_TERRAFORM_GOMODCACHE")
+                    .unwrap_or_else(|_| "/tmp/poolster-tf-mod-cache".into()),
             );
-        if std::env::var_os("KAJI_TERRAFORM_OFFLINE").is_some() {
+        if std::env::var_os("POOLSTER_TERRAFORM_OFFLINE").is_some() {
             tidy.env("GOPROXY", "off");
         }
         let output = tidy.output().unwrap();
@@ -218,13 +218,13 @@ fn generated_provider_executes_native_framework_lifecycle() {
         command
             .args(["test", "-mod=readonly", "./..."])
             .current_dir(directory.path())
-            .env("GOCACHE", "/tmp/kaji-tf-go-cache")
+            .env("GOCACHE", "/tmp/poolster-tf-go-cache")
             .env(
                 "GOMODCACHE",
-                std::env::var("KAJI_TERRAFORM_GOMODCACHE")
-                    .unwrap_or_else(|_| "/tmp/kaji-tf-mod-cache".into()),
+                std::env::var("POOLSTER_TERRAFORM_GOMODCACHE")
+                    .unwrap_or_else(|_| "/tmp/poolster-tf-mod-cache".into()),
             );
-        if std::env::var_os("KAJI_TERRAFORM_OFFLINE").is_some() {
+        if std::env::var_os("POOLSTER_TERRAFORM_OFFLINE").is_some() {
             command.env("GOPROXY", "off");
         }
         let output = command.output().unwrap();
@@ -340,11 +340,11 @@ fn generated_data_source_executes_native_framework_read() {
     let output = Command::new("go")
         .args(["test", "-mod=readonly", "./..."])
         .current_dir(root.path())
-        .env("GOCACHE", "/tmp/kaji-tf-go-cache")
+        .env("GOCACHE", "/tmp/poolster-tf-go-cache")
         .env(
             "GOMODCACHE",
-            std::env::var("KAJI_TERRAFORM_GOMODCACHE")
-                .unwrap_or_else(|_| "/tmp/kaji-tf-mod-cache".into()),
+            std::env::var("POOLSTER_TERRAFORM_GOMODCACHE")
+                .unwrap_or_else(|_| "/tmp/poolster-tf-mod-cache".into()),
         )
         .env("GOPROXY", "off")
         .output()
@@ -364,7 +364,7 @@ func TestDataSourceRead(t *testing.T){ctx:=context.Background();transport:=&fake
 "#;
 
 #[test]
-#[ignore = "requires Terraform CLI (KAJI_TERRAFORM_BIN), Go and official Framework cache"]
+#[ignore = "requires Terraform CLI (POOLSTER_TERRAFORM_BIN), Go and official Framework cache"]
 fn terraform_cli_local_mock_lifecycle() {
     use std::time::Duration;
     let root = tempfile::tempdir().unwrap();
@@ -384,11 +384,11 @@ fn terraform_cli_local_mock_lifecycle() {
         .arg(binary.join("terraform-provider-example"))
         .arg(".")
         .current_dir(root.path())
-        .env("GOCACHE", "/tmp/kaji-tf-go-cache")
+        .env("GOCACHE", "/tmp/poolster-tf-go-cache")
         .env(
             "GOMODCACHE",
-            std::env::var("KAJI_TERRAFORM_GOMODCACHE")
-                .unwrap_or_else(|_| "/tmp/kaji-tf-mod-cache".into()),
+            std::env::var("POOLSTER_TERRAFORM_GOMODCACHE")
+                .unwrap_or_else(|_| "/tmp/poolster-tf-mod-cache".into()),
         )
         .env("GOPROXY", "off")
         .output()
@@ -423,7 +423,7 @@ open(sys.argv[1],'w').write(str(server.server_port))
 server.serve_forever()
 "#;
     fs::write(root.path().join("mock.py"), server_source).unwrap();
-    let python = std::env::var("KAJI_TEST_PYTHON").unwrap_or_else(|_| "python3".into());
+    let python = std::env::var("POOLSTER_TEST_PYTHON").unwrap_or_else(|_| "python3".into());
     fs::write(root.path().join("mode"), "normal").unwrap();
     let mut child = Command::new(python)
         .arg(root.path().join("mock.py"))
@@ -446,14 +446,14 @@ server.serve_forever()
         std::thread::sleep(Duration::from_millis(20));
     }
     let port = fs::read_to_string(root.path().join("port")).unwrap();
-    fs::write(root.path().join("terraform.rc"),format!("provider_installation {{ dev_overrides {{ \"registry.terraform.io/kaji/example\" = {:?} }} }}",binary.to_string_lossy())).unwrap();
+    fs::write(root.path().join("terraform.rc"),format!("provider_installation {{ dev_overrides {{ \"registry.terraform.io/poolster/example\" = {:?} }} }}",binary.to_string_lossy())).unwrap();
     let config = |name: &str| {
         format!(
-            "terraform {{\n required_providers {{\n example = {{ source = \"kaji/example\" }}\n }}\n }}\nprovider \"example\" {{\n base_url = \"http://127.0.0.1:{port}\"\n auth_token = \"secret\"\n }}\nresource \"example_thing\" \"test\" {{\n name = {name:?}\n enabled = true\n quantity = 9007199254740993\n }}\ndata \"example_thing\" \"existing\" {{ id = example_thing.test.id }}\noutput \"count\" {{ value = data.example_thing.existing.quantity }}"
+            "terraform {{\n required_providers {{\n example = {{ source = \"poolster/example\" }}\n }}\n }}\nprovider \"example\" {{\n base_url = \"http://127.0.0.1:{port}\"\n auth_token = \"secret\"\n }}\nresource \"example_thing\" \"test\" {{\n name = {name:?}\n enabled = true\n quantity = 9007199254740993\n }}\ndata \"example_thing\" \"existing\" {{ id = example_thing.test.id }}\noutput \"count\" {{ value = data.example_thing.existing.quantity }}"
         )
     };
     fs::write(root.path().join("main.tf"), config("planned")).unwrap();
-    let terraform = std::env::var("KAJI_TERRAFORM_BIN").unwrap_or_else(|_| "terraform".into());
+    let terraform = std::env::var("POOLSTER_TERRAFORM_BIN").unwrap_or_else(|_| "terraform".into());
     let run_expected = |args: &[&str], expected: i32| {
         let output = Command::new(&terraform)
             .args(args)
