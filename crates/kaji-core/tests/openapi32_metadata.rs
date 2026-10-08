@@ -1,6 +1,6 @@
-use kaji_core::adapter::openapi_sidecar::load_operations;
-use kaji_core::openapi32::{parameter_content, request_content, response_content};
-use kaji_core::{SchemaKind, SecuritySchemeKind};
+use poolster_core::adapter::openapi_sidecar::load_operations;
+use poolster_core::openapi32::{parameter_content, request_content, response_content};
+use poolster_core::{SchemaKind, SecuritySchemeKind};
 
 #[test]
 fn typed_content_preserves_query_stream_and_nested_encoding() {
@@ -46,14 +46,14 @@ fn typed_content_preserves_query_stream_and_nested_encoding() {
             .kind,
         SchemaKind::String
     ));
-    let semantics = kaji_core::semantics::analyze_operation(op, None);
+    let semantics = poolster_core::semantics::analyze_operation(op, None);
     assert_eq!(
         semantics.streaming,
-        Some(kaji_core::semantics::StreamingKind::Binary)
+        Some(poolster_core::semantics::StreamingKind::Binary)
     );
     assert_eq!(
         semantics.request_body,
-        Some(kaji_core::semantics::RequestBodyKind::Multipart)
+        Some(poolster_core::semantics::RequestBodyKind::Multipart)
     );
     let body = request_content(op).unwrap();
     assert_eq!(
@@ -72,7 +72,7 @@ fn typed_content_preserves_query_stream_and_nested_encoding() {
         Some("text/plain")
     );
     assert_eq!(
-        api.annotations["kaji.openapi.metadata"]["tags"][0]["parent"],
+        api.annotations["poolster.openapi.metadata"]["tags"][0]["parent"],
         "api"
     );
     let operation_path = dir.join("operations/events.json");
@@ -92,8 +92,8 @@ fn typed_content_preserves_query_stream_and_nested_encoding() {
         streamed.operations[0].success_schema().unwrap().kind,
         SchemaKind::Integer
     ));
-    let security = kaji_core::adapter::openapi_sidecar::OpenApiSidecar::new(dir, "API", "1");
-    let catalog = kaji_core::Adapter::adapt(&security)
+    let security = poolster_core::adapter::openapi_sidecar::OpenApiSidecar::new(dir, "API", "1");
+    let catalog = poolster_core::Adapter::adapt(&security)
         .unwrap()
         .security_schemes;
     let SecuritySchemeKind::OAuth2 { flows, .. } = &catalog.schemes[0].kind else {

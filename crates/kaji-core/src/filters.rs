@@ -42,7 +42,7 @@ pub struct OperationContext<'a> {
 }
 
 /// Include rules are an OR-set; exclusions always win. An empty include set
-/// selects every operation, matching Kaji's default plugin behaviour.
+/// selects every operation, matching Poolster's default plugin behaviour.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct OperationSelection {
     pub include: Vec<OperationFilter>,

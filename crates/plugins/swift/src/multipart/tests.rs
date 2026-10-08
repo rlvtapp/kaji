@@ -1,5 +1,5 @@
 use super::*;
-use kaji_core::{OperationMediaType, OperationRequestBody, OperationResponse};
+use poolster_core::{OperationMediaType, OperationRequestBody, OperationResponse};
 use serde_json::json;
 use std::{fs, process::Command};
 
@@ -56,7 +56,7 @@ fn fixture() -> Api {
     let mut upload = Operation {
         id: "upload".into(),
         path: "/upload".into(),
-        method: kaji_core::HttpMethod::Post,
+        method: poolster_core::HttpMethod::Post,
         request_body: Some(OperationRequestBody {
             required: true,
             description: None,
@@ -72,7 +72,7 @@ fn fixture() -> Api {
         }],
         ..Default::default()
     };
-    upload.annotations.insert("kaji.request_body_encodings".into(),json!({"multipart/form-data":{"csv":{"style":"form","explode":false,"contentType":"application/json"},"jsonText":{"contentType":"application/json"},"metadata":{"contentType":"application/json","headers":{"X-Part":{"required":true},"Content-Type":{"required":true}}},"file":{"headers":{"X-File":{"required":true}}},"files":{"contentType":"image/png"}}}));
+    upload.annotations.insert("poolster.request_body_encodings".into(),json!({"multipart/form-data":{"csv":{"style":"form","explode":false,"contentType":"application/json"},"jsonText":{"contentType":"application/json"},"metadata":{"contentType":"application/json","headers":{"X-Part":{"required":true},"Content-Type":{"required":true}}},"file":{"headers":{"X-File":{"required":true}}},"files":{"contentType":"image/png"}}}));
     let mut submit = upload.clone();
     submit.id = "submit".into();
     submit.path = "/submit".into();
@@ -111,8 +111,8 @@ fn typed_multipart_does_not_change_json_models_and_preserves_encoding_selection(
     let dto = tree
         .get("sdk/Sources/MultipartProbe/UploadMultipartBody.swift")
         .unwrap();
-    assert!(dto.contains("file: KajiMultipartFile"));
-    assert!(dto.contains("files: [KajiMultipartFile]"));
+    assert!(dto.contains("file: PoolsterMultipartFile"));
+    assert!(dto.contains("files: [PoolsterMultipartFile]"));
     assert!(dto.contains("requiredHeaders: [\"X-File\"]"));
     assert!(
         tree.get("sdk/Sources/MultipartProbe/Models/UploadForm.swift")
@@ -151,7 +151,7 @@ fn wider_multipart_shapes_use_explicit_ordered_parts() {
         assert!(
             generated
                 .iter()
-                .any(|(_, source)| source.contains("public var parts: [KajiOrderedPart]"))
+                .any(|(_, source)| source.contains("public var parts: [PoolsterOrderedPart]"))
         );
     }
 }
@@ -333,7 +333,7 @@ fn native_urlsession_multipart_wire_retry_guard_and_socket_cancellation() {
 fn native_ordered_nested_multipart_applies_positional_plan() {
     let operation = Operation {
         id: "orderedUpload".into(),
-        method: kaji_core::HttpMethod::Put,
+        method: poolster_core::HttpMethod::Put,
         path: "/upload".into(),
         request_body: Some(OperationRequestBody {
             required: true,
@@ -346,14 +346,14 @@ fn native_ordered_nested_multipart_applies_positional_plan() {
             }],
         }),
         annotations: std::collections::BTreeMap::from([(
-            "kaji.request_content".into(),
+            "poolster.request_content".into(),
             json!([{"content_type":"multipart/mixed","prefix_encoding":[{"contentType":"text/plain","headers":{"Content-ID":{"required":true}}},{"contentType":"multipart/mixed","prefixEncoding":[{"contentType":"application/json"}],"itemEncoding":{"contentType":"image/png"}}],"item_encoding":{"contentType":"application/octet-stream"}}]),
         )]),
         ..Default::default()
     };
     let download = Operation {
         id: "download".into(),
-        method: kaji_core::HttpMethod::Get,
+        method: poolster_core::HttpMethod::Get,
         path: "/incoming".into(),
         responses: vec![OperationResponse {
             status: "200".into(),
@@ -377,24 +377,24 @@ fn native_ordered_nested_multipart_applies_positional_plan() {
     let directory = tempfile::tempdir().unwrap();
     tree.write_to(directory.path()).unwrap();
     std::fs::write(directory.path().join("Probe.swift"),r#"import Foundation
-actor ResponseTransport: KajiTransport {
+actor ResponseTransport: PoolsterTransport {
  func execute(_ request:URLRequest) async throws -> (Data,URLResponse) {(Data([0xff,0,13,10]),HTTPURLResponse(url:request.url!,statusCode:200,httpVersion:nil,headerFields:["Content-Type":"multipart/mixed; boundary=test"])!)}
 }
 @main struct Probe {
  static func main() async throws {
-  let client=KajiClient(options:KajiClientOptions(baseURL:URL(string:"https://example.test")!),transport:ResponseTransport())
+  let client=PoolsterClient(options:PoolsterClientOptions(baseURL:URL(string:"https://example.test")!),transport:ResponseTransport())
   let received:Data=try await client.download();guard received == Data([0xff,0,13,10]) else {fatalError("MIME response bytes changed")}
   let facade:Data=try await client.incoming.download();guard facade == received else {fatalError("facade response differs")}
-  let parts:[KajiOrderedPart] = [.init(.text("hello"), headers:["Content-ID":"first"]), .init(.nested([.init(.json(.object(["zero":.integer(0),"flag":.bool(false),"nil":.null]))),.init(.bytes(Data([0xff,0])))])),.init(.bytes(Data([0]))) ]
+  let parts:[PoolsterOrderedPart] = [.init(.text("hello"), headers:["Content-ID":"first"]), .init(.nested([.init(.json(.object(["zero":.integer(0),"flag":.bool(false),"nil":.null]))),.init(.bytes(Data([0xff,0])))])),.init(.bytes(Data([0]))) ]
   let body=OrderedUploadMultipartBody(parts:parts)
-  let encoded=try body.kajiEncoded()
+  let encoded=try body.poolsterEncoded()
   guard encoded.contentType.hasPrefix("multipart/mixed; boundary="),encoded.body.range(of:Data([0xff,0])) != nil else {fatalError("subtype or bytes lost")}
   let readable=String(decoding:encoded.body,as:UTF8.self)
   guard readable.contains("Content-ID: first"),readable.contains("Content-Type: image/png"),readable.contains("Content-Type: application/json"),readable.contains("Content-Type: application/octet-stream"),readable.contains("\"nil\":null"),!readable.contains("name=\"\"") else {fatalError(readable)}
   let first=readable.range(of:"hello")!,nested=readable.range(of:"Content-Type: multipart/mixed;")!;guard first.lowerBound<nested.lowerBound else {fatalError("part order changed")}
-  do {_ = try OrderedUploadMultipartBody(parts:[.init(.text("no header"))]).kajiEncoded();fatalError("required part header ignored")}catch KajiMultipartError.missingHeader("Content-ID") {}
-  do {_ = try OrderedUploadMultipartBody(parts:parts,maximumBodyBytes:8).kajiEncoded();fatalError("limit ignored")}catch KajiMultipartError.bodyTooLarge {}
-  let cancelled=Task {try Task.checkCancellation();return try body.kajiEncoded()};cancelled.cancel();do {_ = try await cancelled.value;fatalError("cancellation ignored")}catch is CancellationError {}
+  do {_ = try OrderedUploadMultipartBody(parts:[.init(.text("no header"))]).poolsterEncoded();fatalError("required part header ignored")}catch PoolsterMultipartError.missingHeader("Content-ID") {}
+  do {_ = try OrderedUploadMultipartBody(parts:parts,maximumBodyBytes:8).poolsterEncoded();fatalError("limit ignored")}catch PoolsterMultipartError.bodyTooLarge {}
+  let cancelled=Task {try Task.checkCancellation();return try body.poolsterEncoded()};cancelled.cancel();do {_ = try await cancelled.value;fatalError("cancellation ignored")}catch is CancellationError {}
  }
 }
 "#).unwrap();

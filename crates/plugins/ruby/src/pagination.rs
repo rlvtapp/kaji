@@ -1,6 +1,6 @@
 //! Declared page-number pagination using the neutral validated plan.
 use super::*;
-use kaji_core::pagination::{PaginationPlan, normalize_pagination};
+use poolster_core::pagination::{PaginationPlan, normalize_pagination};
 pub(crate) fn plan(api: &Api, op: &Operation) -> anyhow::Result<Option<PaginationPlan>> {
     let Some(raw) = op
         .annotations
@@ -54,7 +54,7 @@ pub(crate) fn render(api: &Api, op: &Operation) -> Option<String> {
     let page_arg = ruby_pagination_argument(op, page);
     let state = if page.location == "requestBody" {
         format!(
-            "      kaji_page = kaji_json_path(body, {})\n      kaji_page = 1 if kaji_page.nil?\n      kaji_body = kaji_with_body_value(body, {}, kaji_page)\n",
+            "      poolster_page = poolster_json_path(body, {})\n      poolster_page = 1 if poolster_page.nil?\n      poolster_body = poolster_with_body_value(body, {}, poolster_page)\n",
             ruby_string(&format!(
                 "/{}",
                 page.name.replace('~', "~0").replace('/', "~1")
@@ -62,7 +62,7 @@ pub(crate) fn render(api: &Api, op: &Operation) -> Option<String> {
             ruby_string(&page.name)
         )
     } else {
-        format!("      kaji_page = {page_arg}.nil? ? 1 : {page_arg}\n")
+        format!("      poolster_page = {page_arg}.nil? ? 1 : {page_arg}\n")
     };
     let mut forwarded = op
         .parameters
@@ -75,7 +75,7 @@ pub(crate) fn render(api: &Api, op: &Operation) -> Option<String> {
                     && p.name == page.name
                     && p.location == page.location
                 {
-                    "kaji_page"
+                    "poolster_page"
                 } else {
                     &id
                 }
@@ -85,7 +85,7 @@ pub(crate) fn render(api: &Api, op: &Operation) -> Option<String> {
     if op.request_body.is_some() {
         forwarded.push(
             if page.location == "requestBody" {
-                "body: kaji_body"
+                "body: poolster_body"
             } else {
                 "body: body"
             }
@@ -97,7 +97,7 @@ pub(crate) fn render(api: &Api, op: &Operation) -> Option<String> {
         .map(|input| {
             if input.location == "requestBody" {
                 format!(
-                    "kaji_json_path(kaji_body, {})",
+                    "poolster_json_path(poolster_body, {})",
                     ruby_string(&format!(
                         "/{}",
                         input.name.replace('~', "~0").replace('/', "~1")
@@ -110,14 +110,14 @@ pub(crate) fn render(api: &Api, op: &Operation) -> Option<String> {
         .unwrap_or("nil".into());
     let update = if page.location == "requestBody" {
         format!(
-            "        kaji_body = kaji_with_body_value(kaji_body, {}, kaji_page)\n",
+            "        poolster_body = poolster_with_body_value(poolster_body, {}, poolster_page)\n",
             ruby_string(&page.name)
         )
     } else {
         String::new()
     };
     Some(format!(
-        "    def {name}_pages({signature})\n      return Enumerator.new {{ |output| {name}_pages({original}) {{ |value| output << value }} }} unless block_given?\n{state}      raise ArgumentError, 'page must be a nonnegative integer' unless kaji_page.is_a?(Integer) && kaji_page >= 0\n      10_000.times do\n        response = {name}({forwarded})\n        items = kaji_json_path(response, {selector})\n        raise TypeError, 'pagination results must be an array' unless items.is_a?(Array)\n        yield response\n        kaji_limit = {limit}\n        return if items.empty? || (kaji_limit.is_a?(Integer) && kaji_limit > 0 && items.length < kaji_limit)\n        kaji_page += 1\n{update}      end\n      raise RuntimeError, 'pagination exceeded 10000 pages'\n    end\n\n",
+        "    def {name}_pages({signature})\n      return Enumerator.new {{ |output| {name}_pages({original}) {{ |value| output << value }} }} unless block_given?\n{state}      raise ArgumentError, 'page must be a nonnegative integer' unless poolster_page.is_a?(Integer) && poolster_page >= 0\n      10_000.times do\n        response = {name}({forwarded})\n        items = poolster_json_path(response, {selector})\n        raise TypeError, 'pagination results must be an array' unless items.is_a?(Array)\n        yield response\n        poolster_limit = {limit}\n        return if items.empty? || (poolster_limit.is_a?(Integer) && poolster_limit > 0 && items.length < poolster_limit)\n        poolster_page += 1\n{update}      end\n      raise RuntimeError, 'pagination exceeded 10000 pages'\n    end\n\n",
         signature = args.join(", "),
         original = op
             .parameters
@@ -134,7 +134,7 @@ pub(crate) fn render(api: &Api, op: &Operation) -> Option<String> {
         selector = ruby_string(selector)
     ))
 }
-pub(crate) const HELPERS: &str = r#"    def kaji_json_path(value, path)
+pub(crate) const HELPERS: &str = r#"    def poolster_json_path(value, path)
       current = value
       if path.start_with?('/')
         return nil if path.match?(/~(?![01])/)
@@ -168,7 +168,7 @@ pub(crate) const HELPERS: &str = r#"    def kaji_json_path(value, path)
       current
     end
 
-    def kaji_with_body_value(body, key, value)
+    def poolster_with_body_value(body, key, value)
       data = body.is_a?(Hash) ? body : body.to_h
       raise TypeError, 'body pagination requires an object JSON body' unless data.is_a?(Hash)
       copy = data.each_with_object({}) { |(key, item), result| result[key.to_s] = item }
@@ -181,7 +181,7 @@ pub(crate) const HELPERS: &str = r#"    def kaji_json_path(value, path)
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kaji_core::{
+    use poolster_core::{
         Field, HttpMethod, OperationParameter, OperationRequestBody, OperationResponse,
     };
     fn fixture(body: bool) -> Api {
@@ -294,10 +294,10 @@ seen.clear;raise unless client.items.list_items_pages(page:0,limit:2).to_a.lengt
 [true,-1,1.5].each do |bad|
  begin;client.list_items_pages(page:bad).to_a;raise 'bad page accepted';rescue ArgumentError;end
 end
-raise unless client.send(:kaji_json_path,[{'items'=>[1,2]}],'$[0].items[-1]')==2
-raise unless client.send(:kaji_json_path,{'a/b'=>{'~items'=>[1]}},'/a~1b/~0items/0')==1
-raise unless client.send(:kaji_json_path,[1,2],'$.items').nil?
-raise unless client.send(:kaji_json_path,[1,2],'/-1').nil? && client.send(:kaji_json_path,[1,2],'/01').nil?
+raise unless client.send(:poolster_json_path,[{'items'=>[1,2]}],'$[0].items[-1]')==2
+raise unless client.send(:poolster_json_path,{'a/b'=>{'~items'=>[1]}},'/a~1b/~0items/0')==1
+raise unless client.send(:poolster_json_path,[1,2],'$.items').nil?
+raise unless client.send(:poolster_json_path,[1,2],'/-1').nil? && client.send(:poolster_json_path,[1,2],'/01').nil?
 "#;
         let body = r#"require 'paging_sdk'
 require 'json'
@@ -340,7 +340,7 @@ raise unless !model.to_h.key?('page') && seen.map{|entry|entry[0]['page']}==[1,2
             .unwrap()["type"] = serde_json::json!("cursor");
         let tree = render_sdk(&api, "ruby", Some("paging-sdk"), SdkClientStyle::Flat).unwrap();
         assert!(
-            tree.get("ruby/.kaji/pagination-diagnostics.json")
+            tree.get("ruby/.poolster/pagination-diagnostics.json")
                 .unwrap()
                 .contains("supports declared page")
         );

@@ -5,7 +5,8 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub const RESOLVED_ANNOTATION: &str = "x-kaji-idempotency-resolved";
+pub const RESOLVED_ANNOTATION: &str = "x-poolster-idempotency-resolved";
+const LEGACY_RESOLVED_ANNOTATION: &str = "x-kaji-idempotency-resolved";
 fn enabled() -> bool {
     true
 }
@@ -48,7 +49,11 @@ pub struct ResolvedIdempotency {
 }
 /// Read generator-resolved metadata. Call this on the API supplied by a package.
 pub fn resolved(operation: &crate::Operation) -> Option<ResolvedIdempotency> {
-    serde_json::from_value(operation.annotations.get(RESOLVED_ANNOTATION)?.clone()).ok()
+    let value = operation
+        .annotations
+        .get(RESOLVED_ANNOTATION)
+        .or_else(|| operation.annotations.get(LEGACY_RESOLVED_ANNOTATION))?;
+    serde_json::from_value(value.clone()).ok()
 }
 
 fn valid_header(value: &str) -> bool {
@@ -75,9 +80,11 @@ pub fn prepare_api(api: &Api, config: &IdempotencyConfig) -> Result<Api> {
     let mut prepared = api.clone();
     for operation in &mut prepared.operations {
         operation.annotations.remove(RESOLVED_ANNOTATION);
+        operation.annotations.remove(LEGACY_RESOLVED_ANNOTATION);
         let extension = operation
             .annotations
-            .get("x-kaji-idempotency")
+            .get("x-poolster-idempotency")
+            .or_else(|| operation.annotations.get("x-kaji-idempotency"))
             .filter(|_| !config.operations.contains_key(&operation.id) && config.defaults.is_none())
             .map(|value| match value {
                 serde_json::Value::Bool(value) => Ok(IdempotencyRule {
@@ -199,14 +206,17 @@ pub fn prepare_api(api: &Api, config: &IdempotencyConfig) -> Result<Api> {
             });
             rule.header.clone()
         };
-        operation.annotations.insert(
-            RESOLVED_ANNOTATION.into(),
-            serde_json::to_value(ResolvedIdempotency {
-                header: name.clone(),
-                parameter_name: name,
-                auto_generate: rule.auto_generate,
-            })?,
-        );
+        let resolved = serde_json::to_value(ResolvedIdempotency {
+            header: name.clone(),
+            parameter_name: name,
+            auto_generate: rule.auto_generate,
+        })?;
+        operation
+            .annotations
+            .insert(RESOLVED_ANNOTATION.into(), resolved.clone());
+        operation
+            .annotations
+            .insert(LEGACY_RESOLVED_ANNOTATION.into(), resolved);
     }
     Ok(prepared)
 }
@@ -250,6 +260,17 @@ mod tests {
                 .unwrap()
         );
         assert!(source.operations[0].parameters.is_empty());
+        let mut canonical = api();
+        canonical.operations[0].annotations.insert(
+            "x-poolster-idempotency".into(),
+            serde_json::json!({"auto_generate":true}),
+        );
+        let canonical = prepare_api(&canonical, &Default::default()).unwrap();
+        assert!(resolved(&canonical.operations[0]).unwrap().auto_generate);
+        assert_eq!(
+            canonical.operations[0].annotations[LEGACY_RESOLVED_ANNOTATION],
+            canonical.operations[0].annotations[RESOLVED_ANNOTATION]
+        );
         let config = IdempotencyConfig {
             defaults: Some(IdempotencyRule {
                 enabled: false,

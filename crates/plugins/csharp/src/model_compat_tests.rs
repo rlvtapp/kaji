@@ -1,5 +1,5 @@
 use super::*;
-use kaji_core::engine::Packages;
+use poolster_core::engine::Packages;
 fn api() -> Api {
     let mut enumeration = SchemaValue::new(SchemaKind::String);
     enumeration.enum_values = vec![serde_json::json!("known-value")];
@@ -21,9 +21,9 @@ fn api() -> Api {
         ],
         operations: vec![Operation {
             id: "sequence".into(),
-            method: kaji_core::HttpMethod::Post,
+            method: poolster_core::HttpMethod::Post,
             path: "/sequence".into(),
-            parameters: vec![kaji_core::OperationParameter {
+            parameters: vec![poolster_core::OperationParameter {
                 name: "whole_query".into(),
                 location: "querystring".into(),
                 required: true,
@@ -34,9 +34,9 @@ fn api() -> Api {
                 description: None,
                 annotations: Default::default(),
             }],
-            request_body: Some(kaji_core::OperationRequestBody {
+            request_body: Some(poolster_core::OperationRequestBody {
                 required: true,
-                media_types: vec![kaji_core::OperationMediaType {
+                media_types: vec![poolster_core::OperationMediaType {
                     content_type: "application/x-ndjson".into(),
                     schema: Some(SchemaValue::new(SchemaKind::Array {
                         items: Box::new(SchemaValue::new(SchemaKind::Any)),
@@ -44,9 +44,9 @@ fn api() -> Api {
                 }],
                 description: None,
             }),
-            responses: vec![kaji_core::OperationResponse {
+            responses: vec![poolster_core::OperationResponse {
                 status: "200".into(),
-                media_types: vec![kaji_core::OperationMediaType {
+                media_types: vec![poolster_core::OperationMediaType {
                     content_type: "application/x-ndjson".into(),
                     schema: Some(SchemaValue::new(SchemaKind::Array {
                         items: Box::new(SchemaValue::new(SchemaKind::Any)),
@@ -60,12 +60,12 @@ fn api() -> Api {
     };
     let mut ordered = Operation {
         id: "ordered".into(),
-        method: kaji_core::HttpMethod::Post,
+        method: poolster_core::HttpMethod::Post,
         path: "/ordered".into(),
-        request_body: Some(kaji_core::OperationRequestBody {
+        request_body: Some(poolster_core::OperationRequestBody {
             required: true,
             description: None,
-            media_types: vec![kaji_core::OperationMediaType {
+            media_types: vec![poolster_core::OperationMediaType {
                 content_type: "multipart/mixed".into(),
                 schema: Some(SchemaValue::new(SchemaKind::Array {
                     items: Box::new(SchemaValue::new(SchemaKind::Any)),
@@ -74,11 +74,11 @@ fn api() -> Api {
         }),
         ..Default::default()
     };
-    ordered.annotations.insert("kaji.request_content".into(),serde_json::json!([{"content_type":"multipart/mixed","prefix_encoding":[{"contentType":"application/json","headers":{"X-Part":{"required":true,"example_json":"\"v1\""}}},{"contentType":"multipart/mixed","prefixEncoding":[{"contentType":"text/plain","headers":{"X-Child":{"required":true,"example_json":"\"child\""}}}]}],"item_encoding":{"contentType":"application/octet-stream"}}]));
+    ordered.annotations.insert("poolster.request_content".into(),serde_json::json!([{"content_type":"multipart/mixed","prefix_encoding":[{"contentType":"application/json","headers":{"X-Part":{"required":true,"example_json":"\"v1\""}}},{"contentType":"multipart/mixed","prefixEncoding":[{"contentType":"text/plain","headers":{"X-Child":{"required":true,"example_json":"\"child\""}}}]}],"item_encoding":{"contentType":"application/octet-stream"}}]));
     api.operations.push(ordered);
     let mut params = Operation {
         id: "jsonParameters".into(),
-        method: kaji_core::HttpMethod::Get,
+        method: poolster_core::HttpMethod::Get,
         path: "/params/{path}".into(),
         ..Default::default()
     };
@@ -88,7 +88,7 @@ fn api() -> Api {
         ("x-json", "header"),
         ("cookie", "cookie"),
     ] {
-        let mut parameter = kaji_core::OperationParameter {
+        let mut parameter = poolster_core::OperationParameter {
             name: name.into(),
             location: location.into(),
             required: true,
@@ -100,7 +100,7 @@ fn api() -> Api {
             description: None,
             annotations: Default::default(),
         };
-        parameter.annotations.insert("kaji.parameter_content".into(),serde_json::json!([{"content_type":"application/json","schema_definition":{"type":"string"}}]));
+        parameter.annotations.insert("poolster.parameter_content".into(),serde_json::json!([{"content_type":"application/json","schema_definition":{"type":"string"}}]));
         params.parameters.push(parameter);
     }
     api.operations.push(params);
@@ -111,7 +111,7 @@ fn transparent_aliases_and_opt_in_enum_values_keep_wire_representation() {
     let tree = Packages::new()
         .package(
             crate::package("sdk")
-                .name("Kaji.Compat")
+                .name("Poolster.Compat")
                 .with(crate::sdk().open_enums(true)),
         )
         .generate(&api(), None)
@@ -143,7 +143,7 @@ fn native_models_preserve_alias_union_and_unknown_enum_wire_values() {
     let tree = Packages::new()
         .package(
             crate::package("sdk")
-                .name("Kaji.Compat")
+                .name("Poolster.Compat")
                 .with(crate::sdk().open_enums(true))
                 .with(crate::operation_tests()),
         )
@@ -152,12 +152,12 @@ fn native_models_preserve_alias_union_and_unknown_enum_wire_values() {
     let dir = tempfile::tempdir().unwrap();
     tree.write_to(dir.path()).unwrap();
     std::fs::write(dir.path().join("sdk/tests/OperationTests/Program.cs"), r#"using System.Text.Json;
-using Kaji.KajiCompat;
+using Poolster.PoolsterCompat;
 class Probe {
  static void Main() {
-  var normalize=typeof(KajiClient).GetMethod("NormalizeSequentialJson",System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.NonPublic)!;
-  var encode=typeof(KajiClient).GetMethod("EncodeSequentialJson",System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.NonPublic)!.MakeGenericMethod(typeof(JsonElement));
-  var validate=typeof(KajiClient).GetMethod("ValidateWholeQuery",System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.NonPublic)!;
+  var normalize=typeof(PoolsterClient).GetMethod("NormalizeSequentialJson",System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.NonPublic)!;
+  var encode=typeof(PoolsterClient).GetMethod("EncodeSequentialJson",System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.NonPublic)!.MakeGenericMethod(typeof(JsonElement));
+  var validate=typeof(PoolsterClient).GetMethod("ValidateWholeQuery",System.Reflection.BindingFlags.Static|System.Reflection.BindingFlags.NonPublic)!;
   var records=JsonSerializer.Deserialize<JsonElement>("[false,0,null,{\"future\":\"雪\"}]");
   foreach(var media in new[]{"application/x-ndjson","application/json-seq"}) {
    using var content=(HttpContent)encode.Invoke(null,new object[]{records,media})!;
@@ -166,7 +166,7 @@ class Probe {
    if(JsonSerializer.Serialize(JsonSerializer.Deserialize<JsonElement>(roundtrip))!=JsonSerializer.Serialize(records))throw new Exception("sequence roundtrip");
   }
   foreach(var invalid in new[]{"missing separator","\u001e\u001e0","\u001e0 trailing"}) {try{normalize.Invoke(null,new object[]{invalid,"application/json-seq"});throw new Exception("accepted invalid sequence");}catch(System.Reflection.TargetInvocationException){}}
-  using var driver=new SequenceDriver();using var http=new HttpClient(driver);var client=new KajiClient(http,new KajiClientOptions{BaseUrl="https://example.test"});
+  using var driver=new SequenceDriver();using var http=new HttpClient(driver);var client=new PoolsterClient(http,new PoolsterClientOptions{BaseUrl="https://example.test"});
   var ordered=new OrderedMultipartBody{Parts=new OrderedMultipartPart[]{OrderedMultipartPart.Json("metadata",new{future="雪"}),new(){Name="nested",ContentType="multipart/mixed",Nested=new OrderedMultipartPart[]{new(){Name="child",Bytes=System.Text.Encoding.UTF8.GetBytes("false"),ContentType="text/plain"}}},new(){Name="file",Bytes=new byte[]{0,255},ContentType="application/octet-stream"}}};
   client.JsonParametersAsync("hello world","query","header","cookie").GetAwaiter().GetResult();
   client.JsonParametersAsync(null,null,null,null).GetAwaiter().GetResult();

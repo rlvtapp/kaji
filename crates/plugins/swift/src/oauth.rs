@@ -1,5 +1,5 @@
 use super::*;
-use kaji_core::engine::{Meta, Plugin, PluginContext};
+use poolster_core::engine::{Meta, Plugin, PluginContext};
 pub struct OAuth {
     meta: Meta,
 }
@@ -38,7 +38,7 @@ mod tests {
             name: "Probe".into(),
             ..Default::default()
         };
-        let tree = kaji_core::engine::Packages::new()
+        let tree = poolster_core::engine::Packages::new()
             .package(crate::package("sdk").with(crate::sdk()).with(oauth()))
             .generate(&api, None)
             .unwrap();

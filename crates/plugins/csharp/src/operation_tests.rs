@@ -1,6 +1,6 @@
 //! Independent generated buffered-operation smoke tests; never contact an API.
 use super::*;
-use kaji_core::engine::{Handle, Meta, Plugin, PluginContext, Requirement};
+use poolster_core::engine::{Handle, Meta, Plugin, PluginContext, Requirement};
 use serde_json::{Value, json};
 pub struct OperationTests {
     meta: Meta,
@@ -72,7 +72,7 @@ fn render(api: &Api, sdk: &NativeSdk, bound: usize) -> Result<(String, Value)> {
                     ));
                 }
                 code += &format!(
-                    "        {{ var driver=new Driver({}); using var http=new HttpClient(driver); var client=new KajiClient(http,new KajiClientOptions {{ BaseUrl=\"https://kaji-test.invalid\" }}); var result=await client.{}Async({}); AssertResult(driver,result); }}\n",
+                    "        {{ var driver=new Driver({}); using var http=new HttpClient(driver); var client=new PoolsterClient(http,new PoolsterClientOptions {{ BaseUrl=\"https://kaji-test.invalid\" }}); var result=await client.{}Async({}); AssertResult(driver,result); }}\n",
                     serde_json::to_string(&fixture_json)?,
                     pascal_case(&operation.id),
                     args.join(",")
@@ -142,8 +142,8 @@ pub(crate) fn finalize(tree: &mut GeneratedTree) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kaji_core::engine::Packages;
-    use kaji_core::{
+    use poolster_core::engine::Packages;
+    use poolster_core::{
         AdditionalProperties, Field, HttpMethod, OperationMediaType, OperationParameter,
         OperationRequestBody, OperationResponse,
     };
@@ -240,7 +240,7 @@ mod tests {
         Packages::new()
             .package(
                 crate::package("sdk")
-                    .name("Kaji.OperationTest")
+                    .name("Poolster.OperationTest")
                     .with(operation_tests().sdk_from(&sdk))
                     .with(sdk),
             )
@@ -261,7 +261,7 @@ mod tests {
         assert!(source.contains("client.EchoContactAsync("));
         assert!(source.contains("ReadAsStringAsync(token)"));
         assert!(
-            tree.get("sdk/KajiOperationTest.csproj")
+            tree.get("sdk/PoolsterOperationTest.csproj")
                 .unwrap()
                 .contains("Compile Remove=\"tests/**/*.cs\"")
         );

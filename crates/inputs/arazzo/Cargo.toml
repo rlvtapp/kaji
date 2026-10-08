@@ -1,5 +1,5 @@
 [package]
-name = "kaji-input-arazzo"
+name = "poolster-input-arazzo"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,7 +9,7 @@ description = "Native arazzo input provider for Kaji"
 publish = false
 
 [dependencies]
-kaji-core = { path = "../../kaji-core" }
+poolster-core = { path = "../../kaji-core" }
 anyhow = "1.0.102"
 roas-arazzo = { version = "=0.3.0", default-features = false, features = ["v1_0", "v1_1"] }
 serde_json = "1.0.138"

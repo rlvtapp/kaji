@@ -1,6 +1,6 @@
 use anyhow::Result;
-use kaji_core::engine::*;
-use kaji_core::{Api, GeneratedFile, SdkClientStyle};
+use poolster_core::engine::*;
+use poolster_core::{Api, GeneratedFile, SdkClientStyle};
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
@@ -95,7 +95,7 @@ impl Plugin<TestLanguage> for Consumer {
         cx.files.emit(GeneratedFile::new(self.file, value)?)
     }
 }
-fn run(package: Package<TestLanguage>) -> Result<kaji_core::GeneratedTree> {
+fn run(package: Package<TestLanguage>) -> Result<poolster_core::GeneratedTree> {
     Packages::new()
         .package(package)
         .generate(&Api::default(), None)
@@ -501,7 +501,7 @@ fn post_plugin_output_conflicts_keep_original_owners() {
 
 #[test]
 fn author_code_customization_runs_after_language_finalization() {
-    use kaji_core::customization::CodeCustomization;
+    use poolster_core::customization::CodeCustomization;
     let tree = run(Package::new("sdk")
         .with(Producer::new("generated"))
         .customize(CodeCustomization::Replace {
@@ -519,7 +519,7 @@ fn author_code_customization_runs_after_language_finalization() {
 
 #[test]
 fn invalid_bundled_middleware_is_validated_before_plugins_execute() {
-    use kaji_core::customization::BundledMiddleware;
+    use poolster_core::customization::BundledMiddleware;
     let producer = Producer::new("unused");
     let runs = producer.runs.clone();
     let entry = BundledMiddleware {

@@ -1,12 +1,12 @@
 use crate::Rust;
 use anyhow::Result;
-use kaji_core::{
+use poolster_core::{
     GeneratedFile,
     engine::{Meta, Plugin, PluginContext, Requirement},
 };
 pub struct OAuth {
     meta: Meta,
-    transport: Option<kaji_core::engine::Handle<crate::composition::Transport>>,
+    transport: Option<poolster_core::engine::Handle<crate::composition::Transport>>,
 }
 pub fn oauth() -> OAuth {
     OAuth {
@@ -17,7 +17,7 @@ pub fn oauth() -> OAuth {
 impl OAuth {
     pub fn using_transport(
         mut self,
-        transport: kaji_core::engine::Handle<crate::composition::Transport>,
+        transport: poolster_core::engine::Handle<crate::composition::Transport>,
     ) -> Self {
         self.transport = Some(transport);
         self
@@ -52,23 +52,23 @@ mod tests {
     #[test]
     #[ignore = "requires cached generated Cargo dependencies"]
     fn native_oauth_singleflight_replay_and_dropped_refresh_are_safe() {
-        let api = kaji_core::Api {
+        let api = poolster_core::Api {
             name: "OAuth".into(),
             operations: vec![
-                kaji_core::Operation {
+                poolster_core::Operation {
                     id: "getThing".into(),
-                    method: kaji_core::HttpMethod::Get,
+                    method: poolster_core::HttpMethod::Get,
                     path: "/thing".into(),
-                    security: vec![kaji_core::SecurityRequirement {
+                    security: vec![poolster_core::SecurityRequirement {
                         schemes: [("oauth".into(), Vec::new())].into_iter().collect(),
                     }],
                     ..Default::default()
                 },
-                kaji_core::Operation {
+                poolster_core::Operation {
                     id: "unsafeThing".into(),
-                    method: kaji_core::HttpMethod::Post,
+                    method: poolster_core::HttpMethod::Post,
                     path: "/thing".into(),
-                    security: vec![kaji_core::SecurityRequirement {
+                    security: vec![poolster_core::SecurityRequirement {
                         schemes: [("oauth".into(), Vec::new())].into_iter().collect(),
                     }],
                     ..Default::default()
@@ -76,7 +76,7 @@ mod tests {
             ],
             ..Default::default()
         };
-        let tree = kaji_core::engine::Packages::new()
+        let tree = poolster_core::engine::Packages::new()
             .package(
                 crate::package("sdk")
                     .with(crate::sdk())

@@ -149,7 +149,7 @@ pub(crate) fn render_zod_registry(output: &mut String, api: &Api) {
                 schema
                     .value
                     .extensions
-                    .get("kaji.aux.schema_name")
+                    .get("poolster.aux.schema_name")
                     .and_then(Value::as_str)
                     .unwrap_or(&schema.name)
             ),
@@ -157,17 +157,17 @@ pub(crate) fn render_zod_registry(output: &mut String, api: &Api) {
         );
     }
     output.push_str("} as const;\n\n");
-    output.push_str("export type KajiSchemaName = keyof typeof kajiSchemas;\n");
-    output.push_str("export type KajiSchema = (typeof kajiSchemas)[KajiSchemaName];\n");
+    output.push_str("export type PoolsterSchemaName = keyof typeof kajiSchemas;\n");
+    output.push_str("export type PoolsterSchema = (typeof kajiSchemas)[PoolsterSchemaName];\n");
     output.push_str(
-        "export const getKajiSchema = <Name extends KajiSchemaName>(name: Name): (typeof kajiSchemas)[Name] => kajiSchemas[name];\n\n",
+        "export const getPoolsterSchema = <Name extends PoolsterSchemaName>(name: Name): (typeof kajiSchemas)[Name] => kajiSchemas[name];\n\n",
     );
 
     render_zod_operation_registry(output, api, "kajiOperationSchemas");
-    output.push_str("export type KajiOperationId = keyof typeof kajiOperationSchemas;\n");
-    output.push_str("export type KajiOperationSchemas = typeof kajiOperationSchemas;\n");
+    output.push_str("export type PoolsterOperationId = keyof typeof kajiOperationSchemas;\n");
+    output.push_str("export type PoolsterOperationSchemas = typeof kajiOperationSchemas;\n");
     output.push_str(
-        "export const getKajiOperationSchemas = <Operation extends KajiOperationId>(operation: Operation): KajiOperationSchemas[Operation] => kajiOperationSchemas[operation];\n",
+        "export const getPoolsterOperationSchemas = <Operation extends PoolsterOperationId>(operation: Operation): PoolsterOperationSchemas[Operation] => kajiOperationSchemas[operation];\n",
     );
 }
 
@@ -177,7 +177,7 @@ pub(crate) fn render_zod_operation_registry(output: &mut String, api: &Api, regi
         let name = type_identifier(&operation.id);
         let key = operation
             .annotations
-            .get("kaji.aux.operation_id")
+            .get("poolster.aux.operation_id")
             .and_then(Value::as_str)
             .unwrap_or(&operation.id);
         let _ = writeln!(output, " readonly {}: {{", js_string(key));
@@ -219,7 +219,7 @@ pub(crate) fn render_zod_operation_registry(output: &mut String, api: &Api, regi
             js_string(
                 operation
                     .annotations
-                    .get("kaji.aux.operation_id")
+                    .get("poolster.aux.operation_id")
                     .and_then(Value::as_str)
                     .unwrap_or(&operation.id)
             )

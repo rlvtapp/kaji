@@ -9,15 +9,15 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use anyhow::{Context, Result, bail, ensure};
-use kaji::ts::artifacts::{
+use poolster::ts::artifacts::{
     ArtifactOptions, McpToolManifest, ReDoc, TypeScriptCypress, TypeScriptFaker, TypeScriptMsw,
     TypeScriptReactQuery, TypeScriptSwr, TypeScriptVueQuery, TypeScriptZod,
 };
-use kaji::{
+use poolster::{
     SdkClientStyle, csharp, dotnet, elixir, go, java, mock, php, postman, prelude::*, python, ruby,
     rust, rust_cli, swift, symfony, terraform, ts, ts_cli,
 };
-use kaji_core::{Api, GeneratedFile, GeneratedTree};
+use poolster_core::{Api, GeneratedFile, GeneratedTree};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -33,33 +33,33 @@ mod sdk_doctor;
 mod sdk_install;
 mod sdk_status;
 
-const HELP: &str = "Kaji — native multi-language OpenAPI SDK generator
+const HELP: &str = "Poolster — native multi-language OpenAPI SDK generator
 
 Usage:
-  kaji migrate [project-or-config] [--input <file>] [--output <new-directory>] [--strict]
-  kaji init [--config <file>] [--input <openapi-file>] [--output <directory>]
-  kaji generate                         # reads ./kaji.json
-  kaji generate --config <file>
-  kaji generate <openapi-file> --output <directory> --language <target>...
-  kaji generate --artifacts <directory> --output <directory> --language <target>...
-  kaji mcp <openapi-file> --base-url <url>
-  kaji mcp generator
-  kaji mock serve <openapi-file> [--port <port>]
-  kaji contract plugins [--format human|json]
-  kaji contract inspect <file> --input-format <format> [--provider <id>] [--format human|json]
-  kaji check <openapi-file> [--format human|json]
-  kaji show <openapi-file> [--include-path <pattern>] [--exclude-path <pattern>]
-  kaji update [--output <directory>] [--force]
-  kaji auth <login|logout|status> ...
-  kaji discover <query> [--limit <count>] [--format human|json]
-  kaji download <api-id> --output <openapi-file> [--version <version>]
-  kaji languages
-  kaji eject --language <target> --out <source-workspace>
-  kaji sdk <init|sync|app|list|run|diff|pr|releases|connect|install|status|doctor|inspect> ...
-  kaji --version
+  poolster migrate [project-or-config] [--input <file>] [--output <new-directory>] [--strict]
+  poolster init [--config <file>] [--input <openapi-file>] [--output <directory>]
+  poolster generate                         # reads ./poolster.json
+  poolster generate --config <file>
+  poolster generate <openapi-file> --output <directory> --language <target>...
+  poolster generate --artifacts <directory> --output <directory> --language <target>...
+  poolster mcp <openapi-file> --base-url <url>
+  poolster mcp generator
+  poolster mock serve <openapi-file> [--port <port>]
+  poolster contract plugins [--format human|json]
+  poolster contract inspect <file> --input-format <format> [--provider <id>] [--format human|json]
+  poolster check <openapi-file> [--format human|json]
+  poolster show <openapi-file> [--include-path <pattern>] [--exclude-path <pattern>]
+  poolster update [--output <directory>] [--force]
+  poolster auth <login|logout|status> ...
+  poolster discover <query> [--limit <count>] [--format human|json]
+  poolster download <api-id> --output <openapi-file> [--version <version>]
+  poolster languages
+  poolster eject --language <target> --out <source-workspace>
+  poolster sdk <init|sync|app|list|run|diff|pr|releases|connect|install|status|doctor|inspect> ...
+  poolster --version
 
 Config commands:
-  init                                  Write a starter kaji.json; never overwrites it
+  init                                  Write a starter poolster.json; never overwrites it
   generate                              Read the config by default
       --config <file>                   Read a specific config file
       --color <mode>                    auto (default), always, or never
@@ -77,7 +77,7 @@ Generate options (both modes):
       --typescript-client-name <name> TypeScript client class name
       --jobs <count>                  Go emission workers (default: bounded auto)
       --artifacts <directory>         Reuse compiled OpenAPI JSON artifacts
-      --openapi-compiler <file>       Override bundled kaji-openapi executable
+      --openapi-compiler <file>       Override bundled poolster-openapi executable
       --include-path <pattern>        Generate only matching OpenAPI paths; repeatable
       --exclude-path <pattern>        Omit matching OpenAPI paths; repeatable
   -h, --help                          Show help
@@ -87,17 +87,17 @@ Targets: postman, terraform, rust, rust-cli, typescript, typescript-cli, go, pyt
 MCP commands:
   mcp                                   Serve an OpenAPI document as MCP tools over stdio
       --base-url <url>                  API origin used when a tool is called (required)
-      --openapi-compiler <file>         Override bundled kaji-openapi executable
-  mcp generator                         Serve Kaji generation controls as MCP tools over stdio
+      --openapi-compiler <file>         Override bundled poolster-openapi executable
+  mcp generator                         Serve Poolster generation controls as MCP tools over stdio
 
 Mock commands:
   mock serve                            Serve OpenAPI-derived happy-path responses without Docker
       --port <port>                     Local port (default: 4010)
-      --openapi-compiler <file>         Override bundled kaji-openapi executable
+      --openapi-compiler <file>         Override bundled poolster-openapi executable
 
 Contract commands:
   check                                 Find API-contract issues that make generated SDKs and CLIs awkward
-      --openapi-compiler <file>         Override bundled kaji-openapi executable
+      --openapi-compiler <file>         Override bundled poolster-openapi executable
       --format <format>                  human (default) or json for automation
       --severity <rule=level>            Override a rule as warning or error; repeatable
       --fail-on <level>                  error (default), warning, or none
@@ -283,7 +283,11 @@ impl Reporter {
     }
 
     fn started(&self) {
-        eprintln!("\n{} {}", self.gold("$"), self.paint("1", "kaji generate"));
+        eprintln!(
+            "\n{} {}",
+            self.gold("$"),
+            self.paint("1", "poolster generate")
+        );
         eprintln!("  {} Generation started", self.gold("◆"));
     }
 
@@ -645,7 +649,7 @@ struct OpenApiConfig {
     paths: PathSelection,
 }
 
-/// Path filters intentionally use the same small glob language as Kaji's
+/// Path filters intentionally use the same small glob language as Poolster's
 /// operation filters: `*` matches any sequence (including `/`) and `?` one
 /// Unicode scalar. Includes form an OR-set; an exclusion always wins.
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -688,7 +692,7 @@ impl SecretValue {
             Self::Environment { env: variable } => env::var(variable)
                 .with_context(|| format!("read environment variable {variable:?} for {field}")),
             Self::Profile { profile } => credentials::resolve(profile)
-                .with_context(|| format!("resolve Kaji auth profile {profile:?} for {field}")),
+                .with_context(|| format!("resolve Poolster auth profile {profile:?} for {field}")),
         }
     }
 }
@@ -715,7 +719,7 @@ struct OutputConfig {
 #[serde(deny_unknown_fields)]
 struct DefaultsConfig {
     client_style: Option<String>,
-    layout: Option<kaji_core::SourceLayout>,
+    layout: Option<poolster_core::SourceLayout>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -725,23 +729,23 @@ struct PackageConfig {
     path: String,
     name: Option<String>,
     version: Option<String>,
-    release: Option<kaji_core::release::PackageMetadata>,
+    release: Option<poolster_core::release::PackageMetadata>,
     client_style: Option<String>,
-    layout: Option<kaji_core::SourceLayout>,
+    layout: Option<poolster_core::SourceLayout>,
     #[serde(default)]
     api_reference: bool,
     #[serde(default)]
-    idempotency: kaji_core::idempotency::IdempotencyConfig,
+    idempotency: poolster_core::idempotency::IdempotencyConfig,
     #[serde(default)]
     plugins: Vec<PluginConfig>,
     #[serde(default)]
     customizations: Vec<CodeCustomizationConfig>,
     #[serde(skip)]
-    resolved_customizations: Vec<kaji_core::customization::CodeCustomization>,
+    resolved_customizations: Vec<poolster_core::customization::CodeCustomization>,
     #[serde(default)]
     middleware: Vec<BundledMiddlewareConfig>,
     #[serde(skip)]
-    resolved_middleware: Vec<kaji_core::customization::BundledMiddleware>,
+    resolved_middleware: Vec<poolster_core::customization::BundledMiddleware>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -753,9 +757,9 @@ struct BundledMiddlewareConfig {
     async_symbol: Option<String>,
 }
 impl BundledMiddlewareConfig {
-    fn load(&self, base: &Path) -> Result<kaji_core::customization::BundledMiddleware> {
+    fn load(&self, base: &Path) -> Result<poolster_core::customization::BundledMiddleware> {
         let source = config_path(base, self.source.clone());
-        let middleware = kaji_core::customization::BundledMiddleware {
+        let middleware = poolster_core::customization::BundledMiddleware {
             path: self.path.clone(),
             contents: std::fs::read_to_string(&source)
                 .with_context(|| format!("read bundled middleware source {}", source.display()))?,
@@ -785,8 +789,8 @@ enum CodeCustomizationConfig {
     },
 }
 impl CodeCustomizationConfig {
-    fn load(&self, base: &Path) -> Result<kaji_core::customization::CodeCustomization> {
-        use kaji_core::customization::CodeCustomization;
+    fn load(&self, base: &Path) -> Result<poolster_core::customization::CodeCustomization> {
+        use poolster_core::customization::CodeCustomization;
         let (path, source) = match self {
             Self::Add { path, source }
             | Self::Replace { path, source }
@@ -833,12 +837,12 @@ struct PluginConfig {
     group_by_tag: Option<bool>,
     split_by_group: Option<bool>,
     max_operations_per_file: Option<usize>,
-    layout: Option<kaji_core::SourceLayout>,
+    layout: Option<poolster_core::SourceLayout>,
     include_operations: Option<Vec<String>>,
     operation_kinds: Option<BTreeMap<String, String>>,
     operation_names: Option<BTreeMap<String, String>>,
-    fixture_options: Option<kaji::ts::FixtureOptions>,
-    cypress_options: Option<kaji::ts::CypressOptions>,
+    fixture_options: Option<poolster::ts::FixtureOptions>,
+    cypress_options: Option<poolster::ts::CypressOptions>,
     max_file_bytes: Option<usize>,
     throw_on_error: Option<bool>,
     jobs: Option<usize>,
@@ -1008,7 +1012,7 @@ fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Action> {
         return Ok(Action::Languages);
     }
     if command != "generate" {
-        bail!("unknown command {:?}; run kaji --help", command)
+        bail!("unknown command {:?}; run poolster --help", command)
     }
     let mut options = Generate {
         source: None,
@@ -1085,7 +1089,7 @@ fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Action> {
                 | "--config"
                 | "--color"
         ) {
-            bail!("unknown option {flag}; run kaji --help")
+            bail!("unknown option {flag}; run poolster --help")
         }
         let value = args
             .next()
@@ -1112,7 +1116,7 @@ fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Action> {
                             };
                             for target in targets {
                                 if !LANGUAGES.contains(target) {
-                                    bail!("unknown target {target:?}; run kaji languages")
+                                    bail!("unknown target {target:?}; run poolster languages")
                                 }
                                 if !options.languages.iter().any(|existing| existing == target) {
                                     options.languages.push((*target).into());
@@ -1170,9 +1174,7 @@ fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Action> {
         if direct_mode {
             bail!("--config cannot be combined with direct generation options")
         }
-        options
-            .config
-            .get_or_insert_with(|| PathBuf::from("kaji.json"));
+        options.config.get_or_insert_with(default_config_path);
         return Ok(Action::Generate(Box::new(options)));
     }
     if options.output.as_os_str().is_empty() {
@@ -1230,7 +1232,7 @@ fn parse_discover(args: impl IntoIterator<Item = OsString>) -> Result<Action> {
                     value => bail!("--format must be human or json, got {value:?}"),
                 }
             }
-            value if value.starts_with('-') => bail!("unknown option {value}; run kaji --help"),
+            value if value.starts_with('-') => bail!("unknown option {value}; run poolster --help"),
             _ => {
                 if query
                     .replace(
@@ -1276,7 +1278,7 @@ fn parse_download(args: impl IntoIterator<Item = OsString>) -> Result<Action> {
             "--output" | "-o" => {
                 output = Some(args.next().context("--output requires a file path")?.into());
             }
-            value if value.starts_with('-') => bail!("unknown option {value}; run kaji --help"),
+            value if value.starts_with('-') => bail!("unknown option {value}; run poolster --help"),
             _ => {
                 if id
                     .replace(
@@ -1351,7 +1353,7 @@ fn parse_show(args: impl IntoIterator<Item = OsString>) -> Result<Action> {
                 }
             }
             "--json" => format = ShowFormat::Json,
-            value => bail!("unknown show option {value}; run kaji --help"),
+            value => bail!("unknown show option {value}; run poolster --help"),
         }
     }
     validate_path_selection(&paths)?;
@@ -1375,7 +1377,7 @@ fn parse_update(args: impl IntoIterator<Item = OsString>) -> Result<Action> {
             }
             "--force" => force = true,
             value if value.starts_with('-') => {
-                bail!("unknown update option {value}; run kaji --help")
+                bail!("unknown update option {value}; run poolster --help")
             }
             _ => bail!("update accepts only --output and --force"),
         }
@@ -1520,7 +1522,7 @@ fn parse_check(args: impl IntoIterator<Item = OsString>) -> Result<Action> {
                 }
                 ignored_rules.insert(rule);
             }
-            _ => bail!("unknown check option {flag}; run kaji --help"),
+            _ => bail!("unknown check option {flag}; run poolster --help"),
         }
     }
     Ok(Action::Check(Check {
@@ -1556,7 +1558,7 @@ fn parse_mcp(args: impl IntoIterator<Item = OsString>) -> Result<Action> {
             continue;
         }
         if !matches!(flag.as_ref(), "--base-url" | "--openapi-compiler") {
-            bail!("unknown mcp option {flag}; run kaji --help")
+            bail!("unknown mcp option {flag}; run poolster --help")
         }
         let value = args
             .next()
@@ -1587,10 +1589,10 @@ fn parse_mcp(args: impl IntoIterator<Item = OsString>) -> Result<Action> {
 fn parse_mock(args: impl IntoIterator<Item = OsString>) -> Result<Action> {
     let mut args = args.into_iter();
     let Some(command) = args.next() else {
-        bail!("mock requires a subcommand; use kaji mock serve --help")
+        bail!("mock requires a subcommand; use poolster mock serve --help")
     };
     if command != "serve" {
-        bail!("unknown mock subcommand {command:?}; use kaji mock serve")
+        bail!("unknown mock subcommand {command:?}; use poolster mock serve")
     }
     let mut source = None;
     let mut port = 4010;
@@ -1607,7 +1609,7 @@ fn parse_mock(args: impl IntoIterator<Item = OsString>) -> Result<Action> {
             continue;
         }
         if !matches!(flag.as_ref(), "--port" | "--openapi-compiler") {
-            bail!("unknown mock serve option {flag}; run kaji --help")
+            bail!("unknown mock serve option {flag}; run poolster --help")
         }
         let value = args
             .next()
@@ -1634,7 +1636,7 @@ fn parse_mock(args: impl IntoIterator<Item = OsString>) -> Result<Action> {
 
 fn parse_init(args: impl IntoIterator<Item = OsString>) -> Result<Action> {
     let mut init = Init {
-        config: PathBuf::from("kaji.json"),
+        config: PathBuf::from("poolster.json"),
         input: PathBuf::from("openapi.yaml"),
         output: PathBuf::from("generated"),
         name: default_api_name(),
@@ -1650,7 +1652,7 @@ fn parse_init(args: impl IntoIterator<Item = OsString>) -> Result<Action> {
             flag.as_ref(),
             "--config" | "--input" | "--output" | "--name" | "--sdk-version"
         ) {
-            bail!("unknown init option {flag}; run kaji --help");
+            bail!("unknown init option {flag}; run poolster --help");
         }
         let value = args
             .next()
@@ -1673,21 +1675,33 @@ fn parse_init(args: impl IntoIterator<Item = OsString>) -> Result<Action> {
     Ok(Action::Init(init))
 }
 
+fn default_config_path() -> PathBuf {
+    let current = PathBuf::from("poolster.json");
+    if !current.exists() && Path::new("poolster.json").exists() {
+        PathBuf::from("poolster.json")
+    } else {
+        current
+    }
+}
+
 fn compiler_path(override_path: Option<PathBuf>) -> Result<PathBuf> {
-    if let Some(path) = override_path.or_else(|| env::var_os("KAJI_OPENAPI_BIN").map(PathBuf::from))
-    {
+    if let Some(path) = override_path.or_else(|| {
+        env::var_os("POOLSTER_OPENAPI_BIN")
+            .or_else(|| env::var_os("KAJI_OPENAPI_BIN"))
+            .map(PathBuf::from)
+    }) {
         return std::fs::canonicalize(&path)
             .with_context(|| format!("cannot find OpenAPI compiler {}", path.display()));
     }
-    let executable = env::current_exe().context("cannot locate the Kaji executable")?;
+    let executable = env::current_exe().context("cannot locate the Poolster executable")?;
     let sibling = executable.with_file_name(if cfg!(windows) {
-        "kaji-openapi.exe"
+        "poolster-openapi.exe"
     } else {
-        "kaji-openapi"
+        "poolster-openapi"
     });
     if !sibling.is_file() {
         bail!(
-            "bundled OpenAPI compiler is missing: {}. Reinstall the platform package, or set --openapi-compiler /path/to/kaji-openapi (KAJI_OPENAPI_BIN is also supported). Source builds: build openapi/ with Go first",
+            "bundled OpenAPI compiler is missing: {}. Reinstall the platform package, or set --openapi-compiler /path/to/poolster-openapi (POOLSTER_OPENAPI_BIN is also supported). Source builds: build openapi/ with Go first",
             sibling.display()
         );
     }
@@ -1787,7 +1801,7 @@ fn has_only_known_plugins(package: &PackageConfig, allowed: &[&str]) -> Result<(
     for plugin in &package.plugins {
         if !allowed.contains(&plugin.name.as_str()) {
             bail!(
-                "package {:?} uses plugin {:?}, which is not bundled by this Kaji binary",
+                "package {:?} uses plugin {:?}, which is not bundled by this Poolster binary",
                 package.path,
                 plugin.name
             );
@@ -2179,13 +2193,13 @@ fn typescript_profile(
     Ok(output)
 }
 
-fn with_configured_middleware<L: kaji_core::engine::Language>(
+fn with_configured_middleware<L: poolster_core::engine::Language>(
     builder: Package<L>,
     package: &PackageConfig,
 ) -> Package<L> {
     let builder = builder.idempotency(package.idempotency.clone());
     let builder = if package.api_reference {
-        builder.with(kaji_core::api_reference::<L>())
+        builder.with(poolster_core::api_reference::<L>())
     } else {
         builder
     };
@@ -2203,7 +2217,7 @@ fn config_profiles(
     packages: &[PackageConfig],
 ) -> Result<ProfileSet> {
     if packages.is_empty() {
-        bail!("kaji.json must declare at least one package");
+        bail!("poolster.json must declare at least one package");
     }
     let mut profiles = ProfileSet::new(".").common(Common::default().client_style(default_style));
     for package in packages {
@@ -2764,7 +2778,7 @@ fn generate_from_config(
     if path
         .extension()
         .is_some_and(|extension| extension == "yml" || extension == "yaml")
-        || !path.exists() && path == Path::new("kaji.json")
+        || !path.exists() && path == Path::new("poolster.json")
     {
         return migration::generate(
             if path.exists() { path } else { Path::new(".") },
@@ -2774,11 +2788,11 @@ fn generate_from_config(
         );
     }
     let path = std::fs::canonicalize(path)
-        .with_context(|| format!("cannot read Kaji config {}", path.display()))?;
+        .with_context(|| format!("cannot read Poolster config {}", path.display()))?;
     let source = std::fs::read_to_string(&path)
-        .with_context(|| format!("read Kaji config {}", path.display()))?;
+        .with_context(|| format!("read Poolster config {}", path.display()))?;
     let mut config: ProjectConfig = serde_json::from_str(&source)
-        .with_context(|| format!("parse Kaji JSON config {}", path.display()))?;
+        .with_context(|| format!("parse Poolster JSON config {}", path.display()))?;
     let base = path.parent().expect("config path has parent");
     if config.output.path.as_os_str().is_empty() {
         bail!("output.path cannot be empty");
@@ -2807,14 +2821,14 @@ fn generate_from_config(
         if package.release.is_some() && package.version.is_none() {
             let metadata_path = output
                 .join(&package.path)
-                .join(kaji_core::release::PACKAGE_METADATA_PATH);
+                .join(poolster_core::release::PACKAGE_METADATA_PATH);
             if metadata_path.exists() {
                 let canonical_root = std::fs::canonicalize(&output)?;
                 let canonical_metadata = std::fs::canonicalize(&metadata_path)?;
                 if !canonical_metadata.starts_with(&canonical_root) {
                     bail!("release metadata escapes output root");
                 }
-                let previous: kaji_core::release::PackageMetadata =
+                let previous: poolster_core::release::PackageMetadata =
                     serde_json::from_slice(&std::fs::read(&metadata_path)?)?;
                 previous.validate()?;
                 package.version = Some(previous.version);
@@ -2867,7 +2881,7 @@ fn init_config(init: Init) -> Result<()> {
         );
     }
     let document = serde_json::json!({
-        "$schema": "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/v1/kaji.schema.json",
+        "$schema": "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/v1/poolster.schema.json",
         "openapi": {
             "input": init.input,
             "name": init.name,
@@ -2908,7 +2922,7 @@ fn init_config(init: Init) -> Result<()> {
     )
     .with_context(|| format!("write {}", init.config.display()))?;
     println!(
-        "Created {}. Edit its package plugins, then run kaji generate.",
+        "Created {}. Edit its package plugins, then run poolster generate.",
         init.config.display()
     );
     Ok(())
@@ -3046,14 +3060,14 @@ fn add_typescript_artifact_dependencies(
         let path = Path::new(".").join(&package.path).join("package.json");
         let Some(manifest) = tree.get(&path).map(str::to_owned) else {
             // Artifact-only output is supported for an existing project. In
-            // that case Kaji does not own a package manifest to mutate.
+            // that case Poolster does not own a package manifest to mutate.
             continue;
         };
         let mut manifest: serde_json::Value = serde_json::from_str(&manifest)
             .with_context(|| format!("parse generated TypeScript manifest {}", path.display()))?;
         let object = manifest
             .as_object_mut()
-            .expect("Kaji TypeScript manifests are JSON objects");
+            .expect("Poolster TypeScript manifests are JSON objects");
         for (field, dependencies) in [
             ("dependencies", dependencies),
             ("devDependencies", dev_dependencies),
@@ -3166,24 +3180,28 @@ fn generate(mut options: Generate) -> Result<()> {
 
 fn write_sdk(artifacts: &Path, options: &Generate, reporter: &Reporter) -> Result<()> {
     let started = Instant::now();
-    let api = kaji_core::adapter::openapi_sidecar::load_operations(
+    let api = poolster_core::adapter::openapi_sidecar::load_operations(
         artifacts,
         options.name.clone(),
         options.version.clone(),
     )?;
-    if let Some(report) = api.annotations.get("kaji.vendor.report") {
+    if let Some(report) = api.annotations.get("poolster.vendor.report") {
         if let Some(manual) = report.get("manual").and_then(serde_json::Value::as_array) {
             for diagnostic in manual {
                 if let Some(message) = diagnostic.as_str() {
-                    eprintln!("kaji compatibility: {message}");
+                    eprintln!("poolster compatibility: {message}");
                 }
             }
         }
     }
     let api = slice_api_paths(api, &options.path_selection)?;
-    let security_schemes = kaji_core::adapter::openapi_sidecar::load_security_schemes(artifacts)?;
-    let mut tree =
-        kaji::generate_with_security_catalog(&api, profiles(options)?, Some(&security_schemes))?;
+    let security_schemes =
+        poolster_core::adapter::openapi_sidecar::load_security_schemes(artifacts)?;
+    let mut tree = poolster::generate_with_security_catalog(
+        &api,
+        profiles(options)?,
+        Some(&security_schemes),
+    )?;
     if let Some(packages) = &options.config_packages {
         append_config_artifacts(&api, &mut tree, packages)?;
         add_typescript_artifact_dependencies(&mut tree, packages)?;
@@ -3198,7 +3216,8 @@ fn write_sdk(artifacts: &Path, options: &Generate, reporter: &Reporter) -> Resul
                     .version
                     .clone()
                     .unwrap_or_else(|| options.version.clone());
-                let path = Path::new(&package.path).join(kaji_core::release::PACKAGE_METADATA_PATH);
+                let path =
+                    Path::new(&package.path).join(poolster_core::release::PACKAGE_METADATA_PATH);
                 tree.insert(GeneratedFile::new(&path, metadata.to_json()?)?)?;
                 tree.set_owner(&path, format!("package-metadata:{}", package.path))?;
             }
@@ -3212,7 +3231,7 @@ fn write_sdk(artifacts: &Path, options: &Generate, reporter: &Reporter) -> Resul
                     .map(|code| code.prefixed(Path::new(&package.path)))
             })
             .collect::<Vec<_>>();
-        kaji_core::customization::apply_code_customizations(&mut tree, &customizations)?;
+        poolster_core::customization::apply_code_customizations(&mut tree, &customizations)?;
     }
     reporter.generated(options, started.elapsed());
     let started = Instant::now();
@@ -3254,9 +3273,9 @@ fn write_sdk(artifacts: &Path, options: &Generate, reporter: &Reporter) -> Resul
 }
 
 const GENERATION_LOCK_VERSION: u8 = 1;
-const GENERATION_LOCK_PATH: &str = ".kaji/generation.lock.json";
+const GENERATION_LOCK_PATH: &str = ".poolster/generation.lock.json";
 
-/// A deliberately small, secret-free account of exactly what Kaji rendered.
+/// A deliberately small, secret-free account of exactly what Poolster rendered.
 /// It is an output artifact rather than an input lock: regenerate it whenever
 /// the contract or selected generator settings change, then review it in the
 /// same change as generated code.
@@ -3274,7 +3293,7 @@ struct GenerationLock {
 }
 
 /// Direct generation has no separate recipe to re-run. Preserve its
-/// non-secret inputs so `kaji update` can faithfully replay it later.
+/// non-secret inputs so `poolster update` can faithfully replay it later.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct GenerationReplayLock {
     source: Option<String>,
@@ -3364,7 +3383,7 @@ fn generation_lock(artifacts: &Path, options: &Generate, api: &Api) -> Result<St
     let lock = GenerationLock {
         version: GENERATION_LOCK_VERSION,
         generator: GeneratorLock {
-            name: "kaji",
+            name: "poolster",
             version: env!("CARGO_PKG_VERSION"),
         },
         input: GenerationInputLock {
@@ -3456,7 +3475,7 @@ fn update(options: Update) -> Result<()> {
     find_generation_locks(&root, &mut locks)?;
     if locks.is_empty() {
         bail!(
-            "no {GENERATION_LOCK_PATH} files were found below {}; run kaji generate first",
+            "no {GENERATION_LOCK_PATH} files were found below {}; run poolster generate first",
             root.display()
         )
     }
@@ -3478,7 +3497,7 @@ fn update(options: Update) -> Result<()> {
         }
         let Some(replay) = lock.replay else {
             eprintln!(
-                "kaji update: skipping {} (created by config generation; run kaji generate --config instead)",
+                "poolster update: skipping {} (created by config generation; run poolster generate --config instead)",
                 path.display()
             );
             unsupported += 1;
@@ -3487,7 +3506,7 @@ fn update(options: Update) -> Result<()> {
         let output = path
             .parent()
             .and_then(Path::parent)
-            .expect("generation lock is always nested below .kaji")
+            .expect("generation lock is always nested below .poolster")
             .to_path_buf();
         if !options.force && replay_input_is_unchanged(&replay, &lock.input)? {
             println!("Unchanged: {}", output.display());
@@ -3520,7 +3539,7 @@ fn auth(options: Auth) -> Result<()> {
         Auth::Status => {
             let profiles = credentials::profiles()?;
             if profiles.is_empty() {
-                println!("No Kaji auth profiles are configured.");
+                println!("No Poolster auth profiles are configured.");
             } else {
                 for (profile, token_env) in profiles {
                     println!("{profile}\t${token_env}");
@@ -3683,12 +3702,12 @@ fn slice_api_paths(mut api: Api, selection: &PathSelection) -> Result<Api> {
             || selection
                 .include
                 .iter()
-                .any(|pattern| kaji_core::wildcard_matches(pattern, &operation.path));
+                .any(|pattern| poolster_core::wildcard_matches(pattern, &operation.path));
         included
             && !selection
                 .exclude
                 .iter()
-                .any(|pattern| kaji_core::wildcard_matches(pattern, &operation.path))
+                .any(|pattern| poolster_core::wildcard_matches(pattern, &operation.path))
     });
     if api.operations.is_empty() {
         bail!("path selection matched no OpenAPI operations; adjust paths.include or paths.exclude")
@@ -3866,7 +3885,7 @@ fn check_api(api: &Api, source: &[CheckSidecarOperation]) -> Vec<CheckDiagnostic
                 severity: CheckSeverity::Error,
                 method: method.clone(),
                 path: path.clone(),
-                message: "operationId is missing; Kaji can infer a name, but the inferred public SDK and CLI name may change when the path changes".into(),
+                message: "operationId is missing; Poolster can infer a name, but the inferred public SDK and CLI name may change when the path changes".into(),
                 hint: "add a stable, unique operationId such as listUsers".into(),
             });
         } else if let Some((previous_method, previous_path)) =
@@ -3995,7 +4014,7 @@ fn check(options: Check) -> Result<()> {
     if !status.success() {
         bail!("OpenAPI compiler failed ({status})")
     }
-    let api = kaji_core::adapter::openapi_sidecar::load_operations(
+    let api = poolster_core::adapter::openapi_sidecar::load_operations(
         temporary.path(),
         "API".into(),
         "0.1.0".into(),
@@ -4097,7 +4116,7 @@ fn show(options: Show) -> Result<()> {
     if !status.success() {
         bail!("OpenAPI compiler failed ({status})")
     }
-    let api = kaji_core::adapter::openapi_sidecar::load_operations(
+    let api = poolster_core::adapter::openapi_sidecar::load_operations(
         temporary.path(),
         "API".into(),
         "0.1.0".into(),
@@ -4213,7 +4232,7 @@ fn serve_mcp(options: Mcp) -> Result<()> {
     if !status.success() {
         bail!("OpenAPI compiler failed ({status})")
     }
-    let api = kaji_core::adapter::openapi_sidecar::load_operations(
+    let api = poolster_core::adapter::openapi_sidecar::load_operations(
         temporary.path(),
         "API".into(),
         "0.1.0".into(),
@@ -4256,18 +4275,18 @@ fn serve_mock(options: MockServe) -> Result<()> {
     if !status.success() {
         bail!("OpenAPI compiler failed ({status})")
     }
-    let api = Arc::new(kaji_core::adapter::openapi_sidecar::load_operations(
+    let api = Arc::new(poolster_core::adapter::openapi_sidecar::load_operations(
         temporary.path(),
         "API".into(),
         "0.1.0".into(),
     )?);
     // Fail before listening when a scenario is malformed. Falling back to a
     // happy-path response would hide a broken test contract.
-    kaji_core::extract_mock_scenarios(&api)?;
+    poolster_core::extract_mock_scenarios(&api)?;
     let listener = TcpListener::bind(("127.0.0.1", options.port))
         .with_context(|| format!("cannot listen on http://127.0.0.1:{}", options.port))?;
     let requests = Arc::new(Mutex::new(MockRequests::default()));
-    println!("Kaji dynamic mock: http://127.0.0.1:{}", options.port);
+    println!("Poolster dynamic mock: http://127.0.0.1:{}", options.port);
     println!(
         "Request log: http://127.0.0.1:{}/_kaji/requests",
         options.port
@@ -4276,10 +4295,10 @@ fn serve_mock(options: MockServe) -> Result<()> {
         match stream {
             Ok(stream) => {
                 if let Err(error) = handle_mock_request(stream, &api, &requests) {
-                    eprintln!("kaji mock: {error:#}");
+                    eprintln!("poolster mock: {error:#}");
                 }
             }
-            Err(error) => eprintln!("kaji mock: accept connection: {error}"),
+            Err(error) => eprintln!("poolster mock: accept connection: {error}"),
         }
     }
     Ok(())
@@ -4373,11 +4392,11 @@ fn handle_mock_request(
         .unwrap_or_default();
     let json_body = serde_json::from_slice(&bytes).ok();
     let scenario = operation
-        .map(kaji_core::extract_operation_mock_scenarios)
+        .map(poolster_core::extract_operation_mock_scenarios)
         .transpose()?
         .and_then(|scenarios| {
             scenarios.into_iter().find(|scenario| {
-                kaji_core::mock_scenario_matches(
+                poolster_core::mock_scenario_matches(
                     scenario,
                     &headers,
                     &query,
@@ -4403,7 +4422,7 @@ fn handle_mock_request(
         }
         (Some(operation), None) => {
             let (status, content_type, response) =
-                kaji_core::httpmock::mock_dynamic_response(api, operation, request_id);
+                poolster_core::httpmock::mock_dynamic_response(api, operation, request_id);
             (
                 status,
                 content_type.unwrap_or_else(|| "application/json".into()),
@@ -4588,15 +4607,15 @@ fn mock_status_text(status: u16) -> &'static str {
 
 #[cfg(any())]
 fn mock_dashboard_removed() -> &'static str {
-    r#"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kaji Mock Inspector</title><style>
-:root{--ink:#e8e1d5;--muted:#989185;--line:#36342e;--panel:#161714;--void:#0b0c0a;--signal:#d7ff4f;--warning:#ff7557}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 90% 0,#273016 0,transparent 32rem),var(--void);color:var(--ink);font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}.shell{max-width:1120px;margin:auto;padding:48px 28px}header{display:flex;justify-content:space-between;gap:24px;align-items:end;border-bottom:1px solid var(--line);padding-bottom:25px}h1{font:700 clamp(34px,6vw,68px)/.88 Georgia,serif;letter-spacing:-.06em;margin:0}h1 b{color:var(--signal);font-weight:inherit}.live{color:var(--signal);font-size:11px;letter-spacing:.14em;text-transform:uppercase}.live:before{content:'';display:inline-block;width:8px;height:8px;margin-right:8px;border-radius:99px;background:var(--signal);box-shadow:0 0 18px var(--signal);animation:pulse 1.5s infinite}@keyframes pulse{50%{opacity:.35;transform:scale(.7)}}.summary{display:flex;gap:12px;margin:25px 0}.card{background:var(--panel);border:1px solid var(--line);padding:12px 15px;min-width:130px}.card strong{display:block;font-size:25px;color:var(--signal)}.card span{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em}table{width:100%;border-collapse:collapse;background:rgba(22,23,20,.82);border:1px solid var(--line)}th{text-align:left;padding:11px 14px;color:var(--muted);font-weight:400;font-size:11px;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid var(--line)}td{padding:13px 14px;border-bottom:1px solid #292a26;vertical-align:top}tr:last-child td{border:0}.method{color:var(--signal);font-weight:bold}.status{color:var(--warning)}code{white-space:pre-wrap;word-break:break-word;color:#d5d1c8}.empty{padding:48px 14px;color:var(--muted);text-align:center}footer{color:var(--muted);font-size:12px;margin-top:18px}a{color:var(--signal)}</style></head><body><main class="shell"><header><div><div class="live">Local contract emulator</div><h1>Kaji <b>Mock</b></h1></div><div class="live" id="state">watching requests</div></header><section class="summary"><div class="card"><strong id="count">0</strong><span>requests observed</span></div><div class="card"><strong id="latest">—</strong><span>latest status</span></div></section><table><thead><tr><th>#</th><th>method</th><th>route</th><th>operation</th><th>status</th><th>body</th></tr></thead><tbody id="rows"><tr><td class="empty" colspan="6">Waiting for your app to call the mock API.</td></tr></tbody></table><footer>Schema-shaped responses are regenerated for every request. <a href="/_kaji/requests">Raw request log JSON</a></footer></main><script>const rows=document.querySelector('#rows'),count=document.querySelector('#count'),latest=document.querySelector('#latest');const esc=v=>{const e=document.createElement('span');e.textContent=v??'';return e.innerHTML};async function refresh(){try{const data=await fetch('/_kaji/requests').then(r=>r.json());count.textContent=data.length;latest.textContent=data.length?data[data.length-1].status:'—';rows.innerHTML=data.length?[...data].reverse().map(r=>`<tr><td>${r.id}</td><td class="method">${esc(r.method)}</td><td><code>${esc(r.path)}</code></td><td>${esc(r.operation??'unmatched')}</td><td class="status">${r.status}</td><td><code>${esc(r.body??'')}</code></td></tr>`).join(''):'<tr><td class="empty" colspan="6">Waiting for your app to call the mock API.</td></tr>'}catch{document.querySelector('#state').textContent='reconnecting…'}}refresh();setInterval(refresh,900)</script></body></html>"#
+    r#"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Poolster Mock Inspector</title><style>
+:root{--ink:#e8e1d5;--muted:#989185;--line:#36342e;--panel:#161714;--void:#0b0c0a;--signal:#d7ff4f;--warning:#ff7557}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 90% 0,#273016 0,transparent 32rem),var(--void);color:var(--ink);font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}.shell{max-width:1120px;margin:auto;padding:48px 28px}header{display:flex;justify-content:space-between;gap:24px;align-items:end;border-bottom:1px solid var(--line);padding-bottom:25px}h1{font:700 clamp(34px,6vw,68px)/.88 Georgia,serif;letter-spacing:-.06em;margin:0}h1 b{color:var(--signal);font-weight:inherit}.live{color:var(--signal);font-size:11px;letter-spacing:.14em;text-transform:uppercase}.live:before{content:'';display:inline-block;width:8px;height:8px;margin-right:8px;border-radius:99px;background:var(--signal);box-shadow:0 0 18px var(--signal);animation:pulse 1.5s infinite}@keyframes pulse{50%{opacity:.35;transform:scale(.7)}}.summary{display:flex;gap:12px;margin:25px 0}.card{background:var(--panel);border:1px solid var(--line);padding:12px 15px;min-width:130px}.card strong{display:block;font-size:25px;color:var(--signal)}.card span{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em}table{width:100%;border-collapse:collapse;background:rgba(22,23,20,.82);border:1px solid var(--line)}th{text-align:left;padding:11px 14px;color:var(--muted);font-weight:400;font-size:11px;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid var(--line)}td{padding:13px 14px;border-bottom:1px solid #292a26;vertical-align:top}tr:last-child td{border:0}.method{color:var(--signal);font-weight:bold}.status{color:var(--warning)}code{white-space:pre-wrap;word-break:break-word;color:#d5d1c8}.empty{padding:48px 14px;color:var(--muted);text-align:center}footer{color:var(--muted);font-size:12px;margin-top:18px}a{color:var(--signal)}</style></head><body><main class="shell"><header><div><div class="live">Local contract emulator</div><h1>Poolster <b>Mock</b></h1></div><div class="live" id="state">watching requests</div></header><section class="summary"><div class="card"><strong id="count">0</strong><span>requests observed</span></div><div class="card"><strong id="latest">—</strong><span>latest status</span></div></section><table><thead><tr><th>#</th><th>method</th><th>route</th><th>operation</th><th>status</th><th>body</th></tr></thead><tbody id="rows"><tr><td class="empty" colspan="6">Waiting for your app to call the mock API.</td></tr></tbody></table><footer>Schema-shaped responses are regenerated for every request. <a href="/_kaji/requests">Raw request log JSON</a></footer></main><script>const rows=document.querySelector('#rows'),count=document.querySelector('#count'),latest=document.querySelector('#latest');const esc=v=>{const e=document.createElement('span');e.textContent=v??'';return e.innerHTML};async function refresh(){try{const data=await fetch('/_kaji/requests').then(r=>r.json());count.textContent=data.length;latest.textContent=data.length?data[data.length-1].status:'—';rows.innerHTML=data.length?[...data].reverse().map(r=>`<tr><td>${r.id}</td><td class="method">${esc(r.method)}</td><td><code>${esc(r.path)}</code></td><td>${esc(r.operation??'unmatched')}</td><td class="status">${r.status}</td><td><code>${esc(r.body??'')}</code></td></tr>`).join(''):'<tr><td class="empty" colspan="6">Waiting for your app to call the mock API.</td></tr>'}catch{document.querySelector('#state').textContent='reconnecting…'}}refresh();setInterval(refresh,900)</script></body></html>"#
 }
 
 fn main() -> ExitCode {
     let action = match parse(env::args_os().skip(1)) {
         Ok(action) => action,
         Err(error) => {
-            eprintln!("kaji: {error:#}");
+            eprintln!("poolster: {error:#}");
             return ExitCode::from(2);
         }
     };
@@ -4606,7 +4625,7 @@ fn main() -> ExitCode {
             Ok(())
         }
         Action::Version => {
-            println!("kaji {}", env!("CARGO_PKG_VERSION"));
+            println!("poolster {}", env!("CARGO_PKG_VERSION"));
             Ok(())
         }
         Action::Languages => {
@@ -4632,7 +4651,7 @@ fn main() -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("kaji: {error:#}");
+            eprintln!("poolster: {error:#}");
             ExitCode::FAILURE
         }
     }
@@ -4641,7 +4660,7 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kaji_core::{Operation, OperationParameter, OperationResponse};
+    use poolster_core::{Operation, OperationParameter, OperationResponse};
     fn arguments(value: &str) -> Vec<OsString> {
         value.split_whitespace().map(Into::into).collect()
     }
@@ -4779,7 +4798,7 @@ mod tests {
         let Action::Generate(options) = parse(arguments("generate --color always")).unwrap() else {
             panic!()
         };
-        assert_eq!(options.config, Some(PathBuf::from("kaji.json")));
+        assert_eq!(options.config, Some(PathBuf::from("poolster.json")));
         assert_eq!(options.color, ColorChoice::Always);
         assert!(ColorChoice::Always.enabled());
         assert!(!ColorChoice::Never.enabled());
@@ -4962,7 +4981,7 @@ mod tests {
             operations: vec![
                 Operation {
                     id: "inferred".into(),
-                    method: kaji_core::HttpMethod::Get,
+                    method: poolster_core::HttpMethod::Get,
                     path: "/admin//users/{userId}".into(),
                     parameters: vec![OperationParameter {
                         name: "userId".into(),
@@ -4977,21 +4996,21 @@ mod tests {
                 },
                 Operation {
                     id: "get-user".into(),
-                    method: kaji_core::HttpMethod::Get,
+                    method: poolster_core::HttpMethod::Get,
                     path: "/users/{id}".into(),
                     responses: vec![OperationResponse::json(
                         "200",
-                        kaji_core::SchemaValue::unknown(),
+                        poolster_core::SchemaValue::unknown(),
                     )],
                     ..Operation::default()
                 },
                 Operation {
                     id: "get_user".into(),
-                    method: kaji_core::HttpMethod::Get,
+                    method: poolster_core::HttpMethod::Get,
                     path: "/people".into(),
                     responses: vec![OperationResponse::json(
                         "200",
-                        kaji_core::SchemaValue::unknown(),
+                        poolster_core::SchemaValue::unknown(),
                     )],
                     ..Operation::default()
                 },
@@ -5105,15 +5124,15 @@ mod tests {
         let api = Api {
             name: "Acme".into(),
             version: "1.0.0".into(),
-            operations: vec![kaji_core::Operation {
+            operations: vec![poolster_core::Operation {
                 id: "listProjects".into(),
-                method: kaji_core::HttpMethod::Get,
+                method: poolster_core::HttpMethod::Get,
                 path: "/projects".into(),
                 ..Default::default()
             }],
             ..Default::default()
         };
-        let tree = kaji::generate(&api, profiles).unwrap();
+        let tree = poolster::generate(&api, profiles).unwrap();
         assert!(
             tree.get("./cli/package.json")
                 .unwrap()
@@ -5131,7 +5150,7 @@ mod tests {
     }
     #[test]
     fn combined_optional_reference_smoke_and_data_source_consumers_generate() {
-        use kaji_core::{
+        use poolster_core::{
             AdditionalProperties, Field, HttpMethod, Operation, OperationParameter,
             OperationRequestBody, OperationResponse, SchemaKind, SchemaValue,
         };
@@ -5222,7 +5241,7 @@ mod tests {
         ];
         let configured = combined_optional_packages();
         let packages: Vec<PackageConfig> = serde_json::from_value(configured.clone()).unwrap();
-        let tree = kaji::generate(
+        let tree = poolster::generate(
             &api,
             config_profiles(SdkClientStyle::Namespaced, &packages).unwrap(),
         )
@@ -5230,7 +5249,7 @@ mod tests {
         for path in [
             "./python/API_REFERENCE.md",
             "./python/tests/test_operations.py",
-            "./python/.kaji/operation-test-diagnostics.json",
+            "./python/.poolster/operation-test-diagnostics.json",
             "./terraform/API_REFERENCE.md",
             "./terraform/internal/provider/data_source_item.go",
         ] {
@@ -5244,7 +5263,7 @@ mod tests {
             .unwrap()
             .push(serde_json::json!({"name":"release-scaffold"}));
         let packages: Vec<PackageConfig> = serde_json::from_value(release_recipe).unwrap();
-        let release_tree = kaji::generate(
+        let release_tree = poolster::generate(
             &api,
             config_profiles(SdkClientStyle::Namespaced, &packages).unwrap(),
         )
@@ -5268,7 +5287,8 @@ mod tests {
                 .contains("project_name: terraform-provider-widgets")
         );
         assert!(
-            release_tree.preserves_existing("./terraform/.kaji/templates/terraform-release.yml")
+            release_tree
+                .preserves_existing("./terraform/.poolster/templates/terraform-release.yml")
         );
         assert!(
             release_tree
@@ -5286,14 +5306,14 @@ mod tests {
                 .polling
                 .is_some()
         );
-        let polling_tree = kaji::generate(
+        let polling_tree = poolster::generate(
             &api,
             config_profiles(SdkClientStyle::Namespaced, &polling_packages).unwrap(),
         )
         .unwrap();
         let explanation: serde_json::Value = serde_json::from_str(
             polling_tree
-                .get("./terraform/.kaji/terraform-plan.json")
+                .get("./terraform/.poolster/terraform-plan.json")
                 .unwrap(),
         )
         .unwrap();
@@ -5311,7 +5331,7 @@ mod tests {
             migration_packages[1].plugins[0].resources[0].schema_version,
             1
         );
-        let migration_tree = kaji::generate(
+        let migration_tree = poolster::generate(
             &api,
             config_profiles(SdkClientStyle::Namespaced, &migration_packages).unwrap(),
         )
@@ -5362,7 +5382,7 @@ mod tests {
         resource["identity"] = serde_json::json!([{"parameter":"organization","field":"organizationId"},{"parameter":"id","field":"id"}]);
         let composite_packages: Vec<PackageConfig> =
             serde_json::from_value(composite_recipe).unwrap();
-        let composite_tree = kaji::generate(
+        let composite_tree = poolster::generate(
             &composite_api,
             config_profiles(SdkClientStyle::Namespaced, &composite_packages).unwrap(),
         )
@@ -5383,7 +5403,7 @@ mod tests {
             .unwrap()
             .remove("data_sources");
         let packages: Vec<PackageConfig> = serde_json::from_value(defaults).unwrap();
-        let tree = kaji::generate(
+        let tree = poolster::generate(
             &api,
             config_profiles(SdkClientStyle::Flat, &packages).unwrap(),
         )
@@ -5410,15 +5430,15 @@ mod tests {
         let api = Api {
             name: "Example".into(),
             version: "1.0.0".into(),
-            operations: vec![kaji_core::Operation {
+            operations: vec![poolster_core::Operation {
                 id: "createItem".into(),
-                method: kaji_core::HttpMethod::Post,
+                method: poolster_core::HttpMethod::Post,
                 path: "/items".into(),
                 ..Default::default()
             }],
             ..Default::default()
         };
-        let tree = kaji::generate(
+        let tree = poolster::generate(
             &api,
             config_profiles(SdkClientStyle::Flat, &packages).unwrap(),
         )
@@ -5446,7 +5466,7 @@ mod tests {
     }
     #[test]
     fn optional_security_and_operation_test_consumers_are_available_in_recipes() {
-        use kaji_core::{HttpMethod, OperationResponse, SchemaKind, SchemaValue};
+        use poolster_core::{HttpMethod, OperationResponse, SchemaKind, SchemaValue};
         let packages: Vec<PackageConfig> = serde_json::from_value(serde_json::json!([
             {"language":"typescript","path":"ts","plugins":[{"name":"sdk","id":"native"},{"name":"operation-tests","uses":{"operations":"native","transport":"native"}},{"name":"oauth","uses":{"transport":"native"}}]},
             {"language":"rust","path":"rust","plugins":[{"name":"sdk"},{"name":"operation-tests"},{"name":"oauth"}]},
@@ -5472,7 +5492,7 @@ mod tests {
             }],
             ..Default::default()
         };
-        let tree = kaji::generate(
+        let tree = poolster::generate(
             &api,
             config_profiles(SdkClientStyle::Namespaced, &packages).unwrap(),
         )
@@ -5484,7 +5504,7 @@ mod tests {
             "./rust/src/oauth.rs",
             "./go/oauth.go",
             "./go/webhooks.go",
-            "./go/.kaji/operation-test-diagnostics.json",
+            "./go/.poolster/operation-test-diagnostics.json",
             "./ruby/lib/consumer_sdk/webhooks.rb",
             "./ruby/lib/consumer_sdk/oauth.rb",
         ] {
@@ -5518,15 +5538,17 @@ mod tests {
         .unwrap();
         let api = Api {
             name: "Future".into(),
-            schemas: vec![kaji_core::Schema::new(
+            schemas: vec![poolster_core::Schema::new(
                 "Event",
-                kaji_core::SchemaValue::new(kaji_core::SchemaKind::OneOf {
-                    variants: vec![kaji_core::SchemaValue::new(kaji_core::SchemaKind::String)],
+                poolster_core::SchemaValue::new(poolster_core::SchemaKind::OneOf {
+                    variants: vec![poolster_core::SchemaValue::new(
+                        poolster_core::SchemaKind::String,
+                    )],
                 }),
             )],
             ..Default::default()
         };
-        let tree = kaji::generate(
+        let tree = poolster::generate(
             &api,
             config_profiles(SdkClientStyle::Namespaced, &packages).unwrap(),
         )
@@ -5555,7 +5577,7 @@ mod tests {
             name: "Presence".into(),
             ..Default::default()
         };
-        let tree = kaji::generate(
+        let tree = poolster::generate(
             &api,
             config_profiles(SdkClientStyle::Namespaced, &packages).unwrap(),
         )
@@ -5592,7 +5614,7 @@ mod tests {
             name: "Recipe".into(),
             ..Default::default()
         };
-        let tree = kaji::generate(
+        let tree = poolster::generate(
             &api,
             config_profiles(SdkClientStyle::Namespaced, &packages).unwrap(),
         )
@@ -5636,7 +5658,7 @@ mod tests {
             name: "Webhook".into(),
             ..Default::default()
         };
-        let tree = kaji::generate(
+        let tree = poolster::generate(
             &api,
             config_profiles(SdkClientStyle::Namespaced, &packages).unwrap(),
         )
@@ -5718,7 +5740,7 @@ assert not validator.is_valid(config)
         .args(["-c", script])
         .arg(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../schemas/v1/kaji.schema.json"
+            "/../../schemas/v1/poolster.schema.json"
         ))
         .arg(path)
         .output()

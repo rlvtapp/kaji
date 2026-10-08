@@ -1,6 +1,6 @@
 use super::*;
 use crate::package::RubyModels;
-use kaji_core::engine::{Handle, Meta, Plugin, PluginContext, Requirement};
+use poolster_core::engine::{Handle, Meta, Plugin, PluginContext, Requirement};
 pub struct Webhooks {
     meta: Meta,
     models: Option<Handle<RubyModels>>,
@@ -43,8 +43,8 @@ mod tests {
     use super::*;
     #[test]
     fn generated_webhook_verifier_executes_native_raw_rotation_and_failure_cases() {
-        use kaji_core::engine::Packages;
-        use kaji_core::{AdditionalProperties, Field, Schema, SchemaKind, SchemaValue};
+        use poolster_core::engine::Packages;
+        use poolster_core::{AdditionalProperties, Field, Schema, SchemaKind, SchemaValue};
         let api = Api {
             name: "Security".into(),
             schemas: vec![Schema::new(

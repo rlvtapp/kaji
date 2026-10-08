@@ -1,9 +1,9 @@
 //! Portable Postman collection generation; never executes requests or writes remote workspaces.
 use anyhow::{Result, bail};
-use kaji_core::engine::{
+use poolster_core::engine::{
     Contract, Handle, Language, Meta, Package, Plugin, PluginContext, Provision, Requirement,
 };
-use kaji_core::{Api, GeneratedFile, SchemaKind, SchemaValue};
+use poolster_core::{Api, GeneratedFile, SchemaKind, SchemaValue};
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;

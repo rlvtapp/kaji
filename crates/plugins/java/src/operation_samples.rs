@@ -1,7 +1,7 @@
 // Internal bounded fixture policy: examples/defaults/source extension values
 // never enter emitted fixtures. Unsupported schemas receive explicit reasons.
 use anyhow::{Result, bail, ensure};
-use kaji_core::{AdditionalProperties, Api, Operation, SchemaKind, SchemaValue};
+use poolster_core::{AdditionalProperties, Api, Operation, SchemaKind, SchemaValue};
 use serde_json::{Value, json};
 pub(super) fn clean_api(api: &Api) -> Api {
     fn clean(value: &mut SchemaValue) {
@@ -124,10 +124,10 @@ fn supported(api: &Api, value: &SchemaValue, seen: &mut Vec<String>) -> Result<(
 }
 pub(super) fn sample(api: &Api, schema: &SchemaValue) -> Result<Value> {
     supported(api, schema, &mut vec![])?;
-    let report = kaji_core::samples::schema_samples(
+    let report = poolster_core::samples::schema_samples(
         api,
         schema,
-        kaji_core::samples::SampleOptions {
+        poolster_core::samples::SampleOptions {
             max_depth: 12,
             max_samples: 16,
             max_array_items: 2,

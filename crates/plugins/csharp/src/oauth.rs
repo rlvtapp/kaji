@@ -1,5 +1,5 @@
 use super::*;
-use kaji_core::engine::{Meta, Plugin, PluginContext};
+use poolster_core::engine::{Meta, Plugin, PluginContext};
 pub struct OAuth {
     meta: Meta,
 }

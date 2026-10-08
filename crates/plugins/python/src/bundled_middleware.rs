@@ -1,5 +1,5 @@
 use anyhow::{Result, ensure};
-use kaji_core::{GeneratedFile, GeneratedTree, customization::BundledMiddleware};
+use poolster_core::{GeneratedFile, GeneratedTree, customization::BundledMiddleware};
 
 pub(crate) fn bundle(tree: &mut GeneratedTree, middleware: &[BundledMiddleware]) -> Result<()> {
     let runtimes = tree
@@ -44,10 +44,10 @@ pub(crate) fn bundle(tree: &mut GeneratedTree, middleware: &[BundledMiddleware])
             "async_symbol requires generated Python async output"
         );
         sync_imports.push_str(&format!(
-            "from .{module} import {} as _kaji_bundled_{index}\n",
+            "from .{module} import {} as _poolster_bundled_{index}\n",
             item.symbol
         ));
-        sync_names.push(format!("_kaji_bundled_{index},"));
+        sync_names.push(format!("_poolster_bundled_{index},"));
         if asynchronous.is_some() {
             let symbol = item.async_symbol.as_ref().ok_or_else(|| anyhow::anyhow!("Async Python output requires an explicit async_symbol for each bundled middleware"))?;
             ensure!(
@@ -55,9 +55,9 @@ pub(crate) fn bundle(tree: &mut GeneratedTree, middleware: &[BundledMiddleware])
                 "Python async middleware symbol cannot be a keyword"
             );
             async_imports.push_str(&format!(
-                "from .{module} import {symbol} as _kaji_bundled_async_{index}\n"
+                "from .{module} import {symbol} as _poolster_bundled_async_{index}\n"
             ));
-            async_names.push(format!("_kaji_bundled_async_{index},"));
+            async_names.push(format!("_poolster_bundled_async_{index},"));
         }
         tree.insert(GeneratedFile::new(&item.path, &item.contents)?)?;
     }

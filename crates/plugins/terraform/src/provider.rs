@@ -3,7 +3,7 @@ use crate::{
     plan::{EntityCatalog, ResourceBinding, analyze_with_security, attribute_name},
 };
 use anyhow::{Result, ensure};
-use kaji_core::{
+use poolster_core::{
     GeneratedFile,
     engine::{Handle, Meta, Plugin, PluginContext, Provision, Requirement},
 };
@@ -190,7 +190,7 @@ impl Plugin<Terraform> for Provider {
             crate::typed_render::add_data_sources(&mut tree, &catalog, &provider)?;
         }
         tree.insert(GeneratedFile::new(
-            ".kaji/terraform-plan.json",
+            ".poolster/terraform-plan.json",
             serde_json::to_string_pretty(&catalog.explanation())?,
         )?)?;
         cx.files.append(tree)?;

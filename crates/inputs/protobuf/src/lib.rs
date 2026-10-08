@@ -1,6 +1,6 @@
 //! Protobuf compilation preserves descriptors, imports, and RPC streaming semantics.
 use anyhow::{Context, Result};
-use kaji_core::input::{InputOperation as OperationSummary, InputSummary as ContractSummary};
+use poolster_core::input::{InputOperation as OperationSummary, InputSummary as ContractSummary};
 use protox::prost_reflect::DescriptorPool;
 use std::path::Path;
 
@@ -109,22 +109,22 @@ impl ProtobufDocument {
     }
 }
 
-impl kaji_core::engine::Contract for ProtobufDocument {
-    const NAME: &'static str = "kaji.protobuf";
+impl poolster_core::engine::Contract for ProtobufDocument {
+    const NAME: &'static str = "poolster.protobuf";
 }
 
 /// Native protobuf input provider.
 pub struct ProtobufInput;
-impl kaji_core::input::InputPlugin for ProtobufInput {
+impl poolster_core::input::InputPlugin for ProtobufInput {
     fn id(&self) -> &str {
         "protobuf.protox"
     }
     fn format(&self) -> &str {
         "protobuf"
     }
-    fn load(&self, path: &std::path::Path) -> anyhow::Result<kaji_core::input::InputContract> {
+    fn load(&self, path: &std::path::Path) -> anyhow::Result<poolster_core::input::InputContract> {
         let document = load(path)?;
-        let mut input = kaji_core::input::InputContract::new(document.summary());
+        let mut input = poolster_core::input::InputContract::new(document.summary());
 
         input.publish(document)?;
         Ok(input)

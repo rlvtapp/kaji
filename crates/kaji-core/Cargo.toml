@@ -1,5 +1,5 @@
 [package]
-name = "kaji-core"
+name = "poolster-core"
 version.workspace = true
 edition = "2024"
 description = "Language-neutral OpenAPI code generation primitives"

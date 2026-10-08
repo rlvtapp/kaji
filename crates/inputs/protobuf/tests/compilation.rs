@@ -1,4 +1,4 @@
-use kaji_input_protobuf as protobuf;
+use poolster_input_protobuf as protobuf;
 use std::path::{Path, PathBuf};
 
 fn fixture(name: &str) -> PathBuf {
@@ -164,7 +164,7 @@ fn missing_source_reports_its_path() {
 
 #[test]
 fn provider_publishes_native_descriptor_contract() {
-    use kaji_core::input::InputPlugin;
+    use poolster_core::input::InputPlugin;
     let input = protobuf::ProtobufInput
         .load(&fixture("service.proto"))
         .unwrap();
@@ -180,7 +180,7 @@ fn provider_publishes_native_descriptor_contract() {
 
 #[test]
 fn provider_propagates_invalid_schema() {
-    use kaji_core::input::InputPlugin;
+    use poolster_core::input::InputPlugin;
     assert!(
         protobuf::ProtobufInput
             .load(&fixture("invalid.proto"))

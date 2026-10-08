@@ -10,7 +10,7 @@ pub(crate) fn selected(operation: &Operation) -> bool {
     })
 }
 fn ordered_plan(api: &Api, operation: &Operation) -> Option<serde_json::Value> {
-    let content = kaji_core::openapi32::request_content(operation)
+    let content = poolster_core::openapi32::request_content(operation)
         .ok()
         .and_then(|definitions| {
             definitions.into_iter().find(|item| {
@@ -30,7 +30,7 @@ fn ordered_plan(api: &Api, operation: &Operation) -> Option<serde_json::Value> {
                 .to_ascii_lowercase()
                 .starts_with("multipart/")
         })?;
-    fn advanced(encoding: &kaji_core::openapi32::Encoding) -> bool {
+    fn advanced(encoding: &poolster_core::openapi32::Encoding) -> bool {
         encoding
             .style
             .as_deref()
@@ -92,7 +92,7 @@ pub(crate) fn mixed(operation: &Operation) -> bool {
             .is_some_and(|body| body.media_types.len() > 1)
 }
 
-fn root_fields(api: &Api, value: &SchemaValue, depth: usize) -> Result<Vec<kaji_core::Field>> {
+fn root_fields(api: &Api, value: &SchemaValue, depth: usize) -> Result<Vec<poolster_core::Field>> {
     anyhow::ensure!(
         depth < 12,
         "Multipart root references exceed supported depth"
@@ -111,7 +111,7 @@ fn root_fields(api: &Api, value: &SchemaValue, depth: usize) -> Result<Vec<kaji_
                 .iter()
                 .map(|value| root_fields(api, value, depth + 1))
                 .collect::<Result<Vec<_>>>()?;
-            let mut fields = std::collections::BTreeMap::<String, kaji_core::Field>::new();
+            let mut fields = std::collections::BTreeMap::<String, poolster_core::Field>::new();
             for variant in &variants {
                 for field in variant {
                     if let Some(existing) = fields.get_mut(&field.name) {
@@ -164,7 +164,7 @@ fn extra_parts(api: &Api, operation: &Operation) -> bool {
         .and_then(|media| media.schema.as_ref())
         .is_some_and(|value| open_root(api, value, 0))
 }
-fn fields(api: &Api, operation: &Operation) -> Result<Vec<kaji_core::Field>> {
+fn fields(api: &Api, operation: &Operation) -> Result<Vec<poolster_core::Field>> {
     let body = operation.request_body.as_ref().unwrap();
     anyhow::ensure!(
         body.media_types
@@ -220,7 +220,7 @@ pub(crate) fn validate(api: &Api) -> Result<()> {
     }
     Ok(())
 }
-fn binary(field: &kaji_core::Field) -> bool {
+fn binary(field: &poolster_core::Field) -> bool {
     field.value.format.as_deref() == Some("binary")
         && matches!(field.value.kind, SchemaKind::String)
 }
@@ -261,7 +261,7 @@ fn file_shape(api: &Api, value: &SchemaValue, depth: usize) -> Option<bool> {
 fn encoding<'a>(operation: &'a Operation, name: &str) -> Option<&'a serde_json::Value> {
     operation
         .annotations
-        .get("kaji.request_body_encodings")?
+        .get("poolster.request_body_encodings")?
         .get("multipart/form-data")?
         .get(name)
 }
@@ -456,13 +456,13 @@ pub(crate) fn emit(api: &Api, root: &str, namespace: &str, tree: &mut GeneratedT
             }
         }
         if extra_parts(api, op) {
-            properties.push_str("public System.Collections.Generic.Dictionary<string,object?>? KajiExtraParts {get;init;}\n");
+            properties.push_str("public System.Collections.Generic.Dictionary<string,object?>? PoolsterExtraParts {get;init;}\n");
             let names = fields
                 .iter()
                 .map(|field| format!("{:?}", field.name))
                 .collect::<Vec<_>>()
                 .join(",");
-            encode.push_str(&format!("if(KajiExtraParts is not null)foreach(var entry in KajiExtraParts){{if(new string[]{{{names}}}.Contains(entry.Key))throw new ArgumentException(\"Extra multipart part collides with declared field\");AddExtra(content,entry.Key,entry.Value);}}\n"));
+            encode.push_str(&format!("if(PoolsterExtraParts is not null)foreach(var entry in PoolsterExtraParts){{if(new string[]{{{names}}}.Contains(entry.Key))throw new ArgumentException(\"Extra multipart part collides with declared field\");AddExtra(content,entry.Key,entry.Value);}}\n"));
         }
         let source = format!(
             "using System;\nusing System.Net.Http;\nusing System.Linq;\nusing System.Text.Json;\nnamespace {namespace};\npublic sealed record {name} {{\n{properties}\nprivate static void AddExtra(MultipartFormDataContent content,string name,object? value){{if(value is null)return;if(value is MultipartFile file){{content.Add(file.ToContent(),name,file.FileName);return;}}if(value is System.Collections.Generic.IEnumerable<MultipartFile> files){{foreach(var item in files)content.Add(item.ToContent(),name,item.FileName);return;}}var element=System.Text.Json.JsonSerializer.SerializeToElement(value,new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));if(element.ValueKind==System.Text.Json.JsonValueKind.Array){{foreach(var item in element.EnumerateArray())AddExtra(content,name,item);return;}}bool scalar=element.ValueKind is System.Text.Json.JsonValueKind.String or System.Text.Json.JsonValueKind.Number or System.Text.Json.JsonValueKind.True or System.Text.Json.JsonValueKind.False;content.Add(new StringContent(scalar?Scalar(value):element.GetRawText(),System.Text.Encoding.UTF8,scalar?\"text/plain\":\"application/json\"),name);}}\nprivate static string Scalar(object? value){{var element=System.Text.Json.JsonSerializer.SerializeToElement(value,new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));return element.ValueKind==System.Text.Json.JsonValueKind.String?element.GetString()!:element.GetRawText();}}\npublic MultipartFormDataContent ToContent(){{{checks}\nvar content=new MultipartFormDataContent();try{{{encode}return content;}}catch{{content.Dispose();throw;}}}}\n}}\n"
@@ -472,7 +472,7 @@ pub(crate) fn emit(api: &Api, root: &str, namespace: &str, tree: &mut GeneratedT
             source,
         )?)?;
     }
-    tree.insert(GeneratedFile::new(output_path(root,"MULTIPART.md"), "Multipart/form-data operations accept a generated <Operation>MultipartBody record. File fields use new MultipartFile(bytes, fileName, contentType); bytes are copied. Scalars are encoded with UTF-8/invariant culture and native MultipartFormDataContent. Multipart/form-data with explicit raw or JSON alternatives and object roots are supported. Open roots expose optional KajiExtraParts/kajiExtraParts maps, rejecting collisions with declared parts. Root object unions merge fields and retain only shared required members; branch-specific constraints remain server-validated. Mixed-media calls accept native JSON models or explicit MultipartBody.RawBody/KajiRawBody buffered media wrappers. Objects/unions/reference values use JSON parts; arrays repeat parts by default and explode=false joins scalar values. Optional parts with null values are omitted. Base64 byte format, streaming and custom per-part headers require adapters. Part names use ASCII letters/digits/dot/underscore/hyphen; filenames use printable ASCII excluding quotes/backslashes. Files are buffered; no streaming/file-system access is implied. JSON model APIs remain separate.")?)?;
+    tree.insert(GeneratedFile::new(output_path(root,"MULTIPART.md"), "Multipart/form-data operations accept a generated <Operation>MultipartBody record. File fields use new MultipartFile(bytes, fileName, contentType); bytes are copied. Scalars are encoded with UTF-8/invariant culture and native MultipartFormDataContent. Multipart/form-data with explicit raw or JSON alternatives and object roots are supported. Open roots expose optional PoolsterExtraParts/kajiExtraParts maps, rejecting collisions with declared parts. Root object unions merge fields and retain only shared required members; branch-specific constraints remain server-validated. Mixed-media calls accept native JSON models or explicit MultipartBody.RawBody/PoolsterRawBody buffered media wrappers. Objects/unions/reference values use JSON parts; arrays repeat parts by default and explode=false joins scalar values. Optional parts with null values are omitted. Base64 byte format, streaming and custom per-part headers require adapters. Part names use ASCII letters/digits/dot/underscore/hyphen; filenames use printable ASCII excluding quotes/backslashes. Files are buffered; no streaming/file-system access is implied. JSON model APIs remain separate.")?)?;
     Ok(())
 }
 
@@ -482,7 +482,7 @@ mod tests {
     fn api() -> Api {
         let mut file = SchemaValue::new(SchemaKind::String);
         file.format = Some("binary".into());
-        let field = |name: &str, value, required| kaji_core::Field {
+        let field = |name: &str, value, required| poolster_core::Field {
             name: name.into(),
             value,
             required,
@@ -505,17 +505,17 @@ mod tests {
             )],
             operations: vec![Operation {
                 id: "uploadThing".into(),
-                method: kaji_core::HttpMethod::Post,
+                method: poolster_core::HttpMethod::Post,
                 path: "/upload".into(),
-                request_body: Some(kaji_core::OperationRequestBody {
+                request_body: Some(poolster_core::OperationRequestBody {
                     required: true,
                     description: None,
-                    media_types: vec![kaji_core::OperationMediaType {
+                    media_types: vec![poolster_core::OperationMediaType {
                         content_type: "multipart/form-data".into(),
                         schema: Some(SchemaValue::reference("#/components/schemas/Upload")),
                     }],
                 }),
-                responses: vec![kaji_core::OperationResponse {
+                responses: vec![poolster_core::OperationResponse {
                     status: "204".into(),
                     description: None,
                     media_types: vec![],
@@ -541,7 +541,7 @@ mod tests {
             .as_mut()
             .unwrap()
             .media_types
-            .push(kaji_core::OperationMediaType {
+            .push(poolster_core::OperationMediaType {
                 content_type: "application/json".into(),
                 schema: Some(SchemaValue::new(SchemaKind::String)),
             });
@@ -549,10 +549,10 @@ mod tests {
     }
     #[test]
     fn emits_native_typed_multipart_in_public_and_resource_calls() {
-        let tree = kaji_core::engine::Packages::new()
+        let tree = poolster_core::engine::Packages::new()
             .package(
                 crate::package("sdk")
-                    .name("Kaji.Multipart")
+                    .name("Poolster.Multipart")
                     .with(crate::sdk()),
             )
             .generate(&api(), None)
@@ -561,7 +561,7 @@ mod tests {
         assert!(dto.contains("required MultipartFile File"));
         assert!(dto.contains("new MultipartFormDataContent()"));
         let client = tree
-            .get("sdk/Operations/KajiClientOperations000.cs")
+            .get("sdk/Operations/PoolsterClientOperations000.cs")
             .unwrap();
         assert!(client.contains("UploadThingMultipartBody body"));
         assert!(client.contains("request.Content = body.ToContent()"));
@@ -570,10 +570,10 @@ mod tests {
     #[test]
     #[ignore = "requires .NET8; parses native HTTP multipart request bytes without network"]
     fn native_multipart_http_bytes_preserve_unicode_falsy_and_binary() {
-        let tree = kaji_core::engine::Packages::new()
+        let tree = poolster_core::engine::Packages::new()
             .package(
                 crate::package("sdk")
-                    .name("Kaji.Multipart")
+                    .name("Poolster.Multipart")
                     .with(crate::sdk())
                     .with(crate::operation_tests()),
             )
@@ -612,7 +612,7 @@ mod tests {
             unreachable!()
         };
         *additional_properties = AdditionalProperties::Any;
-        fields.push(kaji_core::Field {
+        fields.push(poolster_core::Field {
             name: "chunking_strategy".into(),
             value: SchemaValue::new(SchemaKind::OneOf {
                 variants: vec![
@@ -626,7 +626,7 @@ mod tests {
             required: false,
             annotations: Default::default(),
         });
-        fields.push(kaji_core::Field {
+        fields.push(poolster_core::Field {
             name: "timestamp_granularities[]".into(),
             value: SchemaValue::new(SchemaKind::Array {
                 items: Box::new(SchemaValue::new(SchemaKind::String)),
@@ -636,7 +636,7 @@ mod tests {
         });
         let mut binary = SchemaValue::new(SchemaKind::String);
         binary.format = Some("binary".into());
-        fields.push(kaji_core::Field {
+        fields.push(poolster_core::Field {
             name: "files".into(),
             value: SchemaValue::new(SchemaKind::Array {
                 items: Box::new(binary),
@@ -644,17 +644,17 @@ mod tests {
             required: false,
             annotations: Default::default(),
         });
-        source.operations[0].annotations.insert("kaji.request_body_encodings".into(),serde_json::json!({"multipart/form-data":{"chunking_strategy":{"contentType":"application/json"}}}));
+        source.operations[0].annotations.insert("poolster.request_body_encodings".into(),serde_json::json!({"multipart/form-data":{"chunking_strategy":{"contentType":"application/json"}}}));
         source
     }
 
     #[test]
     #[ignore = "requires .NET8; native complex multipart wire probe"]
     fn native_multipart_complex_json_and_repeated_arrays() {
-        let tree = kaji_core::engine::Packages::new()
+        let tree = poolster_core::engine::Packages::new()
             .package(
                 crate::package("sdk")
-                    .name("Kaji.Multipart")
+                    .name("Poolster.Multipart")
                     .with(crate::sdk())
                     .with(crate::operation_tests()),
             )

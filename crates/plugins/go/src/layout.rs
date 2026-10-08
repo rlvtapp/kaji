@@ -245,7 +245,7 @@ fn selectors(code: &str) -> BTreeSet<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kaji_core::{HttpMethod, OperationMediaType, OperationResponse};
+    use poolster_core::{HttpMethod, OperationMediaType, OperationResponse};
     use std::process::Command;
 
     #[test]
@@ -313,7 +313,7 @@ func TestAllDescriptorChunks(t *testing.T) {
         api.schemas.push(Schema::new(
             "Node",
             SchemaValue::new(SchemaKind::Object {
-                fields: vec![kaji_core::Field {
+                fields: vec![poolster_core::Field {
                     name: "parent".into(),
                     value: SchemaValue::reference("#/components/schemas/Node"),
                     required: false,

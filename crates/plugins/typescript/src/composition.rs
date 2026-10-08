@@ -2,7 +2,7 @@
 //! so consumers never reconstruct imports from operation IDs or output recipes.
 use crate::{ModelOptions, Symbol, TypeScript, render, sdk};
 use anyhow::{Context, Result};
-use kaji_core::{
+use poolster_core::{
     GeneratedFile,
     engine::{Contract, Handle, Meta, Plugin, PluginContext, Provision, Requirement},
 };
@@ -20,7 +20,7 @@ pub struct Models {
 impl Contract for Models {
     const NAME: &'static str = "typescript.sdk-models";
 }
-/// A module implementing Kaji's runtime ABI: Options, RequestResult,
+/// A module implementing Poolster's runtime ABI: Options, RequestResult,
 /// ResponseResult, ClientConfig, ClientInstance, client, createClient,
 /// resolveResponse and stream. Community transports may publish this contract.
 #[derive(Clone)]
@@ -79,7 +79,7 @@ pub struct Provider {
 fn provider(part: Part, output: &str) -> Provider {
     let mut config = sdk::SdkConfig::new("__package");
     config.group_by_tag = false;
-    config.client_style = kaji_core::SdkClientStyle::Flat;
+    config.client_style = poolster_core::SdkClientStyle::Flat;
     Provider {
         meta: Meta::new(),
         part,
@@ -94,7 +94,7 @@ pub fn models() -> Provider {
     provider(Part::Models, "models")
 }
 pub fn transport() -> Provider {
-    provider(Part::Transport, ".kaji/client")
+    provider(Part::Transport, ".poolster/client")
 }
 pub fn operations() -> Provider {
     provider(Part::Operations, "operations")
@@ -124,7 +124,7 @@ impl Provider {
         self
     }
     pub fn namespaced(mut self) -> Self {
-        self.config.client_style = kaji_core::SdkClientStyle::Namespaced;
+        self.config.client_style = poolster_core::SdkClientStyle::Namespaced;
         self
     }
     pub fn throw_on_error(mut self, value: bool) -> Self {
@@ -210,7 +210,7 @@ impl Plugin<TypeScript> for Provider {
             );
         }
         let prepared_api = crate::symbols::prepare(cx.api);
-        let mut tree = kaji_core::GeneratedTree::default();
+        let mut tree = poolster_core::GeneratedTree::default();
         match self.part {
             Part::Models => {
                 for file in crate::models::ModelRenderer.generate(
@@ -227,7 +227,7 @@ impl Plugin<TypeScript> for Provider {
                 }
                 tree.insert(GeneratedFile::new(
                     "__package/package.json",
-                    sdk::kaji_package(
+                    sdk::poolster_package(
                         &prepared_api,
                         sdk::SdkTransport::Fetch,
                         cx.settings.package_name.as_deref(),
@@ -237,8 +237,8 @@ impl Plugin<TypeScript> for Provider {
             }
             Part::Transport => {
                 tree.insert(GeneratedFile::new(
-                    "__package/.kaji/client.ts",
-                    sdk::kaji_runtime(config.transport, cx.security_schemes),
+                    "__package/.poolster/client.ts",
+                    sdk::poolster_runtime(config.transport, cx.security_schemes),
                 )?)?;
             }
             Part::Operations => {
@@ -252,7 +252,7 @@ impl Plugin<TypeScript> for Provider {
                         group_default_directory: false,
                         type_import_prefix: Some("../models".into()),
                         runtime_import_prefix: Some("..".into()),
-                        runtime_dir: ".kaji".into(),
+                        runtime_dir: ".poolster".into(),
                     },
                     cx.security_schemes,
                 )? {
@@ -264,13 +264,13 @@ impl Plugin<TypeScript> for Provider {
                     .client_name
                     .clone()
                     .unwrap_or_else(|| sdk::sdk_client_name(&cx.api.name));
-                for file in sdk::kaji_sdk_client(
+                for file in sdk::poolster_sdk_client(
                     &prepared_api,
                     &name,
                     false,
                     config.client_style,
                     "__package",
-                    ".kaji",
+                    ".poolster",
                 )? {
                     tree.insert(file)?;
                 }
@@ -286,13 +286,13 @@ impl Plugin<TypeScript> for Provider {
                 Part::Models => {
                     path.starts_with("models") && path.extension().is_some_and(|e| e == "ts")
                 }
-                Part::Transport => path == Path::new(".kaji/client.ts"),
+                Part::Transport => path == Path::new(".poolster/client.ts"),
                 Part::Operations => {
                     path.starts_with("clients")
                         && (path
                             .file_stem()
                             .and_then(|s| s.to_str())
-                            .is_some_and(|s| s.starts_with("_kaji_json_refs"))
+                            .is_some_and(|s| s.starts_with("_poolster_json_refs"))
                             || prepared_api.operations.iter().any(|o| {
                                 path.file_stem().is_some_and(|s| {
                                     s == crate::clients::operation_file_identifier(&o.id).as_str()
@@ -316,14 +316,14 @@ impl Plugin<TypeScript> for Provider {
             if matches!(self.part, Part::Operations | Part::Client) {
                 let transport = cx.inputs.get::<Transport>()?;
                 let import = module_import(&transport.module, &target)?;
-                let original = module_import(Path::new(".kaji/client"), path)?;
+                let original = module_import(Path::new(".poolster/client"), path)?;
                 contents = contents.replace(&format!("'{original}'"), &format!("'{import}'"));
             }
             if matches!(self.part, Part::Operations)
                 && path
                     .file_stem()
                     .and_then(|s| s.to_str())
-                    .is_some_and(|s| s.starts_with("_kaji_json_refs"))
+                    .is_some_and(|s| s.starts_with("_poolster_json_refs"))
             {
                 cx.files.emit(GeneratedFile::new(target, contents)?)?;
                 continue;
@@ -512,7 +512,7 @@ pub struct Auxiliary {
     models: Option<Handle<Models>>,
     operations: Option<Handle<Operations>>,
     max_file_bytes: usize,
-    layout: Option<kaji_core::SourceLayout>,
+    layout: Option<poolster_core::SourceLayout>,
     fixture_options: crate::FixtureOptions,
     cypress_options: crate::CypressOptions,
 }
@@ -548,7 +548,7 @@ pub fn cypress() -> Auxiliary {
     auxiliary(AuxiliaryKind::Cypress, "cypress")
 }
 impl Auxiliary {
-    pub fn layout(mut self, layout: kaji_core::SourceLayout) -> Self {
+    pub fn layout(mut self, layout: poolster_core::SourceLayout) -> Self {
         self.layout = Some(layout);
         self
     }
@@ -614,15 +614,16 @@ impl Plugin<TypeScript> for Auxiliary {
         };
         let mut api = crate::symbols::prepare(cx.api);
         for (prepared, original) in api.schemas.iter_mut().zip(&cx.api.schemas) {
-            prepared
-                .value
-                .extensions
-                .insert("kaji.aux.schema_name".into(), original.name.clone().into());
+            prepared.value.extensions.insert(
+                "poolster.aux.schema_name".into(),
+                original.name.clone().into(),
+            );
         }
         for (prepared, original) in api.operations.iter_mut().zip(&cx.api.operations) {
-            prepared
-                .annotations
-                .insert("kaji.aux.operation_id".into(), original.id.clone().into());
+            prepared.annotations.insert(
+                "poolster.aux.operation_id".into(),
+                original.id.clone().into(),
+            );
         }
         let (files, dependency, version) = match self.kind {
             AuxiliaryKind::Zod => (
@@ -746,7 +747,7 @@ impl Plugin<TypeScript> for Auxiliary {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kaji_core::{Api, HttpMethod, Operation, engine::Packages};
+    use poolster_core::{Api, HttpMethod, Operation, engine::Packages};
     fn api() -> Api {
         Api {
             name: "Contacts API".into(),
@@ -764,13 +765,13 @@ mod tests {
     fn auxiliary_chunks_relocate_and_cleanup_when_output_shrinks() {
         let mut spec = api();
         spec.schemas = vec![
-            kaji_core::Schema::new(
+            poolster_core::Schema::new(
                 "Leaf",
-                kaji_core::SchemaValue::new(kaji_core::SchemaKind::String),
+                poolster_core::SchemaValue::new(poolster_core::SchemaKind::String),
             ),
-            kaji_core::Schema::new(
+            poolster_core::Schema::new(
                 "Branch",
-                kaji_core::SchemaValue::reference("#/components/schemas/Leaf"),
+                poolster_core::SchemaValue::reference("#/components/schemas/Leaf"),
             ),
         ];
         let build = |budget| {
@@ -837,7 +838,7 @@ mod tests {
             let tree = sdk::generate_sdk(cx.api, &config, cx.security_schemes)?;
             cx.files.emit(GeneratedFile::new(
                 "custom/request.ts",
-                tree.get("__package/.kaji/client.ts").unwrap(),
+                tree.get("__package/.poolster/client.ts").unwrap(),
             )?)?;
             cx.publish(Transport {
                 module: "custom/request".into(),
@@ -875,7 +876,7 @@ mod tests {
             query.contains("from \"../api/calls/listContacts.js\""),
             "{query}"
         );
-        assert!(tree.get("ts/.kaji/client.ts").is_none());
+        assert!(tree.get("ts/.poolster/client.ts").is_none());
         let manifest: serde_json::Value =
             serde_json::from_str(tree.get("ts/package.json").unwrap()).unwrap();
         assert_eq!(
@@ -993,7 +994,7 @@ mod tests {
                 .include_operations(["searchContacts"])
                 .operation_kind("searchContacts", QueryKind::Query)
                 .operation_name("searchContacts", "findContacts")
-                .layout(kaji_core::SourceLayout::PerOperation),
+                .layout(poolster_core::SourceLayout::PerOperation),
         )
         .unwrap();
         assert!(tree.iter().any(|(path, _)| {
@@ -1023,7 +1024,7 @@ mod tests {
             .package(
                 crate::package("ts")
                     .with(crate::sdk().raw())
-                    .with(react_query().layout(kaji_core::SourceLayout::PerOperation)),
+                    .with(react_query().layout(poolster_core::SourceLayout::PerOperation)),
             )
             .generate(&source, None)
             .unwrap();
@@ -1076,17 +1077,17 @@ mod tests {
                 (
                     role,
                     if role == "cursor" {
-                        kaji_core::SchemaKind::String
+                        poolster_core::SchemaKind::String
                     } else {
-                        kaji_core::SchemaKind::Integer
+                        poolster_core::SchemaKind::Integer
                     },
                 ),
-                ("limit", kaji_core::SchemaKind::Integer),
+                ("limit", poolster_core::SchemaKind::Integer),
             ] {
-                op.parameters.push(kaji_core::OperationParameter {
+                op.parameters.push(poolster_core::OperationParameter {
                     name: name.into(),
                     location: "query".into(),
-                    schema: Some(kaji_core::SchemaValue::new(schema)),
+                    schema: Some(poolster_core::SchemaValue::new(schema)),
                     required: false,
                     description: None,
                     annotations: BTreeMap::new(),
@@ -1108,30 +1109,32 @@ mod tests {
                 "x-kaji-pagination".into(),
                 serde_json::json!({"type":kind,"inputs":inputs,"outputs":outputs}),
             );
-            let mut next = kaji_core::SchemaValue::new(kaji_core::SchemaKind::String);
+            let mut next = poolster_core::SchemaValue::new(poolster_core::SchemaKind::String);
             next.nullable = true;
-            op.responses.push(kaji_core::OperationResponse::json(
+            op.responses.push(poolster_core::OperationResponse::json(
                 "200",
-                kaji_core::SchemaValue::new(kaji_core::SchemaKind::Object {
+                poolster_core::SchemaValue::new(poolster_core::SchemaKind::Object {
                     fields: vec![
-                        kaji_core::Field {
+                        poolster_core::Field {
                             name: "next".into(),
                             value: next,
                             required: false,
                             annotations: BTreeMap::new(),
                         },
-                        kaji_core::Field {
+                        poolster_core::Field {
                             name: "items".into(),
-                            value: kaji_core::SchemaValue::new(kaji_core::SchemaKind::Array {
-                                items: Box::new(kaji_core::SchemaValue::new(
-                                    kaji_core::SchemaKind::Integer,
-                                )),
-                            }),
+                            value: poolster_core::SchemaValue::new(
+                                poolster_core::SchemaKind::Array {
+                                    items: Box::new(poolster_core::SchemaValue::new(
+                                        poolster_core::SchemaKind::Integer,
+                                    )),
+                                },
+                            ),
                             required: false,
                             annotations: BTreeMap::new(),
                         },
                     ],
-                    additional_properties: kaji_core::AdditionalProperties::Unspecified,
+                    additional_properties: poolster_core::AdditionalProperties::Unspecified,
                 }),
             ));
 
@@ -1143,12 +1146,12 @@ mod tests {
                     .with(crate::sdk().raw())
                     .with(
                         react_query()
-                            .layout(kaji_core::SourceLayout::PerOperation)
+                            .layout(poolster_core::SourceLayout::PerOperation)
                             .output("ui/react"),
                     )
                     .with(
                         vue_query()
-                            .layout(kaji_core::SourceLayout::PerResource {
+                            .layout(poolster_core::SourceLayout::PerResource {
                                 max_file_bytes: 128 * 1024,
                                 max_declarations: Some(1),
                             })
@@ -1256,25 +1259,27 @@ mod tests {
         let modules = std::env::var("KAJI_TS_NODE_MODULES").unwrap();
         let directory = std::env::temp_dir().join(format!("kaji-ts-aux-{}", std::process::id()));
         let mut api = api();
-        let mut id = kaji_core::SchemaValue::new(kaji_core::SchemaKind::Integer);
+        let mut id = poolster_core::SchemaValue::new(poolster_core::SchemaKind::Integer);
         id.format = Some("int64".into());
-        let mut status = kaji_core::SchemaValue::new(kaji_core::SchemaKind::String);
+        let mut status = poolster_core::SchemaValue::new(poolster_core::SchemaKind::String);
         status.enum_values = vec![serde_json::json!("active"), serde_json::json!("disabled")];
         api.schemas = vec![
-            kaji_core::Schema::new("Status", status),
-            kaji_core::Schema::new(
+            poolster_core::Schema::new("Status", status),
+            poolster_core::Schema::new(
                 "Contact",
-                kaji_core::SchemaValue::new(kaji_core::SchemaKind::Object {
+                poolster_core::SchemaValue::new(poolster_core::SchemaKind::Object {
                     fields: vec![
-                        kaji_core::Field {
+                        poolster_core::Field {
                             name: "id".into(),
                             value: id,
                             required: true,
                             annotations: Default::default(),
                         },
-                        kaji_core::Field {
+                        poolster_core::Field {
                             name: "status".into(),
-                            value: kaji_core::SchemaValue::reference("#/components/schemas/Status"),
+                            value: poolster_core::SchemaValue::reference(
+                                "#/components/schemas/Status",
+                            ),
                             required: true,
                             annotations: Default::default(),
                         },
@@ -1283,16 +1288,16 @@ mod tests {
                 }),
             ),
         ];
-        api.operations[0].responses = vec![kaji_core::OperationResponse::json(
+        api.operations[0].responses = vec![poolster_core::OperationResponse::json(
             "200",
-            kaji_core::SchemaValue::reference("#/components/schemas/Contact"),
+            poolster_core::SchemaValue::reference("#/components/schemas/Contact"),
         )];
-        api.schemas.push(kaji_core::Schema::new(
+        api.schemas.push(poolster_core::Schema::new(
             "Node",
-            kaji_core::SchemaValue::new(kaji_core::SchemaKind::Object {
-                fields: vec![kaji_core::Field {
+            poolster_core::SchemaValue::new(poolster_core::SchemaKind::Object {
+                fields: vec![poolster_core::Field {
                     name: "child".into(),
-                    value: kaji_core::SchemaValue::reference("#/components/schemas/Node"),
+                    value: poolster_core::SchemaValue::reference("#/components/schemas/Node"),
                     required: false,
                     annotations: Default::default(),
                 }],
@@ -1300,12 +1305,12 @@ mod tests {
             }),
         ));
         for (name, reference) in [("NodeA", "NodeB"), ("NodeB", "NodeA")] {
-            api.schemas.push(kaji_core::Schema::new(
+            api.schemas.push(poolster_core::Schema::new(
                 name,
-                kaji_core::SchemaValue::new(kaji_core::SchemaKind::Object {
-                    fields: vec![kaji_core::Field {
+                poolster_core::SchemaValue::new(poolster_core::SchemaKind::Object {
+                    fields: vec![poolster_core::Field {
                         name: "child".into(),
-                        value: kaji_core::SchemaValue::reference(format!(
+                        value: poolster_core::SchemaValue::reference(format!(
                             "#/components/schemas/{reference}"
                         )),
                         required: false,

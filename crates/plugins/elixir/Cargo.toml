@@ -1,5 +1,5 @@
 [package]
-name = "kaji-plugin-elixir"
+name = "poolster-plugin-elixir"
 version.workspace = true
 edition = "2024"
 license.workspace = true
@@ -10,7 +10,7 @@ publish = false
 
 [dependencies]
 anyhow = "1.0.102"
-kaji-core = { path = "../../kaji-core" }
+poolster-core = { path = "../../kaji-core" }
 serde_json = "1.0"
 
 [dev-dependencies]

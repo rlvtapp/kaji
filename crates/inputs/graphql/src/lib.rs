@@ -7,7 +7,7 @@ mod defaults;
 use anyhow::{Result, anyhow};
 use apollo_compiler::{Schema, schema::ExtendedType, validation::Valid};
 
-use kaji_core::input::{InputOperation as OperationSummary, InputSummary as ContractSummary};
+use poolster_core::input::{InputOperation as OperationSummary, InputSummary as ContractSummary};
 
 #[derive(Debug, Clone)]
 pub struct GraphqlDocument {
@@ -64,25 +64,25 @@ impl GraphqlDocument {
 
 use anyhow::Context;
 
-impl kaji_core::engine::Contract for GraphqlDocument {
-    const NAME: &'static str = "kaji.graphql";
+impl poolster_core::engine::Contract for GraphqlDocument {
+    const NAME: &'static str = "poolster.graphql";
 }
 
 /// Native graphql input provider.
 pub struct GraphqlInput;
-impl kaji_core::input::InputPlugin for GraphqlInput {
+impl poolster_core::input::InputPlugin for GraphqlInput {
     fn id(&self) -> &str {
         "graphql.apollo"
     }
     fn format(&self) -> &str {
         "graphql"
     }
-    fn load(&self, path: &std::path::Path) -> anyhow::Result<kaji_core::input::InputContract> {
+    fn load(&self, path: &std::path::Path) -> anyhow::Result<poolster_core::input::InputContract> {
         let document = parse(
             &std::fs::read_to_string(path)
                 .with_context(|| format!("cannot read contract {}", path.display()))?,
         )?;
-        let mut input = kaji_core::input::InputContract::new(document.summary());
+        let mut input = poolster_core::input::InputContract::new(document.summary());
 
         input.publish(document)?;
         Ok(input)

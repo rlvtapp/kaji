@@ -1,29 +1,31 @@
 //! Export a neutral multioperation wire fixture for the native conformance runner.
 mod support;
-use kaji::{generate_with_security_catalog, prelude::*};
-use kaji_core::{SecurityRequirement, SecurityScheme, SecuritySchemeCatalog, SecuritySchemeKind};
+use poolster::{generate_with_security_catalog, prelude::*};
+use poolster_core::{
+    SecurityRequirement, SecurityScheme, SecuritySchemeCatalog, SecuritySchemeKind,
+};
 use std::collections::BTreeMap;
 #[test]
 fn export_runtime_contract_fixture() {
     let mut api = support::sdk_contract_api();
-    api.name = "Kaji Contract".into();
+    api.name = "Poolster Contract".into();
     api.operations[0].security = vec![SecurityRequirement {
         schemes: BTreeMap::from([("Bearer".into(), vec![])]),
     }];
-    api.schemas.push(kaji_core::Schema::new(
+    api.schemas.push(poolster_core::Schema::new(
         "ContactPage",
-        kaji_core::SchemaValue::new(kaji_core::SchemaKind::Object {
-            fields: vec![kaji_core::Field {
+        poolster_core::SchemaValue::new(poolster_core::SchemaKind::Object {
+            fields: vec![poolster_core::Field {
                 name: "items".into(),
-                value: kaji_core::SchemaValue::new(kaji_core::SchemaKind::Array {
-                    items: Box::new(kaji_core::SchemaValue::reference(
+                value: poolster_core::SchemaValue::new(poolster_core::SchemaKind::Array {
+                    items: Box::new(poolster_core::SchemaValue::reference(
                         "#/components/schemas/Contact",
                     )),
                 }),
                 required: true,
                 annotations: Default::default(),
             }],
-            additional_properties: kaji_core::AdditionalProperties::Forbidden,
+            additional_properties: poolster_core::AdditionalProperties::Forbidden,
         }),
     ));
     let mut listing = api.operations[0].clone();
@@ -31,24 +33,26 @@ fn export_runtime_contract_fixture() {
     listing.path = "/contacts".into();
     listing.parameters = ["page", "limit"]
         .into_iter()
-        .map(|name| kaji_core::OperationParameter {
+        .map(|name| poolster_core::OperationParameter {
             name: name.into(),
             location: "query".into(),
             required: false,
-            schema: Some(kaji_core::SchemaValue::new(kaji_core::SchemaKind::Integer)),
+            schema: Some(poolster_core::SchemaValue::new(
+                poolster_core::SchemaKind::Integer,
+            )),
             description: None,
             annotations: Default::default(),
         })
         .collect();
-    listing.responses = vec![kaji_core::OperationResponse::json(
+    listing.responses = vec![poolster_core::OperationResponse::json(
         "200",
-        kaji_core::SchemaValue::reference("#/components/schemas/ContactPage"),
+        poolster_core::SchemaValue::reference("#/components/schemas/ContactPage"),
     )];
     listing.annotations.insert("x-kaji-pagination".into(), serde_json::json!({"type":"page","inputs":[{"name":"page","in":"parameters","type":"page"},{"name":"limit","in":"parameters","type":"limit"}],"outputs":{"results":"/items"}}));
     api.operations.push(listing);
     let mut creating = api.operations[0].clone();
     creating.id = "createContact".into();
-    creating.method = kaji_core::HttpMethod::Post;
+    creating.method = poolster_core::HttpMethod::Post;
     creating.path = "/contacts".into();
     creating.parameters.clear();
     creating.annotations.insert(
@@ -57,84 +61,91 @@ fn export_runtime_contract_fixture() {
     );
     let mut patching = creating.clone();
     patching.id = "patchContact".into();
-    patching.method = kaji_core::HttpMethod::Patch;
+    patching.method = poolster_core::HttpMethod::Patch;
     let mut unsafe_creating = creating.clone();
     unsafe_creating.id = "unsafeCreateContact".into();
     unsafe_creating.path = "/unsafe".into();
     unsafe_creating.annotations.clear();
     let mut unsafe_patching = unsafe_creating.clone();
     unsafe_patching.id = "unsafePatchContact".into();
-    unsafe_patching.method = kaji_core::HttpMethod::Patch;
+    unsafe_patching.method = poolster_core::HttpMethod::Patch;
     api.operations
         .extend([creating, patching, unsafe_creating, unsafe_patching]);
-    let mut nullable_note = kaji_core::SchemaValue::new(kaji_core::SchemaKind::String);
+    let mut nullable_note = poolster_core::SchemaValue::new(poolster_core::SchemaKind::String);
     nullable_note.nullable = true;
-    api.schemas.push(kaji_core::Schema::new(
+    api.schemas.push(poolster_core::Schema::new(
         "WireInput",
-        kaji_core::SchemaValue::new(kaji_core::SchemaKind::Object {
+        poolster_core::SchemaValue::new(poolster_core::SchemaKind::Object {
             fields: vec![
-                kaji_core::Field {
+                poolster_core::Field {
                     name: "enabled".into(),
-                    value: kaji_core::SchemaValue::new(kaji_core::SchemaKind::Boolean),
+                    value: poolster_core::SchemaValue::new(poolster_core::SchemaKind::Boolean),
                     required: true,
                     annotations: Default::default(),
                 },
-                kaji_core::Field {
+                poolster_core::Field {
                     name: "count".into(),
-                    value: kaji_core::SchemaValue::new(kaji_core::SchemaKind::Integer),
+                    value: poolster_core::SchemaValue::new(poolster_core::SchemaKind::Integer),
                     required: true,
                     annotations: Default::default(),
                 },
-                kaji_core::Field {
+                poolster_core::Field {
                     name: "note".into(),
                     value: nullable_note,
                     required: true,
                     annotations: Default::default(),
                 },
-                kaji_core::Field {
+                poolster_core::Field {
                     name: "missing".into(),
-                    value: kaji_core::SchemaValue::new(kaji_core::SchemaKind::String),
+                    value: poolster_core::SchemaValue::new(poolster_core::SchemaKind::String),
                     required: false,
                     annotations: Default::default(),
                 },
             ],
-            additional_properties: kaji_core::AdditionalProperties::Forbidden,
+            additional_properties: poolster_core::AdditionalProperties::Forbidden,
         }),
     ));
     let mut echo = api.operations[0].clone();
     echo.id = "echoWire".into();
-    echo.method = kaji_core::HttpMethod::Post;
+    echo.method = poolster_core::HttpMethod::Post;
     echo.path = "/wire/{key}".into();
     echo.parameters = vec![];
     for (name, location, kind, required) in [
-        ("key", "path", kaji_core::SchemaKind::String, true),
-        ("text", "query", kaji_core::SchemaKind::String, false),
-        ("flag", "query", kaji_core::SchemaKind::Boolean, false),
-        ("count", "query", kaji_core::SchemaKind::Integer, false),
+        ("key", "path", poolster_core::SchemaKind::String, true),
+        ("text", "query", poolster_core::SchemaKind::String, false),
+        ("flag", "query", poolster_core::SchemaKind::Boolean, false),
+        ("count", "query", poolster_core::SchemaKind::Integer, false),
         (
             "tags",
             "query",
-            kaji_core::SchemaKind::Array {
-                items: Box::new(kaji_core::SchemaValue::new(kaji_core::SchemaKind::String)),
+            poolster_core::SchemaKind::Array {
+                items: Box::new(poolster_core::SchemaValue::new(
+                    poolster_core::SchemaKind::String,
+                )),
             },
             false,
         ),
-        ("X-Label", "header", kaji_core::SchemaKind::String, false),
+        (
+            "X-Label",
+            "header",
+            poolster_core::SchemaKind::String,
+            false,
+        ),
     ] {
-        echo.parameters.push(kaji_core::OperationParameter {
+        echo.parameters.push(poolster_core::OperationParameter {
             name: name.into(),
             location: location.into(),
             required,
-            schema: Some(kaji_core::SchemaValue::new(kind)),
+            schema: Some(poolster_core::SchemaValue::new(kind)),
             description: None,
             annotations: Default::default(),
         });
     }
-    echo.request_body = Some(kaji_core::OperationRequestBody {
+    echo.request_body = Some(poolster_core::OperationRequestBody {
         required: true,
-        media_types: vec![kaji_core::OperationMediaType {
+        media_types: vec![poolster_core::OperationMediaType {
             content_type: "application/json".into(),
-            schema: Some(kaji_core::SchemaValue::reference(
+            schema: Some(poolster_core::SchemaValue::reference(
                 "#/components/schemas/WireInput",
             )),
         }],
@@ -155,54 +166,54 @@ fn export_runtime_contract_fixture() {
         &api,
         ProfileSet::new("sdk")
             .package(
-                kaji::ts::package("typescript")
+                poolster::ts::package("typescript")
                     .name("contractsdk")
-                    .with(kaji::ts::sdk().fetch()),
+                    .with(poolster::ts::sdk().fetch()),
             )
             .package(
-                kaji::go::package("go")
+                poolster::go::package("go")
                     .name("contractsdk")
-                    .with(kaji::go::sdk()),
+                    .with(poolster::go::sdk()),
             )
             .package(
-                kaji::python::package("python")
+                poolster::python::package("python")
                     .name("contractsdk")
-                    .with(kaji::python::sdk()),
+                    .with(poolster::python::sdk()),
             )
             .package(
-                kaji::rust::package("rust")
+                poolster::rust::package("rust")
                     .name("contractsdk")
-                    .with(kaji::rust::sdk()),
+                    .with(poolster::rust::sdk()),
             )
             .package(
-                kaji::ruby::package("ruby")
+                poolster::ruby::package("ruby")
                     .name("contractsdk")
-                    .with(kaji::ruby::sdk()),
+                    .with(poolster::ruby::sdk()),
             )
             .package(
-                kaji::swift::package("swift")
+                poolster::swift::package("swift")
                     .name("contractsdk")
-                    .with(kaji::swift::sdk()),
+                    .with(poolster::swift::sdk()),
             )
             .package(
-                kaji::java::package("java")
+                poolster::java::package("java")
                     .name("contract.sdk")
-                    .with(kaji::java::sdk()),
+                    .with(poolster::java::sdk()),
             )
             .package(
-                kaji::dotnet::package("csharp")
+                poolster::dotnet::package("csharp")
                     .name("ContractSdk")
-                    .with(kaji::dotnet::sdk()),
+                    .with(poolster::dotnet::sdk()),
             )
             .package(
-                kaji::php::package("php")
+                poolster::php::package("php")
                     .name("contract/sdk")
-                    .with(kaji::php::sdk()),
+                    .with(poolster::php::sdk()),
             )
             .package(
-                kaji::elixir::package("elixir")
+                poolster::elixir::package("elixir")
                     .name("contractsdk")
-                    .with(kaji::elixir::sdk()),
+                    .with(poolster::elixir::sdk()),
             ),
         Some(&catalog),
     )

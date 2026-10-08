@@ -1,5 +1,5 @@
 //! Deterministic native symbols without changing property wire names.
-use kaji_core::Api;
+use poolster_core::Api;
 use std::collections::{BTreeMap, BTreeSet};
 pub(crate) fn prepare(
     api: &Api,
@@ -96,7 +96,7 @@ pub(crate) fn prepare(
         }
         if candidate != original {
             operation.annotations.insert(
-                "kaji.source_operation_id".into(),
+                "poolster.source_operation_id".into(),
                 serde_json::json!(original),
             );
             operation.id = candidate;
@@ -119,9 +119,10 @@ pub(crate) fn prepare(
                 candidate = format!("{base}{suffix}");
                 suffix += 1;
             }
-            parameter
-                .annotations
-                .insert("kaji.native_argument".into(), serde_json::json!(candidate));
+            parameter.annotations.insert(
+                "poolster.native_argument".into(),
+                serde_json::json!(candidate),
+            );
         }
         let _ = base;
     }
@@ -171,7 +172,7 @@ fn rewrite(value: &mut serde_json::Value, names: &BTreeMap<String, String>) {
     }
 }
 pub(crate) fn field_names(
-    fields: &[kaji_core::Field],
+    fields: &[poolster_core::Field],
     name: fn(&str) -> String,
     reserved: &[&str],
 ) -> BTreeMap<String, String> {
@@ -200,7 +201,7 @@ pub(crate) fn field_names(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kaji_core::{Schema, SchemaKind, SchemaValue};
+    use poolster_core::{Schema, SchemaKind, SchemaValue};
     #[test]
     fn native_symbols_preserve_source_names_and_rewrite_reserved_references() {
         let api = Api {

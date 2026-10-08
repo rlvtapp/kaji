@@ -87,15 +87,15 @@ console.log('bounded fixtures, constraint validation, exact integers and seed re
 #[test]
 #[ignore = "requires Node, TypeScript and MSW; set KAJI_TSC_JS and KAJI_TS_NODE_MODULES"]
 fn msw_declared_response_scenarios_and_pagination_execute() {
-    use kaji_core::{Api, HttpMethod, Operation, OperationResponse, SchemaValue};
+    use poolster_core::{Api, HttpMethod, Operation, OperationResponse, SchemaValue};
     use std::{fs, process::Command};
     let mut operation = Operation {
         id: "listItems".into(),
         method: HttpMethod::Get,
-        path: "http://kaji.test/items/{id}".into(),
+        path: "http://poolster.test/items/{id}".into(),
         responses: vec![OperationResponse::json(
             "201",
-            SchemaValue::new(kaji_core::SchemaKind::String),
+            SchemaValue::new(poolster_core::SchemaKind::String),
         )],
         ..Default::default()
     };
@@ -151,13 +151,13 @@ import {setupServer} from 'msw/node';
 import {handlers} from './msw.js';
 const server=setupServer(...handlers);server.listen({onUnhandledRequest:'error'});
 try {
- const initial=await fetch('http://kaji.test/items/abc');assert.equal(initial.status,201);assert.match(initial.headers.get('content-type'),/json/);assert.equal(typeof await initial.json(),'string');
- const page=await fetch('http://kaji.test/items/abc?cursor=next',{headers:{'X-Page':'yes'}});assert.deepEqual(await page.json(),{items:[2],next:null});
- const mismatch=await fetch('http://kaji.test/items/other?cursor=next',{headers:{'x-page':'yes'}});assert.equal(mismatch.status,201);
- const limited=await fetch('http://kaji.test/items/abc?fail=yes');assert.equal(limited.status,429);assert.equal(limited.headers.get('retry-after'),'2');assert.equal((await limited.json()).message,'slow down');
- const named=await fetch('http://kaji.test/items/abc',{headers:{'x-kaji-mock-scenario':'limited'}});assert.equal(named.status,429);
- const empty=await fetch('http://kaji.test/items/abc?empty=yes');assert.equal(empty.status,204);assert.equal(await empty.text(),'');
- const unknown=await fetch('http://kaji.test/items/abc',{headers:{'x-kaji-mock-scenario':'missing'}});assert.equal(unknown.status,400);
+ const initial=await fetch('http://poolster.test/items/abc');assert.equal(initial.status,201);assert.match(initial.headers.get('content-type'),/json/);assert.equal(typeof await initial.json(),'string');
+ const page=await fetch('http://poolster.test/items/abc?cursor=next',{headers:{'X-Page':'yes'}});assert.deepEqual(await page.json(),{items:[2],next:null});
+ const mismatch=await fetch('http://poolster.test/items/other?cursor=next',{headers:{'x-page':'yes'}});assert.equal(mismatch.status,201);
+ const limited=await fetch('http://poolster.test/items/abc?fail=yes');assert.equal(limited.status,429);assert.equal(limited.headers.get('retry-after'),'2');assert.equal((await limited.json()).message,'slow down');
+ const named=await fetch('http://poolster.test/items/abc',{headers:{'x-kaji-mock-scenario':'limited'}});assert.equal(named.status,429);
+ const empty=await fetch('http://poolster.test/items/abc?empty=yes');assert.equal(empty.status,204);assert.equal(await empty.text(),'');
+ const unknown=await fetch('http://poolster.test/items/abc',{headers:{'x-kaji-mock-scenario':'missing'}});assert.equal(unknown.status,400);
 } finally {server.close();}
 "#).unwrap();
     let output = Command::new("node")
@@ -177,7 +177,7 @@ try {
 #[test]
 #[ignore = "requires installed Cypress browser; set KAJI_TS_NODE_MODULES and CYPRESS_CACHE_FOLDER"]
 fn cypress_generated_smoke_executes_in_browser() {
-    use kaji_core::{Api, HttpMethod, Operation, OperationResponse};
+    use poolster_core::{Api, HttpMethod, Operation, OperationResponse};
     use std::{collections::BTreeMap, fs, process::Command};
     let api = Api {
         name: "Native Smoke".into(),
@@ -267,7 +267,7 @@ try {
 #[test]
 #[ignore = "requires Node and Zod; set KAJI_TSC_JS and KAJI_TS_NODE_MODULES"]
 fn zod_constraints_unions_and_lossless_boundaries_execute() {
-    use kaji_core::{Api, Schema, SchemaKind, SchemaValue};
+    use poolster_core::{Api, Schema, SchemaKind, SchemaValue};
     use std::{fs, process::Command};
     let mut wide = SchemaValue::new(SchemaKind::Integer);
     wide.extensions
@@ -311,7 +311,7 @@ fn zod_constraints_unions_and_lossless_boundaries_execute() {
             Schema::new(
                 "Node",
                 SchemaValue::new(SchemaKind::Object {
-                    fields: vec![kaji_core::Field {
+                    fields: vec![poolster_core::Field {
                         name: "child".into(),
                         value: SchemaValue::reference("#/components/schemas/Node"),
                         required: false,
@@ -405,7 +405,7 @@ assert.equal(kajiSchemas.Exclusive.safeParse(1).success,false);assert.equal(kaji
 
 #[test]
 fn auxiliary_layout_modes_keep_atomic_models_and_stable_entrypoints() {
-    use kaji_core::{Api, Schema, SchemaKind, SchemaValue, SourceLayout};
+    use poolster_core::{Api, Schema, SchemaKind, SchemaValue, SourceLayout};
     let api = Api {
         schemas: vec![
             Schema::new(
@@ -458,7 +458,7 @@ fn auxiliary_layout_modes_keep_atomic_models_and_stable_entrypoints() {
 #[test]
 fn common_layout_inherits_and_plugin_override_wins() {
     use crate::composition::{faker, models, zod};
-    use kaji_core::{
+    use poolster_core::{
         Api, Schema, SchemaKind, SchemaValue,
         engine::{Common, Packages},
     };

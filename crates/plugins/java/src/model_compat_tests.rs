@@ -1,5 +1,5 @@
 use super::*;
-use kaji_core::engine::Packages;
+use poolster_core::engine::Packages;
 fn api() -> Api {
     let mut enumeration = SchemaValue::new(SchemaKind::String);
     enumeration.enum_values = vec![serde_json::json!("known-value")];
@@ -25,9 +25,9 @@ fn api() -> Api {
         ],
         operations: vec![Operation {
             id: "sequence".into(),
-            method: kaji_core::HttpMethod::Post,
+            method: poolster_core::HttpMethod::Post,
             path: "/sequence".into(),
-            parameters: vec![kaji_core::OperationParameter {
+            parameters: vec![poolster_core::OperationParameter {
                 name: "whole_query".into(),
                 location: "querystring".into(),
                 required: true,
@@ -38,9 +38,9 @@ fn api() -> Api {
                 description: None,
                 annotations: Default::default(),
             }],
-            request_body: Some(kaji_core::OperationRequestBody {
+            request_body: Some(poolster_core::OperationRequestBody {
                 required: true,
-                media_types: vec![kaji_core::OperationMediaType {
+                media_types: vec![poolster_core::OperationMediaType {
                     content_type: "application/x-ndjson".into(),
                     schema: Some(SchemaValue::new(SchemaKind::Array {
                         items: Box::new(SchemaValue::new(SchemaKind::Any)),
@@ -48,9 +48,9 @@ fn api() -> Api {
                 }],
                 description: None,
             }),
-            responses: vec![kaji_core::OperationResponse {
+            responses: vec![poolster_core::OperationResponse {
                 status: "200".into(),
-                media_types: vec![kaji_core::OperationMediaType {
+                media_types: vec![poolster_core::OperationMediaType {
                     content_type: "application/x-ndjson".into(),
                     schema: Some(SchemaValue::new(SchemaKind::Array {
                         items: Box::new(SchemaValue::new(SchemaKind::Any)),
@@ -64,12 +64,12 @@ fn api() -> Api {
     };
     let mut ordered = Operation {
         id: "ordered".into(),
-        method: kaji_core::HttpMethod::Post,
+        method: poolster_core::HttpMethod::Post,
         path: "/ordered".into(),
-        request_body: Some(kaji_core::OperationRequestBody {
+        request_body: Some(poolster_core::OperationRequestBody {
             required: true,
             description: None,
-            media_types: vec![kaji_core::OperationMediaType {
+            media_types: vec![poolster_core::OperationMediaType {
                 content_type: "multipart/mixed".into(),
                 schema: Some(SchemaValue::new(SchemaKind::Array {
                     items: Box::new(SchemaValue::new(SchemaKind::Any)),
@@ -78,11 +78,11 @@ fn api() -> Api {
         }),
         ..Default::default()
     };
-    ordered.annotations.insert("kaji.request_content".into(),serde_json::json!([{"content_type":"multipart/mixed","prefix_encoding":[{"contentType":"application/json","headers":{"X-Part":{"required":true,"example_json":"\"v1\""}}},{"contentType":"multipart/mixed","prefixEncoding":[{"contentType":"text/plain","headers":{"X-Child":{"required":true,"example_json":"\"child\""}}}]}],"item_encoding":{"contentType":"application/octet-stream"}}]));
+    ordered.annotations.insert("poolster.request_content".into(),serde_json::json!([{"content_type":"multipart/mixed","prefix_encoding":[{"contentType":"application/json","headers":{"X-Part":{"required":true,"example_json":"\"v1\""}}},{"contentType":"multipart/mixed","prefixEncoding":[{"contentType":"text/plain","headers":{"X-Child":{"required":true,"example_json":"\"child\""}}}]}],"item_encoding":{"contentType":"application/octet-stream"}}]));
     api.operations.push(ordered);
     api.operations.push(Operation {
         id: "collisionWire".into(),
-        method: kaji_core::HttpMethod::Get,
+        method: poolster_core::HttpMethod::Get,
         path: "/collision".into(),
         parameters: [
             ("notify", "query"),
@@ -91,7 +91,7 @@ fn api() -> Api {
             ("notify", "header"),
         ]
         .into_iter()
-        .map(|(name, location)| kaji_core::OperationParameter {
+        .map(|(name, location)| poolster_core::OperationParameter {
             name: name.into(),
             location: location.into(),
             required: true,
@@ -107,7 +107,7 @@ fn api() -> Api {
         "Large",
         SchemaValue::new(SchemaKind::Object {
             fields: (0..260)
-                .map(|index| kaji_core::Field {
+                .map(|index| poolster_core::Field {
                     name: format!("field{index}"),
                     required: index == 0,
                     value: {
@@ -124,7 +124,7 @@ fn api() -> Api {
 
     let mut params = Operation {
         id: "jsonParameters".into(),
-        method: kaji_core::HttpMethod::Get,
+        method: poolster_core::HttpMethod::Get,
         path: "/params/{path}".into(),
         ..Default::default()
     };
@@ -134,7 +134,7 @@ fn api() -> Api {
         ("x-json", "header"),
         ("cookie", "cookie"),
     ] {
-        let mut parameter = kaji_core::OperationParameter {
+        let mut parameter = poolster_core::OperationParameter {
             name: name.into(),
             location: location.into(),
             required: true,
@@ -146,7 +146,7 @@ fn api() -> Api {
             description: None,
             annotations: Default::default(),
         };
-        parameter.annotations.insert("kaji.parameter_content".into(),serde_json::json!([{"content_type":"application/json","schema_definition":{"type":"string"}}]));
+        parameter.annotations.insert("poolster.parameter_content".into(),serde_json::json!([{"content_type":"application/json","schema_definition":{"type":"string"}}]));
         params.parameters.push(parameter);
     }
     api.operations.push(params);
@@ -157,7 +157,7 @@ fn transparent_aliases_and_opt_in_enum_values_keep_wire_representation() {
     let tree = Packages::new()
         .package(
             crate::package("sdk")
-                .name("io.kaji.compat")
+                .name("io.poolster.compat")
                 .with(crate::sdk().open_enums(true)),
         )
         .generate(&api(), None)
@@ -184,7 +184,7 @@ fn native_models_preserve_alias_union_and_unknown_enum_wire_values() {
     let tree = Packages::new()
         .package(
             crate::package("sdk")
-                .name("io.kaji.compat")
+                .name("io.poolster.compat")
                 .with(crate::sdk().open_enums(true))
                 .with(crate::operation_tests()),
         )
@@ -192,8 +192,8 @@ fn native_models_preserve_alias_union_and_unknown_enum_wire_values() {
         .unwrap();
     let dir = tempfile::tempdir().unwrap();
     tree.write_to(dir.path()).unwrap();
-    std::fs::write(dir.path().join("sdk/src/test/java/io/kaji/compat/ModelsProbe.java"), r#"package io.kaji.compat;
-import io.kaji.compat.model.*;
+    std::fs::write(dir.path().join("sdk/src/test/java/io/kaji/compat/ModelsProbe.java"), r#"package io.poolster.compat;
+import io.poolster.compat.model.*;
 import com.fasterxml.jackson.databind.*;
 public final class ModelsProbe extends ClientBase {
  private ModelsProbe(){super(new ClientConfig("https://example.test",null));}
@@ -247,7 +247,7 @@ public final class ModelsProbe extends ClientBase {
             "-q",
             "test-compile",
             "org.codehaus.mojo:exec-maven-plugin:3.5.0:java",
-            "-Dexec.mainClass=io.kaji.compat.ModelsProbe",
+            "-Dexec.mainClass=io.poolster.compat.ModelsProbe",
             "-Dexec.classpathScope=test",
         ])
         .current_dir(dir.path().join("sdk"))

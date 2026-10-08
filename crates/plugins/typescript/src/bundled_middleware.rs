@@ -1,6 +1,6 @@
 use crate::Symbol;
 use anyhow::{Result, bail};
-use kaji_core::{GeneratedFile, GeneratedTree, customization::BundledMiddleware};
+use poolster_core::{GeneratedFile, GeneratedTree, customization::BundledMiddleware};
 use std::path::{Component, Path};
 
 pub(crate) fn bundle(tree: &mut GeneratedTree, middleware: &[BundledMiddleware]) -> Result<()> {

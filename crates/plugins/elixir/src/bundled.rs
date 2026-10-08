@@ -1,5 +1,5 @@
 use anyhow::{Result, ensure};
-use kaji_core::{GeneratedFile, GeneratedTree, customization::BundledMiddleware};
+use poolster_core::{GeneratedFile, GeneratedTree, customization::BundledMiddleware};
 
 pub(crate) fn bundle(tree: &mut GeneratedTree, middleware: &[BundledMiddleware]) -> Result<()> {
     if middleware.is_empty() {
@@ -96,12 +96,12 @@ mod tests {
         use crate::PackageExt;
         let policy = BundledMiddleware {path:"lib/policy.ex".into(), symbol:"AuthorPolicy".into(), async_symbol:None,
             contents:"defmodule AuthorPolicy do\n  def handle(_request, _next), do: {:ok, struct(Finch.Response, status: 200, body: \"author\")}\nend\n".into()};
-        let api = kaji_core::Api {
+        let api = poolster_core::Api {
             name: "demo".into(),
             version: "1.0.0".into(),
             ..Default::default()
         };
-        kaji_core::engine::Packages::new()
+        poolster_core::engine::Packages::new()
             .package(
                 crate::package("sdk")
                     .name("probe")

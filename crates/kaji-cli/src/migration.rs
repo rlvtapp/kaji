@@ -69,7 +69,7 @@ fn add_package(
     packages: &mut Vec<Value>,
     lang: &str,
     name: Option<&str>,
-    report: &mut kaji_core::vendor::MigrationReport,
+    report: &mut poolster_core::vendor::MigrationReport,
 ) {
     if let Some(lang) = language(lang) {
         let mut package = json!({"language":lang,"path":format!("{lang}/{}",packages.len()+1),"plugins":[{"name":"sdk"}]});
@@ -87,12 +87,12 @@ fn scan_settings(
     value: &Value,
     prefix: &str,
     allowed: &[&str],
-    report: &mut kaji_core::vendor::MigrationReport,
+    report: &mut poolster_core::vendor::MigrationReport,
 ) {
     if let Some(object) = value.as_object() {
         for key in object.keys().filter(|key| !allowed.contains(&key.as_str())) {
             report.manual.push(format!(
-                "{prefix}.{key}: review in Kaji; setting was not imported"
+                "{prefix}.{key}: review in Poolster; setting was not imported"
             ));
         }
     }
@@ -114,7 +114,7 @@ fn stainless_resources(
     resources: &Value,
     document: &mut Value,
     prefix: &str,
-    report: &mut kaji_core::vendor::MigrationReport,
+    report: &mut poolster_core::vendor::MigrationReport,
 ) {
     if let Some(resources) = resources.as_object() {
         for (name, resource) in resources {
@@ -170,7 +170,7 @@ fn import(
     let config_path = detect(path)?;
     let base = config_path.parent().context("config has no parent")?;
     let config = read_document(&config_path, false)?;
-    let mut report = kaji_core::vendor::MigrationReport::default();
+    let mut report = poolster_core::vendor::MigrationReport::default();
     let mut packages = Vec::new();
     let mut sources = Vec::new();
     let vendor;
@@ -199,7 +199,7 @@ fn import(
                             );
                         } else {
                             report.manual.push(format!(
-                                "groups.{group}: custom generator needs a Kaji plugin"
+                                "groups.{group}: custom generator needs a Poolster plugin"
                             ));
                         }
                         scan_settings(
@@ -209,7 +209,7 @@ fn import(
                             &mut report,
                         );
                         if generator.get("output").is_some() {
-                            report.manual.push(format!("groups.{group}.output: package name imported; configure publishing with kaji sdk init"));
+                            report.manual.push(format!("groups.{group}.output: package name imported; configure publishing with poolster sdk init"));
                         }
                     }
                 }
@@ -310,7 +310,7 @@ fn import(
         if config.get("organization").is_some() {
             report
                 .manual
-                .push("organization: review branding in Kaji configuration".into());
+                .push("organization: review branding in Poolster configuration".into());
         }
     } else if config.get("configVersion").is_some() {
         vendor = "speakeasy";
@@ -362,7 +362,7 @@ fn import(
             stainless_resources(resources, &mut document, "", &mut report);
         }
     }
-    let annotations = kaji_core::vendor::normalize_openapi(&mut document);
+    let annotations = poolster_core::vendor::normalize_openapi(&mut document);
     report.converted.extend(annotations.converted);
     report.manual.extend(annotations.manual);
     report.converted.push(format!(
@@ -371,7 +371,7 @@ fn import(
     ));
     let native = json!({"openapi":{"input":"./openapi.json","name":document.pointer("/info/title").and_then(Value::as_str).unwrap_or("API"),"version":default_sdk_version()},"output":{"path":"./generated"},"packages":packages});
     let _: ProjectConfig =
-        serde_json::from_value(native.clone()).context("validate imported Kaji config")?;
+        serde_json::from_value(native.clone()).context("validate imported Poolster config")?;
     if strict {
         ensure!(
             report.manual.is_empty(),
@@ -387,7 +387,7 @@ fn import(
     std::fs::create_dir_all(parent)?;
     let staging = tempfile::tempdir_in(parent)?;
     for (name, value) in [
-        ("kaji.json", native),
+        ("poolster.json", native),
         ("openapi.json", document),
         ("migration-report.json", serde_json::to_value(&report)?),
     ] {
@@ -404,18 +404,18 @@ fn import(
             report.manual.len()
         );
         eprintln!(
-            "Next: kaji generate --config {}",
-            destination.join("kaji.json").display()
+            "Next: poolster generate --config {}",
+            destination.join("poolster.json").display()
         );
     }
-    Ok(destination.join("kaji.json"))
+    Ok(destination.join("poolster.json"))
 }
 
 pub fn run(arguments: Vec<OsString>) -> Result<()> {
     let mut args = arguments.into_iter();
     let mut project = PathBuf::from(".");
     let mut input = None;
-    let mut output = PathBuf::from("kaji-migration");
+    let mut output = PathBuf::from("poolster-migration");
     let mut strict = false;
     while let Some(arg) = args.next() {
         match arg.to_str() {
@@ -430,7 +430,7 @@ pub fn run(arguments: Vec<OsString>) -> Result<()> {
             Some("--strict") => strict = true,
             Some("--help" | "-h") => {
                 println!(
-                    "kaji migrate [project-or-config] [--input openapi-file] [--output new-directory] [--strict]"
+                    "poolster migrate [project-or-config] [--input openapi-file] [--output new-directory] [--strict]"
                 );
                 return Ok(());
             }
@@ -461,13 +461,13 @@ pub fn generate(path: &Path, color: ColorChoice, check: bool, json_changes: bool
         false,
     )?;
     let mut native: Value = serde_json::from_slice(&std::fs::read(&imported)?)?;
-    native["output"]["path"] = json!(project.join("kaji-generated"));
+    native["output"]["path"] = json!(project.join("poolster-generated"));
     std::fs::write(&imported, serde_json::to_vec_pretty(&native)?)?;
-    let report: kaji_core::vendor::MigrationReport = serde_json::from_slice(&std::fs::read(
+    let report: poolster_core::vendor::MigrationReport = serde_json::from_slice(&std::fs::read(
         imported.parent().unwrap().join("migration-report.json"),
     )?)?;
     for diagnostic in report.manual {
-        eprintln!("kaji migration: {diagnostic}");
+        eprintln!("poolster migration: {diagnostic}");
     }
     super::generate_from_config(&imported, color, check, json_changes)
 }

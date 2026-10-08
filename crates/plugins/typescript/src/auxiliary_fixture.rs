@@ -1,7 +1,7 @@
 //! Lossless AST descriptors for seeded, constraint-checked fixture construction.
 use crate::render::{self, ArtifactOptions};
 use anyhow::{Result, ensure};
-use kaji_core::{Api, GeneratedFile, SchemaValue, SourceLayout, SourceUnit};
+use poolster_core::{Api, GeneratedFile, SchemaValue, SourceLayout, SourceUnit};
 use serde_json::{Value, json};
 
 pub(crate) fn literal(value: &Value) -> Value {
@@ -119,7 +119,7 @@ pub(crate) fn generate(api: &Api, config: &ArtifactOptions) -> Result<Vec<Genera
             schema
                 .value
                 .extensions
-                .get("kaji.aux.schema_name")
+                .get("poolster.aux.schema_name")
                 .and_then(Value::as_str)
                 .unwrap_or(&schema.name)
                 == key
@@ -150,12 +150,12 @@ pub(crate) fn generate(api: &Api, config: &ArtifactOptions) -> Result<Vec<Genera
     };
     if !split {
         let mut source = runtime.to_owned();
-        source.push_str(&format!("\nconst __kajiSchemas: Record<string, FixtureSchema> = {{ {} }};\nconst __kajiFixtures = createFixtureRuntime(__kajiSchemas, {settings});\nexport const seedKajiFixtures = (seed: number | number[]) => __kajiFixtures.seed(seed);\n",api.schemas.iter().zip(&descriptors).map(|(schema,value)|format!("{}: {value}",render::js_string(&schema.name))).collect::<Vec<_>>().join(",")));
+        source.push_str(&format!("\nconst __kajiSchemas: Record<string, FixtureSchema> = {{ {} }};\nconst __kajiFixtures = createFixtureRuntime(__kajiSchemas, {settings});\nexport const seedPoolsterFixtures = (seed: number | number[]) => __kajiFixtures.seed(seed);\n",api.schemas.iter().zip(&descriptors).map(|(schema,value)|format!("{}: {value}",render::js_string(&schema.name))).collect::<Vec<_>>().join(",")));
         source.push_str(&factory(&(0..api.schemas.len()).collect::<Vec<_>>(), "./"));
         return Ok(vec![file(config, "faker.ts", source)?]);
     }
     let mut files = Vec::new();
-    let mut root = "export { seedKajiFixtures } from './faker_chunks/runtime';\n".to_owned();
+    let mut root = "export { seedPoolsterFixtures } from './faker_chunks/runtime';\n".to_owned();
     let mut schemas = "import type { FixtureSchema } from './runtime';\n".to_owned();
     let mut registries = Vec::new();
     for (chunk, indices) in groups.iter().enumerate() {
@@ -198,7 +198,7 @@ pub(crate) fn generate(api: &Api, config: &ArtifactOptions) -> Result<Vec<Genera
         registries.join(",")
     ));
     files.push(file(config, "faker_chunks/schemas.ts", schemas)?);
-    files.push(file(config,"faker_chunks/runtime.ts",format!("{runtime}\nimport {{ schemas }} from './schemas';\nexport const __kajiFixtures = createFixtureRuntime(schemas, {settings});\nexport const seedKajiFixtures = (seed: number | number[]) => __kajiFixtures.seed(seed);\n"))?);
+    files.push(file(config,"faker_chunks/runtime.ts",format!("{runtime}\nimport {{ schemas }} from './schemas';\nexport const __kajiFixtures = createFixtureRuntime(schemas, {settings});\nexport const seedPoolsterFixtures = (seed: number | number[]) => __kajiFixtures.seed(seed);\n"))?);
     files.push(file(config, "faker.ts", root)?);
     Ok(files)
 }

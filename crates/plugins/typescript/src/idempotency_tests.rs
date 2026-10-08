@@ -2,7 +2,7 @@
 #[test]
 #[ignore = "requires Node, KAJI_TSC_JS and KAJI_AXIOS_NODE_MODULES"]
 fn generated_idempotency_fetch_and_axios_execute() {
-    use kaji_core::{
+    use poolster_core::{
         Api, HttpMethod, Operation, OperationParameter, OperationResponse, SchemaKind, SchemaValue,
     };
     let compiler = std::env::var("KAJI_TSC_JS").unwrap();
@@ -92,7 +92,7 @@ fn generated_idempotency_fetch_and_axios_execute() {
         );
         std::fs::write(temp.path().join("run.cjs"), r#"
 const assert=require('node:assert/strict');const axios=require('axios').default;
-const runtime=require('./compiled/.kaji/client.js');
+const runtime=require('./compiled/.poolster/client.js');
 const {write}=require('./compiled/clients/write.js');const {patch}=require('./compiled/clients/patch.js');
 const {manual}=require('./compiled/clients/manual.js');const {unsafeWrite}=require('./compiled/clients/unsafeWrite.js');const {unsafePatch}=require('./compiled/clients/unsafePatch.js');
 ;(async()=>{

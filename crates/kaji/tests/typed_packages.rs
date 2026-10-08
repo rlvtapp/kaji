@@ -1,5 +1,5 @@
 mod support;
-use kaji::{csharp, dotnet, prelude::*, ts};
+use poolster::{csharp, dotnet, prelude::*, ts};
 
 struct CommunityConsumer {
     meta: Meta,
@@ -34,7 +34,7 @@ fn community_consumer_uses_real_types_and_shared_package_dependencies() {
         meta: Meta::new(),
         types: types.handle(),
     };
-    let tree = kaji::generate(
+    let tree = poolster::generate(
         &support::sdk_contract_api(),
         ProfileSet::new("sdk").package(
             ts::package("models")
@@ -76,7 +76,7 @@ fn typescript_variants_generate_raw_or_client_with_local_options() {
                     if flat {
                         sdk = sdk.flat();
                     }
-                    let tree = kaji::generate(
+                    let tree = poolster::generate(
                         &support::sdk_contract_api(),
                         ProfileSet::new("sdk").package(ts::package("ts").with(sdk)),
                     )
@@ -84,7 +84,7 @@ fn typescript_variants_generate_raw_or_client_with_local_options() {
                     assert_eq!(tree.get("sdk/ts/client.ts").is_some(), !raw);
                     let manifest = tree.get("sdk/ts/package.json").unwrap();
                     assert_eq!(manifest.contains("\"axios\""), axios);
-                    assert!(tree.get("sdk/ts/.kaji/client.ts").is_some());
+                    assert!(tree.get("sdk/ts/.poolster/client.ts").is_some());
                 }
             }
         }
@@ -93,7 +93,7 @@ fn typescript_variants_generate_raw_or_client_with_local_options() {
 
 #[test]
 fn shared_package_and_local_settings_resolve_per_instance() {
-    let tree = kaji::generate(
+    let tree = poolster::generate(
         &support::sdk_contract_api(),
         ProfileSet::new("sdk")
             .common(
@@ -139,7 +139,7 @@ fn shared_package_and_local_settings_resolve_per_instance() {
 
 #[test]
 fn csharp_is_a_first_class_sdk_generator() {
-    let tree = kaji::generate(
+    let tree = poolster::generate(
         &support::sdk_contract_api(),
         ProfileSet::new("sdk").package(
             csharp::package("csharp")
@@ -151,7 +151,7 @@ fn csharp_is_a_first_class_sdk_generator() {
 
     assert!(tree.get("sdk/csharp/AcmeEmail.csproj").is_some());
     assert!(
-        tree.get("sdk/csharp/KajiClient.cs")
+        tree.get("sdk/csharp/PoolsterClient.cs")
             .unwrap()
             .contains("HttpClient")
     );
@@ -160,7 +160,7 @@ fn csharp_is_a_first_class_sdk_generator() {
 #[test]
 fn dotnet_remains_a_compatible_rust_target() {
     let package: Package<dotnet::DotNet> = dotnet::package("dotnet");
-    let tree = kaji::generate(
+    let tree = poolster::generate(
         &support::sdk_contract_api(),
         ProfileSet::new("sdk").package(package.name("acme-email").with(dotnet::sdk().namespaced())),
     )

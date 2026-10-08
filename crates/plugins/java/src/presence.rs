@@ -20,7 +20,7 @@ pub(crate) fn render(
         format!("{root}/")
     };
     let package =
-        java_package_name(name.unwrap_or(&format!("io.kaji.{}", package_segment(&api.name))));
+        java_package_name(name.unwrap_or(&format!("io.poolster.{}", package_segment(&api.name))));
     let path = package.replace('.', "/");
     anyhow::ensure!(
         !api.schemas.iter().any(|s| type_name(&s.name) == "Presence"),
@@ -109,13 +109,13 @@ mod tests {
                 "Event",
                 SchemaValue::new(SchemaKind::Object {
                     fields: vec![
-                        kaji_core::Field {
+                        poolster_core::Field {
                             name: "note".into(),
                             value: note,
                             required: false,
                             annotations: Default::default(),
                         },
-                        kaji_core::Field {
+                        poolster_core::Field {
                             name: "count".into(),
                             value: SchemaValue::new(SchemaKind::Integer),
                             required: false,
@@ -133,7 +133,7 @@ mod tests {
         let tree = render(
             &api(),
             ".",
-            Some("io.kaji.presence"),
+            Some("io.poolster.presence"),
             SdkClientStyle::Flat,
             false,
             true,
@@ -153,7 +153,7 @@ mod tests {
         let default = render(
             &api(),
             ".",
-            Some("io.kaji.presence"),
+            Some("io.poolster.presence"),
             SdkClientStyle::Flat,
             false,
             false,
@@ -169,10 +169,10 @@ mod tests {
     #[test]
     #[ignore = "requires JDK17+Maven"]
     fn native_omitted_and_null_presence_roundtrip() {
-        let tree = kaji_core::engine::Packages::new()
+        let tree = poolster_core::engine::Packages::new()
             .package(
                 crate::package("sdk")
-                    .name("io.kaji.presence")
+                    .name("io.poolster.presence")
                     .with(crate::sdk().preserve_presence(true))
                     .with(crate::operation_tests()),
             )
@@ -180,13 +180,13 @@ mod tests {
             .unwrap();
         let dir = tempfile::tempdir().unwrap();
         tree.write_to(dir.path()).unwrap();
-        std::fs::write(dir.path().join("sdk/src/test/java/io/kaji/presence/PresenceProbe.java"),r#"package io.kaji.presence;import io.kaji.presence.model.*;import com.fasterxml.jackson.databind.*;public class PresenceProbe{public static void main(String[]args)throws Exception{var mapper=new ObjectMapper();for(var wire:new String[]{"{}","{\"note\":null}","{\"note\":\"future\",\"count\":0}","{\"note\":null,\"future\":[false,0,null]}"}){var model=mapper.readValue(wire,Event.class);if(!mapper.readTree(wire).equals(mapper.readTree(mapper.writeValueAsString(model))))throw new AssertionError("presence wire");}var absent=mapper.readValue("{}",Event.class);if(absent.note()!=null)throw new AssertionError("omitted");var present=mapper.readValue("{\"note\":null}",Event.class);if(present.note()==null||present.note().value()!=null)throw new AssertionError("null");}}"#).unwrap();
+        std::fs::write(dir.path().join("sdk/src/test/java/io/kaji/presence/PresenceProbe.java"),r#"package io.poolster.presence;import io.poolster.presence.model.*;import com.fasterxml.jackson.databind.*;public class PresenceProbe{public static void main(String[]args)throws Exception{var mapper=new ObjectMapper();for(var wire:new String[]{"{}","{\"note\":null}","{\"note\":\"future\",\"count\":0}","{\"note\":null,\"future\":[false,0,null]}"}){var model=mapper.readValue(wire,Event.class);if(!mapper.readTree(wire).equals(mapper.readTree(mapper.writeValueAsString(model))))throw new AssertionError("presence wire");}var absent=mapper.readValue("{}",Event.class);if(absent.note()!=null)throw new AssertionError("omitted");var present=mapper.readValue("{\"note\":null}",Event.class);if(present.note()==null||present.note().value()!=null)throw new AssertionError("null");}}"#).unwrap();
         let output = std::process::Command::new("mvn")
             .args([
                 "-q",
                 "test-compile",
                 "org.codehaus.mojo:exec-maven-plugin:3.5.0:java",
-                "-Dexec.mainClass=io.kaji.presence.PresenceProbe",
+                "-Dexec.mainClass=io.poolster.presence.PresenceProbe",
                 "-Dexec.classpathScope=test",
             ])
             .current_dir(dir.path().join("sdk"))

@@ -23,7 +23,7 @@ mod tests {
             let root = tempfile::tempdir().unwrap();
             fs::write(
                 root.path().join("runtime.ts"),
-                crate::sdk::kaji_runtime(transport, None),
+                crate::sdk::poolster_runtime(transport, None),
             )
             .unwrap();
             fs::write(

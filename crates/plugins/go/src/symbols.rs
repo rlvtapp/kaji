@@ -192,7 +192,7 @@ pub(super) fn operation_symbols(api: &Api) -> BTreeMap<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kaji_core::{Field, HttpMethod, OperationMediaType, OperationResponse};
+    use poolster_core::{Field, HttpMethod, OperationMediaType, OperationResponse};
     #[test]
     fn allocated_models_and_operations_compile_through_typed_providers() {
         let object = |field: &str| {
@@ -281,7 +281,7 @@ mod tests {
         let operation_handle = operations.operations_handle();
         let client = crate::client().using_operations(operation_handle);
         let client_handle = client.client_handle();
-        let tree = kaji_core::engine::Packages::new()
+        let tree = poolster_core::engine::Packages::new()
             .package(
                 crate::package("sdk")
                     .with(models)

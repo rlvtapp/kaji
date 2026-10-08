@@ -1,5 +1,5 @@
 use super::*;
-use kaji_core::engine::{Meta, Plugin, PluginContext};
+use poolster_core::engine::{Meta, Plugin, PluginContext};
 pub struct OAuth {
     meta: Meta,
 }
@@ -46,7 +46,7 @@ mod tests {
             dir.path().join("client.ex"),
             format!(
                 "{}\n{}\n{}\n{}",
-                crate::render_api_error(&kaji_core::Api::default(), "ProbeSdk"),
+                crate::render_api_error(&poolster_core::Api::default(), "ProbeSdk"),
                 crate::render_json("ProbeSdk"),
                 include_str!("multipart.ex.txt").replace("__KAJI_MODULE__", "ProbeSdk"),
                 crate::render_client("ProbeSdk")

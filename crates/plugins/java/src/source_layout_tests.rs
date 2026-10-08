@@ -1,21 +1,23 @@
 use super::*;
-fn fixture() -> kaji_core::Api {
-    let mut api = kaji_core::Api {
+fn fixture() -> poolster_core::Api {
+    let mut api = poolster_core::Api {
         name: "Layout boundary".into(),
         version: "1.0.0".into(),
         ..Default::default()
     };
     api.operations = (0..201)
-        .map(|index| kaji_core::Operation {
+        .map(|index| poolster_core::Operation {
             id: format!("listItems{index}{}", "y".repeat(64)),
-            method: kaji_core::HttpMethod::Get,
+            method: poolster_core::HttpMethod::Get,
             path: format!("/items/{index}"),
             parameters: (0..48)
-                .map(|field| kaji_core::OperationParameter {
+                .map(|field| poolster_core::OperationParameter {
                     name: format!("field{field}{}", "x".repeat(112)),
                     location: "query".into(),
                     required: false,
-                    schema: Some(kaji_core::SchemaValue::new(kaji_core::SchemaKind::String)),
+                    schema: Some(poolster_core::SchemaValue::new(
+                        poolster_core::SchemaKind::String,
+                    )),
                     description: None,
                     annotations: Default::default(),
                 })
@@ -27,18 +29,18 @@ fn fixture() -> kaji_core::Api {
             ..Default::default()
         })
         .collect();
-    api.schemas.push(kaji_core::Schema::new(
+    api.schemas.push(poolster_core::Schema::new(
         "Large",
-        kaji_core::SchemaValue::new(kaji_core::SchemaKind::Object {
+        poolster_core::SchemaValue::new(poolster_core::SchemaKind::Object {
             fields: (0..900)
-                .map(|index| kaji_core::Field {
+                .map(|index| poolster_core::Field {
                     name: format!("field{index}{}", "z".repeat(64)),
-                    value: kaji_core::SchemaValue::new(kaji_core::SchemaKind::String),
+                    value: poolster_core::SchemaValue::new(poolster_core::SchemaKind::String),
                     required: false,
                     annotations: Default::default(),
                 })
                 .collect(),
-            additional_properties: kaji_core::AdditionalProperties::Any,
+            additional_properties: poolster_core::AdditionalProperties::Any,
         }),
     ));
     api
@@ -48,7 +50,7 @@ fn byte_budget_splits_verbose_single_resource_before_count_limit() {
     let tree = presence::render(
         &fixture(),
         "sdk",
-        Some("io.kaji.layout"),
+        Some("io.poolster.layout"),
         SdkClientStyle::Namespaced,
         false,
         true,
@@ -73,7 +75,7 @@ fn byte_budget_splits_verbose_single_resource_before_count_limit() {
     }
     let holders = tree
         .iter()
-        .filter(|(path, _)| path.to_string_lossy().contains("model/KajiModelPart"))
+        .filter(|(path, _)| path.to_string_lossy().contains("model/PoolsterModelPart"))
         .collect::<Vec<_>>();
     assert!(holders.len() > 1);
     for (path, source) in holders {
@@ -127,7 +129,7 @@ fn native_byte_grouped_sdk_compiles() {
     let tree = presence::render(
         &fixture(),
         "sdk",
-        Some("io.kaji.layout"),
+        Some("io.poolster.layout"),
         SdkClientStyle::Namespaced,
         false,
         true,
@@ -139,8 +141,8 @@ fn native_byte_grouped_sdk_compiles() {
         .path()
         .join("sdk/src/test/java/io/kaji/layout/LayoutProbe.java");
     std::fs::create_dir_all(probe.parent().unwrap()).unwrap();
-    std::fs::write(probe, r#"package io.kaji.layout;
-import io.kaji.layout.model.*;
+    std::fs::write(probe, r#"package io.poolster.layout;
+import io.poolster.layout.model.*;
 import com.fasterxml.jackson.databind.*;
 public class LayoutProbe { public static void main(String[] args) throws Exception {
  var mapper=new ObjectMapper();var first="field0"+"z".repeat(64);var last="field899"+"z".repeat(64);
@@ -149,14 +151,14 @@ public class LayoutProbe { public static void main(String[] args) throws Excepti
  if(!input.equals(output))throw new AssertionError("split holder roundtrip: "+output);
  var result=model.getClass().getMethod(last,Presence.class).invoke(model,Presence.of("updated"));
  if(result!=model || !mapper.valueToTree(model).get(last).asText().equals("updated"))throw new AssertionError("inherited fluent setter");
- try { model.kajiAdditionalProperty(last, null);throw new AssertionError("known field shadowed"); } catch(IllegalArgumentException expected) {}
+ try { model.poolsterAdditionalProperty(last, null);throw new AssertionError("known field shadowed"); } catch(IllegalArgumentException expected) {}
  }}"#).unwrap();
     let result = std::process::Command::new("mvn")
         .args([
             "-q",
             "test-compile",
             "org.codehaus.mojo:exec-maven-plugin:3.5.0:java",
-            "-Dexec.mainClass=io.kaji.layout.LayoutProbe",
+            "-Dexec.mainClass=io.poolster.layout.LayoutProbe",
             "-Dexec.classpathScope=test",
         ])
         .current_dir(root.path().join("sdk"))
@@ -183,9 +185,9 @@ fn oversized_atomic_operation_is_diagnosed_without_slicing() {
             parameter
         })
         .collect();
-    let tree = render_test_sdk(&api, "sdk", Some("io.kaji.layout")).unwrap();
+    let tree = render_test_sdk(&api, "sdk", Some("io.poolster.layout")).unwrap();
     let diagnostics: serde_json::Value = serde_json::from_str(
-        tree.get("sdk/.kaji/source-layout-diagnostics.json")
+        tree.get("sdk/.poolster/source-layout-diagnostics.json")
             .unwrap(),
     )
     .unwrap();

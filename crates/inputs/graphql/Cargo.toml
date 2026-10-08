@@ -1,5 +1,5 @@
 [package]
-name = "kaji-input-graphql"
+name = "poolster-input-graphql"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,7 +9,7 @@ description = "Native graphql input provider for Kaji"
 publish = false
 
 [dependencies]
-kaji-core = { path = "../../kaji-core" }
+poolster-core = { path = "../../kaji-core" }
 anyhow = "1.0.102"
 apollo-compiler = "1.32"
 

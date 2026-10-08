@@ -1,5 +1,5 @@
 [package]
-name = "kaji-inputs"
+name = "poolster-inputs"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,20 +10,20 @@ publish = false
 
 [features]
 default = ["graphql", "asyncapi", "arazzo", "protobuf", "capnproto"]
-graphql = ["dep:kaji-input-graphql"]
-asyncapi = ["dep:kaji-input-asyncapi"]
-arazzo = ["dep:kaji-input-arazzo"]
-protobuf = ["dep:kaji-input-protobuf"]
-capnproto = ["dep:kaji-input-capnproto"]
+graphql = ["dep:poolster-input-graphql"]
+asyncapi = ["dep:poolster-input-asyncapi"]
+arazzo = ["dep:poolster-input-arazzo"]
+protobuf = ["dep:poolster-input-protobuf"]
+capnproto = ["dep:poolster-input-capnproto"]
 
 [dependencies]
-kaji-core = { path = "../kaji-core" }
+poolster-core = { path = "../kaji-core" }
 anyhow = "1.0.102"
-kaji-input-graphql = { path = "../inputs/graphql", optional = true }
-kaji-input-asyncapi = { path = "../inputs/asyncapi", optional = true }
-kaji-input-arazzo = { path = "../inputs/arazzo", optional = true }
-kaji-input-protobuf = { path = "../inputs/protobuf", optional = true }
-kaji-input-capnproto = { path = "../inputs/capnproto", optional = true }
+poolster-input-graphql = { path = "../inputs/graphql", optional = true }
+poolster-input-asyncapi = { path = "../inputs/asyncapi", optional = true }
+poolster-input-arazzo = { path = "../inputs/arazzo", optional = true }
+poolster-input-protobuf = { path = "../inputs/protobuf", optional = true }
+poolster-input-capnproto = { path = "../inputs/capnproto", optional = true }
 
 [dev-dependencies]
 tempfile = "3.27.0"

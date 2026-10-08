@@ -1,7 +1,7 @@
 //! A stable inventory of generated artifacts.
 //!
 //! It is deliberately source-oriented.  A future formatter-aware writer can
-//! extend this with on-disk hashes, like Kaji's output manifest, without
+//! extend this with on-disk hashes, like Poolster's output manifest, without
 //! changing the portable manifest emitted by the generator itself.
 
 use std::path::Path;

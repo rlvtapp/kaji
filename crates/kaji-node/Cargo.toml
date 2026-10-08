@@ -1,5 +1,5 @@
 [package]
-name = "kaji-node"
+name = "poolster-node"
 version.workspace = true
 edition = "2024"
 license.workspace = true
@@ -12,9 +12,9 @@ crate-type = ["cdylib"]
 
 [dependencies]
 anyhow = "1.0.102"
-kaji = { path = "../kaji", features = ["all-plugins"] }
-kaji-core = { path = "../kaji-core" }
-kaji-inputs = { path = "../kaji-inputs" }
+poolster = { path = "../kaji", features = ["all-plugins"] }
+poolster-core = { path = "../kaji-core" }
+poolster-inputs = { path = "../kaji-inputs" }
 napi = { version = "3", default-features = false, features = ["napi4", "async", "compat-mode"] }
 napi-derive = "3"
 serde = { version = "1.0.219", features = ["derive"] }

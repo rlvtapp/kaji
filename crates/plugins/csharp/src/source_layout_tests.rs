@@ -1,21 +1,23 @@
 use super::*;
-fn fixture() -> kaji_core::Api {
-    let mut api = kaji_core::Api {
+fn fixture() -> poolster_core::Api {
+    let mut api = poolster_core::Api {
         name: "Layout boundary".into(),
         version: "1.0.0".into(),
         ..Default::default()
     };
     api.operations = (0..201)
-        .map(|index| kaji_core::Operation {
+        .map(|index| poolster_core::Operation {
             id: format!("listItems{index}{}", "y".repeat(64)),
-            method: kaji_core::HttpMethod::Get,
+            method: poolster_core::HttpMethod::Get,
             path: format!("/items/{index}"),
             parameters: (0..48)
-                .map(|field| kaji_core::OperationParameter {
+                .map(|field| poolster_core::OperationParameter {
                     name: format!("field{field}{}", "x".repeat(112)),
                     location: "query".into(),
                     required: false,
-                    schema: Some(kaji_core::SchemaValue::new(kaji_core::SchemaKind::String)),
+                    schema: Some(poolster_core::SchemaValue::new(
+                        poolster_core::SchemaKind::String,
+                    )),
                     description: None,
                     annotations: Default::default(),
                 })
@@ -27,18 +29,18 @@ fn fixture() -> kaji_core::Api {
             ..Default::default()
         })
         .collect();
-    api.schemas.push(kaji_core::Schema::new(
+    api.schemas.push(poolster_core::Schema::new(
         "Large",
-        kaji_core::SchemaValue::new(kaji_core::SchemaKind::Object {
+        poolster_core::SchemaValue::new(poolster_core::SchemaKind::Object {
             fields: (0..900)
-                .map(|index| kaji_core::Field {
+                .map(|index| poolster_core::Field {
                     name: format!("field{index}{}", "z".repeat(128)),
-                    value: kaji_core::SchemaValue::new(kaji_core::SchemaKind::String),
+                    value: poolster_core::SchemaValue::new(poolster_core::SchemaKind::String),
                     required: false,
                     annotations: Default::default(),
                 })
                 .collect(),
-            additional_properties: kaji_core::AdditionalProperties::Any,
+            additional_properties: poolster_core::AdditionalProperties::Any,
         }),
     ));
     api
@@ -140,7 +142,7 @@ fn native_byte_grouped_sdk_compiles() {
     );
     std::fs::write(project, contents).unwrap();
     std::fs::write(root.path().join("sdk/Program.cs"), r#"using System.Text.Json;
-using Kaji.LayoutSdk;
+using Poolster.LayoutSdk;
 var first="field0"+new string('z',128);var last="field899"+new string('z',128);
 var input="{\""+first+"\":null,\""+last+"\":\"last\",\"future\":{\"nested\":[1,null,true]}}";
 var model=JsonSerializer.Deserialize<Large>(input)!;
@@ -182,7 +184,7 @@ fn oversized_atomic_operation_is_diagnosed_without_slicing() {
         .collect();
     let tree = render_test_sdk(&api, "sdk", Some("layout-sdk")).unwrap();
     let diagnostics: serde_json::Value = serde_json::from_str(
-        tree.get("sdk/.kaji/source-layout-diagnostics.json")
+        tree.get("sdk/.poolster/source-layout-diagnostics.json")
             .unwrap(),
     )
     .unwrap();

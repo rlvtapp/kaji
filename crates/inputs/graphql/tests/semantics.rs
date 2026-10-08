@@ -1,6 +1,6 @@
 use apollo_compiler::schema::ExtendedType;
-use kaji_core::input::InputPlugin;
-use kaji_input_graphql::{GraphqlDocument, GraphqlInput, parse};
+use poolster_core::input::InputPlugin;
+use poolster_input_graphql::{GraphqlDocument, GraphqlInput, parse};
 
 #[test]
 fn explicit_schema_does_not_infer_unused_mutation_root() {

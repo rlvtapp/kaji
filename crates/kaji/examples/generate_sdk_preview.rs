@@ -1,10 +1,10 @@
-//! Generates a complete multi-language Kaji SDK preview from Kaji Go compiler artifacts.
+//! Generates a complete multi-language Poolster SDK preview from Poolster Go compiler artifacts.
 
 use std::env;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
-use kaji::{ProfileSet, generate_openapi};
+use poolster::{ProfileSet, generate_openapi};
 
 fn main() -> Result<()> {
     let mut arguments = env::args_os().skip(1);
@@ -33,15 +33,15 @@ fn main() -> Result<()> {
         name,
         version,
         ProfileSet::new("sdks")
-            .package(kaji::rust::package("rust").with(kaji::rust::sdk()))
-            .package(kaji::ts::package("typescript-fetch").with(kaji::ts::sdk().fetch()))
-            .package(kaji::ts::package("typescript-axios").with(kaji::ts::sdk().axios()))
-            .package(kaji::go::package("go").with(kaji::go::sdk()))
-            .package(kaji::python::package("python").with(kaji::python::sdk()))
-            .package(kaji::php::package("php").with(kaji::php::sdk()))
-            .package(kaji::java::package("java").with(kaji::java::sdk()))
-            .package(kaji::csharp::package("csharp").with(kaji::csharp::sdk()))
-            .package(kaji::elixir::package("elixir").with(kaji::elixir::sdk())),
+            .package(poolster::rust::package("rust").with(poolster::rust::sdk()))
+            .package(poolster::ts::package("typescript-fetch").with(poolster::ts::sdk().fetch()))
+            .package(poolster::ts::package("typescript-axios").with(poolster::ts::sdk().axios()))
+            .package(poolster::go::package("go").with(poolster::go::sdk()))
+            .package(poolster::python::package("python").with(poolster::python::sdk()))
+            .package(poolster::php::package("php").with(poolster::php::sdk()))
+            .package(poolster::java::package("java").with(poolster::java::sdk()))
+            .package(poolster::csharp::package("csharp").with(poolster::csharp::sdk()))
+            .package(poolster::elixir::package("elixir").with(poolster::elixir::sdk())),
     )?;
     let count = tree.iter().count();
     tree.write_to(&output)?;

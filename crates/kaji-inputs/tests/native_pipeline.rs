@@ -6,13 +6,13 @@
     feature = "capnproto"
 ))]
 use anyhow::Result;
-use kaji_core::{
+use poolster_core::{
     Api, GeneratedFile,
     engine::{
         Contract, Handle, Language, Meta, Package, Packages, Plugin, PluginContext, Requirement,
     },
 };
-use kaji_inputs::{InputProvider, InputSummary, default_registry};
+use poolster_inputs::{InputProvider, InputSummary, default_registry};
 use std::{marker::PhantomData, path::PathBuf, sync::Arc};
 struct Docs;
 impl Language for Docs {
@@ -76,7 +76,7 @@ fn fixture(format: &str, file: &str) -> PathBuf {
 fn graphql_source_reaches_output_with_all_operation_kinds() {
     let source = tempfile::NamedTempFile::new().unwrap();
     std::fs::write(source.path(), "type Query { read: String } type Mutation { write: String } type Subscription { changed: String }").unwrap();
-    pipeline::<kaji_inputs::graphql::GraphqlDocument>(
+    pipeline::<poolster_inputs::graphql::GraphqlDocument>(
         "graphql",
         source.path().into(),
         |d| d.summary(),
@@ -86,7 +86,7 @@ fn graphql_source_reaches_output_with_all_operation_kinds() {
 #[cfg(feature = "asyncapi")]
 #[test]
 fn asyncapi_source_reaches_output_without_losing_event_semantics() {
-    pipeline::<kaji_inputs::asyncapi::AsyncApiDocument>(
+    pipeline::<poolster_inputs::asyncapi::AsyncApiDocument>(
         "asyncapi",
         fixture("asyncapi", "events.yaml"),
         |d| d.summary(),
@@ -96,7 +96,7 @@ fn asyncapi_source_reaches_output_without_losing_event_semantics() {
 #[cfg(feature = "arazzo")]
 #[test]
 fn arazzo_source_reaches_output_as_workflows() {
-    pipeline::<kaji_inputs::arazzo::ArazzoDocument>(
+    pipeline::<poolster_inputs::arazzo::ArazzoDocument>(
         "arazzo",
         fixture("arazzo", "workflows.yaml"),
         |d| d.summary(),
@@ -106,7 +106,7 @@ fn arazzo_source_reaches_output_as_workflows() {
 #[cfg(feature = "protobuf")]
 #[test]
 fn protobuf_source_reaches_output_with_each_streaming_mode() {
-    pipeline::<kaji_inputs::protobuf::ProtobufDocument>(
+    pipeline::<poolster_inputs::protobuf::ProtobufDocument>(
         "protobuf",
         fixture("protobuf", "rpc/service.proto"),
         |d| d.summary(),
@@ -129,7 +129,7 @@ fn capnproto_source_reaches_output_when_official_compiler_is_available() {
         eprintln!("SKIPPED Cap'n Proto source-to-output pipeline: capnp is unavailable");
         return;
     }
-    pipeline::<kaji_inputs::capnproto::CapnProtoDocument>(
+    pipeline::<poolster_inputs::capnproto::CapnProtoDocument>(
         "capnproto",
         fixture("capnproto", "rpc/service.capnp"),
         |d| d.summary(),
@@ -140,7 +140,7 @@ fn capnproto_source_reaches_output_when_official_compiler_is_available() {
 #[cfg(feature = "graphql")]
 #[test]
 fn large_github_schema_reaches_documentation_output() {
-    pipeline::<kaji_inputs::graphql::GraphqlDocument>(
+    pipeline::<poolster_inputs::graphql::GraphqlDocument>(
         "graphql",
         fixture("graphql", "github/schema.graphql"),
         |d| d.summary(),
@@ -152,7 +152,7 @@ fn large_github_schema_reaches_documentation_output() {
 fn official_slack_events_reach_documentation_output() {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../inputs/asyncapi/tests/corpus/slack-rtm-3.1.yaml");
-    pipeline::<kaji_inputs::asyncapi::AsyncApiDocument>(
+    pipeline::<poolster_inputs::asyncapi::AsyncApiDocument>(
         "asyncapi",
         path,
         |d| d.summary(),
@@ -164,7 +164,7 @@ fn official_slack_events_reach_documentation_output() {
 fn official_bnpl_workflow_reaches_documentation_output() {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../inputs/arazzo/tests/corpus/bnpl-1.0.yaml");
-    pipeline::<kaji_inputs::arazzo::ArazzoDocument>(
+    pipeline::<poolster_inputs::arazzo::ArazzoDocument>(
         "arazzo",
         path,
         |d| d.summary(),

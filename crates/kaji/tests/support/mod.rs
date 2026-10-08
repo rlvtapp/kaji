@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use kaji_core::{
+use poolster_core::{
     Api, Field, HttpMethod, Operation, OperationMediaType, OperationResponse, Schema, SchemaKind,
     SchemaValue,
 };
@@ -21,7 +21,7 @@ pub fn sdk_contract_api() -> Api {
         }),
     );
     Api {
-        name: "Kaji Contract API".into(),
+        name: "Poolster Contract API".into(),
         version: "1.0.0".into(),
         schemas: vec![contact],
         operations: vec![Operation {

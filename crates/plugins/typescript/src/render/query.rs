@@ -79,7 +79,7 @@ fn render_hooks(api: &Api, options: &ArtifactOptions, framework: &str, swr: bool
     for (original, operation) in api.operations.iter().zip(&mut prepared.operations) {
         operation
             .annotations
-            .entry("kaji.query.operation_id".into())
+            .entry("poolster.query.operation_id".into())
             .or_insert_with(|| json!(original.id));
     }
     let api = &prepared;
@@ -100,9 +100,9 @@ fn render_hooks(api: &Api, options: &ArtifactOptions, framework: &str, swr: bool
             "import type { UseQueryOptions, UseMutationReturnType, UseInfiniteQueryOptions, UseInfiniteQueryReturnType } from '@tanstack/vue-query';\n",
         );
     }
-    output.push_str("// __kaji_shared_start\n");
+    output.push_str("// __poolster_shared_start\n");
     output.push_str(&crate::query_helpers::shared_runtime(false));
-    output.push_str("// __kaji_shared_end\n");
+    output.push_str("// __poolster_shared_end\n");
     for operation in &api.operations {
         output.push_str(&render_query_operation(
             api, operation, options, framework, swr,
@@ -113,7 +113,7 @@ fn render_hooks(api: &Api, options: &ArtifactOptions, framework: &str, swr: bool
 
 pub(crate) fn render_query_operation(
     api: &Api,
-    operation: &kaji_core::Operation,
+    operation: &poolster_core::Operation,
     options: &ArtifactOptions,
     framework: &str,
     swr: bool,
@@ -125,7 +125,7 @@ pub(crate) fn render_query_operation(
     let pascal = type_identifier(crate::query_helpers::name(operation));
     let identity = operation
         .annotations
-        .get("kaji.query.operation_id")
+        .get("poolster.query.operation_id")
         .and_then(Value::as_str)
         .unwrap_or(&operation.id);
     let group = if options.group_by_tag {
@@ -145,13 +145,13 @@ pub(crate) fn render_query_operation(
     if read {
         let _ = writeln!(
             output,
-            "export const {name}QueryKey = (options: Parameters<typeof {function}>[0], scope: KajiQueryScope = 'default') => [{}, scope, __kajiInputs(options)] as const;",
+            "export const {name}QueryKey = (options: Parameters<typeof {function}>[0], scope: PoolsterQueryScope = 'default') => [{}, scope, __kajiInputs(options)] as const;",
             js_string(identity)
         );
         if swr {
             let _ = writeln!(
                 output,
-                "export function use{pascal}(options: Parameters<typeof {function}>[0], config: SWRConfiguration<Awaited<ReturnType<typeof {function}>>, Error> = {{}}, scope: KajiQueryScope = 'default') {{ return useSWR({name}QueryKey(options, scope), () => {function}(options), config); }}\n"
+                "export function use{pascal}(options: Parameters<typeof {function}>[0], config: SWRConfiguration<Awaited<ReturnType<typeof {function}>>, Error> = {{}}, scope: PoolsterQueryScope = 'default') {{ return useSWR({name}QueryKey(options, scope), () => {function}(options), config); }}\n"
             );
         } else {
             let query_type = if framework == "@tanstack/vue-query" {
@@ -165,7 +165,7 @@ pub(crate) fn render_query_operation(
             };
             let _ = writeln!(
                 output,
-                "export type {pascal}QueryOverrides<TData = Awaited<ReturnType<typeof {function}>>> = Omit<{query_type}, 'queryKey' | 'queryFn'>;\nexport function {name}QueryOptions<TData = Awaited<ReturnType<typeof {function}>>>(options: Parameters<typeof {function}>[0], query: {pascal}QueryOverrides<TData> = {{}}, scope: KajiQueryScope = 'default'): {pascal}QueryOverrides<TData> & {{ queryKey: ReturnType<typeof {name}QueryKey>; queryFn: (context: QueryFunctionContext<ReturnType<typeof {name}QueryKey>>) => Promise<Awaited<ReturnType<typeof {function}>>> }} {{\n  return {{ ...query, queryKey: {name}QueryKey(options, scope), queryFn: (context: QueryFunctionContext<ReturnType<typeof {name}QueryKey>>) => __kajiQueryCall(options, context.signal, {function}) }};\n}}\nexport function use{pascal}<TData = Awaited<ReturnType<typeof {function}>>>(options: Parameters<typeof {function}>[0], query: {pascal}QueryOverrides<TData> = {{}}, scope: KajiQueryScope = 'default') {{ return useQuery({name}QueryOptions(options, query, scope)); }}\n"
+                "export type {pascal}QueryOverrides<TData = Awaited<ReturnType<typeof {function}>>> = Omit<{query_type}, 'queryKey' | 'queryFn'>;\nexport function {name}QueryOptions<TData = Awaited<ReturnType<typeof {function}>>>(options: Parameters<typeof {function}>[0], query: {pascal}QueryOverrides<TData> = {{}}, scope: PoolsterQueryScope = 'default'): {pascal}QueryOverrides<TData> & {{ queryKey: ReturnType<typeof {name}QueryKey>; queryFn: (context: QueryFunctionContext<ReturnType<typeof {name}QueryKey>>) => Promise<Awaited<ReturnType<typeof {function}>>> }} {{\n  return {{ ...query, queryKey: {name}QueryKey(options, scope), queryFn: (context: QueryFunctionContext<ReturnType<typeof {name}QueryKey>>) => __kajiQueryCall(options, context.signal, {function}) }};\n}}\nexport function use{pascal}<TData = Awaited<ReturnType<typeof {function}>>>(options: Parameters<typeof {function}>[0], query: {pascal}QueryOverrides<TData> = {{}}, scope: PoolsterQueryScope = 'default') {{ return useQuery({name}QueryOptions(options, query, scope)); }}\n"
             );
         }
     } else if swr {

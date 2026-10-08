@@ -6,9 +6,9 @@ fn native_call_scopes_preserve_headers_and_cancel_timeout_without_mutation() {
         name: "Scope".into(),
         operations: vec![Operation {
             id: "getThing".into(),
-            method: kaji_core::HttpMethod::Get,
+            method: poolster_core::HttpMethod::Get,
             path: "/thing".into(),
-            responses: vec![kaji_core::OperationResponse {
+            responses: vec![poolster_core::OperationResponse {
                 status: "204".into(),
                 description: None,
                 media_types: vec![],
@@ -17,10 +17,10 @@ fn native_call_scopes_preserve_headers_and_cancel_timeout_without_mutation() {
         }],
         ..Default::default()
     };
-    let tree = kaji_core::engine::Packages::new()
+    let tree = poolster_core::engine::Packages::new()
         .package(
             crate::package("sdk")
-                .name("Kaji.Scope")
+                .name("Poolster.Scope")
                 .with(crate::sdk())
                 .with(crate::operation_tests()),
         )

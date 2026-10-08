@@ -75,7 +75,7 @@ final class MultipartBody
     {
         if ($depth > 32) throw new \InvalidArgumentException('multipart nesting exceeds 32 levels');
         if ($this->encoded !== null) return $this->encoded;
-        $boundary = 'kaji-' . bin2hex(random_bytes(24));
+        $boundary = 'poolster-' . bin2hex(random_bytes(24));
         $encoded = '';
         $quote = static fn(string $value): string => str_replace(['\\', '"'], ['\\\\', '\\"'], $value);
         $mediaType = $this->encoding['content_type'] ?? $this->encoding['contentType'] ?? 'multipart/form-data';

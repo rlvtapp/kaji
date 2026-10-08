@@ -18,8 +18,8 @@ fn collect(root: &Path, dir: &Path, files: &mut Vec<PathBuf>) {
                     | "dist"
                     | "build"
                     | "__pycache__"
-                    | "kaji-openapi"
-                    | "kaji-openapi.exe"
+                    | "poolster-openapi"
+                    | "poolster-openapi.exe"
             )
         {
             continue;

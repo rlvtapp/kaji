@@ -1,34 +1,34 @@
 //! Convenience registry for independently packaged input providers.
 use anyhow::Result;
-pub use kaji_core::input::{
+pub use poolster_core::input::{
     InputContract, InputDiagnostic, InputOperation, InputPlugin, InputPluginInfo, InputProvider,
     InputRegistry, InputSummary, LoadedInput,
 };
 
 #[cfg(feature = "graphql")]
-pub use kaji_input_graphql as graphql;
+pub use poolster_input_graphql as graphql;
 #[cfg(feature = "graphql")]
-pub use kaji_input_graphql::GraphqlInput;
+pub use poolster_input_graphql::GraphqlInput;
 
 #[cfg(feature = "asyncapi")]
-pub use kaji_input_asyncapi as asyncapi;
+pub use poolster_input_asyncapi as asyncapi;
 #[cfg(feature = "asyncapi")]
-pub use kaji_input_asyncapi::AsyncApiInput;
+pub use poolster_input_asyncapi::AsyncApiInput;
 
 #[cfg(feature = "arazzo")]
-pub use kaji_input_arazzo as arazzo;
+pub use poolster_input_arazzo as arazzo;
 #[cfg(feature = "arazzo")]
-pub use kaji_input_arazzo::ArazzoInput;
+pub use poolster_input_arazzo::ArazzoInput;
 
 #[cfg(feature = "protobuf")]
-pub use kaji_input_protobuf as protobuf;
+pub use poolster_input_protobuf as protobuf;
 #[cfg(feature = "protobuf")]
-pub use kaji_input_protobuf::ProtobufInput;
+pub use poolster_input_protobuf::ProtobufInput;
 
 #[cfg(feature = "capnproto")]
-pub use kaji_input_capnproto as capnproto;
+pub use poolster_input_capnproto as capnproto;
 #[cfg(feature = "capnproto")]
-pub use kaji_input_capnproto::CapnProtoInput;
+pub use poolster_input_capnproto::CapnProtoInput;
 
 /// Register the feature-enabled providers. Alternative providers can be added
 /// using the same core interface without depending on this bundle.

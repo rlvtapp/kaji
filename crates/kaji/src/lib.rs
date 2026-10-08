@@ -1,98 +1,100 @@
 //! Typed composition of first-party and community SDK plugins.
 
 use anyhow::{Result, bail};
-use kaji_core::engine::{Language, Packages};
-use kaji_core::{AdaptedApi, Adapter, Api, GeneratedFile, GeneratedTree, SecuritySchemeCatalog};
+use poolster_core::engine::{Language, Packages};
+use poolster_core::{
+    AdaptedApi, Adapter, Api, GeneratedFile, GeneratedTree, SecuritySchemeCatalog,
+};
 use std::path::Path;
 
 pub mod mock;
-pub use kaji_core::SdkClientStyle;
-pub use kaji_core::api_reference::{ApiReference, ApiReferenceDocument, api_reference};
-pub use kaji_core::customization::{
+pub use poolster_core::SdkClientStyle;
+pub use poolster_core::api_reference::{ApiReference, ApiReferenceDocument, api_reference};
+pub use poolster_core::customization::{
     BundledMiddleware, CodeCustomization, apply_code_customizations,
 };
-pub use kaji_core::engine::{Common, Enforce, Package, PluginPhase};
-pub use kaji_core::idempotency::{IdempotencyConfig, IdempotencyRule};
-pub use kaji_core::input;
-pub use kaji_core::release;
+pub use poolster_core::engine::{Common, Enforce, Package, PluginPhase};
+pub use poolster_core::idempotency::{IdempotencyConfig, IdempotencyRule};
+pub use poolster_core::input;
+pub use poolster_core::release;
 /// First-party C# SDK generator.
 ///
 /// This is the preferred name for the .NET/C# target. [`dotnet`] remains an
 /// alias so existing embedded generation profiles continue to compile.
 #[cfg(feature = "csharp")]
-pub use kaji_plugin_csharp as csharp;
+pub use poolster_plugin_csharp as csharp;
 #[cfg(feature = "dotnet")]
-pub use kaji_plugin_dotnet as dotnet;
+pub use poolster_plugin_dotnet as dotnet;
 #[cfg(feature = "elixir")]
-pub use kaji_plugin_elixir as elixir;
+pub use poolster_plugin_elixir as elixir;
 #[cfg(feature = "go")]
-pub use kaji_plugin_go as go;
+pub use poolster_plugin_go as go;
 #[cfg(feature = "java")]
-pub use kaji_plugin_java as java;
+pub use poolster_plugin_java as java;
 #[cfg(feature = "php")]
-pub use kaji_plugin_php as php;
+pub use poolster_plugin_php as php;
 #[cfg(feature = "postman")]
-pub use kaji_plugin_postman as postman;
+pub use poolster_plugin_postman as postman;
 #[cfg(feature = "python")]
-pub use kaji_plugin_python as python;
+pub use poolster_plugin_python as python;
 #[cfg(feature = "ruby")]
-pub use kaji_plugin_ruby as ruby;
+pub use poolster_plugin_ruby as ruby;
 #[cfg(feature = "rust")]
-pub use kaji_plugin_rust as rust;
+pub use poolster_plugin_rust as rust;
 #[cfg(feature = "rust-cli")]
-pub use kaji_plugin_rust_cli as rust_cli;
+pub use poolster_plugin_rust_cli as rust_cli;
 #[cfg(feature = "swift")]
-pub use kaji_plugin_swift as swift;
+pub use poolster_plugin_swift as swift;
 #[cfg(feature = "symfony")]
-pub use kaji_plugin_symfony as symfony;
+pub use poolster_plugin_symfony as symfony;
 #[cfg(feature = "terraform")]
-pub use kaji_plugin_terraform as terraform;
+pub use poolster_plugin_terraform as terraform;
 #[cfg(feature = "typescript")]
-pub use kaji_plugin_typescript as ts;
+pub use poolster_plugin_typescript as ts;
 #[cfg(feature = "typescript-cli")]
-pub use kaji_plugin_typescript_cli as ts_cli;
+pub use poolster_plugin_typescript_cli as ts_cli;
 
 pub mod prelude {
     pub use crate::{
         BundledMiddleware, CodeCustomization, Common, IdempotencyConfig, IdempotencyRule, Package,
         ProfileSet,
     };
-    pub use kaji_core::engine::{
+    pub use poolster_core::engine::{
         Contract, Enforce, Handle, Language, Meta, Plugin, PluginContext, PluginPhase, Provision,
         Requirement,
     };
-    pub use kaji_core::input::{InputContract, InputPlugin, InputProvider, InputRegistry};
-    pub use kaji_core::{GeneratedFile, SdkClientStyle};
+    pub use poolster_core::input::{InputContract, InputPlugin, InputProvider, InputRegistry};
+    pub use poolster_core::{GeneratedFile, SdkClientStyle};
     #[cfg(feature = "csharp")]
-    pub use kaji_plugin_csharp::PackageExt as _;
+    pub use poolster_plugin_csharp::PackageExt as _;
     #[cfg(feature = "elixir")]
-    pub use kaji_plugin_elixir::PackageExt as _;
+    pub use poolster_plugin_elixir::PackageExt as _;
     #[cfg(feature = "go")]
-    pub use kaji_plugin_go::PackageExt as _;
+    pub use poolster_plugin_go::PackageExt as _;
     #[cfg(feature = "java")]
-    pub use kaji_plugin_java::PackageExt as _;
+    pub use poolster_plugin_java::PackageExt as _;
     #[cfg(feature = "php")]
-    pub use kaji_plugin_php::PackageExt as _;
+    pub use poolster_plugin_php::PackageExt as _;
     #[cfg(feature = "postman")]
-    pub use kaji_plugin_postman::PackageExt as _;
+    pub use poolster_plugin_postman::PackageExt as _;
     #[cfg(feature = "python")]
-    pub use kaji_plugin_python::PackageExt as _;
+    pub use poolster_plugin_python::PackageExt as _;
     #[cfg(feature = "ruby")]
-    pub use kaji_plugin_ruby::PackageExt as _;
+    pub use poolster_plugin_ruby::PackageExt as _;
     #[cfg(feature = "rust")]
-    pub use kaji_plugin_rust::PackageExt as _;
+    pub use poolster_plugin_rust::PackageExt as _;
     #[cfg(feature = "rust-cli")]
-    pub use kaji_plugin_rust_cli::PackageExt as _;
+    pub use poolster_plugin_rust_cli::PackageExt as _;
     #[cfg(feature = "swift")]
-    pub use kaji_plugin_swift::PackageExt as _;
+    pub use poolster_plugin_swift::PackageExt as _;
     #[cfg(feature = "symfony")]
-    pub use kaji_plugin_symfony::PackageExt as _;
+    pub use poolster_plugin_symfony::PackageExt as _;
     #[cfg(feature = "terraform")]
-    pub use kaji_plugin_terraform::PackageExt as _;
+    pub use poolster_plugin_terraform::PackageExt as _;
     #[cfg(feature = "typescript")]
-    pub use kaji_plugin_typescript::PackageExt as _;
+    pub use poolster_plugin_typescript::PackageExt as _;
     #[cfg(feature = "typescript-cli")]
-    pub use kaji_plugin_typescript_cli::PackageExt as _;
+    pub use poolster_plugin_typescript_cli::PackageExt as _;
 }
 
 /// One release containing independently configured, typed packages.
@@ -151,7 +153,7 @@ pub fn generate_with_security_catalog(
 /// Native GraphQL/event/RPC inputs require consumers for their own typed contracts;
 /// they are never silently coerced into HTTP operations.
 pub fn generate_with_input(
-    input: &kaji_core::input::InputContract,
+    input: &poolster_core::input::InputContract,
     profiles: ProfileSet,
 ) -> Result<GeneratedTree> {
     let adapted = input.get::<AdaptedApi>()?;
@@ -160,7 +162,7 @@ pub fn generate_with_input(
 
 /// Generates packages from any source-format [`Adapter`].
 ///
-/// The adapter owns parsing and normalization; Kaji's language plugins only
+/// The adapter owns parsing and normalization; Poolster's language plugins only
 /// see its target-neutral [`Api`] and named security definitions. This makes
 /// custom input formats possible without a fork of the generator.
 pub fn generate_with_adapter(adapter: &dyn Adapter, profiles: ProfileSet) -> Result<GeneratedTree> {
@@ -171,21 +173,21 @@ pub fn generate_with_adapter(adapter: &dyn Adapter, profiles: ProfileSet) -> Res
     generate_with_security_catalog(&api, profiles, Some(&security_schemes))
 }
 
-/// Generates packages from the artifacts of Kaji's bundled OpenAPI compiler.
+/// Generates packages from the artifacts of Poolster's bundled OpenAPI compiler.
 pub fn generate_openapi(
     compiler_output: &Path,
     name: impl Into<String>,
     version: impl Into<String>,
     profiles: ProfileSet,
 ) -> Result<GeneratedTree> {
-    let adapter = kaji_core::adapter::OpenApiSidecar::new(compiler_output, name, version);
+    let adapter = poolster_core::adapter::OpenApiSidecar::new(compiler_output, name, version);
     generate_with_adapter(&adapter, profiles)
 }
 
 #[cfg(all(test, feature = "go"))]
 mod tests {
     use super::*;
-    use kaji_core::adapter::AdaptedApi;
+    use poolster_core::adapter::AdaptedApi;
 
     struct EmptyAdapter;
 
@@ -226,7 +228,7 @@ mod tests {
     }
     #[test]
     fn registered_input_can_supply_normalized_api_to_existing_sdk_generators() {
-        use kaji_core::input::{InputContract, InputPlugin, InputRegistry, InputSummary};
+        use poolster_core::input::{InputContract, InputPlugin, InputRegistry, InputSummary};
         struct JsonApiInput;
         impl InputPlugin for JsonApiInput {
             fn id(&self) -> &str {
@@ -252,9 +254,9 @@ mod tests {
         let api = Api {
             name: "Inventory".into(),
             version: "2.0.0".into(),
-            schemas: vec![kaji_core::Schema::new(
+            schemas: vec![poolster_core::Schema::new(
                 "InventoryItem",
-                kaji_core::SchemaValue::new(kaji_core::SchemaKind::String),
+                poolster_core::SchemaValue::new(poolster_core::SchemaKind::String),
             )],
             ..Default::default()
         };
@@ -284,6 +286,6 @@ mod tests {
         )
         .err()
         .unwrap();
-        assert!(error.to_string().contains("kaji.http-api"));
+        assert!(error.to_string().contains("poolster.http-api"));
     }
 }

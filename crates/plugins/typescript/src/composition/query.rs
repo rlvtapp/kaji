@@ -18,7 +18,7 @@ pub struct Query {
     provider: Option<Handle<Operations>>,
     output: String,
     operations_per_file: Option<usize>,
-    layout: Option<kaji_core::SourceLayout>,
+    layout: Option<poolster_core::SourceLayout>,
     include: Option<std::collections::BTreeSet<String>>,
     kinds: BTreeMap<String, QueryKind>,
     names: BTreeMap<String, String>,
@@ -51,7 +51,7 @@ pub fn swr() -> Query {
     }
 }
 impl Query {
-    pub fn layout(mut self, layout: kaji_core::SourceLayout) -> Self {
+    pub fn layout(mut self, layout: poolster_core::SourceLayout) -> Self {
         self.layout = Some(layout);
         self
     }
@@ -84,7 +84,7 @@ impl Query {
     /// Preserve one aggregate helper module for callers that explicitly prefer it.
     pub fn single_file(mut self) -> Self {
         self.operations_per_file = None;
-        self.layout = Some(kaji_core::SourceLayout::SingleFile);
+        self.layout = Some(poolster_core::SourceLayout::SingleFile);
         self
     }
     pub fn output(mut self, module: impl Into<String>) -> Self {
@@ -137,12 +137,12 @@ impl Plugin<TypeScript> for Query {
         let mut prepared = crate::symbols::prepare(cx.api);
         for (original, native) in cx.api.operations.iter().zip(&mut prepared.operations) {
             native.annotations.insert(
-                "kaji.query.operation_id".into(),
+                "poolster.query.operation_id".into(),
                 serde_json::json!(original.id),
             );
             if let Some(kind) = self.kinds.get(&original.id) {
                 native.annotations.insert(
-                    "kaji.query.kind".into(),
+                    "poolster.query.kind".into(),
                     serde_json::json!(match kind {
                         QueryKind::Query => "query",
                         QueryKind::Mutation => "mutation",
@@ -156,7 +156,7 @@ impl Plugin<TypeScript> for Query {
                 );
                 native
                     .annotations
-                    .insert("kaji.query.name".into(), serde_json::json!(name));
+                    .insert("poolster.query.name".into(), serde_json::json!(name));
             }
         }
         let selected = prepared
@@ -165,7 +165,7 @@ impl Plugin<TypeScript> for Query {
             .filter(|operation| {
                 self.include.as_ref().is_none_or(|ids| {
                     ids.contains(
-                        operation.annotations["kaji.query.operation_id"]
+                        operation.annotations["poolster.query.operation_id"]
                             .as_str()
                             .unwrap(),
                     )
@@ -180,7 +180,7 @@ impl Plugin<TypeScript> for Query {
                 exported.insert(crate::symbols::identifier(name)),
                 "query helper name collision for {name:?}"
             );
-            kaji_core::pagination::normalize_pagination(&prepared, operation, None)?;
+            poolster_core::pagination::normalize_pagination(&prepared, operation, None)?;
         }
         let count = self.operations_per_file.unwrap_or(usize::MAX);
         let framework = match self.framework {
@@ -198,7 +198,7 @@ impl Plugin<TypeScript> for Query {
                 .iter()
                 .zip(&resources)
                 .map(
-                    |(operation, resource)| kaji_core::source_layout::SourceUnit {
+                    |(operation, resource)| poolster_core::source_layout::SourceUnit {
                         bytes: render::render_query_operation(
                             &prepared,
                             operation,
@@ -222,7 +222,8 @@ impl Plugin<TypeScript> for Query {
         let split = layout.is_some_and(|layout| {
             matches!(
                 layout,
-                kaji_core::SourceLayout::PerOperation | kaji_core::SourceLayout::PerResource { .. }
+                poolster_core::SourceLayout::PerOperation
+                    | poolster_core::SourceLayout::PerResource { .. }
             )
         }) || groups.len() > 1;
         let groups = if groups.is_empty() {
@@ -255,12 +256,14 @@ impl Plugin<TypeScript> for Query {
             };
             let module = if split {
                 match layout {
-                    Some(kaji_core::SourceLayout::PerOperation) if !chunk.is_empty() => format!(
-                        "{}_operations/{}",
-                        self.output,
-                        crate::clients::operation_file_identifier(&chunk[0].id)
-                    ),
-                    Some(kaji_core::SourceLayout::PerResource { .. }) => {
+                    Some(poolster_core::SourceLayout::PerOperation) if !chunk.is_empty() => {
+                        format!(
+                            "{}_operations/{}",
+                            self.output,
+                            crate::clients::operation_file_identifier(&chunk[0].id)
+                        )
+                    }
+                    Some(poolster_core::SourceLayout::PerResource { .. }) => {
                         format!("{}_resources/chunk_{index:04}", self.output)
                     }
                     _ => format!("{}_chunks/chunk_{index:04}", self.output),
@@ -273,19 +276,19 @@ impl Plugin<TypeScript> for Query {
                 let mut contents = file.contents;
                 if split {
                     let start = contents
-                        .find("// __kaji_shared_start")
+                        .find("// __poolster_shared_start")
                         .context("query runtime boundary missing")?;
                     let end = contents
-                        .find("// __kaji_shared_end")
+                        .find("// __poolster_shared_end")
                         .context("query runtime boundary missing")?
-                        + "// __kaji_shared_end\n".len();
+                        + "// __poolster_shared_end\n".len();
                     let shared = Symbol {
                         module: shared_path.with_extension(""),
                         name: String::new(),
                     }
                     .import_from(&target)?;
                     let source = format!(
-                        "import {{ __kajiInputs, __kajiQueryCall, __kajiInitial, __kajiNext, __kajiPageOptions, __kajiMaxPages, type KajiQueryScope, type KajiPageParam, type KajiPaginationOptions }} from {shared:?};\nexport type {{ KajiQueryScope, KajiPageParam, KajiPaginationOptions }} from {shared:?};\n"
+                        "import {{ __kajiInputs, __kajiQueryCall, __kajiInitial, __kajiNext, __kajiPageOptions, __kajiMaxPages, type PoolsterQueryScope, type PoolsterPageParam, type PoolsterPaginationOptions }} from {shared:?};\nexport type {{ PoolsterQueryScope, PoolsterPageParam, PoolsterPaginationOptions }} from {shared:?};\n"
                     );
                     contents.replace_range(start..end, &source);
                 }
@@ -349,9 +352,9 @@ impl Plugin<TypeScript> for Query {
                 let mut types = types;
                 if index == 0 {
                     types.extend([
-                        "KajiQueryScope".into(),
-                        "KajiPageParam".into(),
-                        "KajiPaginationOptions".into(),
+                        "PoolsterQueryScope".into(),
+                        "PoolsterPageParam".into(),
+                        "PoolsterPaginationOptions".into(),
                     ]);
                 }
                 if !types.is_empty() {
@@ -377,12 +380,12 @@ fn emit_barrel(cx: &mut PluginContext<'_, TypeScript>, output: &str, source: &st
     let declarations = source.lines().collect::<Vec<_>>();
     let units = declarations
         .iter()
-        .map(|line| kaji_core::SourceUnit {
+        .map(|line| poolster_core::SourceUnit {
             bytes: line.len() + 1,
             resource: None,
         })
         .collect::<Vec<_>>();
-    let groups = kaji_core::SourceLayout::Chunked {
+    let groups = poolster_core::SourceLayout::Chunked {
         max_file_bytes: 128 * 1024,
         max_declarations: Some(100),
     }

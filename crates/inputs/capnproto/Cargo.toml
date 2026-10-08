@@ -1,5 +1,5 @@
 [package]
-name = "kaji-input-capnproto"
+name = "poolster-input-capnproto"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,6 +9,6 @@ description = "Native capnproto input provider for Kaji"
 publish = false
 
 [dependencies]
-kaji-core = { path = "../../kaji-core" }
+poolster-core = { path = "../../kaji-core" }
 anyhow = "1.0.102"
 capnp = "0.25"

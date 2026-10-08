@@ -1,20 +1,22 @@
-fn fixture() -> kaji_core::Api {
-    let mut api = kaji_core::Api {
+fn fixture() -> poolster_core::Api {
+    let mut api = poolster_core::Api {
         name: "Layout boundary".into(),
         version: "1.0.0".into(),
         ..Default::default()
     };
     api.operations = (0..48)
-        .map(|index| kaji_core::Operation {
+        .map(|index| poolster_core::Operation {
             id: format!("listItems{index}{}", "y".repeat(1024)),
-            method: kaji_core::HttpMethod::Get,
+            method: poolster_core::HttpMethod::Get,
             path: format!("/items/{index}"),
             parameters: (0..48)
-                .map(|field| kaji_core::OperationParameter {
+                .map(|field| poolster_core::OperationParameter {
                     name: format!("field{field}{}", "x".repeat(112)),
                     location: "query".into(),
                     required: false,
-                    schema: Some(kaji_core::SchemaValue::new(kaji_core::SchemaKind::String)),
+                    schema: Some(poolster_core::SchemaValue::new(
+                        poolster_core::SchemaKind::String,
+                    )),
                     description: None,
                     annotations: Default::default(),
                 })
@@ -106,19 +108,19 @@ fn native_byte_grouped_sdk_compiles() {
 
 #[test]
 fn oversized_atomic_model_keeps_native_fields_and_reports_exact_source() {
-    let api = kaji_core::Api {
-        schemas: vec![kaji_core::Schema::new(
+    let api = poolster_core::Api {
+        schemas: vec![poolster_core::Schema::new(
             "Large",
-            kaji_core::SchemaValue::new(kaji_core::SchemaKind::Object {
+            poolster_core::SchemaValue::new(poolster_core::SchemaKind::Object {
                 fields: (0..1000)
-                    .map(|index| kaji_core::Field {
+                    .map(|index| poolster_core::Field {
                         name: format!("field{index}{}", "z".repeat(128)),
-                        value: kaji_core::SchemaValue::new(kaji_core::SchemaKind::String),
+                        value: poolster_core::SchemaValue::new(poolster_core::SchemaKind::String),
                         required: true,
                         annotations: Default::default(),
                     })
                     .collect(),
-                additional_properties: kaji_core::AdditionalProperties::Forbidden,
+                additional_properties: poolster_core::AdditionalProperties::Forbidden,
             }),
         )],
         ..Default::default()
@@ -134,7 +136,9 @@ fn oversized_atomic_model_keeps_native_fields_and_reports_exact_source() {
     assert_eq!(model.contents.matches(": String,").count(), 1000);
     let diagnostics = files
         .iter()
-        .find(|file| file.path.to_string_lossy() == ".kaji/source-layout-model-diagnostics.json")
+        .find(|file| {
+            file.path.to_string_lossy() == ".poolster/source-layout-model-diagnostics.json"
+        })
         .unwrap();
     let entries: serde_json::Value = serde_json::from_str(&diagnostics.contents).unwrap();
     assert_eq!(entries[0]["bytes"], model.contents.len());

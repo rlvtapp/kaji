@@ -4,7 +4,7 @@
 //! public boundary for bringing another source format into that neutral model;
 //! it also carries security definitions which cannot be inferred from an
 //! operation's named requirements alone. OpenAPI parsing is supplied by
-//! Kaji's embedded Go compiler, whose JSON artifacts are read by
+//! Poolster's embedded Go compiler, whose JSON artifacts are read by
 //! [`openapi_sidecar`].
 
 use anyhow::Result;
@@ -35,7 +35,7 @@ impl AdaptedApi {
     }
 }
 
-/// Converts a source contract into Kaji's target-neutral AST.
+/// Converts a source contract into Poolster's target-neutral AST.
 ///
 /// Implement this trait in an application or integration crate to support
 /// formats such as AsyncAPI, GraphQL, or a company-specific contract format.
@@ -43,7 +43,7 @@ impl AdaptedApi {
 /// as `&dyn Adapter` when a caller selects an input format at runtime.
 ///
 /// Output customization does not use a separate parser trait: it belongs to
-/// Kaji's existing [`crate::engine::Language`] and [`crate::engine::Plugin`]
+/// Poolster's existing [`crate::engine::Language`] and [`crate::engine::Plugin`]
 /// extension points after an adapter has produced an [`Api`].
 pub trait Adapter {
     fn adapt(&self) -> Result<AdaptedApi>;

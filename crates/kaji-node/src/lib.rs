@@ -1,16 +1,16 @@
-//! Node-API boundary for Kaji's normalized contract and safe output tree.
+//! Node-API boundary for Poolster's normalized contract and safe output tree.
 
 use std::path::Path;
 
 use anyhow::{Context, Result as AnyResult, bail};
-use kaji::prelude::*;
-use kaji::{csharp, elixir, go, java, php, python, ruby, rust, swift, ts};
-use kaji_core::adapter::OpenApiSidecar;
-use kaji_core::{Api, GeneratedFile, GeneratedTree, SecuritySchemeCatalog};
-use kaji_inputs::default_registry;
 use napi::bindgen_prelude::{AsyncTask, Task};
 use napi::{Env, Error, Result, Status};
 use napi_derive::napi;
+use poolster::prelude::*;
+use poolster::{csharp, elixir, go, java, php, python, ruby, rust, swift, ts};
+use poolster_core::adapter::OpenApiSidecar;
+use poolster_core::{Api, GeneratedFile, GeneratedTree, SecuritySchemeCatalog};
+use poolster_inputs::default_registry;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
@@ -355,7 +355,7 @@ impl Task for GenerateSdk {
         if packages.is_empty() {
             return Ok("[]".to_owned());
         }
-        let tree = kaji::generate_with_security_catalog(
+        let tree = poolster::generate_with_security_catalog(
             &contract.api,
             profiles(packages).map_err(napi_error)?,
             Some(&contract.security_schemes),

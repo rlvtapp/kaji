@@ -32,7 +32,7 @@ pub struct InputDiagnostic {
 
 /// Native payloads use the same `Contract` trait as generator providers.
 /// A parser may publish several contracts, including an `AdaptedApi` when its
-/// semantics fit Kaji's HTTP model. Reading an absent capability fails explicitly.
+/// semantics fit Poolster's HTTP model. Reading an absent capability fails explicitly.
 pub struct InputContract {
     pub summary: InputSummary,
     pub diagnostics: Vec<InputDiagnostic>,
@@ -209,7 +209,7 @@ impl InputRegistry {
 }
 
 impl Contract for crate::AdaptedApi {
-    const NAME: &'static str = "kaji.http-api";
+    const NAME: &'static str = "poolster.http-api";
 }
 
 /// Bridges a selected input contract into the ordinary provider/consumer graph.

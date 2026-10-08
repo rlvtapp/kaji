@@ -1,5 +1,5 @@
-use kaji_core::input::InputPlugin;
-use kaji_input_asyncapi::{AsyncApiDocument, AsyncApiInput, AsyncApiModel, parse};
+use poolster_core::input::InputPlugin;
+use poolster_input_asyncapi::{AsyncApiDocument, AsyncApiInput, AsyncApiModel, parse};
 use serde_json::{Value, json};
 const EXAMPLE: &str = include_str!("fixtures/events.yaml");
 fn fixture() -> Value {

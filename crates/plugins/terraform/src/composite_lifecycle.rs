@@ -16,11 +16,13 @@ fn fixture() -> EntityCatalog {
         },
     ];
     plan.create.path = "/organizations/{org}/things".into();
-    plan.create.parameters = vec![kaji_core::OperationParameter {
+    plan.create.parameters = vec![poolster_core::OperationParameter {
         name: "org".into(),
         location: "path".into(),
         required: true,
-        schema: Some(kaji_core::SchemaValue::new(kaji_core::SchemaKind::String)),
+        schema: Some(poolster_core::SchemaValue::new(
+            poolster_core::SchemaKind::String,
+        )),
         description: None,
         annotations: Default::default(),
     }];

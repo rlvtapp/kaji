@@ -1,5 +1,5 @@
 use anyhow::{Result, ensure};
-use kaji_core::{GeneratedFile, GeneratedTree, customization::BundledMiddleware};
+use poolster_core::{GeneratedFile, GeneratedTree, customization::BundledMiddleware};
 
 pub(crate) fn bundle(tree: &mut GeneratedTree, middleware: &[BundledMiddleware]) -> Result<()> {
     let anchor = "      @middleware = middleware.to_a.dup.freeze";

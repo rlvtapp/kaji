@@ -1,5 +1,5 @@
 [package]
-name = "kaji-input-protobuf"
+name = "poolster-input-protobuf"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,7 +9,7 @@ description = "Native protobuf input provider for Kaji"
 publish = false
 
 [dependencies]
-kaji-core = { path = "../../kaji-core" }
+poolster-core = { path = "../../kaji-core" }
 anyhow = "1.0.102"
 protox = "0.9"
 

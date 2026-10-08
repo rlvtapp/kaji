@@ -124,11 +124,11 @@ fn operation_names(api: &Api) -> BTreeMap<String, String> {
         "check_cancellation",
         "retry_pause",
         "execute_with_retry",
-        "kaji_parameter_content",
-        "kaji_whole_query",
-        "kaji_sequential_json",
-        "kaji_json_path",
-        "kaji_with_body_value",
+        "poolster_parameter_content",
+        "poolster_whole_query",
+        "poolster_sequential_json",
+        "poolster_json_path",
+        "poolster_with_body_value",
     ]
     .iter()
     .map(|name| name.to_ascii_lowercase())

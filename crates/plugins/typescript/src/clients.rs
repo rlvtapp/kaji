@@ -1,14 +1,14 @@
 //! Structured TypeScript Fetch and Axios operation-client generators.
 //!
 //! Fetch and Axios operation files share a consistent public source shape;
-//! transport-specific setup lives in `.kaji/client`.
+//! transport-specific setup lives in `.poolster/client`.
 
 use crate::models::operation_model_file_identifier;
 use anyhow::{Result, bail};
 use serde_json::Value;
 
-use kaji_core::GeneratedFile;
-use kaji_core::ast::{Api, Operation, SecuritySchemeCatalog, SecuritySchemeKind};
+use poolster_core::GeneratedFile;
+use poolster_core::ast::{Api, Operation, SecuritySchemeCatalog, SecuritySchemeKind};
 
 const ESLINT_HEADER: &str = "/* eslint-disable no-alert, no-console */\n\n";
 
@@ -91,7 +91,7 @@ pub(crate) fn generate_operations(
                     serde_json::to_string(&plan["requests"])?,
                     serde_json::to_string(&plan["responses"])?);
                 let prefix = if grouped_directory(operation, config, group_by_tag).is_some() { "../" } else { "./" };
-                source = format!("import {{ kajiJsonRefs }} from '{prefix}_kaji_json_refs'\n{source}");
+                source = format!("import {{ kajiJsonRefs }} from '{prefix}_poolster_json_refs'\n{source}");
                 source = source.replace(
                     "      ...config,",
                     &format!("      jsonPlan: {plan},\n      ...config,"),
@@ -142,7 +142,10 @@ fn rewrite_import_paths(
             &format!("from './{}'", pascal_identifier(&operation.id)),
             &format!("from '{type_path}'"),
         )
-        .replace("from './.kaji/client'", &format!("from '{runtime_path}'"))
+        .replace(
+            "from './.poolster/client'",
+            &format!("from '{runtime_path}'"),
+        )
 }
 
 fn grouped_directory(
@@ -209,7 +212,7 @@ fn render_operation(
     {
         let content_type = parameter
             .annotations
-            .get("kaji.parameter_content")
+            .get("poolster.parameter_content")
             .and_then(Value::as_array)
             .and_then(|m| m.first())
             .and_then(|m| m.get("content_type"))
@@ -221,7 +224,7 @@ fn render_operation(
             serde_json::to_string(content_type).expect("media type")
         ));
     }
-    if let Ok(content) = kaji_core::openapi32::request_content(operation) {
+    if let Ok(content) = poolster_core::openapi32::request_content(operation) {
         if let Some(media) = content.iter().find(|m| {
             !m.prefix_encoding.is_empty()
                 || m.item_encoding.is_some()
@@ -252,12 +255,12 @@ fn render_operation(
         metadata.push_str(&format!("      security: {security},\n"));
     }
     format!(
-        "{ESLINT_HEADER}import type {{ Options, RequestResult, ResponseResult }} from './.kaji/client'\nimport type {{ {type_name}Options, {type_name}Responses }} from './{type_name}'\nimport {{ client, resolveResponse }} from './.kaji/client'\n\n/**\n * {{@link {link_path}}}\n */\nexport function {function_name}<ThrowOnError extends boolean = {throw_on_error}>(\n  options: Options<{type_name}Options, ThrowOnError>,\n): Promise<ResponseResult<RequestResult<{type_name}Responses, ThrowOnError>, ThrowOnError>> {{\n  const {{ client: request = client, ...config }} = options\n  const throwOnError = (config.throwOnError ?? {throw_on_error}) as ThrowOnError\n\n  return resolveResponse(\n    request({{\n      method: '{method}',\n      url: '{}',\n{metadata}      ...config,\n      throwOnError,\n    }}) as Promise<RequestResult<{type_name}Responses, ThrowOnError>>,\n    throwOnError,\n  )\n}}\n",
+        "{ESLINT_HEADER}import type {{ Options, RequestResult, ResponseResult }} from './.poolster/client'\nimport type {{ {type_name}Options, {type_name}Responses }} from './{type_name}'\nimport {{ client, resolveResponse }} from './.poolster/client'\n\n/**\n * {{@link {link_path}}}\n */\nexport function {function_name}<ThrowOnError extends boolean = {throw_on_error}>(\n  options: Options<{type_name}Options, ThrowOnError>,\n): Promise<ResponseResult<RequestResult<{type_name}Responses, ThrowOnError>, ThrowOnError>> {{\n  const {{ client: request = client, ...config }} = options\n  const throwOnError = (config.throwOnError ?? {throw_on_error}) as ThrowOnError\n\n  return resolveResponse(\n    request({{\n      method: '{method}',\n      url: '{}',\n{metadata}      ...config,\n      throwOnError,\n    }}) as Promise<RequestResult<{type_name}Responses, ThrowOnError>>,\n    throwOnError,\n  )\n}}\n",
         operation.path,
     )
 }
 
-/// Preserves explicit OpenAPI parameter serialization metadata for Kaji's
+/// Preserves explicit OpenAPI parameter serialization metadata for Poolster's
 /// runtime. Unspecified style/explode settings intentionally remain absent so
 /// the runtime can apply each location's OpenAPI defaults.
 fn style_property_name(name: &str) -> String {
@@ -287,7 +290,7 @@ fn render_parameter_styles(operation: &Operation) -> Option<String> {
                         .annotations
                         .get("explode")
                         .and_then(Value::as_bool);
-                    let content_type = kaji_core::openapi32::parameter_content(parameter)
+                    let content_type = poolster_core::openapi32::parameter_content(parameter)
                         .ok()
                         .and_then(|content| {
                             content.first().map(|media| media.content_type.clone())
@@ -326,7 +329,7 @@ fn render_parameter_styles(operation: &Operation) -> Option<String> {
 fn render_form_encodings(operation: &Operation) -> Option<String> {
     let mut encodings = operation
         .annotations
-        .get("kaji.request_body_encodings")?
+        .get("poolster.request_body_encodings")?
         .clone();
     if let Some(media_types) = encodings.as_object_mut() {
         for fields in media_types.values_mut().filter_map(Value::as_object_mut) {
@@ -419,7 +422,7 @@ fn render_security_scheme(scheme_name: &str, catalog: Option<&SecuritySchemeCata
     }
 }
 
-/// Kaji routes Server-Sent Events through the event-stream client helper,
+/// Poolster routes Server-Sent Events through the event-stream client helper,
 /// selected from the response media type rather than an operation-name rule.
 fn render_event_stream_operation(
     operation: &Operation,
@@ -439,7 +442,7 @@ fn render_event_stream_operation(
     {
         let content_type = parameter
             .annotations
-            .get("kaji.parameter_content")
+            .get("poolster.parameter_content")
             .and_then(Value::as_array)
             .and_then(|m| m.first())
             .and_then(|m| m.get("content_type"))
@@ -451,7 +454,7 @@ fn render_event_stream_operation(
             serde_json::to_string(content_type).expect("media type")
         ));
     }
-    if let Ok(content) = kaji_core::openapi32::request_content(operation) {
+    if let Ok(content) = poolster_core::openapi32::request_content(operation) {
         if let Some(media) = content.iter().find(|m| {
             !m.prefix_encoding.is_empty()
                 || m.item_encoding.is_some()
@@ -492,7 +495,7 @@ fn render_event_stream_operation(
         " = {}"
     };
     format!(
-        "{ESLINT_HEADER}import type {{ Options, EventStreamResult, SuccessOf }} from './.kaji/client'\nimport type {{ {type_name}Options, {type_name}Responses }} from './{type_name}'\nimport {{ client, toEventStream }} from './.kaji/client'\n\n/**\n * {{@link {link_path}}}\n */\nexport function {function_name}<ThrowOnError extends boolean = {throw_on_error}>(\n  options: Options<{type_name}Options, ThrowOnError>{options_default},\n): Promise<EventStreamResult<SuccessOf<{type_name}Responses>>> {{\n  const {{ client: request = client, ...config }} = options\n\n  return toEventStream<SuccessOf<{type_name}Responses>>(\n    request({{\n      method: '{method}',\n      url: '{}',\n      responseType: 'stream',\n{metadata}      ...config,\n      throwOnError: config.throwOnError ?? {throw_on_error},\n    }}),\n  )\n}}\n",
+        "{ESLINT_HEADER}import type {{ Options, EventStreamResult, SuccessOf }} from './.poolster/client'\nimport type {{ {type_name}Options, {type_name}Responses }} from './{type_name}'\nimport {{ client, toEventStream }} from './.poolster/client'\n\n/**\n * {{@link {link_path}}}\n */\nexport function {function_name}<ThrowOnError extends boolean = {throw_on_error}>(\n  options: Options<{type_name}Options, ThrowOnError>{options_default},\n): Promise<EventStreamResult<SuccessOf<{type_name}Responses>>> {{\n  const {{ client: request = client, ...config }} = options\n\n  return toEventStream<SuccessOf<{type_name}Responses>>(\n    request({{\n      method: '{method}',\n      url: '{}',\n      responseType: 'stream',\n{metadata}      ...config,\n      throwOnError: config.throwOnError ?? {throw_on_error},\n    }}),\n  )\n}}\n",
         operation.path,
     )
 }
@@ -561,19 +564,19 @@ fn stable_hash(value: &str) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kaji_core::ast::{HttpMethod, SecurityRequirement, SecurityScheme, SecuritySchemeKind};
+    use poolster_core::ast::{HttpMethod, SecurityRequirement, SecurityScheme, SecuritySchemeKind};
 
     fn operation(id: &str, method: HttpMethod, path: &str) -> Operation {
         Operation {
             id: id.into(),
             method,
             path: path.into(),
-            responses: vec![kaji_core::OperationResponse {
+            responses: vec![poolster_core::OperationResponse {
                 status: "200".into(),
                 description: None,
-                media_types: vec![kaji_core::OperationMediaType {
+                media_types: vec![poolster_core::OperationMediaType {
                     content_type: "application/json".into(),
-                    schema: Some(kaji_core::SchemaValue::reference(
+                    schema: Some(poolster_core::SchemaValue::reference(
                         "#/components/schemas/Pet",
                     )),
                 }],
@@ -584,7 +587,7 @@ mod tests {
     }
 
     #[test]
-    fn renders_kaji_path_parameter_docs_and_source() {
+    fn renders_poolster_path_parameter_docs_and_source() {
         let source = render_operation(
             &operation("getPetById", HttpMethod::Get, "/pet/{petId}"),
             true,
@@ -658,15 +661,17 @@ mod tests {
     #[test]
     fn encoding_omission_and_required_sse_options_match_native_types() {
         let mut operation = operation("streamProbe", HttpMethod::Get, "/probe/{id}");
-        operation.parameters.push(kaji_core::OperationParameter {
-            name: "id".into(),
-            location: "path".into(),
-            required: true,
-            schema: None,
-            description: None,
-            annotations: Default::default(),
-        });
-        operation.annotations.insert("kaji.request_body_encodings".into(), serde_json::json!({"multipart/form-data": {"payload": {"style":null,"explode":null,"contentType":null,"allowReserved":null}}}));
+        operation
+            .parameters
+            .push(poolster_core::OperationParameter {
+                name: "id".into(),
+                location: "path".into(),
+                required: true,
+                schema: None,
+                description: None,
+                annotations: Default::default(),
+            });
+        operation.annotations.insert("poolster.request_body_encodings".into(), serde_json::json!({"multipart/form-data": {"payload": {"style":null,"explode":null,"contentType":null,"allowReserved":null}}}));
         assert_eq!(
             render_form_encodings(&operation).unwrap(),
             "{\"multipart/form-data\":{\"payload\":{}}}"
@@ -683,17 +688,19 @@ mod tests {
     fn style_metadata_preserves_unsafe_wire_keys_as_string_properties() {
         let mut operation = operation("headerProbe", HttpMethod::Get, "/probe");
         for name in ["openai-beta", "x'quoted", "1st", "雪"] {
-            operation.parameters.push(kaji_core::OperationParameter {
-                name: name.into(),
-                location: "header".into(),
-                required: false,
-                schema: None,
-                description: None,
-                annotations: std::collections::BTreeMap::from([(
-                    "style".into(),
-                    serde_json::json!("simple"),
-                )]),
-            });
+            operation
+                .parameters
+                .push(poolster_core::OperationParameter {
+                    name: name.into(),
+                    location: "header".into(),
+                    required: false,
+                    schema: None,
+                    description: None,
+                    annotations: std::collections::BTreeMap::from([(
+                        "style".into(),
+                        serde_json::json!("simple"),
+                    )]),
+                });
         }
         let styles = render_parameter_styles(&operation).unwrap();
         for name in ["openai-beta", "x'quoted", "1st", "雪"] {
@@ -708,27 +715,29 @@ mod tests {
     #[test]
     fn operation_composes_media_styles_and_security_metadata() {
         let mut operation = operation("updatePet", HttpMethod::Post, "/pets/{petId}");
-        operation.parameters.push(kaji_core::OperationParameter {
-            name: "petId".into(),
-            location: "path".into(),
+        operation
+            .parameters
+            .push(poolster_core::OperationParameter {
+                name: "petId".into(),
+                location: "path".into(),
+                required: true,
+                schema: None,
+                description: None,
+                annotations: std::collections::BTreeMap::from([(
+                    "style".into(),
+                    serde_json::json!("matrix"),
+                )]),
+            });
+        operation.request_body = Some(poolster_core::OperationRequestBody {
             required: true,
-            schema: None,
             description: None,
-            annotations: std::collections::BTreeMap::from([(
-                "style".into(),
-                serde_json::json!("matrix"),
-            )]),
-        });
-        operation.request_body = Some(kaji_core::OperationRequestBody {
-            required: true,
-            description: None,
-            media_types: vec![kaji_core::OperationMediaType {
+            media_types: vec![poolster_core::OperationMediaType {
                 content_type: "multipart/form-data".into(),
                 schema: None,
             }],
         });
         operation.annotations.insert(
-            "kaji.request_body_encodings".into(),
+            "poolster.request_body_encodings".into(),
             serde_json::json!({
                 "multipart/form-data": {
                     "metadata": {

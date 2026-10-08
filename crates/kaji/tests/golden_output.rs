@@ -1,4 +1,4 @@
-//! Approved generated-output fingerprints for every maintained Kaji target.
+//! Approved generated-output fingerprints for every maintained Poolster target.
 //! TypeScript SDK operations resolve directly to their successful response body.
 //!
 //! The checked-in fixture protects the actual emitted files, rather than only
@@ -7,7 +7,7 @@
 
 mod support;
 
-use kaji::{ProfileSet, generate};
+use poolster::{ProfileSet, generate};
 
 const APPROVED_SNAPSHOT: &str = include_str!("fixtures/all-targets.snapshot");
 
@@ -25,16 +25,16 @@ fn snapshot() -> String {
     let tree = generate(
         &support::sdk_contract_api(),
         ProfileSet::new("sdk")
-            .package(kaji::rust::package("rust").with(kaji::rust::sdk()))
-            .package(kaji::ts::package("typescript-fetch").with(kaji::ts::sdk().fetch()))
-            .package(kaji::ts::package("typescript-axios").with(kaji::ts::sdk().axios()))
-            .package(kaji::go::package("go").with(kaji::go::sdk()))
-            .package(kaji::python::package("python").with(kaji::python::sdk()))
-            .package(kaji::php::package("php").with(kaji::php::sdk()))
-            .package(kaji::java::package("java").with(kaji::java::sdk()))
-            .package(kaji::dotnet::package("dotnet").with(kaji::dotnet::sdk()))
-            .package(kaji::elixir::package("elixir").with(kaji::elixir::sdk()))
-            .package(kaji::mock::package("mock-server").with(kaji::mock::server())),
+            .package(poolster::rust::package("rust").with(poolster::rust::sdk()))
+            .package(poolster::ts::package("typescript-fetch").with(poolster::ts::sdk().fetch()))
+            .package(poolster::ts::package("typescript-axios").with(poolster::ts::sdk().axios()))
+            .package(poolster::go::package("go").with(poolster::go::sdk()))
+            .package(poolster::python::package("python").with(poolster::python::sdk()))
+            .package(poolster::php::package("php").with(poolster::php::sdk()))
+            .package(poolster::java::package("java").with(poolster::java::sdk()))
+            .package(poolster::dotnet::package("dotnet").with(poolster::dotnet::sdk()))
+            .package(poolster::elixir::package("elixir").with(poolster::elixir::sdk()))
+            .package(poolster::mock::package("mock-server").with(poolster::mock::server())),
     )
     .expect("the maintained target set must generate");
 

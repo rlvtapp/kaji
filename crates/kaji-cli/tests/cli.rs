@@ -79,7 +79,7 @@ fn generates_all_languages_from_artifacts_and_preserves_custom_files() {
         assert!(output.join(target).is_dir(), "missing {target}");
     }
     let lock: serde_json::Value = serde_json::from_str(
-        &fs::read_to_string(output.join(".kaji/generation.lock.json")).unwrap(),
+        &fs::read_to_string(output.join(".poolster/generation.lock.json")).unwrap(),
     )
     .unwrap();
     assert_eq!(lock["version"], 1);
@@ -231,7 +231,7 @@ fn json_config_generates_sdks_and_all_selected_artifacts() {
         r#"{"path":"/contacts","method":"GET","operation_id":"listContacts","responses":[]}"#,
     )
     .unwrap();
-    let config = working.path().join("kaji.json");
+    let config = working.path().join("poolster.json");
     fs::write(
         &config,
         r#"{
@@ -312,7 +312,7 @@ fn json_config_generates_sdks_and_all_selected_artifacts() {
     assert_eq!(manifest["dependencies"]["msw"], "^2.0.0");
     assert_eq!(manifest["devDependencies"]["cypress"], "^15.0.0");
     let lock: serde_json::Value = serde_json::from_str(
-        &fs::read_to_string(output.join(".kaji/generation.lock.json")).unwrap(),
+        &fs::read_to_string(output.join(".poolster/generation.lock.json")).unwrap(),
     )
     .unwrap();
     assert_eq!(lock["paths"]["include"], serde_json::json!(["/contacts*"]));
@@ -353,7 +353,7 @@ fn json_config_generates_sdks_and_all_selected_artifacts() {
 #[test]
 fn init_writes_a_json_recipe_without_overwriting_existing_work() {
     let working = tempfile::tempdir().unwrap();
-    let config = working.path().join("nested/kaji.json");
+    let config = working.path().join("nested/poolster.json");
     let first = cli()
         .args(["init", "--config"])
         .arg(&config)
@@ -365,7 +365,7 @@ fn init_writes_a_json_recipe_without_overwriting_existing_work() {
         serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
     assert_eq!(
         document["$schema"],
-        "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/v1/kaji.schema.json"
+        "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/v1/poolster.schema.json"
     );
     assert_eq!(document["openapi"]["input"], "contract/openapi.json");
     assert_eq!(document["packages"][0]["plugins"][1]["name"], "zod");
@@ -385,7 +385,7 @@ fn init_writes_a_json_recipe_without_overwriting_existing_work() {
 #[test]
 fn published_config_schema_is_valid_json_schema_document() {
     let schema: serde_json::Value =
-        serde_json::from_str(include_str!("../../../schemas/v1/kaji.schema.json")).unwrap();
+        serde_json::from_str(include_str!("../../../schemas/v1/poolster.schema.json")).unwrap();
     assert_eq!(
         schema["$schema"],
         "https://json-schema.org/draft/2020-12/schema"
@@ -426,7 +426,7 @@ fn named_provider_recipe_and_release_version_survive_regeneration() {
     )
     .unwrap();
     fs::write(artifacts.join("operations-order.json"), r#"["GET /items"]"#).unwrap();
-    let config = working.path().join("kaji.json");
+    let config = working.path().join("poolster.json");
     let mut recipe = serde_json::json!({
         "openapi": {"artifacts":"artifacts", "name":"Inventory", "version":"1.0.0"},
         "output": {"path":"generated"},
@@ -458,7 +458,7 @@ fn named_provider_recipe_and_release_version_survive_regeneration() {
             .unwrap()
             .contains("network")
     );
-    let metadata_path = root.join(".kaji/package.json");
+    let metadata_path = root.join(".poolster/package.json");
     let mut metadata: serde_json::Value =
         serde_json::from_slice(&fs::read(&metadata_path).unwrap()).unwrap();
     metadata["version"] = "2.3.4".into();
@@ -543,7 +543,7 @@ fn source_customizations_are_package_scoped_survive_regeneration_and_detect_drif
     fs::create_dir_all(working.path().join("overrides")).unwrap();
     let source = working.path().join("overrides/extra.ts");
     fs::write(&source, "export const customBehavior = 1;\n").unwrap();
-    let config = working.path().join("kaji.json");
+    let config = working.path().join("poolster.json");
     let mut document = serde_json::json!({
         "openapi":{"artifacts":"artifacts","name":"Example","version":"1.0.0"},
         "output":{"path":"generated"},
@@ -615,7 +615,7 @@ fn bundled_author_middleware_is_scoped_and_tracks_source_drift() {
         "export const authorPolicy = async (request: any, next: any) => next(request);\n",
     )
     .unwrap();
-    let config = working.path().join("kaji.json");
+    let config = working.path().join("poolster.json");
     let mut document = serde_json::json!({
         "openapi":{"artifacts":"artifacts","name":"Example","version":"1.0.0"},
         "output":{"path":"generated"},
@@ -640,7 +640,7 @@ fn bundled_author_middleware_is_scoped_and_tracks_source_drift() {
         "{}",
         String::from_utf8_lossy(&result.stderr)
     );
-    let runtime = working.path().join("generated/web/.kaji/client.ts");
+    let runtime = working.path().join("generated/web/.poolster/client.ts");
     assert!(
         fs::read_to_string(&runtime)
             .unwrap()
@@ -722,7 +722,7 @@ fn postman_and_typed_terraform_share_a_recipe_and_preserve_environment() {
         serde_json::to_vec(&order).unwrap(),
     )
     .unwrap();
-    let config = working.path().join("kaji.json");
+    let config = working.path().join("poolster.json");
     fs::write(&config, serde_json::to_vec(&json!({"openapi":{"artifacts":"artifacts","name":"Widgets"},"output":{"path":"generated"},"packages":[{"language":"postman","path":"postman","plugins":[{"name":"collection","strict":true,"split_by_group":true},{"name":"environment"}]},{"language":"terraform","path":"terraform","plugins":[{"name":"provider","provider_name":"widgets","infer":false,"resources":[{"name":"widget","create":"createWidget","read":"getWidget","update":"updateWidget","delete":"deleteWidget"}]}]}]})).unwrap()).unwrap();
     let run = || {
         cli()
@@ -747,7 +747,7 @@ fn postman_and_typed_terraform_share_a_recipe_and_preserve_environment() {
             .contains("v2.1.0")
     );
     let catalog: serde_json::Value = serde_json::from_slice(
-        &fs::read(output.join("terraform/.kaji/terraform-plan.json")).unwrap(),
+        &fs::read(output.join("terraform/.poolster/terraform-plan.json")).unwrap(),
     )
     .unwrap();
     assert_eq!(catalog["resources"][0]["name"], "widget");
@@ -788,7 +788,7 @@ fn per_language_repository_setup_and_install_dry_run_are_local() {
     for language in ["typescript", "python"] {
         let metadata = working
             .path()
-            .join(format!("generated/{language}/.kaji/package.json"));
+            .join(format!("generated/{language}/.poolster/package.json"));
         fs::create_dir_all(metadata.parent().unwrap()).unwrap();
         fs::write(metadata, serde_json::to_vec(&serde_json::json!({
             "language":language,"name":format!("demo-{language}"),"version":"1.0.0",
@@ -813,7 +813,7 @@ fn per_language_repository_setup_and_install_dry_run_are_local() {
         String::from_utf8_lossy(&output.stderr)
     );
     for language in ["typescript", "python"] {
-        let setup = format!(".kaji/sdk-repository-setup/acme/api-{language}");
+        let setup = format!(".poolster/sdk-repository-setup/acme/api-{language}");
         assert!(
             working
                 .path()

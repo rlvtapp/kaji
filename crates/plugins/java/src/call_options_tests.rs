@@ -6,9 +6,9 @@ fn native_call_scopes_preserve_headers_timeouts_and_original_client() {
         name: "Scope".into(),
         operations: vec![Operation {
             id: "getThing".into(),
-            method: kaji_core::HttpMethod::Get,
+            method: poolster_core::HttpMethod::Get,
             path: "/thing".into(),
-            responses: vec![kaji_core::OperationResponse {
+            responses: vec![poolster_core::OperationResponse {
                 status: "204".into(),
                 description: None,
                 media_types: vec![],
@@ -17,10 +17,10 @@ fn native_call_scopes_preserve_headers_timeouts_and_original_client() {
         }],
         ..Default::default()
     };
-    let tree = kaji_core::engine::Packages::new()
+    let tree = poolster_core::engine::Packages::new()
         .package(
             crate::package("sdk")
-                .name("io.kaji.callscope")
+                .name("io.poolster.callscope")
                 .with(crate::sdk())
                 .with(crate::operation_tests()),
         )
@@ -29,7 +29,7 @@ fn native_call_scopes_preserve_headers_timeouts_and_original_client() {
     let dir = tempfile::tempdir().unwrap();
     tree.write_to(dir.path()).unwrap();
     let mut source = include_str!("operation_driver.java.txt")
-        .replace("__PACKAGE__", "io.kaji.callscope")
+        .replace("__PACKAGE__", "io.poolster.callscope")
         .replace(
             "__CASES__",
             include_str!("call_options_probe_main.java.txt"),
@@ -45,7 +45,7 @@ fn native_call_scopes_preserve_headers_timeouts_and_original_client() {
     );
     std::fs::write(
         dir.path()
-            .join("sdk/src/test/java/io/kaji/callscope/KajiOperationTests.java"),
+            .join("sdk/src/test/java/io/kaji/callscope/PoolsterOperationTests.java"),
         source,
     )
     .unwrap();
@@ -54,7 +54,7 @@ fn native_call_scopes_preserve_headers_timeouts_and_original_client() {
             "-q",
             "test-compile",
             "org.codehaus.mojo:exec-maven-plugin:3.5.0:java",
-            "-Dexec.mainClass=io.kaji.callscope.KajiOperationTests",
+            "-Dexec.mainClass=io.poolster.callscope.PoolsterOperationTests",
             "-Dexec.classpathScope=test",
         ])
         .current_dir(dir.path().join("sdk"))

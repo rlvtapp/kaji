@@ -19,7 +19,7 @@ impl TypeScriptCypress {
             anyhow::ensure!(
                 api.operations.iter().any(|operation| operation
                     .annotations
-                    .get("kaji.aux.operation_id")
+                    .get("poolster.aux.operation_id")
                     .and_then(serde_json::Value::as_str)
                     .unwrap_or(&operation.id)
                     == id),
@@ -42,7 +42,7 @@ impl TypeScriptCypress {
                 .get(
                     operation
                         .annotations
-                        .get("kaji.aux.operation_id")
+                        .get("poolster.aux.operation_id")
                         .and_then(serde_json::Value::as_str)
                         .unwrap_or(&operation.id),
                 )
@@ -52,9 +52,9 @@ impl TypeScriptCypress {
                 options.include_mutations
                     || matches!(
                         operation.method,
-                        kaji_core::HttpMethod::Get
-                            | kaji_core::HttpMethod::Head
-                            | kaji_core::HttpMethod::Options
+                        poolster_core::HttpMethod::Get
+                            | poolster_core::HttpMethod::Head
+                            | poolster_core::HttpMethod::Options
                     ),
             );
             let name = js_string(&format!(
@@ -94,10 +94,10 @@ impl TypeScriptCypress {
                     .schema
                     .as_ref()
                     .and_then(|schema| {
-                        kaji_core::samples::schema_samples(
+                        poolster_core::samples::schema_samples(
                             api,
                             schema,
-                            kaji_core::samples::SampleOptions::default(),
+                            poolster_core::samples::SampleOptions::default(),
                         )
                         .samples
                         .into_iter()
@@ -130,10 +130,10 @@ impl TypeScriptCypress {
                 operation
                     .request_schema()
                     .and_then(|schema| {
-                        kaji_core::samples::schema_samples(
+                        poolster_core::samples::schema_samples(
                             api,
                             schema,
-                            kaji_core::samples::SampleOptions::default(),
+                            poolster_core::samples::SampleOptions::default(),
                         )
                         .samples
                         .into_iter()

@@ -1,4 +1,4 @@
-//! Executes generated SDKs against a small Kaji contract mock.
+//! Executes generated SDKs against a small Poolster contract mock.
 //!
 //! Docker is intentionally not required for this fast CI suite. The release
 //! profile still emits the standalone httpmock package; this in-process HTTP
@@ -14,7 +14,7 @@ use std::{
     thread,
 };
 
-use kaji::{generate, go, mock, prelude::*, python};
+use poolster::{generate, go, mock, prelude::*, python};
 
 struct MockServer {
     base_url: String,
@@ -70,7 +70,7 @@ impl MockServer {
     }
 }
 
-fn generated_contract_tree() -> kaji_core::GeneratedTree {
+fn generated_contract_tree() -> poolster_core::GeneratedTree {
     generate(
         &support::sdk_contract_api(),
         ProfileSet::new("sdk")
@@ -89,12 +89,12 @@ fn require_command(program: &str) {
     let available = Command::new(program).arg("--version").output();
     assert!(
         available.is_ok(),
-        "{program} is required for Kaji's generated-SDK contract suite"
+        "{program} is required for Poolster's generated-SDK contract suite"
     );
 }
 
 #[test]
-#[ignore = "opens a loopback Kaji contract mock; CI runs this explicitly"]
+#[ignore = "opens a loopback Poolster contract mock; CI runs this explicitly"]
 fn generated_go_and_python_sdks_call_the_openapi_derived_mock() {
     require_command("go");
     require_command("python3");
@@ -117,7 +117,7 @@ import (
     "testing"
 )
 
-func TestKajiContractMock(t *testing.T) {
+func TestPoolsterContractMock(t *testing.T) {
     client, err := NewClient(ClientConfig{
         BaseURL: os.Getenv("KAJI_CONTRACT_MOCK_URL"),
         APIKey: "contract-test-token",

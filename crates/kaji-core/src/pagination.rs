@@ -161,7 +161,7 @@ impl Selector {
     }
 }
 
-/// Validate an explicit recipe declaration or a retained Kaji/Speakeasy extension.
+/// Validate an explicit recipe declaration or a retained Poolster/Speakeasy extension.
 /// Invalid declarations return a diagnostic instead of silently disabling pagination.
 pub fn normalize_pagination(
     api: &Api,
@@ -174,7 +174,8 @@ pub fn normalize_pagination(
     } else {
         let Some(extension) = operation
             .annotations
-            .get("x-kaji-pagination")
+            .get("x-poolster-pagination")
+            .or_else(|| operation.annotations.get("x-kaji-pagination"))
             .or_else(|| operation.annotations.get("x-speakeasy-pagination"))
         else {
             return Ok(None);

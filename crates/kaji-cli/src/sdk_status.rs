@@ -5,10 +5,10 @@ use serde_json::{Value, json};
 use std::{collections::BTreeSet, process::Command};
 
 const WORKFLOWS: [(&str, bool); 4] = [
-    ("kaji-sdks.yml", false),
-    ("kaji-sdk-ci.yml", false),
-    ("kaji-sdk-release.yml", false),
-    ("kaji-spec-sync.yml", true),
+    ("poolster-sdks.yml", false),
+    ("poolster-sdk-ci.yml", false),
+    ("poolster-sdk-release.yml", false),
+    ("poolster-spec-sync.yml", true),
 ];
 
 pub fn remote_status(repository: &str) -> Result<Value> {
@@ -220,9 +220,9 @@ fn automation_prs(value: &Value) -> Observation {
                                 == Some("autorelease: pending")
                         })
                     });
-            let sdk = branch == "codex/kaji-sdks" || branch.starts_with("codex/kaji-sdks/");
-            let spec =
-                branch == "codex/kaji-spec-sync" || branch.starts_with("codex/kaji-spec-sync/");
+            let sdk = branch == "codex/poolster-sdks" || branch.starts_with("codex/poolster-sdks/");
+            let spec = branch == "codex/poolster-spec-sync"
+                || branch.starts_with("codex/poolster-spec-sync/");
             if !release && !sdk && !spec {
                 continue;
             }
@@ -239,7 +239,7 @@ fn automation_prs(value: &Value) -> Observation {
     }
     prs.sort_by_key(|pr| pr["number"].as_u64());
     Ok(json!({"pull_requests": prs,
-        "recognition": "default codex/kaji-sdks or codex/kaji-spec-sync branches, release-please branches, or autorelease: pending label; custom SDK branch names may be omitted"}))
+        "recognition": "default codex/poolster-sdks or codex/poolster-spec-sync branches, release-please branches, or autorelease: pending label; custom SDK branch names may be omitted"}))
 }
 
 #[cfg(test)]
@@ -278,7 +278,7 @@ mod tests {
     }
     #[test]
     fn recognizes_only_automation_and_projects_safe_pr_fields() {
-        let prs = json!([[{"number":3,"head":{"ref":"custom-feature"}}, {"number":2,"head":{"ref":"release-please--branches--main"},"body":"secret","html_url":"https://github.com/owner/repo/pull/2"}], [{"number":1,"head":{"ref":"codex/kaji-sdks"},"title":"private","draft":false}]]);
+        let prs = json!([[{"number":3,"head":{"ref":"custom-feature"}}, {"number":2,"head":{"ref":"release-please--branches--main"},"body":"secret","html_url":"https://github.com/owner/repo/pull/2"}], [{"number":1,"head":{"ref":"codex/poolster-sdks"},"title":"private","draft":false}]]);
         let output = automation_prs(&prs).unwrap();
         assert_eq!(output["pull_requests"].as_array().unwrap().len(), 2);
         assert_eq!(output["pull_requests"][0]["kind"], "generated_sdk");
@@ -300,35 +300,35 @@ mod tests {
         ] {
             assert!(validate_repository(repository).is_err());
         }
-        let names = workflow_names(&json!([{"name":"kaji-sdks.yml","type":"file","content":"ignored"},{"name":"directory","type":"dir"}])).unwrap();
-        assert!(names.contains("kaji-sdks.yml") && !names.contains("directory"));
+        let names = workflow_names(&json!([{"name":"poolster-sdks.yml","type":"file","content":"ignored"},{"name":"directory","type":"dir"}])).unwrap();
+        assert!(names.contains("poolster-sdks.yml") && !names.contains("directory"));
         assert!(workflow_names(&json!({"message":"not found"})).is_err());
     }
     #[test]
     fn optional_missing_workflow_is_skipped_without_querying_runs() {
         let directory = Ok(BTreeSet::new());
-        let optional = workflow_observation("kaji-spec-sync.yml", true, &directory, || {
+        let optional = workflow_observation("poolster-spec-sync.yml", true, &directory, || {
             panic!("must not query missing optional workflow")
         });
         assert_eq!(optional["optional"], true);
         assert_eq!(optional["latest_run"]["status"], "skipped");
         assert!(workflow_observed(&optional));
         let hidden = workflow_observation(
-            "kaji-spec-sync.yml",
+            "poolster-spec-sync.yml",
             true,
             &Err("request_unavailable"),
             || panic!("must not query unknown optional workflow"),
         );
         assert!(!workflow_observed(&hidden));
-        let present = Ok(BTreeSet::from(["kaji-spec-sync.yml".into()]));
-        let failed = workflow_observation("kaji-spec-sync.yml", true, &present, || {
+        let present = Ok(BTreeSet::from(["poolster-spec-sync.yml".into()]));
+        let failed = workflow_observation("poolster-spec-sync.yml", true, &present, || {
             Err("request_unavailable")
         });
         assert!(!workflow_observed(&failed));
         let available =
-            workflow_observation("kaji-spec-sync.yml", true, &present, || Ok(Value::Null));
+            workflow_observation("poolster-spec-sync.yml", true, &present, || Ok(Value::Null));
         assert!(workflow_observed(&available));
-        let required = workflow_observation("kaji-sdk-ci.yml", false, &directory, || {
+        let required = workflow_observation("poolster-sdk-ci.yml", false, &directory, || {
             Err("request_unavailable")
         });
         assert!(!workflow_observed(&required));
@@ -336,7 +336,8 @@ mod tests {
     #[test]
     fn recognizes_spec_sync_review_branch() {
         let output =
-            automation_prs(&json!([[{"number":5,"head":{"ref":"codex/kaji-spec-sync"}}]])).unwrap();
+            automation_prs(&json!([[{"number":5,"head":{"ref":"codex/poolster-spec-sync"}}]]))
+                .unwrap();
         assert_eq!(output["pull_requests"][0]["kind"], "spec_sync");
     }
 }

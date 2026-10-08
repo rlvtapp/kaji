@@ -1,5 +1,5 @@
 use anyhow::{Result, ensure};
-use kaji_core::{GeneratedFile, GeneratedTree, customization::BundledMiddleware};
+use poolster_core::{GeneratedFile, GeneratedTree, customization::BundledMiddleware};
 
 pub(crate) fn bundle(tree: &mut GeneratedTree, middleware: &[BundledMiddleware]) -> Result<()> {
     let anchor = "for index := len(config.Middleware) - 1; index >= 0; index-- {";
@@ -128,7 +128,7 @@ pub(crate) fn bundle(tree: &mut GeneratedTree, middleware: &[BundledMiddleware])
         client.matches(anchor).count() == 1,
         "Go client has ambiguous middleware registration"
     );
-    client = client.replacen(anchor, &format!("middleware := append([]KajiMiddleware{{{}}}, config.Middleware...)\n\tfor index := len(middleware) - 1; index >= 0; index-- {{", symbols.join(", ")), 1).replace("config.Middleware[index]", "middleware[index]");
+    client = client.replacen(anchor, &format!("middleware := append([]PoolsterMiddleware{{{}}}, config.Middleware...)\n\tfor index := len(middleware) - 1; index >= 0; index-- {{", symbols.join(", ")), 1).replace("config.Middleware[index]", "middleware[index]");
     tree.replace(GeneratedFile::new(client_path, client)?)?;
     Ok(())
 }

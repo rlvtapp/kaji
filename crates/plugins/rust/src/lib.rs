@@ -14,8 +14,8 @@ pub use composition::{client, models, operations, roundtrip_tests, transport};
 pub use operation_tests::{OperationTests, operation_tests};
 
 use anyhow::Result;
-use kaji_core::engine::{Language, Meta, Package, Plugin, PluginContext};
-use kaji_core::{GeneratedFile, SdkClientStyle};
+use poolster_core::engine::{Language, Meta, Package, Plugin, PluginContext};
+use poolster_core::{GeneratedFile, SdkClientStyle};
 
 pub struct Rust;
 #[derive(Default)]
@@ -29,12 +29,12 @@ impl Language for Rust {
     type Settings = Settings;
     type Workspace = composition::Workspace;
     fn bundle_middleware(
-        tree: &mut kaji_core::GeneratedTree,
-        middleware: &[kaji_core::customization::BundledMiddleware],
+        tree: &mut poolster_core::GeneratedTree,
+        middleware: &[poolster_core::customization::BundledMiddleware],
     ) -> Result<()> {
         crate::bundled::bundle(tree, middleware)
     }
-    fn finalize(cx: &mut kaji_core::engine::FinalizeContext<'_, Self>) -> Result<()> {
+    fn finalize(cx: &mut poolster_core::engine::FinalizeContext<'_, Self>) -> Result<()> {
         composition::Workspace::finalize(cx)
     }
 }
@@ -98,12 +98,12 @@ impl Plugin<Rust> for Sdk {
     fn meta(&self) -> &Meta {
         &self.meta
     }
-    fn provides(&self) -> Vec<kaji_core::engine::Provision> {
+    fn provides(&self) -> Vec<poolster_core::engine::Provision> {
         vec![
-            kaji_core::engine::Provision::of::<composition::Models>(),
-            kaji_core::engine::Provision::of::<composition::Transport>(),
-            kaji_core::engine::Provision::of::<composition::Operations>(),
-            kaji_core::engine::Provision::of::<composition::Client>(),
+            poolster_core::engine::Provision::of::<composition::Models>(),
+            poolster_core::engine::Provision::of::<composition::Transport>(),
+            poolster_core::engine::Provision::of::<composition::Operations>(),
+            poolster_core::engine::Provision::of::<composition::Client>(),
         ]
     }
     fn generate(&self, cx: &mut PluginContext<'_, Rust>) -> Result<()> {
@@ -146,7 +146,7 @@ impl Plugin<Rust> for Sdk {
     }
 }
 
-fn style_guide(api: &kaji_core::Api, style: SdkClientStyle) -> String {
+fn style_guide(api: &poolster_core::Api, style: SdkClientStyle) -> String {
     let surface = match style {
         SdkClientStyle::Flat => {
             "Call operation methods directly on `Client`. No resource accessors are generated."
@@ -164,8 +164,8 @@ fn style_guide(api: &kaji_core::Api, style: SdkClientStyle) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kaji_core::engine::Packages;
-    use kaji_core::{Api, HttpMethod, Operation};
+    use poolster_core::engine::Packages;
+    use poolster_core::{Api, HttpMethod, Operation};
 
     fn api() -> Api {
         Api {
@@ -237,7 +237,7 @@ mod tests {
 
     #[test]
     fn typed_operation_schemas_preserve_arrays_bodies_and_empty_responses() {
-        use kaji_core::{
+        use poolster_core::{
             OperationMediaType, OperationRequestBody, OperationResponse, SchemaKind, SchemaValue,
         };
         let mut api = api();

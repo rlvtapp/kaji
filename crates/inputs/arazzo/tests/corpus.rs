@@ -1,4 +1,4 @@
-use kaji_input_arazzo::parse;
+use poolster_input_arazzo::parse;
 #[test]
 fn official_arazzo_workflow_corpus() {
     for (name, source, workflows, expected_steps) in [

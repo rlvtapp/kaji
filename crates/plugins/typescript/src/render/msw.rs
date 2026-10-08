@@ -23,7 +23,7 @@ impl TypeScriptMsw {
                 "    if (request.method !== {}) return undefined;",
                 js_string(operation.method.as_str())
             );
-            let scenarios = kaji_core::extract_operation_mock_scenarios(operation)?;
+            let scenarios = poolster_core::extract_operation_mock_scenarios(operation)?;
             if !scenarios.is_empty() {
                 output.push_str("    const url = new URL(request.url);\n    const selected = request.headers.get('x-kaji-mock-scenario');\n");
                 if scenarios
@@ -96,10 +96,10 @@ impl TypeScriptMsw {
             let sample = media
                 .and_then(|media| media.schema.as_ref())
                 .and_then(|schema| {
-                    kaji_core::samples::schema_samples(
+                    poolster_core::samples::schema_samples(
                         api,
                         schema,
-                        kaji_core::samples::SampleOptions::default(),
+                        poolster_core::samples::SampleOptions::default(),
                     )
                     .samples
                     .into_iter()

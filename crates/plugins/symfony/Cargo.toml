@@ -1,5 +1,5 @@
 [package]
-name = "kaji-plugin-symfony"
+name = "poolster-plugin-symfony"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,4 +10,4 @@ publish = false
 
 [dependencies]
 anyhow = "1.0.102"
-kaji-core = { path = "../../kaji-core" }
+poolster-core = { path = "../../kaji-core" }

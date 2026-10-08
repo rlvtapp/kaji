@@ -11,7 +11,7 @@ use std::path::Path;
 use std::process::Command;
 
 use anyhow::{Context, Result, bail};
-use kaji_core::{Api, Operation, SchemaKind, SchemaValue};
+use poolster_core::{Api, Operation, SchemaKind, SchemaValue};
 use serde_json::{Map, Value, json};
 
 const MAX_RESPONSE_BYTES: u64 = 1_048_576;
@@ -42,7 +42,7 @@ pub fn serve(api: Api, base_url: &str) -> Result<()> {
     Ok(())
 }
 
-/// Serves Kaji itself as MCP tools. This is intentionally separate from the
+/// Serves Poolster itself as MCP tools. This is intentionally separate from the
 /// OpenAPI-derived API server above: it lets an agent generate an SDK without
 /// granting it an API base URL or conflating generator controls with API calls.
 pub fn serve_generator() -> Result<()> {
@@ -83,16 +83,16 @@ impl GeneratorServer {
             "initialize" => Ok(json!({
                 "protocolVersion": request.pointer("/params/protocolVersion").and_then(Value::as_str).unwrap_or("2025-03-26"),
                 "capabilities": { "tools": { "listChanged": false } },
-                "serverInfo": { "name": "kaji-generator", "version": env!("CARGO_PKG_VERSION") },
+                "serverInfo": { "name": "poolster-generator", "version": env!("CARGO_PKG_VERSION") },
             })),
             "tools/list" => Ok(json!({ "tools": [
                 {
-                    "name": "kaji_languages",
-                    "description": "List Kaji's maintained SDK language targets.",
+                    "name": "poolster_languages",
+                    "description": "List Poolster's maintained SDK language targets.",
                     "inputSchema": { "type": "object", "additionalProperties": false },
                 },
                 {
-                    "name": "kaji_generate",
+                    "name": "poolster_generate",
                     "description": "Generate SDKs from a local OpenAPI file. Files under output are overwritten; custom files are preserved.",
                     "inputSchema": {
                         "type": "object",
@@ -128,10 +128,10 @@ impl GeneratorServer {
             .and_then(Value::as_str)
             .context("tools/call requires params.name")?;
         match name {
-            "kaji_languages" => Ok(json!({
+            "poolster_languages" => Ok(json!({
                 "content": [{ "type": "text", "text": "rust, typescript, go, python, php, symfony, java, csharp, dotnet (legacy alias), elixir, ruby, swift." }],
             })),
-            "kaji_generate" => {
+            "poolster_generate" => {
                 self.generate(params.get("arguments").cloned().unwrap_or(Value::Null))
             }
             _ => bail!("unknown generator tool {name:?}"),
@@ -141,7 +141,7 @@ impl GeneratorServer {
     fn generate(&self, arguments: Value) -> Result<Value> {
         let arguments = arguments
             .as_object()
-            .context("kaji_generate arguments must be an object")?;
+            .context("poolster_generate arguments must be an object")?;
         let source = required_string(arguments, "source")?;
         let output = required_string(arguments, "output")?;
         if !Path::new(source).is_file() {
@@ -150,13 +150,13 @@ impl GeneratorServer {
         let languages = arguments
             .get("languages")
             .and_then(Value::as_array)
-            .context("kaji_generate requires languages as a non-empty array")?;
+            .context("poolster_generate requires languages as a non-empty array")?;
         let languages = languages
             .iter()
             .map(|value| value.as_str().context("language must be a string"))
             .collect::<Result<Vec<_>>>()?;
         if languages.is_empty() {
-            bail!("kaji_generate requires at least one language")
+            bail!("poolster_generate requires at least one language")
         }
         let allowed = [
             "rust",
@@ -178,7 +178,7 @@ impl GeneratorServer {
         {
             bail!("unsupported language {unknown:?}")
         }
-        let executable = std::env::current_exe().context("locate kaji executable")?;
+        let executable = std::env::current_exe().context("locate poolster executable")?;
         let mut command = Command::new(executable);
         command
             .arg("generate")
@@ -201,14 +201,14 @@ impl GeneratorServer {
                 );
             }
         }
-        let result = command.output().context("run kaji generate")?;
+        let result = command.output().context("run poolster generate")?;
         let text = format!(
             "{}{}",
             String::from_utf8_lossy(&result.stdout),
             String::from_utf8_lossy(&result.stderr)
         );
         if !result.status.success() {
-            bail!("kaji generate failed: {text}")
+            bail!("poolster generate failed: {text}")
         }
         Ok(json!({ "content": [{ "type": "text", "text": text }] }))
     }
@@ -219,7 +219,7 @@ fn required_string<'a>(arguments: &'a Map<String, Value>, name: &str) -> Result<
         .get(name)
         .and_then(Value::as_str)
         .filter(|value| !value.trim().is_empty())
-        .with_context(|| format!("kaji_generate requires a non-empty {name}"))
+        .with_context(|| format!("poolster_generate requires a non-empty {name}"))
 }
 
 fn write_message(writer: &mut impl Write, message: Value) -> Result<()> {
@@ -289,7 +289,7 @@ impl Server {
             "initialize" => Ok(json!({
                 "protocolVersion": request.pointer("/params/protocolVersion").and_then(Value::as_str).unwrap_or("2025-03-26"),
                 "capabilities": { "tools": { "listChanged": false } },
-                "serverInfo": { "name": "kaji", "version": env!("CARGO_PKG_VERSION") },
+                "serverInfo": { "name": "poolster", "version": env!("CARGO_PKG_VERSION") },
             })),
             "tools/list" => Ok(json!({ "tools": self.tool_definitions() })),
             "tools/call" => self.call_tool(request.get("params").cloned().unwrap_or(Value::Null)),
@@ -613,7 +613,7 @@ fn response_text(bytes: &[u8], content_type: &str, truncated: bool) -> String {
         String::from_utf8_lossy(bytes).into_owned()
     };
     if truncated {
-        text.push_str("\n\n[Kaji truncated the response at 1 MiB]");
+        text.push_str("\n\n[Poolster truncated the response at 1 MiB]");
     }
     text
 }
@@ -734,17 +734,17 @@ fn schema_to_json_schema(
                 object["required"] = Value::Array(required);
             }
             match additional_properties {
-                kaji_core::AdditionalProperties::Forbidden => {
+                poolster_core::AdditionalProperties::Forbidden => {
                     object["additionalProperties"] = Value::Bool(false)
                 }
-                kaji_core::AdditionalProperties::Any => {
+                poolster_core::AdditionalProperties::Any => {
                     object["additionalProperties"] = Value::Bool(true)
                 }
-                kaji_core::AdditionalProperties::Schema { value } => {
+                poolster_core::AdditionalProperties::Schema { value } => {
                     object["additionalProperties"] =
                         schema_to_json_schema(value, api, active_references)
                 }
-                kaji_core::AdditionalProperties::Unspecified => {}
+                poolster_core::AdditionalProperties::Unspecified => {}
             }
             object
         }
@@ -850,7 +850,7 @@ fn error_response(id: Value, code: i64, message: &str) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kaji_core::{
+    use poolster_core::{
         HttpMethod, OperationMediaType, OperationParameter, OperationRequestBody, SchemaKind,
     };
 
@@ -927,14 +927,14 @@ mod tests {
                     content_type: "application/json".into(),
                     schema: Some(SchemaValue::new(SchemaKind::Object {
                         fields: vec![],
-                        additional_properties: kaji_core::AdditionalProperties::Any,
+                        additional_properties: poolster_core::AdditionalProperties::Any,
                     })),
                 },
                 OperationMediaType {
                     content_type: "application/x-www-form-urlencoded".into(),
                     schema: Some(SchemaValue::new(SchemaKind::Object {
                         fields: vec![],
-                        additional_properties: kaji_core::AdditionalProperties::Any,
+                        additional_properties: poolster_core::AdditionalProperties::Any,
                     })),
                 },
             ],
@@ -979,8 +979,8 @@ mod tests {
             .and_then(Value::as_array)
             .unwrap();
         assert_eq!(tools.len(), 2);
-        assert_eq!(tools[0]["name"], "kaji_languages");
-        assert_eq!(tools[1]["name"], "kaji_generate");
+        assert_eq!(tools[0]["name"], "poolster_languages");
+        assert_eq!(tools[1]["name"], "poolster_generate");
         assert_eq!(
             tools[1]["inputSchema"]["required"],
             json!(["source", "output", "languages"])

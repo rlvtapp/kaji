@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use kaji_core::{
+use poolster_core::{
     HttpMethod, Operation, OperationFilter, OperationSelection, OverrideFilter, OverrideRule,
     OverrideRules, Schema, SchemaKind, SchemaValue, wildcard_matches,
 };

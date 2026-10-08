@@ -26,7 +26,7 @@ func main() {
 	flag.Parse()
 
 	if flag.NArg() < 1 {
-		fmt.Println("Usage: kaji-openapi [--out <directory>] [--source-url <HTTP(S) URL>] <openapi-file>")
+		fmt.Println("Usage: poolster-openapi [--out <directory>] [--source-url <HTTP(S) URL>] <openapi-file>")
 		os.Exit(1)
 	}
 

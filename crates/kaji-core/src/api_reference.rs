@@ -12,7 +12,7 @@ pub struct ApiReferenceDocument {
     pub contents: String,
 }
 impl Contract for ApiReferenceDocument {
-    const NAME: &'static str = "kaji.api-reference.v1";
+    const NAME: &'static str = "poolster.api-reference.v1";
 }
 pub struct ApiReference<L: Language> {
     meta: Meta,

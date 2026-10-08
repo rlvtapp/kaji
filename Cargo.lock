@@ -819,302 +819,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "kaji"
-version = "0.5.0"
-dependencies = [
- "anyhow",
- "kaji-core",
- "kaji-plugin-csharp",
- "kaji-plugin-dotnet",
- "kaji-plugin-elixir",
- "kaji-plugin-go",
- "kaji-plugin-java",
- "kaji-plugin-php",
- "kaji-plugin-postman",
- "kaji-plugin-python",
- "kaji-plugin-ruby",
- "kaji-plugin-rust",
- "kaji-plugin-rust-cli",
- "kaji-plugin-swift",
- "kaji-plugin-symfony",
- "kaji-plugin-terraform",
- "kaji-plugin-typescript",
- "kaji-plugin-typescript-cli",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "kaji-cli"
-version = "0.5.0"
-dependencies = [
- "anyhow",
- "kaji",
- "kaji-core",
- "kaji-inputs",
- "reqwest",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
-]
-
-[[package]]
-name = "kaji-core"
-version = "0.5.0"
-dependencies = [
- "anyhow",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
-]
-
-[[package]]
-name = "kaji-input-arazzo"
-version = "0.5.0"
-dependencies = [
- "anyhow",
- "enumset",
- "kaji-core",
- "roas-arazzo",
- "serde_json",
- "serde_yaml_ng",
- "tempfile",
-]
-
-[[package]]
-name = "kaji-input-asyncapi"
-version = "0.5.0"
-dependencies = [
- "anyhow",
- "kaji-core",
- "roas-asyncapi",
- "serde_json",
- "serde_yaml_ng",
- "tempfile",
-]
-
-[[package]]
-name = "kaji-input-capnproto"
-version = "0.5.0"
-dependencies = [
- "anyhow",
- "capnp",
- "kaji-core",
-]
-
-[[package]]
-name = "kaji-input-graphql"
-version = "0.5.0"
-dependencies = [
- "anyhow",
- "apollo-compiler",
- "kaji-core",
- "tempfile",
-]
-
-[[package]]
-name = "kaji-input-protobuf"
-version = "0.5.0"
-dependencies = [
- "anyhow",
- "kaji-core",
- "protox",
- "tempfile",
-]
-
-[[package]]
-name = "kaji-inputs"
-version = "0.5.0"
-dependencies = [
- "anyhow",
- "kaji-core",
- "kaji-input-arazzo",
- "kaji-input-asyncapi",
- "kaji-input-capnproto",
- "kaji-input-graphql",
- "kaji-input-protobuf",
- "tempfile",
-]
-
-[[package]]
-name = "kaji-node"
-version = "0.5.0"
-dependencies = [
- "anyhow",
- "kaji",
- "kaji-core",
- "kaji-inputs",
- "napi",
- "napi-build",
- "napi-derive",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "kaji-plugin-csharp"
-version = "0.5.0"
-dependencies = [
- "anyhow",
- "kaji-core",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "kaji-plugin-dotnet"
-version = "0.5.0"
-dependencies = [
- "kaji-core",
- "kaji-plugin-csharp",
-]
-
-[[package]]
-name = "kaji-plugin-elixir"
-version = "0.5.0"
-dependencies = [
- "anyhow",
- "kaji-core",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "kaji-plugin-go"
-version = "0.5.0"
-dependencies = [
- "anyhow",
- "kaji-core",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "kaji-plugin-java"
-version = "0.5.0"
-dependencies = [
- "anyhow",
- "kaji-core",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "kaji-plugin-php"
-version = "0.5.0"
-dependencies = [
- "anyhow",
- "kaji-core",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "kaji-plugin-postman"
-version = "0.5.0"
-dependencies = [
- "anyhow",
- "kaji-core",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
-]
-
-[[package]]
-name = "kaji-plugin-python"
-version = "0.5.0"
-dependencies = [
- "anyhow",
- "kaji-core",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "kaji-plugin-ruby"
-version = "0.5.0"
-dependencies = [
- "anyhow",
- "kaji-core",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "kaji-plugin-rust"
-version = "0.5.0"
-dependencies = [
- "anyhow",
- "kaji-core",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "kaji-plugin-rust-cli"
-version = "0.5.0"
-dependencies = [
- "anyhow",
- "kaji-core",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "kaji-plugin-swift"
-version = "0.5.0"
-dependencies = [
- "anyhow",
- "kaji-core",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "kaji-plugin-symfony"
-version = "0.5.0"
-dependencies = [
- "anyhow",
- "kaji-core",
-]
-
-[[package]]
-name = "kaji-plugin-terraform"
-version = "0.5.0"
-dependencies = [
- "anyhow",
- "kaji-core",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "kaji-plugin-typescript"
-version = "0.5.0"
-dependencies = [
- "anyhow",
- "kaji-core",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
-name = "kaji-plugin-typescript-cli"
-version = "0.5.0"
-dependencies = [
- "anyhow",
- "kaji-core",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
 name = "lazy_static"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1403,6 +1107,302 @@ name = "pin-project-lite"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
+
+[[package]]
+name = "poolster"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "poolster-core",
+ "poolster-plugin-csharp",
+ "poolster-plugin-dotnet",
+ "poolster-plugin-elixir",
+ "poolster-plugin-go",
+ "poolster-plugin-java",
+ "poolster-plugin-php",
+ "poolster-plugin-postman",
+ "poolster-plugin-python",
+ "poolster-plugin-ruby",
+ "poolster-plugin-rust",
+ "poolster-plugin-rust-cli",
+ "poolster-plugin-swift",
+ "poolster-plugin-symfony",
+ "poolster-plugin-terraform",
+ "poolster-plugin-typescript",
+ "poolster-plugin-typescript-cli",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "poolster-cli"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "poolster",
+ "poolster-core",
+ "poolster-inputs",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+]
+
+[[package]]
+name = "poolster-core"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+]
+
+[[package]]
+name = "poolster-input-arazzo"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "enumset",
+ "poolster-core",
+ "roas-arazzo",
+ "serde_json",
+ "serde_yaml_ng",
+ "tempfile",
+]
+
+[[package]]
+name = "poolster-input-asyncapi"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "poolster-core",
+ "roas-asyncapi",
+ "serde_json",
+ "serde_yaml_ng",
+ "tempfile",
+]
+
+[[package]]
+name = "poolster-input-capnproto"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "capnp",
+ "poolster-core",
+]
+
+[[package]]
+name = "poolster-input-graphql"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "apollo-compiler",
+ "poolster-core",
+ "tempfile",
+]
+
+[[package]]
+name = "poolster-input-protobuf"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "poolster-core",
+ "protox",
+ "tempfile",
+]
+
+[[package]]
+name = "poolster-inputs"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "poolster-core",
+ "poolster-input-arazzo",
+ "poolster-input-asyncapi",
+ "poolster-input-capnproto",
+ "poolster-input-graphql",
+ "poolster-input-protobuf",
+ "tempfile",
+]
+
+[[package]]
+name = "poolster-node"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "napi",
+ "napi-build",
+ "napi-derive",
+ "poolster",
+ "poolster-core",
+ "poolster-inputs",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "poolster-plugin-csharp"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "poolster-core",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "poolster-plugin-dotnet"
+version = "0.5.0"
+dependencies = [
+ "poolster-core",
+ "poolster-plugin-csharp",
+]
+
+[[package]]
+name = "poolster-plugin-elixir"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "poolster-core",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "poolster-plugin-go"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "poolster-core",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "poolster-plugin-java"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "poolster-core",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "poolster-plugin-php"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "poolster-core",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "poolster-plugin-postman"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "poolster-core",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+]
+
+[[package]]
+name = "poolster-plugin-python"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "poolster-core",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "poolster-plugin-ruby"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "poolster-core",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "poolster-plugin-rust"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "poolster-core",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "poolster-plugin-rust-cli"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "poolster-core",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "poolster-plugin-swift"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "poolster-core",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "poolster-plugin-symfony"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "poolster-core",
+]
+
+[[package]]
+name = "poolster-plugin-terraform"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "poolster-core",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "poolster-plugin-typescript"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "poolster-core",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "poolster-plugin-typescript-cli"
+version = "0.5.0"
+dependencies = [
+ "anyhow",
+ "poolster-core",
+ "serde_json",
+ "tempfile",
+]
 
 [[package]]
 name = "potential_utf"

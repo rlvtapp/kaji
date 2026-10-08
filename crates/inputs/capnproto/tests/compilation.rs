@@ -1,4 +1,4 @@
-use kaji_input_capnproto as capnproto;
+use poolster_input_capnproto as capnproto;
 use std::path::{Path, PathBuf};
 
 fn fixture(name: &str) -> PathBuf {
@@ -45,7 +45,7 @@ fn missing_source_is_reported_before_invoking_compiler() {
 
 #[test]
 fn provider_propagates_missing_source() {
-    use kaji_core::input::InputPlugin;
+    use poolster_core::input::InputPlugin;
     assert!(
         capnproto::CapnProtoInput
             .load(&fixture("absent.capnp"))

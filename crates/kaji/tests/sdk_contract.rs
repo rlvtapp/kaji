@@ -1,4 +1,4 @@
-//! Cross-language release contract for the product-style Kaji SDK surface.
+//! Cross-language release contract for the product-style Poolster SDK surface.
 //!
 //! This deliberately tests behaviour-visible generated source rather than a
 //! particular language's formatter. Every new runtime capability belongs in
@@ -6,8 +6,8 @@
 
 use std::collections::BTreeMap;
 
-use kaji::{ProfileSet, generate_with_security_catalog};
-use kaji_core::{
+use poolster::{ProfileSet, generate_with_security_catalog};
+use poolster_core::{
     Api, Field, HttpMethod, Operation, OperationMediaType, OperationParameter,
     OperationRequestBody, OperationResponse, Schema, SchemaKind, SchemaValue, SecurityRequirement,
     SecurityScheme, SecuritySchemeCatalog, SecuritySchemeKind,
@@ -21,7 +21,7 @@ fn reference(name: &str) -> SchemaValue {
 /// A release contract is about the public behaviour emitted by a target, not
 /// about which internal source file happens to own an operation. Large SDKs
 /// deliberately split those internals into bounded files.
-fn generated_source_under(tree: &kaji_core::GeneratedTree, root: &str) -> String {
+fn generated_source_under(tree: &poolster_core::GeneratedTree, root: &str) -> String {
     tree.iter()
         .filter(|(path, _)| path.starts_with(root))
         .map(|(_, source)| source)
@@ -89,7 +89,7 @@ fn contract_api() -> Api {
         schemes: BTreeMap::from([("Bearer".into(), Vec::new())]),
     }];
     Api {
-        name: "Kaji Email".into(),
+        name: "Poolster Email".into(),
         version: "1.0.0".into(),
         schemas: vec![contact, page, error],
         operations: vec![
@@ -213,15 +213,15 @@ fn all_first_party_packages_preserve_the_public_sdk_contract() {
     let tree = generate_with_security_catalog(
         &contract_api(),
         ProfileSet::new("sdks")
-            .package(kaji::rust::package("rust").with(kaji::rust::sdk()))
-            .package(kaji::ts::package("typescript-fetch").with(kaji::ts::sdk().fetch()))
-            .package(kaji::ts::package("typescript-axios").with(kaji::ts::sdk().axios()))
-            .package(kaji::go::package("go").with(kaji::go::sdk()))
-            .package(kaji::python::package("python").with(kaji::python::sdk()))
-            .package(kaji::php::package("php").with(kaji::php::sdk()))
-            .package(kaji::java::package("java").with(kaji::java::sdk()))
-            .package(kaji::dotnet::package("dotnet").with(kaji::dotnet::sdk()))
-            .package(kaji::elixir::package("elixir").with(kaji::elixir::sdk())),
+            .package(poolster::rust::package("rust").with(poolster::rust::sdk()))
+            .package(poolster::ts::package("typescript-fetch").with(poolster::ts::sdk().fetch()))
+            .package(poolster::ts::package("typescript-axios").with(poolster::ts::sdk().axios()))
+            .package(poolster::go::package("go").with(poolster::go::sdk()))
+            .package(poolster::python::package("python").with(poolster::python::sdk()))
+            .package(poolster::php::package("php").with(poolster::php::sdk()))
+            .package(poolster::java::package("java").with(poolster::java::sdk()))
+            .package(poolster::dotnet::package("dotnet").with(poolster::dotnet::sdk()))
+            .package(poolster::elixir::package("elixir").with(poolster::elixir::sdk())),
         Some(&catalog),
     )
     .unwrap();
@@ -242,14 +242,14 @@ fn all_first_party_packages_preserve_the_public_sdk_contract() {
             .get(format!("sdks/{transport}/custom/index.ts"))
             .unwrap();
         let runtime = tree
-            .get(format!("sdks/{transport}/.kaji/client.ts"))
+            .get(format!("sdks/{transport}/.poolster/client.ts"))
             .unwrap();
-        assert!(client.contains("export class KajiEmail"));
+        assert!(client.contains("export class PoolsterEmail"));
         assert!(client.contains("readonly contacts"));
         assert!(client.contains("listPages"));
         assert!(client.contains("kajiJsonPath"));
         assert!(barrel.contains("export * from './custom/index.js'"));
-        assert!(custom.contains("never overwritten by Kaji"));
+        assert!(custom.contains("never overwritten by Poolster"));
         assert!(runtime.contains("export class ApiError"));
         assert!(runtime.contains("SecurityCredentials"));
         assert!(runtime.contains("export const toEventStream"));
@@ -262,7 +262,7 @@ fn all_first_party_packages_preserve_the_public_sdk_contract() {
         assert!(runtime.contains("onError"));
     }
 
-    let python = generated_source_under(&tree, "sdks/python/src/kaji_email_sdk");
+    let python = generated_source_under(&tree, "sdks/python/src/poolster_email_sdk");
     assert!(python.contains("class ListContactsStatus429Error(ApiError):"));
     assert!(python.contains("def stream_events"));
     assert!(python.contains("def download_export"));

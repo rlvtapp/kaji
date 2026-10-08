@@ -1,5 +1,5 @@
 //! Constraint predicates shared by schema-derived validators.
-use kaji_core::{SchemaKind, SchemaValue};
+use poolster_core::{SchemaKind, SchemaValue};
 use serde_json::Value;
 
 fn integer_ratio(value: &Value) -> Option<(String, String)> {

@@ -22,9 +22,10 @@ fn local_child_edits_change_generation_provenance_and_sdk_types() {
             "{}",
             String::from_utf8_lossy(&result.stderr)
         );
-        let lock: serde_json::Value =
-            serde_json::from_slice(&fs::read(output.join(".kaji/generation.lock.json")).unwrap())
-                .unwrap();
+        let lock: serde_json::Value = serde_json::from_slice(
+            &fs::read(output.join(".poolster/generation.lock.json")).unwrap(),
+        )
+        .unwrap();
         lock["input"]["source_sha256"].as_str().unwrap().to_owned()
     };
     fs::write(

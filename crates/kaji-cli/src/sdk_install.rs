@@ -7,7 +7,7 @@ use std::{
     process::Command,
 };
 
-const INVENTORY: &str = ".kaji/sdk-automation.json";
+const INVENTORY: &str = ".poolster/sdk-automation.json";
 const MANIFEST: &str = ".release-please-manifest.json";
 type Files = BTreeMap<PathBuf, String>;
 
@@ -32,9 +32,9 @@ fn allowed(path: &Path) -> bool {
         INVENTORY
             | MANIFEST
             | "release-please-config.json"
-            | ".kaji/SDK_AUTOMATION.md"
-            | ".github/workflows/kaji-sdk-ci.yml"
-            | ".github/workflows/kaji-sdk-release.yml"
+            | ".poolster/SDK_AUTOMATION.md"
+            | ".github/workflows/poolster-sdk-ci.yml"
+            | ".github/workflows/poolster-sdk-release.yml"
     ) {
         return true;
     }
@@ -42,7 +42,7 @@ fn allowed(path: &Path) -> bool {
     parts.len() >= 4
         && parts[0] == ".github"
         && parts[1] == "actions"
-        && parts[2].starts_with("kaji-")
+        && parts[2].starts_with("poolster-")
         && parts[2].len() > 5
 }
 
@@ -285,12 +285,12 @@ pub fn install(
             "git",
             &[
                 "-c",
-                "user.name=Kaji SDK setup",
+                "user.name=Poolster SDK setup",
                 "-c",
-                "user.email=kaji-sdk-setup@users.noreply.github.com",
+                "user.email=poolster-sdk-setup@users.noreply.github.com",
                 "commit",
                 "-m",
-                "chore: install Kaji SDK automation",
+                "chore: install Poolster SDK automation",
             ],
         )?;
         let push_ref = format!("HEAD:refs/heads/{branch}");
@@ -329,7 +329,7 @@ pub fn install(
     let body = temporary.path().join("pr.md");
     fs::write(
         &body,
-        "Installs staged Kaji SDK build and release automation. Existing release versions are preserved. Review workflow permissions, publishing configuration, and generated action sources before merging.\n",
+        "Installs staged Poolster SDK build and release automation. Existing release versions are preserved. Review workflow permissions, publishing configuration, and generated action sources before merging.\n",
     )?;
     let url = capture(
         &checkout,
@@ -345,7 +345,7 @@ pub fn install(
             "--head",
             branch,
             "--title",
-            "chore: install Kaji SDK automation",
+            "chore: install Poolster SDK automation",
             "--body-file",
             body.to_str().context("invalid temporary path")?,
         ],
@@ -359,7 +359,9 @@ mod tests {
     use super::*;
     #[test]
     fn paths_and_refs_are_restricted() {
-        assert!(allowed(Path::new(".github/actions/kaji-check/check.mjs")));
+        assert!(allowed(Path::new(
+            ".github/actions/poolster-check/check.mjs"
+        )));
         for path in [
             "../escape",
             ".github/workflows/other.yml",
@@ -379,7 +381,7 @@ mod tests {
         let path = PathBuf::from("release-please-config.json");
         fs::write(root.path().join(&path), "manual")?;
         assert!(updates(root.path(), Files::from([(path.clone(), "new".into())])).is_err());
-        fs::create_dir(root.path().join(".kaji"))?;
+        fs::create_dir(root.path().join(".poolster"))?;
         fs::write(
             root.path().join(INVENTORY),
             serde_json::to_vec(&Files::from([(path.clone(), "manual".into())]))?,

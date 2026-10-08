@@ -87,7 +87,7 @@ pub enum RequestBodyKind {
 
 /// An opt-in pagination declaration. Pagination is intentionally not guessed
 /// from operation names: a false pager is worse than no pager. Adapters retain
-/// vendor extensions, so Kaji accepts its own portable extension and the
+/// vendor extensions, so Poolster accepts its own portable extension and the
 /// established Speakeasy declaration while keeping their payload opaque until
 /// a concrete paginator renderer needs it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -97,7 +97,7 @@ pub struct PaginationHint {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PaginationSource {
-    Kaji,
+    Poolster,
     Speakeasy,
 }
 
@@ -264,7 +264,7 @@ fn request_body_kind(media: &OperationMediaType) -> RequestBodyKind {
 fn pagination_hint(operation: &Operation) -> Option<PaginationHint> {
     if operation.annotations.contains_key("x-kaji-pagination") {
         Some(PaginationHint {
-            source: PaginationSource::Kaji,
+            source: PaginationSource::Poolster,
         })
     } else if operation.annotations.contains_key("x-speakeasy-pagination") {
         Some(PaginationHint {
@@ -407,7 +407,7 @@ mod tests {
         assert_eq!(
             semantics.pagination,
             Some(PaginationHint {
-                source: PaginationSource::Kaji,
+                source: PaginationSource::Poolster,
             })
         );
     }

@@ -1,5 +1,5 @@
 use super::*;
-use kaji_core::engine::{Meta, Plugin, PluginContext};
+use poolster_core::engine::{Meta, Plugin, PluginContext};
 /// Optional raw-body Standard Webhooks v1 verifier. Native requirements: Elixir 1.15+, OTP 25+ with crypto.
 pub struct Webhooks {
     meta: Meta,
@@ -35,7 +35,7 @@ impl Plugin<crate::Elixir> for Webhooks {
 mod tests {
     use super::*;
     fn generate() -> (tempfile::TempDir, String) {
-        use kaji_core::engine::Packages;
+        use poolster_core::engine::Packages;
         let tree = Packages::new()
             .package(crate::package("sdk").name("security-sdk").with(webhooks()))
             .generate(

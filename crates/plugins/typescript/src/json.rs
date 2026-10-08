@@ -1,6 +1,6 @@
 //! Schema-directed lossless JSON plans shared by generated transports.
 use crate::{Int64Type, ModelOptions};
-use kaji_core::{AdditionalProperties, Api, SchemaKind, SchemaValue};
+use poolster_core::{AdditionalProperties, Api, SchemaKind, SchemaValue};
 use serde_json::{Value, json};
 
 pub(crate) fn representation(value: &SchemaValue, options: &ModelOptions) -> Int64Type {
@@ -78,7 +78,7 @@ fn value_object_required(value: &SchemaValue) -> Vec<&str> {
 #[cfg(test)]
 fn operation_plan(
     api: &Api,
-    operation: &kaji_core::Operation,
+    operation: &poolster_core::Operation,
     options: &ModelOptions,
 ) -> Option<Value> {
     operation_plan_impl(api, operation, options, true)
@@ -86,7 +86,7 @@ fn operation_plan(
 
 pub(crate) fn operation_inline_plan(
     api: &Api,
-    operation: &kaji_core::Operation,
+    operation: &poolster_core::Operation,
     options: &ModelOptions,
 ) -> Option<Value> {
     operation_plan_impl(api, operation, options, false)
@@ -94,7 +94,7 @@ pub(crate) fn operation_inline_plan(
 
 fn operation_plan_impl(
     api: &Api,
-    operation: &kaji_core::Operation,
+    operation: &poolster_core::Operation,
     options: &ModelOptions,
     include_refs: bool,
 ) -> Option<Value> {
@@ -192,7 +192,7 @@ pub(crate) fn shared_refs(
         let descriptor = plan(&schema.value, options);
         let size = serde_json::to_string(&descriptor)?.len() + schema.name.len() + 4;
         if bytes + size > CHUNK_BYTES && !chunk.is_empty() {
-            let name = format!("_kaji_json_refs_{:04}", files.len() + 1);
+            let name = format!("_poolster_json_refs_{:04}", files.len() + 1);
             files.push((
                 name,
                 format!(
@@ -207,7 +207,7 @@ pub(crate) fn shared_refs(
         bytes += size;
     }
     if !chunk.is_empty() {
-        let name = format!("_kaji_json_refs_{:04}", files.len() + 1);
+        let name = format!("_poolster_json_refs_{:04}", files.len() + 1);
         files.push((
             name,
             format!(
@@ -227,7 +227,7 @@ pub(crate) fn shared_refs(
         root.push_str(&format!("  ...chunk{index},\n"));
     }
     root.push_str("}\n");
-    files.push(("_kaji_json_refs".into(), root));
+    files.push(("_poolster_json_refs".into(), root));
     Ok(files)
 }
 
@@ -322,7 +322,7 @@ const decodeJsonValue = (value: unknown, shape: JsonShape | null | undefined, re
 /** Structural response checks; enum values and unknown object fields remain forward compatible. */
 export class ResponseDecodeError extends TypeError {
   constructor(public readonly path: string, public readonly expected: string) {
-    super(`Kaji response decoding failed at ${path}: expected ${expected}`)
+    super(`Poolster response decoding failed at ${path}: expected ${expected}`)
     this.name = 'ResponseDecodeError'
   }
 }
@@ -501,7 +501,7 @@ pub(crate) fn artifact_api(api: &Api, options: &ModelOptions) -> Api {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kaji_core::{
+    use poolster_core::{
         Field, HttpMethod, Operation, OperationMediaType, OperationRequestBody, OperationResponse,
         Schema, engine::Packages,
     };
@@ -591,7 +591,7 @@ mod tests {
             .package(crate::package("ts").with(crate::sdk().raw().group_by_tag(false)))
             .generate(&api, None)
             .unwrap();
-        let shared = tree.get("ts/clients/_kaji_json_refs_0001.ts").unwrap();
+        let shared = tree.get("ts/clients/_poolster_json_refs_0001.ts").unwrap();
         assert!(shared.contains("\"Record\""));
         assert!(shared.contains("\"integer\""));
         for (path, source) in tree.iter() {
@@ -701,7 +701,7 @@ const wire = '{"id":9223372036854775807,"count":7,"ratio":2,"label":"quoted \\" 
 const inputWire = JSON.parse(wire);
 async function run(name, integer) {
   const { echoRecord } = require(`./${name}/compiled/clients/echoRecord.js`);
-  const { createClient, parseJson, stringifyJson } = require(`./${name}/compiled/.kaji/client.js`);
+  const { createClient, parseJson, stringifyJson } = require(`./${name}/compiled/.poolster/client.js`);
   const body = { id: integer('9223372036854775807'), count: 7, ratio: 2, label: inputWire.label, ids: [integer('-9223372036854775808'), integer('9223372036854775807')] };
   let requestBody;
   const transport = name === 'axios'

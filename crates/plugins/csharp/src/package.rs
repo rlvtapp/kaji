@@ -1,7 +1,7 @@
-//! Typed package integration for Kaji's C# generator.
+//! Typed package integration for Poolster's C# generator.
 use anyhow::Result;
-use kaji_core::SdkClientStyle;
-use kaji_core::engine::{
+use poolster_core::SdkClientStyle;
+use poolster_core::engine::{
     Contract, Handle, Language, Meta, Package, Plugin, PluginContext, Provision,
 };
 
@@ -20,12 +20,12 @@ impl Language for CSharp {
     const NAME: &'static str = "csharp";
     type Settings = Settings;
     type Workspace = ();
-    fn finalize_files(tree: &mut kaji_core::GeneratedTree) -> Result<()> {
+    fn finalize_files(tree: &mut poolster_core::GeneratedTree) -> Result<()> {
         crate::operation_tests::finalize(tree)
     }
     fn bundle_middleware(
-        tree: &mut kaji_core::GeneratedTree,
-        middleware: &[kaji_core::customization::BundledMiddleware],
+        tree: &mut poolster_core::GeneratedTree,
+        middleware: &[poolster_core::customization::BundledMiddleware],
     ) -> Result<()> {
         crate::bundled_middleware::bundle(tree, middleware)
     }
@@ -34,12 +34,12 @@ impl Language for DotNet {
     const NAME: &'static str = "dotnet";
     type Settings = Settings;
     type Workspace = ();
-    fn finalize_files(tree: &mut kaji_core::GeneratedTree) -> Result<()> {
+    fn finalize_files(tree: &mut poolster_core::GeneratedTree) -> Result<()> {
         crate::operation_tests::finalize(tree)
     }
     fn bundle_middleware(
-        tree: &mut kaji_core::GeneratedTree,
-        middleware: &[kaji_core::customization::BundledMiddleware],
+        tree: &mut poolster_core::GeneratedTree,
+        middleware: &[poolster_core::customization::BundledMiddleware],
     ) -> Result<()> {
         crate::bundled_middleware::bundle(tree, middleware)
     }

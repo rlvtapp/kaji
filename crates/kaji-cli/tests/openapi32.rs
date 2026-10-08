@@ -20,7 +20,7 @@ fn native_openapi32_query_compiles_and_executes_typed_sdk_bytes() {
     )
     .unwrap();
     fs::write(
-        temp.path().join("kaji.json"),
+        temp.path().join("poolster.json"),
         serde_json::to_vec(&json!({
             "openapi": {
                 "input": "api.json",
@@ -92,7 +92,7 @@ fn native_openapi32_query_compiles_and_executes_typed_sdk_bytes() {
     checked(
         Command::new(env!("CARGO_BIN_EXE_kaji"))
             .args(["generate", "--config"])
-            .arg(temp.path().join("kaji.json")),
+            .arg(temp.path().join("poolster.json")),
     );
     let rust = temp.path().join("generated/rust");
     let source = fs::read_to_string(rust.join("src/client/operations/chunk_0001.rs")).unwrap();

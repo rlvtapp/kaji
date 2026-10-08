@@ -1,7 +1,7 @@
 //! Editable registry release scaffolding; generation never signs or publishes.
 use crate::Terraform;
 use anyhow::{Result, ensure};
-use kaji_core::{
+use poolster_core::{
     GeneratedFile,
     engine::{Meta, Plugin, PluginContext},
 };
@@ -47,7 +47,7 @@ impl Plugin<Terraform> for ReleaseScaffold {
                 include_str!("terraform.goreleaser.yml.txt").replace("__PROVIDER__", name),
             ),
             (
-                ".kaji/templates/terraform-release.yml",
+                ".poolster/templates/terraform-release.yml",
                 include_str!("terraform-release.yml.txt").to_owned(),
             ),
             (
@@ -57,7 +57,7 @@ impl Plugin<Terraform> for ReleaseScaffold {
             (
                 "RELEASING.md",
                 format!(
-                    "# Release terraform-provider-{name}\n\nRegistry namespace: `{namespace}`. These are editable, create-once sources. Generation does not sign or publish.\n\n1. Use a dedicated public `terraform-provider-{name}` repository; place the generated package at its root.\n2. Review `.goreleaser.yml`; install GoReleaser v2 and run `goreleaser check` plus `go test ./...`. A local unsigned `goreleaser release --snapshot --clean --skip=publish,sign` validates archives without publication.\n3. Register your provider and public GPG signing key in the Terraform Registry.\n4. Copy `.kaji/templates/terraform-release.yml` to `.github/workflows/terraform-release.yml` after review. Configure the protected `release` environment and signing secrets.\n5. Push a new immutable `vMAJOR.MINOR.PATCH` tag. Checks precede signing/publication. Do not replace a released version.\n\nThe workflow emits native archives, protocol manifest, SHA-256 sums and detached signature using GoReleaser. Registry registration and live signing/publication remain unverified. No state migration is generated. See https://developer.hashicorp.com/terraform/registry/providers/publishing.\n"
+                    "# Release terraform-provider-{name}\n\nRegistry namespace: `{namespace}`. These are editable, create-once sources. Generation does not sign or publish.\n\n1. Use a dedicated public `terraform-provider-{name}` repository; place the generated package at its root.\n2. Review `.goreleaser.yml`; install GoReleaser v2 and run `goreleaser check` plus `go test ./...`. A local unsigned `goreleaser release --snapshot --clean --skip=publish,sign` validates archives without publication.\n3. Register your provider and public GPG signing key in the Terraform Registry.\n4. Copy `.poolster/templates/terraform-release.yml` to `.github/workflows/terraform-release.yml` after review. Configure the protected `release` environment and signing secrets.\n5. Push a new immutable `vMAJOR.MINOR.PATCH` tag. Checks precede signing/publication. Do not replace a released version.\n\nThe workflow emits native archives, protocol manifest, SHA-256 sums and detached signature using GoReleaser. Registry registration and live signing/publication remain unverified. No state migration is generated. See https://developer.hashicorp.com/terraform/registry/providers/publishing.\n"
                 ),
             ),
         ] {
@@ -71,7 +71,7 @@ impl Plugin<Terraform> for ReleaseScaffold {
 mod tests {
     use super::*;
     use crate::PackageExt;
-    use kaji_core::{Api, engine::Packages};
+    use poolster_core::{Api, engine::Packages};
     #[test]
     fn release_scaffold_requires_destination_and_preserves_authored_files() {
         let api = Api {
@@ -97,7 +97,7 @@ mod tests {
             ".goreleaser.yml",
             "terraform-registry-manifest.json",
             "RELEASING.md",
-            ".kaji/templates/terraform-release.yml",
+            ".poolster/templates/terraform-release.yml",
         ] {
             assert!(tree.preserves_existing(format!("terraform/{name}")));
         }

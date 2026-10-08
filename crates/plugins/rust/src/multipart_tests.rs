@@ -1,22 +1,22 @@
 #[test]
 #[ignore = "requires cached generated Rust dependencies"]
 fn native_multipart_buffered_parts_preserve_bytes_and_safe_retries() {
-    let mut api = kaji_core::Api {
+    let mut api = poolster_core::Api {
         name: "Multipart".into(),
         ..Default::default()
     };
     for (id, method) in [
-        ("putUpload", kaji_core::HttpMethod::Put),
-        ("postUpload", kaji_core::HttpMethod::Post),
+        ("putUpload", poolster_core::HttpMethod::Put),
+        ("postUpload", poolster_core::HttpMethod::Post),
     ] {
-        api.operations.push(kaji_core::Operation {
+        api.operations.push(poolster_core::Operation {
             id: id.into(),
             method,
             path: "/upload".into(),
-            request_body: Some(kaji_core::OperationRequestBody {
+            request_body: Some(poolster_core::OperationRequestBody {
                 required: true,
                 description: None,
-                media_types: vec![kaji_core::OperationMediaType {
+                media_types: vec![poolster_core::OperationMediaType {
                     content_type: "multipart/form-data".into(),
                     schema: None,
                 }],
@@ -31,56 +31,60 @@ fn native_multipart_buffered_parts_preserve_bytes_and_safe_retries() {
         .as_mut()
         .unwrap()
         .media_types
-        .push(kaji_core::OperationMediaType {
+        .push(poolster_core::OperationMediaType {
             content_type: "application/json".into(),
             schema: None,
         });
     api.operations.push(mixed);
-    api.operations.push(kaji_core::Operation {
+    api.operations.push(poolster_core::Operation {
         id: "mixedUploadMultipart".into(),
-        method: kaji_core::HttpMethod::Get,
+        method: poolster_core::HttpMethod::Get,
         path: "/collision".into(),
         ..Default::default()
     });
-    let array = kaji_core::SchemaValue::new(kaji_core::SchemaKind::Array {
-        items: Box::new(kaji_core::SchemaValue::new(kaji_core::SchemaKind::Any)),
+    let array = poolster_core::SchemaValue::new(poolster_core::SchemaKind::Array {
+        items: Box::new(poolster_core::SchemaValue::new(
+            poolster_core::SchemaKind::Any,
+        )),
     });
-    api.operations.push(kaji_core::Operation {
+    api.operations.push(poolster_core::Operation {
         id: "sequence".into(),
-        method: kaji_core::HttpMethod::Post,
+        method: poolster_core::HttpMethod::Post,
         path: "/sequence".into(),
-        parameters: vec![kaji_core::OperationParameter {
+        parameters: vec![poolster_core::OperationParameter {
             name: "whole_query".into(),
             location: "querystring".into(),
             required: true,
-            schema: Some(kaji_core::SchemaValue::new(kaji_core::SchemaKind::Object {
-                fields: vec![],
-                additional_properties: kaji_core::AdditionalProperties::Any,
-            })),
+            schema: Some(poolster_core::SchemaValue::new(
+                poolster_core::SchemaKind::Object {
+                    fields: vec![],
+                    additional_properties: poolster_core::AdditionalProperties::Any,
+                },
+            )),
             description: None,
             annotations: Default::default(),
         }],
-        request_body: Some(kaji_core::OperationRequestBody {
+        request_body: Some(poolster_core::OperationRequestBody {
             required: true,
             description: None,
-            media_types: vec![kaji_core::OperationMediaType {
+            media_types: vec![poolster_core::OperationMediaType {
                 content_type: "application/x-ndjson".into(),
                 schema: Some(array.clone()),
             }],
         }),
-        responses: vec![kaji_core::OperationResponse {
+        responses: vec![poolster_core::OperationResponse {
             status: "200".into(),
             description: None,
-            media_types: vec![kaji_core::OperationMediaType {
+            media_types: vec![poolster_core::OperationMediaType {
                 content_type: "application/x-ndjson".into(),
                 schema: Some(array),
             }],
         }],
         ..Default::default()
     });
-    let mut params = kaji_core::Operation {
+    let mut params = poolster_core::Operation {
         id: "jsonParameters".into(),
-        method: kaji_core::HttpMethod::Get,
+        method: poolster_core::HttpMethod::Get,
         path: "/params/{path}".into(),
         ..Default::default()
     };
@@ -90,19 +94,21 @@ fn native_multipart_buffered_parts_preserve_bytes_and_safe_retries() {
         ("x-json", "header"),
         ("cookie", "cookie"),
     ] {
-        let mut parameter = kaji_core::OperationParameter {
+        let mut parameter = poolster_core::OperationParameter {
             name: name.into(),
             location: location.into(),
             required: true,
-            schema: Some(kaji_core::SchemaValue::new(kaji_core::SchemaKind::String)),
+            schema: Some(poolster_core::SchemaValue::new(
+                poolster_core::SchemaKind::String,
+            )),
             description: None,
             annotations: Default::default(),
         };
-        parameter.annotations.insert("kaji.parameter_content".into(),serde_json::json!([{"content_type":"application/json","schema_definition":{"type":"string"}}]));
+        parameter.annotations.insert("poolster.parameter_content".into(),serde_json::json!([{"content_type":"application/json","schema_definition":{"type":"string"}}]));
         params.parameters.push(parameter);
     }
     api.operations.push(params);
-    let tree = kaji_core::engine::Packages::new()
+    let tree = poolster_core::engine::Packages::new()
         .package(
             crate::package("sdk")
                 .with(crate::sdk().namespaced())

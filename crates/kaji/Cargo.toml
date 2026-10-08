@@ -1,5 +1,5 @@
 [package]
-name = "kaji"
+name = "poolster"
 version.workspace = true
 edition = "2024"
 description = "Multi-language OpenAPI SDK generation profiles"
@@ -17,44 +17,44 @@ all-plugins = [
     "ruby", "rust", "rust-cli", "swift", "symfony", "terraform",
     "typescript", "typescript-cli",
 ]
-csharp = ["dep:kaji-plugin-csharp"]
-dotnet = ["dep:kaji-plugin-dotnet"]
-elixir = ["dep:kaji-plugin-elixir"]
-go = ["dep:kaji-plugin-go"]
-java = ["dep:kaji-plugin-java"]
-php = ["dep:kaji-plugin-php"]
-postman = ["dep:kaji-plugin-postman"]
-python = ["dep:kaji-plugin-python"]
-ruby = ["dep:kaji-plugin-ruby"]
-rust = ["dep:kaji-plugin-rust"]
-rust-cli = ["dep:kaji-plugin-rust-cli"]
-swift = ["dep:kaji-plugin-swift"]
-symfony = ["dep:kaji-plugin-symfony"]
-terraform = ["dep:kaji-plugin-terraform"]
-typescript = ["dep:kaji-plugin-typescript"]
-typescript-cli = ["dep:kaji-plugin-typescript-cli"]
+csharp = ["dep:poolster-plugin-csharp"]
+dotnet = ["dep:poolster-plugin-dotnet"]
+elixir = ["dep:poolster-plugin-elixir"]
+go = ["dep:poolster-plugin-go"]
+java = ["dep:poolster-plugin-java"]
+php = ["dep:poolster-plugin-php"]
+postman = ["dep:poolster-plugin-postman"]
+python = ["dep:poolster-plugin-python"]
+ruby = ["dep:poolster-plugin-ruby"]
+rust = ["dep:poolster-plugin-rust"]
+rust-cli = ["dep:poolster-plugin-rust-cli"]
+swift = ["dep:poolster-plugin-swift"]
+symfony = ["dep:poolster-plugin-symfony"]
+terraform = ["dep:poolster-plugin-terraform"]
+typescript = ["dep:poolster-plugin-typescript"]
+typescript-cli = ["dep:poolster-plugin-typescript-cli"]
 
 [dependencies]
 anyhow = "1.0.102"
-kaji-core = { path = "../kaji-core" }
-kaji-plugin-rust = { path = "../plugins/rust", optional = true }
-kaji-plugin-typescript = { path = "../plugins/typescript", optional = true }
-kaji-plugin-typescript-cli = { path = "../plugins/typescript-cli", optional = true }
-kaji-plugin-rust-cli = { path = "../plugins/rust-cli", optional = true }
+poolster-core = { path = "../kaji-core" }
+poolster-plugin-rust = { path = "../plugins/rust", optional = true }
+poolster-plugin-typescript = { path = "../plugins/typescript", optional = true }
+poolster-plugin-typescript-cli = { path = "../plugins/typescript-cli", optional = true }
+poolster-plugin-rust-cli = { path = "../plugins/rust-cli", optional = true }
 serde = { version = "1.0.219", features = ["derive"] }
-kaji-plugin-go = { path = "../plugins/go", optional = true }
-kaji-plugin-python = { path = "../plugins/python", optional = true }
-kaji-plugin-php = { path = "../plugins/php", optional = true }
-kaji-plugin-symfony = { path = "../plugins/symfony", optional = true }
-kaji-plugin-java = { path = "../plugins/java", optional = true }
-kaji-plugin-csharp = { path = "../plugins/csharp", optional = true }
-kaji-plugin-dotnet = { path = "../plugins/dotnet", optional = true }
-kaji-plugin-elixir = { path = "../plugins/elixir", optional = true }
-kaji-plugin-ruby = { path = "../plugins/ruby", optional = true }
-kaji-plugin-swift = { path = "../plugins/swift", optional = true }
+poolster-plugin-go = { path = "../plugins/go", optional = true }
+poolster-plugin-python = { path = "../plugins/python", optional = true }
+poolster-plugin-php = { path = "../plugins/php", optional = true }
+poolster-plugin-symfony = { path = "../plugins/symfony", optional = true }
+poolster-plugin-java = { path = "../plugins/java", optional = true }
+poolster-plugin-csharp = { path = "../plugins/csharp", optional = true }
+poolster-plugin-dotnet = { path = "../plugins/dotnet", optional = true }
+poolster-plugin-elixir = { path = "../plugins/elixir", optional = true }
+poolster-plugin-ruby = { path = "../plugins/ruby", optional = true }
+poolster-plugin-swift = { path = "../plugins/swift", optional = true }
 
-kaji-plugin-terraform = { path = "../plugins/terraform", optional = true }
-kaji-plugin-postman = { path = "../plugins/postman", optional = true }
+poolster-plugin-terraform = { path = "../plugins/terraform", optional = true }
+poolster-plugin-postman = { path = "../plugins/postman", optional = true }
 
 [dev-dependencies]
 serde_json = "1.0.138"

@@ -8,7 +8,7 @@ mod auxiliary_layout;
 mod auxiliary_options;
 mod auxiliary_validation;
 pub use auxiliary_options::{CypressOperationOptions, CypressOptions, FixtureOptions};
-pub use kaji_core::SourceLayout;
+pub use poolster_core::SourceLayout;
 mod bundled_middleware;
 mod clients;
 pub mod composition;
@@ -40,10 +40,10 @@ pub mod artifacts {
 }
 
 use anyhow::Result;
-use kaji_core::engine::{
+use poolster_core::engine::{
     FinalizeContext, Handle, Language, Meta, Package, Plugin, PluginContext, Provision,
 };
-use kaji_core::{GeneratedFile, SdkClientStyle};
+use poolster_core::{GeneratedFile, SdkClientStyle};
 use sdk::{SdkSurface, SdkTransport};
 use std::path::Path;
 
@@ -59,12 +59,12 @@ impl Language for TypeScript {
     fn finalize(cx: &mut FinalizeContext<'_, Self>) -> Result<()> {
         workspace::finalize(cx)
     }
-    fn finalize_files(tree: &mut kaji_core::GeneratedTree) -> Result<()> {
+    fn finalize_files(tree: &mut poolster_core::GeneratedTree) -> Result<()> {
         esm::finalize(tree)
     }
     fn bundle_middleware(
-        tree: &mut kaji_core::GeneratedTree,
-        middleware: &[kaji_core::customization::BundledMiddleware],
+        tree: &mut poolster_core::GeneratedTree,
+        middleware: &[poolster_core::customization::BundledMiddleware],
     ) -> Result<()> {
         bundled_middleware::bundle(tree, middleware)
     }
@@ -266,9 +266,9 @@ impl Plugin<TypeScript> for Sdk {
         })?;
         cx.workspace
             .native_transports
-            .insert(".kaji/client".into(), options.transport);
+            .insert(".poolster/client".into(), options.transport);
         cx.publish(composition::Transport {
-            module: ".kaji/client".into(),
+            module: ".poolster/client".into(),
             lossless_json: true,
         })?;
         cx.publish(composition::Operations { functions })?;
@@ -371,7 +371,7 @@ impl Plugin<TypeScript> for Types {
     }
 }
 
-fn style_guide(api: &kaji_core::Api, options: &sdk::SdkConfig) -> String {
+fn style_guide(api: &poolster_core::Api, options: &sdk::SdkConfig) -> String {
     let selected = match options.surface {
         SdkSurface::Raw => "raw exports",
         SdkSurface::Client => match options.client_style {
@@ -388,8 +388,8 @@ fn style_guide(api: &kaji_core::Api, options: &sdk::SdkConfig) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kaji_core::engine::Packages;
-    use kaji_core::{
+    use poolster_core::engine::Packages;
+    use poolster_core::{
         Api, Field, HttpMethod, Operation, OperationResponse, Schema, SchemaKind, SchemaValue,
         SecurityRequirement,
     };
@@ -419,7 +419,7 @@ mod tests {
                 responses: vec![OperationResponse {
                     status: "200".into(),
                     description: None,
-                    media_types: vec![kaji_core::OperationMediaType {
+                    media_types: vec![poolster_core::OperationMediaType {
                         content_type: "application/json".into(),
                         schema: Some(SchemaValue::reference("#/components/schemas/Contact")),
                     }],
@@ -482,7 +482,7 @@ mod tests {
                 .contains("as const")
         );
         let operation = tree.get("ts/clients/listContacts.ts").unwrap();
-        assert!(operation.contains("from '../.kaji/client.js'"));
+        assert!(operation.contains("from '../.poolster/client.js'"));
         assert!(operation.contains("ThrowOnError extends boolean = false"));
         assert!(tree.get("ts/client.ts").is_none());
     }
@@ -599,7 +599,7 @@ mod tests {
         assert!(format!("{error:#}").contains("definition is missing"));
     }
 
-    fn response_contract_tree() -> kaji_core::GeneratedTree {
+    fn response_contract_tree() -> poolster_core::GeneratedTree {
         let mut api = api();
         // Require a body field so structural TypeScript assignability cannot
         // mistake an open object schema with only optional fields for an envelope.
@@ -625,7 +625,7 @@ mod tests {
                 .get(format!("{package}/models/contacts/ListContacts.ts"))
                 .unwrap();
             assert!(models.contains("import type { Contact } from '../Contact.js'"));
-            let runtime = tree.get(format!("{package}/.kaji/client.ts")).unwrap();
+            let runtime = tree.get(format!("{package}/.poolster/client.ts")).unwrap();
             assert!(runtime.contains("SuccessOf<T> = T[Extract<keyof T, `2${string}`>]"));
             assert!(
                 runtime.contains("ThrowOnError extends true ? SuccessResult<T> : StatusResult<T>")
@@ -651,7 +651,7 @@ mod tests {
         ));
         let mut tree = response_contract_tree();
         tree.insert(
-            kaji_core::GeneratedFile::new(
+            poolster_core::GeneratedFile::new(
                 "consumer.ts",
                 r#"
 import { listContacts, type Contact } from './raw/index';

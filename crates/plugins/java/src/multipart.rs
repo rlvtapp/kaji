@@ -10,7 +10,7 @@ pub(crate) fn selected(operation: &Operation) -> bool {
     })
 }
 fn ordered_plan(api: &Api, operation: &Operation) -> Option<serde_json::Value> {
-    let content = kaji_core::openapi32::request_content(operation)
+    let content = poolster_core::openapi32::request_content(operation)
         .ok()
         .and_then(|definitions| {
             definitions.into_iter().find(|item| {
@@ -30,7 +30,7 @@ fn ordered_plan(api: &Api, operation: &Operation) -> Option<serde_json::Value> {
                 .to_ascii_lowercase()
                 .starts_with("multipart/")
         })?;
-    fn advanced(encoding: &kaji_core::openapi32::Encoding) -> bool {
+    fn advanced(encoding: &poolster_core::openapi32::Encoding) -> bool {
         encoding
             .style
             .as_deref()
@@ -92,7 +92,7 @@ pub(crate) fn mixed(operation: &Operation) -> bool {
             .is_some_and(|body| body.media_types.len() > 1)
 }
 
-fn root_fields(api: &Api, value: &SchemaValue, depth: usize) -> Result<Vec<kaji_core::Field>> {
+fn root_fields(api: &Api, value: &SchemaValue, depth: usize) -> Result<Vec<poolster_core::Field>> {
     anyhow::ensure!(
         depth < 12,
         "Multipart root references exceed supported depth"
@@ -111,7 +111,7 @@ fn root_fields(api: &Api, value: &SchemaValue, depth: usize) -> Result<Vec<kaji_
                 .iter()
                 .map(|value| root_fields(api, value, depth + 1))
                 .collect::<Result<Vec<_>>>()?;
-            let mut fields = std::collections::BTreeMap::<String, kaji_core::Field>::new();
+            let mut fields = std::collections::BTreeMap::<String, poolster_core::Field>::new();
             for variant in &variants {
                 for field in variant {
                     if let Some(existing) = fields.get_mut(&field.name) {
@@ -164,7 +164,7 @@ fn extra_parts(api: &Api, operation: &Operation) -> bool {
         .and_then(|media| media.schema.as_ref())
         .is_some_and(|value| open_root(api, value, 0))
 }
-fn fields(api: &Api, operation: &Operation) -> Result<Vec<kaji_core::Field>> {
+fn fields(api: &Api, operation: &Operation) -> Result<Vec<poolster_core::Field>> {
     let body = operation.request_body.as_ref().unwrap();
     anyhow::ensure!(
         body.media_types
@@ -257,7 +257,7 @@ fn file_shape(api: &Api, value: &SchemaValue, depth: usize) -> Option<bool> {
 fn encoding<'a>(operation: &'a Operation, name: &str) -> Option<&'a serde_json::Value> {
     operation
         .annotations
-        .get("kaji.request_body_encodings")?
+        .get("poolster.request_body_encodings")?
         .get("multipart/form-data")?
         .get(name)
 }
@@ -456,7 +456,7 @@ pub(crate) fn emit(api: &Api, root: &str, package: &str, tree: &mut GeneratedTre
             source,
         )?)?;
     }
-    tree.insert(GeneratedFile::new(format!("{prefix}MULTIPART.md"), "Multipart/form-data operations accept a generated <Operation>MultipartBody record through their native request record. File fields use MultipartBody.FilePart(filename, contentType, bytes), or MultipartBody.FilePart.bytes(bytes). File bytes are copied; scalars use UTF-8. Multipart/form-data with explicit raw or JSON alternatives and object roots are supported. Open roots expose optional KajiExtraParts/kajiExtraParts maps, rejecting collisions with declared parts. Root object unions merge fields and retain only shared required members; branch-specific constraints remain server-validated. Mixed-media calls accept native JSON models or explicit MultipartBody.RawBody/KajiRawBody buffered media wrappers. Objects/unions/reference values use JSON parts; arrays repeat parts by default and explode=false joins scalar values. Optional parts with null values are omitted. Base64 byte format, streaming and custom per-part headers require adapters. Part names use ASCII letters/digits/dot/underscore/hyphen; filenames use printable ASCII excluding quotes/backslashes. Files are buffered; no streaming/file-system access is implied. Java JSON model APIs remain separate.")?)?;
+    tree.insert(GeneratedFile::new(format!("{prefix}MULTIPART.md"), "Multipart/form-data operations accept a generated <Operation>MultipartBody record through their native request record. File fields use MultipartBody.FilePart(filename, contentType, bytes), or MultipartBody.FilePart.bytes(bytes). File bytes are copied; scalars use UTF-8. Multipart/form-data with explicit raw or JSON alternatives and object roots are supported. Open roots expose optional PoolsterExtraParts/kajiExtraParts maps, rejecting collisions with declared parts. Root object unions merge fields and retain only shared required members; branch-specific constraints remain server-validated. Mixed-media calls accept native JSON models or explicit MultipartBody.RawBody/PoolsterRawBody buffered media wrappers. Objects/unions/reference values use JSON parts; arrays repeat parts by default and explode=false joins scalar values. Optional parts with null values are omitted. Base64 byte format, streaming and custom per-part headers require adapters. Part names use ASCII letters/digits/dot/underscore/hyphen; filenames use printable ASCII excluding quotes/backslashes. Files are buffered; no streaming/file-system access is implied. Java JSON model APIs remain separate.")?)?;
     Ok(())
 }
 pub(crate) fn runtime(source: String) -> String {
@@ -470,7 +470,7 @@ mod tests {
     fn api() -> Api {
         let mut file = SchemaValue::new(SchemaKind::String);
         file.format = Some("binary".into());
-        let field = |name: &str, value, required| kaji_core::Field {
+        let field = |name: &str, value, required| poolster_core::Field {
             name: name.into(),
             value,
             required,
@@ -493,17 +493,17 @@ mod tests {
             )],
             operations: vec![Operation {
                 id: "uploadThing".into(),
-                method: kaji_core::HttpMethod::Post,
+                method: poolster_core::HttpMethod::Post,
                 path: "/upload".into(),
-                request_body: Some(kaji_core::OperationRequestBody {
+                request_body: Some(poolster_core::OperationRequestBody {
                     required: true,
                     description: None,
-                    media_types: vec![kaji_core::OperationMediaType {
+                    media_types: vec![poolster_core::OperationMediaType {
                         content_type: "multipart/form-data".into(),
                         schema: Some(SchemaValue::reference("#/components/schemas/Upload")),
                     }],
                 }),
-                responses: vec![kaji_core::OperationResponse {
+                responses: vec![poolster_core::OperationResponse {
                     status: "204".into(),
                     description: None,
                     media_types: vec![],
@@ -529,7 +529,7 @@ mod tests {
             .as_mut()
             .unwrap()
             .media_types
-            .push(kaji_core::OperationMediaType {
+            .push(poolster_core::OperationMediaType {
                 content_type: "application/json".into(),
                 schema: Some(SchemaValue::new(SchemaKind::String)),
             });
@@ -537,10 +537,10 @@ mod tests {
     }
     #[test]
     fn emits_native_typed_multipart_in_all_response_drivers() {
-        let tree = kaji_core::engine::Packages::new()
+        let tree = poolster_core::engine::Packages::new()
             .package(
                 crate::package("sdk")
-                    .name("io.kaji.multipart")
+                    .name("io.poolster.multipart")
                     .with(crate::sdk()),
             )
             .generate(&api(), None)
@@ -569,10 +569,10 @@ mod tests {
     #[test]
     #[ignore = "requires JDK17+Maven; parses native HTTP multipart request bytes without network"]
     fn native_multipart_http_bytes_preserve_unicode_falsy_and_binary() {
-        let tree = kaji_core::engine::Packages::new()
+        let tree = poolster_core::engine::Packages::new()
             .package(
                 crate::package("sdk")
-                    .name("io.kaji.multipart")
+                    .name("io.poolster.multipart")
                     .with(crate::sdk())
                     .with(crate::operation_tests()),
             )
@@ -581,7 +581,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         tree.write_to(dir.path()).unwrap();
         let mut source = include_str!("operation_driver.java.txt")
-            .replace("__PACKAGE__", "io.kaji.multipart")
+            .replace("__PACKAGE__", "io.poolster.multipart")
             .replace("__CASES__", include_str!("multipart_probe_main.java.txt"));
         let start = source.find("        void assertRequest(").unwrap();
         let end = source[start..]
@@ -591,7 +591,7 @@ mod tests {
         source.replace_range(start..end, include_str!("multipart_probe_assert.java.txt"));
         std::fs::write(
             dir.path()
-                .join("sdk/src/test/java/io/kaji/multipart/KajiOperationTests.java"),
+                .join("sdk/src/test/java/io/kaji/multipart/PoolsterOperationTests.java"),
             source,
         )
         .unwrap();
@@ -600,7 +600,7 @@ mod tests {
                 "-q",
                 "test-compile",
                 "org.codehaus.mojo:exec-maven-plugin:3.5.0:java",
-                "-Dexec.mainClass=io.kaji.multipart.KajiOperationTests",
+                "-Dexec.mainClass=io.poolster.multipart.PoolsterOperationTests",
                 "-Dexec.classpathScope=test",
             ])
             .current_dir(dir.path().join("sdk"))
@@ -623,7 +623,7 @@ mod tests {
             unreachable!()
         };
         *additional_properties = AdditionalProperties::Any;
-        fields.push(kaji_core::Field {
+        fields.push(poolster_core::Field {
             name: "chunking_strategy".into(),
             value: SchemaValue::new(SchemaKind::OneOf {
                 variants: vec![
@@ -637,7 +637,7 @@ mod tests {
             required: false,
             annotations: Default::default(),
         });
-        fields.push(kaji_core::Field {
+        fields.push(poolster_core::Field {
             name: "timestamp_granularities[]".into(),
             value: SchemaValue::new(SchemaKind::Array {
                 items: Box::new(SchemaValue::new(SchemaKind::String)),
@@ -647,7 +647,7 @@ mod tests {
         });
         let mut binary = SchemaValue::new(SchemaKind::String);
         binary.format = Some("binary".into());
-        fields.push(kaji_core::Field {
+        fields.push(poolster_core::Field {
             name: "files".into(),
             value: SchemaValue::new(SchemaKind::Array {
                 items: Box::new(binary),
@@ -655,17 +655,17 @@ mod tests {
             required: false,
             annotations: Default::default(),
         });
-        source.operations[0].annotations.insert("kaji.request_body_encodings".into(),serde_json::json!({"multipart/form-data":{"chunking_strategy":{"contentType":"application/json"}}}));
+        source.operations[0].annotations.insert("poolster.request_body_encodings".into(),serde_json::json!({"multipart/form-data":{"chunking_strategy":{"contentType":"application/json"}}}));
         source
     }
 
     #[test]
     #[ignore = "requires JDK17+Maven; native complex multipart wire probe"]
     fn native_multipart_complex_json_and_repeated_arrays() {
-        let tree = kaji_core::engine::Packages::new()
+        let tree = poolster_core::engine::Packages::new()
             .package(
                 crate::package("sdk")
-                    .name("io.kaji.multipart")
+                    .name("io.poolster.multipart")
                     .with(crate::sdk())
                     .with(crate::operation_tests()),
             )
@@ -675,7 +675,7 @@ mod tests {
         tree.write_to(dir.path()).unwrap();
         let main=include_str!("multipart_probe_main.java.txt").replace("file,null);","file,null,MAPPER.valueToTree(Map.of(\"type\",\"server_vad\",\"label\",\"café雪\",\"threshold\",0.5)),List.of(\"word\",\"segment\"),List.of(file,file),Map.of(\"extra\",Map.of(\"snow\",\"雪\")));");
         let mut source = include_str!("operation_driver.java.txt")
-            .replace("__PACKAGE__", "io.kaji.multipart")
+            .replace("__PACKAGE__", "io.poolster.multipart")
             .replace("__CASES__", &main);
         let start = source.find("        void assertRequest(").unwrap();
         let end = start
@@ -688,7 +688,7 @@ mod tests {
         );
         std::fs::write(
             dir.path()
-                .join("sdk/src/test/java/io/kaji/multipart/KajiOperationTests.java"),
+                .join("sdk/src/test/java/io/kaji/multipart/PoolsterOperationTests.java"),
             source,
         )
         .unwrap();
@@ -697,7 +697,7 @@ mod tests {
                 "-q",
                 "test-compile",
                 "org.codehaus.mojo:exec-maven-plugin:3.5.0:java",
-                "-Dexec.mainClass=io.kaji.multipart.KajiOperationTests",
+                "-Dexec.mainClass=io.poolster.multipart.PoolsterOperationTests",
                 "-Dexec.classpathScope=test",
             ])
             .current_dir(dir.path().join("sdk"))

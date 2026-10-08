@@ -1,4 +1,4 @@
-use kaji_inputs::{InputPluginInfo, default_registry};
+use poolster_inputs::{InputPluginInfo, default_registry};
 
 #[test]
 fn bundle_registers_exactly_the_enabled_providers() {
@@ -35,7 +35,7 @@ fn bundle_registers_exactly_the_enabled_providers() {
 
 #[test]
 fn registries_are_independent_instances() {
-    use kaji_inputs::{InputContract, InputPlugin};
+    use poolster_inputs::{InputContract, InputPlugin};
     struct Extra;
     impl InputPlugin for Extra {
         fn id(&self) -> &str {

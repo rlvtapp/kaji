@@ -1,8 +1,8 @@
 //! Synthetic, checked-in OpenAPI 3.1 regression corpus. This is deliberately
 //! not a claim of compatibility with a third-party API or all JSON Schema.
-use kaji::swift::PackageExt;
-use kaji::{ProfileSet, csharp, java, swift};
-use kaji_core::adapter::openapi_sidecar::OpenApiSidecar;
+use poolster::swift::PackageExt;
+use poolster::{ProfileSet, csharp, java, swift};
+use poolster_core::adapter::openapi_sidecar::OpenApiSidecar;
 use std::{path::PathBuf, process::Command};
 
 const SPEC: &str = include_str!("fixtures/complex-contract.openapi.json");
@@ -30,12 +30,12 @@ fn fixture_is_explicitly_versioned_and_contains_complex_cases() {
 }
 
 #[test]
-#[ignore = "requires built Kaji OpenAPI compiler and Swift 6"]
+#[ignore = "requires built Poolster OpenAPI compiler and Swift 6"]
 fn real_openapi_complex_models_compile_and_round_trip_with_explicit_collision_errors() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let compiler = std::env::var_os("KAJI_OPENAPI_BIN")
         .map(PathBuf::from)
-        .unwrap_or_else(|| root.join("target/debug/kaji-openapi"));
+        .unwrap_or_else(|| root.join("target/debug/poolster-openapi"));
     let temp = tempfile::tempdir().unwrap();
     let artifacts = temp.path().join("ast");
     let result = Command::new(compiler)
@@ -58,7 +58,7 @@ fn real_openapi_complex_models_compile_and_round_trip_with_explicit_collision_er
         ProfileSet::new("sdk").package(java::package("java").with(java::sdk())),
         ProfileSet::new("sdk").package(csharp::package("csharp").with(csharp::sdk())),
     ] {
-        let error = kaji::generate_with_security_catalog(
+        let error = poolster::generate_with_security_catalog(
             &adapted.api,
             profiles,
             Some(&adapted.security_schemes),
@@ -74,7 +74,7 @@ fn real_openapi_complex_models_compile_and_round_trip_with_explicit_collision_er
         .api
         .schemas
         .retain(|schema| schema.name != "Collision");
-    let tree = kaji::generate_with_security_catalog(
+    let tree = poolster::generate_with_security_catalog(
         &adapted.api,
         ProfileSet::new("sdk").package(
             swift::package("swift")

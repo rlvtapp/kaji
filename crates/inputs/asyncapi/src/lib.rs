@@ -1,6 +1,6 @@
 //! AsyncAPI inputs retain their original version and native protocol model.
 use anyhow::{Context, Result, bail};
-use kaji_core::input::{InputOperation as OperationSummary, InputSummary as ContractSummary};
+use poolster_core::input::{InputOperation as OperationSummary, InputSummary as ContractSummary};
 use roas_asyncapi::validation::{Validate, ValidationOptions};
 use serde_json::Value;
 
@@ -116,25 +116,25 @@ fn resolve<'a>(root: &'a Value, mut value: &'a Value) -> &'a Value {
     value
 }
 
-impl kaji_core::engine::Contract for AsyncApiDocument {
-    const NAME: &'static str = "kaji.asyncapi";
+impl poolster_core::engine::Contract for AsyncApiDocument {
+    const NAME: &'static str = "poolster.asyncapi";
 }
 
 /// Native asyncapi input provider.
 pub struct AsyncApiInput;
-impl kaji_core::input::InputPlugin for AsyncApiInput {
+impl poolster_core::input::InputPlugin for AsyncApiInput {
     fn id(&self) -> &str {
         "asyncapi.roas"
     }
     fn format(&self) -> &str {
         "asyncapi"
     }
-    fn load(&self, path: &std::path::Path) -> anyhow::Result<kaji_core::input::InputContract> {
+    fn load(&self, path: &std::path::Path) -> anyhow::Result<poolster_core::input::InputContract> {
         let document = parse(
             &std::fs::read_to_string(path)
                 .with_context(|| format!("cannot read contract {}", path.display()))?,
         )?;
-        let mut input = kaji_core::input::InputContract::new(document.summary());
+        let mut input = poolster_core::input::InputContract::new(document.summary());
 
         input.publish(document)?;
         Ok(input)

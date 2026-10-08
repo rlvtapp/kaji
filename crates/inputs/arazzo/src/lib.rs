@@ -1,6 +1,6 @@
 //! Workflow descriptions are validated and inspected, never executed on load.
 use anyhow::{Context, Result, bail};
-use kaji_core::input::{InputOperation as OperationSummary, InputSummary as ContractSummary};
+use poolster_core::input::{InputOperation as OperationSummary, InputSummary as ContractSummary};
 use roas_arazzo::validation::Validate;
 use serde_json::Value;
 
@@ -177,27 +177,27 @@ impl ArazzoDocument {
     }
 }
 
-impl kaji_core::engine::Contract for ArazzoDocument {
-    const NAME: &'static str = "kaji.arazzo";
+impl poolster_core::engine::Contract for ArazzoDocument {
+    const NAME: &'static str = "poolster.arazzo";
 }
 
 /// Native arazzo input provider.
 pub struct ArazzoInput;
-impl kaji_core::input::InputPlugin for ArazzoInput {
+impl poolster_core::input::InputPlugin for ArazzoInput {
     fn id(&self) -> &str {
         "arazzo.roas"
     }
     fn format(&self) -> &str {
         "arazzo"
     }
-    fn load(&self, path: &std::path::Path) -> anyhow::Result<kaji_core::input::InputContract> {
+    fn load(&self, path: &std::path::Path) -> anyhow::Result<poolster_core::input::InputContract> {
         let document = parse(
             &std::fs::read_to_string(path)
                 .with_context(|| format!("cannot read contract {}", path.display()))?,
         )?;
-        let mut input = kaji_core::input::InputContract::new(document.summary());
+        let mut input = poolster_core::input::InputContract::new(document.summary());
         for source in &document.unresolved_sources {
-            input.diagnostics.push(kaji_core::input::InputDiagnostic { code: "unresolved-source".into(), message: format!("Source contract {source} was retained but not loaded; its operation references remain unverified") });
+            input.diagnostics.push(poolster_core::input::InputDiagnostic { code: "unresolved-source".into(), message: format!("Source contract {source} was retained but not loaded; its operation references remain unverified") });
         }
         input.publish(document)?;
         Ok(input)

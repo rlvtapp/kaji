@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::PackageExt;
-    use kaji_core::{AdditionalProperties, Api, Field, Schema, SchemaKind, SchemaValue};
+    use poolster_core::{AdditionalProperties, Api, Field, Schema, SchemaKind, SchemaValue};
     fn api() -> Api {
         Api {
             name: "Future".into(),
@@ -36,7 +36,7 @@ mod tests {
         for sdk in [true, false] {
             for enabled in [true, false] {
                 let package = crate::package("sdk").open_unions(enabled);
-                let packages = kaji_core::engine::Packages::new();
+                let packages = poolster_core::engine::Packages::new();
                 let tree = if sdk {
                     packages.package(package.with(crate::sdk()))
                 } else {
@@ -58,7 +58,7 @@ mod tests {
     fn native_unknown_union_roundtrips_and_default_decoding_remains_strict() {
         for enabled in [true, false] {
             let root = tempfile::tempdir().unwrap();
-            kaji_core::engine::Packages::new()
+            poolster_core::engine::Packages::new()
                 .package(
                     crate::package("sdk")
                         .open_unions(enabled)

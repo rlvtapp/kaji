@@ -57,13 +57,12 @@ pub fn resolve(name: &str) -> Result<String> {
     validate_name(name)?;
     let path = store_path()?;
     let store = load(&path)?;
-    let profile = store
-        .profiles
-        .get(name)
-        .with_context(|| format!("no Kaji auth profile named {name:?}; run kaji auth login"))?;
+    let profile = store.profiles.get(name).with_context(|| {
+        format!("no Poolster auth profile named {name:?}; run poolster auth login")
+    })?;
     env::var(&profile.token_env).with_context(|| {
         format!(
-            "read token environment variable {:?} for Kaji auth profile {name:?}",
+            "read token environment variable {:?} for Poolster auth profile {name:?}",
             profile.token_env
         )
     })
@@ -81,12 +80,12 @@ fn validate_name(name: &str) -> Result<()> {
 }
 
 fn store_path() -> Result<PathBuf> {
-    let base = env::var_os("KAJI_CONFIG_HOME")
+    let base = env::var_os("POOLSTER_CONFIG_HOME")
         .map(PathBuf::from)
         .or_else(|| env::var_os("XDG_CONFIG_HOME").map(PathBuf::from))
         .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
-        .context("locate a Kaji config directory; set KAJI_CONFIG_HOME")?;
-    Ok(base.join("kaji").join("auth.json"))
+        .context("locate a Poolster config directory; set POOLSTER_CONFIG_HOME")?;
+    Ok(base.join("poolster").join("auth.json"))
 }
 
 fn load(path: &PathBuf) -> Result<CredentialStore> {
@@ -94,22 +93,26 @@ fn load(path: &PathBuf) -> Result<CredentialStore> {
         return Ok(CredentialStore::default());
     }
     let document = std::fs::read_to_string(path)
-        .with_context(|| format!("read Kaji auth profiles {}", path.display()))?;
+        .with_context(|| format!("read Poolster auth profiles {}", path.display()))?;
     serde_json::from_str(&document)
-        .with_context(|| format!("parse Kaji auth profiles {}", path.display()))
+        .with_context(|| format!("parse Poolster auth profiles {}", path.display()))
 }
 
 fn save(path: &PathBuf, store: &CredentialStore) -> Result<()> {
     let parent = path.parent().expect("auth path has a parent");
-    std::fs::create_dir_all(parent)
-        .with_context(|| format!("create Kaji auth profile directory {}", parent.display()))?;
+    std::fs::create_dir_all(parent).with_context(|| {
+        format!(
+            "create Poolster auth profile directory {}",
+            parent.display()
+        )
+    })?;
     std::fs::write(path, format!("{}\n", serde_json::to_string_pretty(store)?))
-        .with_context(|| format!("write Kaji auth profiles {}", path.display()))?;
+        .with_context(|| format!("write Poolster auth profiles {}", path.display()))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
-            .with_context(|| format!("restrict Kaji auth profiles {}", path.display()))?;
+            .with_context(|| format!("restrict Poolster auth profiles {}", path.display()))?;
     }
     Ok(())
 }

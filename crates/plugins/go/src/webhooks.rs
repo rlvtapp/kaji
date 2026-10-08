@@ -1,5 +1,5 @@
 use super::*;
-use kaji_core::engine::{Meta, Plugin, PluginContext};
+use poolster_core::engine::{Meta, Plugin, PluginContext};
 pub struct Webhooks {
     meta: Meta,
 }
@@ -26,7 +26,7 @@ mod tests {
     use super::*;
     #[test]
     fn generated_webhooks_and_oauth_execute_native_security_cases() {
-        use kaji_core::engine::Packages;
+        use poolster_core::engine::Packages;
         let api = Api {
             name: "Security".into(),
             ..Default::default()

@@ -1,7 +1,7 @@
 //! Cap'n Proto inspection uses the official compiler's schema descriptors.
 use anyhow::{Context, Result, bail};
 use capnp::schema_capnp::{code_generator_request, node};
-use kaji_core::input::{InputOperation as OperationSummary, InputSummary as ContractSummary};
+use poolster_core::input::{InputOperation as OperationSummary, InputSummary as ContractSummary};
 use std::{io::Cursor, path::Path, process::Command};
 
 #[derive(Debug, Clone)]
@@ -108,22 +108,22 @@ impl CapnProtoDocument {
     }
 }
 
-impl kaji_core::engine::Contract for CapnProtoDocument {
-    const NAME: &'static str = "kaji.capnproto";
+impl poolster_core::engine::Contract for CapnProtoDocument {
+    const NAME: &'static str = "poolster.capnproto";
 }
 
 /// Native capnproto input provider.
 pub struct CapnProtoInput;
-impl kaji_core::input::InputPlugin for CapnProtoInput {
+impl poolster_core::input::InputPlugin for CapnProtoInput {
     fn id(&self) -> &str {
         "capnproto.capnp"
     }
     fn format(&self) -> &str {
         "capnproto"
     }
-    fn load(&self, path: &std::path::Path) -> anyhow::Result<kaji_core::input::InputContract> {
+    fn load(&self, path: &std::path::Path) -> anyhow::Result<poolster_core::input::InputContract> {
         let document = load(path)?;
-        let mut input = kaji_core::input::InputContract::new(document.summary());
+        let mut input = poolster_core::input::InputContract::new(document.summary());
 
         input.publish(document)?;
         Ok(input)
@@ -215,7 +215,7 @@ mod descriptor_edge_tests {
             schema_request: bytes.clone(),
             summary: summary.clone(),
         };
-        let mut input = kaji_core::input::InputContract::new(summary.clone());
+        let mut input = poolster_core::input::InputContract::new(summary.clone());
         input.publish(document).unwrap();
         let native = input.get::<CapnProtoDocument>().unwrap();
         assert_eq!(native.schema_request, bytes);

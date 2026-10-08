@@ -1,6 +1,6 @@
 //! Typed contracts for OpenAPI-derived mock scenarios.
 //!
-//! Kaji keeps mock behaviour on an operation's `x-kaji-mock` extension. The
+//! Poolster keeps mock behaviour on an operation's `x-kaji-mock` extension. The
 //! extension is intentionally small and transport-neutral, so a generated
 //! MSW handler, a standalone HTTP fixture, and a hosted mock environment can
 //! all make the same request/response decision.
@@ -93,7 +93,8 @@ pub fn mock_scenario_matches(
             .is_none_or(|expected| body == Some(expected))
 }
 
-const EXTENSION: &str = "x-kaji-mock";
+const EXTENSION: &str = "x-poolster-mock";
+const LEGACY_EXTENSION: &str = "x-kaji-mock";
 const MAX_DELAY_MS: u64 = 600_000;
 
 /// Extracts every valid `x-kaji-mock` scenario from an API.
@@ -112,7 +113,11 @@ pub fn extract_mock_scenarios(api: &Api) -> Result<Vec<MockScenario>> {
 
 /// Extracts and validates mock scenarios for one operation.
 pub fn extract_operation_mock_scenarios(operation: &Operation) -> Result<Vec<MockScenario>> {
-    let Some(value) = operation.annotations.get(EXTENSION) else {
+    let Some(value) = operation
+        .annotations
+        .get(EXTENSION)
+        .or_else(|| operation.annotations.get(LEGACY_EXTENSION))
+    else {
         return Ok(Vec::new());
     };
     let object = value.as_object().with_context(|| {
@@ -325,6 +330,19 @@ mod tests {
         assert_eq!(scenarios[0].when.path["contact_id"], "contact_123");
         assert_eq!(scenarios[0].response.status, 429);
         assert_eq!(scenarios[0].response.delay_ms, Some(25));
+    }
+
+    #[test]
+    fn accepts_legacy_mock_extension() {
+        let mut operation = operation(json!({
+            "scenarios": [{"name": "legacy", "response": {"status": 202}}]
+        }));
+        let extension = operation.annotations.remove(EXTENSION).unwrap();
+        operation
+            .annotations
+            .insert(LEGACY_EXTENSION.into(), extension);
+        let scenarios = extract_operation_mock_scenarios(&operation).unwrap();
+        assert_eq!(scenarios[0].response.status, 202);
     }
 
     #[test]

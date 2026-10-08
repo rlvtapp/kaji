@@ -1,5 +1,5 @@
 use super::*;
-use kaji_core::pagination::{PaginationKind, SelectorSegment, normalize_pagination};
+use poolster_core::pagination::{PaginationKind, SelectorSegment, normalize_pagination};
 
 pub(super) fn render(api: &Api) -> Result<String> {
     let mut output = super::cursor_pagination::render(api)?;
@@ -101,7 +101,7 @@ pub(super) fn render(api: &Api) -> Result<String> {
         let name = function_name(&operation.id);
         writeln!(
             output,
-            "    func {name}Pages({signature}) -> KajiPageSequence<{response}> {{\n        KajiPageSequence(page: {initial}, limit: {limit_expr}, offset: {offset}) {{ current in\n            let response = try await self.{name}({args})\n            return (response, try kajiPageCount(response, [{selectors}]))\n        }}\n    }}"
+            "    func {name}Pages({signature}) -> PoolsterPageSequence<{response}> {{\n        PoolsterPageSequence(page: {initial}, limit: {limit_expr}, offset: {offset}) {{ current in\n            let response = try await self.{name}({args})\n            return (response, try kajiPageCount(response, [{selectors}]))\n        }}\n    }}"
         )?;
     }
     Ok(output)
@@ -110,7 +110,7 @@ pub(super) fn render(api: &Api) -> Result<String> {
 fn render_url(
     output: &mut String,
     operation: &Operation,
-    plan: &kaji_core::pagination::PaginationPlan,
+    plan: &poolster_core::pagination::PaginationPlan,
 ) -> Result<()> {
     anyhow::ensure!(
         operation
@@ -157,7 +157,7 @@ fn render_url(
         .join(", ");
     writeln!(
         output,
-        "    func {name}Pages({signature}) -> KajiURLSequence<{response}> {{\n        KajiURLSequence {{ nextURL in\n            let response = try await self.{name}KajiURL({args}_kajiURL: nextURL)\n            return (response, try kajiNextURL(response, [{selectors}]))\n        }}\n    }}"
+        "    func {name}Pages({signature}) -> PoolsterURLSequence<{response}> {{\n        PoolsterURLSequence {{ nextURL in\n            let response = try await self.{name}PoolsterURL({args}_kajiURL: nextURL)\n            return (response, try kajiNextURL(response, [{selectors}]))\n        }}\n    }}"
     )?;
     Ok(())
 }
@@ -184,7 +184,7 @@ mod tests {
     #[ignore = "Requires Swift6; real generated offset/URL operations and fake native transport"]
     fn native_offset_and_url_pagination_preserves_auth_and_laziness() {
         use super::*;
-        use kaji_core::{
+        use poolster_core::{
             AdditionalProperties, Field, HttpMethod, OperationParameter, OperationResponse, Schema,
         };
         let integer = |name: &str| OperationParameter {
@@ -308,7 +308,7 @@ actor Calls { var pages: [Int] = []; func record(_ page: Int) { pages.append(pag
 @main struct Test {
  static func main() async throws {
   let calls = Calls()
-  let sequence = KajiPageSequence<[Int]>(page: 0, limit: 2) { page in
+  let sequence = PoolsterPageSequence<[Int]>(page: 0, limit: 2) { page in
    await calls.record(page); return (page == 0 ? [1,2] : [3], page == 0 ? 2 : 1)
   }
   let before = await calls.values(); precondition(before.isEmpty)
@@ -317,16 +317,16 @@ actor Calls { var pages: [Int] = []; func record(_ page: Int) { pages.append(pag
   let second = try await iterator.next(); precondition(second == [3])
   let end = try await iterator.next(); precondition(end == nil)
   let pages = await calls.values(); precondition(pages == [0,1])
-  var invalid = KajiPageSequence<Int>(page: -1, limit: nil) { _ in fatalError("must not request") }.makeAsyncIterator()
-  do { _ = try await invalid.next(); fatalError("invalid page") } catch KajiPaginationError.invalidPage {}
-  var overflow = KajiPageSequence<Int>(page: Int.max, limit: nil) { _ in (1,1) }.makeAsyncIterator()
+  var invalid = PoolsterPageSequence<Int>(page: -1, limit: nil) { _ in fatalError("must not request") }.makeAsyncIterator()
+  do { _ = try await invalid.next(); fatalError("invalid page") } catch PoolsterPaginationError.invalidPage {}
+  var overflow = PoolsterPageSequence<Int>(page: Int.max, limit: nil) { _ in (1,1) }.makeAsyncIterator()
   _ = try await overflow.next()
-  do { _ = try await overflow.next(); fatalError("overflow") } catch KajiPaginationError.pageOverflow {}
+  do { _ = try await overflow.next(); fatalError("overflow") } catch PoolsterPaginationError.pageOverflow {}
   let count = try kajiPageCount(["a/b": [[1],[2,3]]], [.field("a/b"), .index(-1)])
   precondition(count == 2)
   for key in ["01", "+1", "-1", ""] {
     do { _ = try kajiPageCount([1,2], [.field(key)]); fatalError("invalid pointer index") }
-    catch KajiPaginationError.invalidResults {}
+    catch PoolsterPaginationError.invalidResults {}
   }
 
  }
@@ -363,7 +363,7 @@ mod generation_tests {
     #[test]
     #[ignore = "requires Swift toolchain"]
     fn declared_pages_preserve_required_and_optional_parameters() {
-        use kaji_core::{HttpMethod, OperationParameter, OperationResponse};
+        use poolster_core::{HttpMethod, OperationParameter, OperationResponse};
         let mut operation = Operation {
             id: "listPets".into(),
             method: HttpMethod::Get,
@@ -414,7 +414,7 @@ actor Calls {
  func record() { count += 1 }
  func snapshot() -> Int { count }
 }
-struct Driver: KajiTransport {
+struct Driver: PoolsterTransport {
  let calls: Calls
  func execute(_ request: URLRequest) async throws -> (Data, URLResponse) {
   await calls.record()
@@ -422,7 +422,7 @@ struct Driver: KajiTransport {
   return (Data("[]".utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
  }
 }
-struct Blocking: KajiTransport {
+struct Blocking: PoolsterTransport {
  let calls: Calls
  func execute(_ request: URLRequest) async throws -> (Data, URLResponse) {
   await calls.record()
@@ -433,7 +433,7 @@ struct Blocking: KajiTransport {
 @main struct Test {
  static func main() async throws {
   let calls = Calls()
-  let client = KajiClient(options: .init(baseURL: URL(string: "https://example.com")!), transport: Driver(calls: calls))
+  let client = PoolsterClient(options: .init(baseURL: URL(string: "https://example.com")!), transport: Driver(calls: calls))
   var iterator = client.pets.listPetsPages(page: 0).makeAsyncIterator()
   let first = try await iterator.next(); precondition(first == [])
   let end = try await iterator.next(); precondition(end == nil)
@@ -447,7 +447,7 @@ struct Blocking: KajiTransport {
   cancelled.cancel(); await cancelled.value
   let after = await calls.snapshot(); precondition(after == 1)
   let blockedCalls = Calls()
-  let blocked = KajiClient(options: .init(baseURL: URL(string: "https://example.com")!), transport: Blocking(calls: blockedCalls))
+  let blocked = PoolsterClient(options: .init(baseURL: URL(string: "https://example.com")!), transport: Blocking(calls: blockedCalls))
   let pending = Task {
    var pages = blocked.listPetsPages(page: 0).makeAsyncIterator()
    return try await pages.next()

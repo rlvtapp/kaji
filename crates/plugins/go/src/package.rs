@@ -1,7 +1,7 @@
 //! Typed package integration for the existing complete Go generator.
 use anyhow::Result;
-use kaji_core::SdkClientStyle;
-use kaji_core::engine::{Language, Meta, Package, Plugin, PluginContext};
+use poolster_core::SdkClientStyle;
+use poolster_core::engine::{Language, Meta, Package, Plugin, PluginContext};
 
 pub struct Go;
 #[derive(Default)]
@@ -13,12 +13,12 @@ impl Language for Go {
     type Settings = Settings;
     type Workspace = crate::providers::Workspace;
     fn bundle_middleware(
-        tree: &mut kaji_core::GeneratedTree,
-        middleware: &[kaji_core::customization::BundledMiddleware],
+        tree: &mut poolster_core::GeneratedTree,
+        middleware: &[poolster_core::customization::BundledMiddleware],
     ) -> Result<()> {
         crate::bundled_middleware::bundle(tree, middleware)
     }
-    fn finalize(cx: &mut kaji_core::engine::FinalizeContext<'_, Self>) -> Result<()> {
+    fn finalize(cx: &mut poolster_core::engine::FinalizeContext<'_, Self>) -> Result<()> {
         crate::providers::Workspace::finalize(cx)
     }
 }
@@ -47,7 +47,7 @@ pub fn sdk() -> Sdk {
     }
 }
 impl Sdk {
-    pub fn client(&self) -> kaji_core::engine::Handle<crate::providers::Client> {
+    pub fn client(&self) -> poolster_core::engine::Handle<crate::providers::Client> {
         self.meta.handle()
     }
 
@@ -72,12 +72,12 @@ impl Plugin<Go> for Sdk {
     fn meta(&self) -> &Meta {
         &self.meta
     }
-    fn provides(&self) -> Vec<kaji_core::engine::Provision> {
+    fn provides(&self) -> Vec<poolster_core::engine::Provision> {
         vec![
-            kaji_core::engine::Provision::of::<crate::providers::Models>(),
-            kaji_core::engine::Provision::of::<crate::providers::Transport>(),
-            kaji_core::engine::Provision::of::<crate::providers::Operations>(),
-            kaji_core::engine::Provision::of::<crate::providers::Client>(),
+            poolster_core::engine::Provision::of::<crate::providers::Models>(),
+            poolster_core::engine::Provision::of::<crate::providers::Transport>(),
+            poolster_core::engine::Provision::of::<crate::providers::Operations>(),
+            poolster_core::engine::Provision::of::<crate::providers::Client>(),
         ]
     }
     fn generate(&self, cx: &mut PluginContext<'_, Go>) -> Result<()> {

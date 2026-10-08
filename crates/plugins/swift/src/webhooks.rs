@@ -1,5 +1,5 @@
 use super::*;
-use kaji_core::engine::{Meta, Plugin, PluginContext};
+use poolster_core::engine::{Meta, Plugin, PluginContext};
 pub struct Webhooks {
     meta: Meta,
 }
@@ -29,7 +29,7 @@ impl Plugin<Swift> for Webhooks {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kaji_core::engine::Packages;
+    use poolster_core::engine::Packages;
     #[test]
     fn opt_in_adds_only_pinned_crypto_dependency() {
         let api = Api {

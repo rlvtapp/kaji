@@ -1,6 +1,6 @@
 //! Independent generated buffered-operation smoke tests; never contact an API.
 use super::*;
-use kaji_core::engine::{Handle, Meta, Plugin, PluginContext, Requirement};
+use poolster_core::engine::{Handle, Meta, Plugin, PluginContext, Requirement};
 use serde_json::{Value, json};
 pub struct OperationTests {
     meta: Meta,
@@ -104,7 +104,7 @@ impl Plugin<Java> for OperationTests {
             .replace("__CASES__", &code);
         cx.files.emit(GeneratedFile::new(
             format!(
-                "src/test/java/{}/KajiOperationTests.java",
+                "src/test/java/{}/PoolsterOperationTests.java",
                 sdk.namespace.replace('.', "/")
             ),
             source,
@@ -115,15 +115,15 @@ impl Plugin<Java> for OperationTests {
                 &json!({"version":1,"supported":cases,"unsupported":unsupported}),
             )?,
         )?)?;
-        cx.files.emit(GeneratedFile::new("OPERATION_TESTS.md",format!("# Generated operation smoke tests\n\nAll HTTP is fake and in memory. Run:\n\n~~~sh\nmvn -q test-compile org.codehaus.mojo:exec-maven-plugin:3.5.0:java -Dexec.mainClass={}.KajiOperationTests -Dexec.classpathScope=test\n~~~\n\noperation-test-report.json records supported cases and exclusions. Bounded structural samples strip source examples, defaults and annotations. These tests verify public operation calls, wire controls, bodies and decoded models; dedicated fixtures are still needed for constraints, recursive/compositional schemas, auth, pagination, retries, and streaming.\n",sdk.namespace))?)?;
+        cx.files.emit(GeneratedFile::new("OPERATION_TESTS.md",format!("# Generated operation smoke tests\n\nAll HTTP is fake and in memory. Run:\n\n~~~sh\nmvn -q test-compile org.codehaus.mojo:exec-maven-plugin:3.5.0:java -Dexec.mainClass={}.PoolsterOperationTests -Dexec.classpathScope=test\n~~~\n\noperation-test-report.json records supported cases and exclusions. Bounded structural samples strip source examples, defaults and annotations. These tests verify public operation calls, wire controls, bodies and decoded models; dedicated fixtures are still needed for constraints, recursive/compositional schemas, auth, pagination, retries, and streaming.\n",sdk.namespace))?)?;
         Ok(())
     }
 }
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kaji_core::engine::Packages;
-    use kaji_core::{
+    use poolster_core::engine::Packages;
+    use poolster_core::{
         AdditionalProperties, Field, HttpMethod, OperationMediaType, OperationParameter,
         OperationRequestBody, OperationResponse,
     };
@@ -220,7 +220,7 @@ mod tests {
         Packages::new()
             .package(
                 crate::package("sdk")
-                    .name("io.kaji.operationtest")
+                    .name("io.poolster.operationtest")
                     .with(operation_tests().sdk_from(&sdk))
                     .with(sdk),
             )
@@ -238,7 +238,7 @@ mod tests {
         assert!(!report_text.contains("DO_NOT_COPY_SOURCE_SECRET"));
         assert!(report_text.contains("encoded_path"));
         let source = tree
-            .get("sdk/src/test/java/io/kaji/operationtest/KajiOperationTests.java")
+            .get("sdk/src/test/java/io/kaji/operationtest/PoolsterOperationTests.java")
             .unwrap();
         assert!(source.contains("client.echoContact("));
         assert!(source.contains("request.bodyPublisher()"));
@@ -288,7 +288,7 @@ mod tests {
                 "-q",
                 "test-compile",
                 "org.codehaus.mojo:exec-maven-plugin:3.5.0:java",
-                "-Dexec.mainClass=io.kaji.operationtest.KajiOperationTests",
+                "-Dexec.mainClass=io.poolster.operationtest.PoolsterOperationTests",
                 "-Dexec.classpathScope=test",
             ])
             .current_dir(dir.path().join("sdk"))

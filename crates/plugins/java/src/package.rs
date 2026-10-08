@@ -1,7 +1,7 @@
 //! Typed package integration for the existing complete Java generator.
 use anyhow::Result;
-use kaji_core::SdkClientStyle;
-use kaji_core::engine::{
+use poolster_core::SdkClientStyle;
+use poolster_core::engine::{
     Contract, Handle, Language, Meta, Package, Plugin, PluginContext, Provision,
 };
 
@@ -15,8 +15,8 @@ impl Language for Java {
     type Settings = Settings;
     type Workspace = ();
     fn bundle_middleware(
-        tree: &mut kaji_core::GeneratedTree,
-        middleware: &[kaji_core::customization::BundledMiddleware],
+        tree: &mut poolster_core::GeneratedTree,
+        middleware: &[poolster_core::customization::BundledMiddleware],
     ) -> Result<()> {
         crate::bundled_middleware::bundle(tree, middleware)
     }
@@ -101,12 +101,9 @@ impl Plugin<Java> for Sdk {
             self.preserve_presence,
         )?)?;
         cx.publish(NativeSdk {
-            namespace: crate::java_package_name(
-                cx.settings
-                    .package_name
-                    .as_deref()
-                    .unwrap_or(&format!("io.kaji.{}", crate::package_segment(&cx.api.name))),
-            ),
+            namespace: crate::java_package_name(cx.settings.package_name.as_deref().unwrap_or(
+                &format!("io.poolster.{}", crate::package_segment(&cx.api.name)),
+            )),
         })
     }
 }

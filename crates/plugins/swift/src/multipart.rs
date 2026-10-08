@@ -1,7 +1,7 @@
 use super::*;
 use anyhow::ensure;
 
-const TYPE_KEY: &str = "kaji.swift.multipart_type";
+const TYPE_KEY: &str = "poolster.swift.multipart_type";
 fn json_media(value: &str) -> bool {
     let value = value.to_ascii_lowercase();
     value == "application/json" || value.ends_with("+json")
@@ -213,7 +213,7 @@ fn fields<'a>(api: &'a Api, operation: &'a Operation) -> Result<&'a [Field]> {
 fn encoding<'a>(operation: &'a Operation, name: &str) -> Option<&'a Value> {
     operation
         .annotations
-        .get("kaji.request_body_encodings")?
+        .get("poolster.request_body_encodings")?
         .as_object()?
         .iter()
         .find(|(media, _)| media.eq_ignore_ascii_case("multipart/form-data"))?
@@ -264,7 +264,7 @@ fn ordered(api: &Api, operation: &Operation) -> bool {
                         .and_then(|s| resolve(api, s, 0).ok())
                         .is_some_and(|s| matches!(s.kind, SchemaKind::Array { .. })))
         })
-        || kaji_core::openapi32::request_content(operation)
+        || poolster_core::openapi32::request_content(operation)
             .ok()
             .is_some_and(|content| {
                 content
@@ -293,14 +293,14 @@ pub(crate) fn prepare(api: &Api) -> Result<std::borrow::Cow<'_, Api>> {
         for reserved in [
             dto_name(operation),
             body_type.clone(),
-            "KajiMultipartFile".into(),
-            "KajiMultipartError".into(),
-            "KajiMultipartEncoder".into(),
-            "KajiEncodedMultipart".into(),
-            "KajiMultipartPart".into(),
-            "KajiOrderedPart".into(),
-            "KajiOrderedDefinition".into(),
-            "KajiOrderedEncoding".into(),
+            "PoolsterMultipartFile".into(),
+            "PoolsterMultipartError".into(),
+            "PoolsterMultipartEncoder".into(),
+            "PoolsterEncodedMultipart".into(),
+            "PoolsterMultipartPart".into(),
+            "PoolsterOrderedPart".into(),
+            "PoolsterOrderedDefinition".into(),
+            "PoolsterOrderedEncoding".into(),
         ] {
             ensure!(
                 !api.schemas
@@ -320,8 +320,8 @@ pub(crate) fn body_type(operation: &Operation) -> Option<&str> {
 }
 fn field_type(api: &Api, field: &Field) -> Result<String> {
     let base = match shape(api, &field.value)? {
-        Shape::File => "KajiMultipartFile".into(),
-        Shape::FileArray => "[KajiMultipartFile]".into(),
+        Shape::File => "PoolsterMultipartFile".into(),
+        Shape::FileArray => "[PoolsterMultipartFile]".into(),
         _ => swift_type(&field.value, false),
     };
     Ok(format!("{base}{}", if field.required { "" } else { "?" }))
@@ -381,7 +381,7 @@ fn render_body(api: &Api, operation: &Operation) -> Result<String> {
             required.as_str()
         };
         let header_expr = format!(
-            "try KajiMultipartEncoder.headers({header_expr}, required: [{checked_required}])"
+            "try PoolsterMultipartEncoder.headers({header_expr}, required: [{checked_required}])"
         );
         let default_type = match kind {
             Shape::Json | Shape::JsonArray => "application/json",
@@ -421,7 +421,7 @@ fn render_body(api: &Api, operation: &Operation) -> Result<String> {
                         == Some(false) =>
             {
                 format!(
-                    "try builder.scalar(name: {:?}, value: try {native}.map(KajiMultipartEncoder.scalarString).joined(separator: \",\"), contentType: {mime:?}, headers: {header_expr})",
+                    "try builder.scalar(name: {:?}, value: try {native}.map(PoolsterMultipartEncoder.scalarString).joined(separator: \",\"), contentType: {mime:?}, headers: {header_expr})",
                     field.name
                 )
             }
@@ -454,7 +454,7 @@ fn render_body(api: &Api, operation: &Operation) -> Result<String> {
         .collect::<Vec<_>>()
         .join(", ");
     let mut source = format!(
-        "{NOTICE}\nimport Foundation\n\npublic struct {name}: Sendable {{\n{declarations}    public var partHeaders: [String: [String: String]]\n    public var maximumBodyBytes: Int\n\n    public init({}) {{\n{assignments}        self.partHeaders = partHeaders\n        self.maximumBodyBytes = maximumBodyBytes\n    }}\n\n    internal func kajiEncoded() throws -> KajiEncodedMultipart {{\n        try Task.checkCancellation()\n        guard partHeaders.keys.allSatisfy({{ [{known}].contains($0) }}) else {{ throw KajiMultipartError.unknownPart }}\n        var builder = try KajiMultipartEncoder(maximumBodyBytes: maximumBodyBytes)\n{parts}        return try builder.finish()\n    }}\n}}\n",
+        "{NOTICE}\nimport Foundation\n\npublic struct {name}: Sendable {{\n{declarations}    public var partHeaders: [String: [String: String]]\n    public var maximumBodyBytes: Int\n\n    public init({}) {{\n{assignments}        self.partHeaders = partHeaders\n        self.maximumBodyBytes = maximumBodyBytes\n    }}\n\n    internal func kajiEncoded() throws -> PoolsterEncodedMultipart {{\n        try Task.checkCancellation()\n        guard partHeaders.keys.allSatisfy({{ [{known}].contains($0) }}) else {{ throw PoolsterMultipartError.unknownPart }}\n        var builder = try PoolsterMultipartEncoder(maximumBodyBytes: maximumBodyBytes)\n{parts}        return try builder.finish()\n    }}\n}}\n",
         arguments.join(", ")
     );
     if mixed(operation) {
@@ -472,7 +472,7 @@ fn render_body(api: &Api, operation: &Operation) -> Result<String> {
             .map(|schema| swift_type(schema, false))
             .unwrap_or_else(|| "JSONValue".into());
         let wrapper = body_type(operation).unwrap();
-        source.push_str(&format!("\n/// Select the declared wire representation explicitly.\npublic enum {wrapper}: Sendable {{\n    case multipart({name})\n    case json({ty})\n\n    internal func kajiEncoded() throws -> KajiEncodedMultipart {{\n        try Task.checkCancellation()\n        switch self {{\n        case .multipart(let value): return try value.kajiEncoded()\n        case .json(let value):\n            let body = try JSONEncoder().encode(value)\n            guard body.count <= {MAX_BODY_BYTES} else {{ throw KajiMultipartError.bodyTooLarge }}\n            return KajiEncodedMultipart(body: body, contentType: {:?})\n        }}\n    }}\n}}\n",media.content_type));
+        source.push_str(&format!("\n/// Select the declared wire representation explicitly.\npublic enum {wrapper}: Sendable {{\n    case multipart({name})\n    case json({ty})\n\n    internal func kajiEncoded() throws -> PoolsterEncodedMultipart {{\n        try Task.checkCancellation()\n        switch self {{\n        case .multipart(let value): return try value.poolsterEncoded()\n        case .json(let value):\n            let body = try JSONEncoder().encode(value)\n            guard body.count <= {MAX_BODY_BYTES} else {{ throw PoolsterMultipartError.bodyTooLarge }}\n            return PoolsterEncodedMultipart(body: body, contentType: {:?})\n        }}\n    }}\n}}\n",media.content_type));
     }
     Ok(source)
 }
@@ -491,16 +491,16 @@ fn render_ordered_body(operation: &Operation) -> Result<String> {
                 .starts_with("multipart/")
         })
         .unwrap();
-    let definition = kaji_core::openapi32::request_content(operation)?
+    let definition = poolster_core::openapi32::request_content(operation)?
         .into_iter()
         .find(|content| content.content_type == media.content_type)
-        .unwrap_or_else(|| kaji_core::openapi32::ContentDefinition {
+        .unwrap_or_else(|| poolster_core::openapi32::ContentDefinition {
             content_type: media.content_type.clone(),
             ..Default::default()
         });
     let definition = serde_json::to_string(&definition)?;
     let mut source = format!(
-        "{NOTICE}\nimport Foundation\n\npublic struct {name}: Sendable {{\n    public var parts: [KajiOrderedPart]\n    public var maximumBodyBytes: Int\n    public init(parts: [KajiOrderedPart], maximumBodyBytes: Int = {MAX_BODY_BYTES}) {{ self.parts = parts; self.maximumBodyBytes = maximumBodyBytes }}\n    internal func kajiEncoded() throws -> KajiEncodedMultipart {{\n        let definition = try JSONDecoder().decode(KajiOrderedDefinition.self, from: Data({definition:?}.utf8))\n        return try kajiOrderedEncode(parts: parts, contentType: definition.content_type, named: definition.encoding ?? [:], prefix: definition.prefix_encoding ?? [], item: definition.item_encoding, maximumBodyBytes: maximumBodyBytes)\n    }}\n}}\n"
+        "{NOTICE}\nimport Foundation\n\npublic struct {name}: Sendable {{\n    public var parts: [PoolsterOrderedPart]\n    public var maximumBodyBytes: Int\n    public init(parts: [PoolsterOrderedPart], maximumBodyBytes: Int = {MAX_BODY_BYTES}) {{ self.parts = parts; self.maximumBodyBytes = maximumBodyBytes }}\n    internal func kajiEncoded() throws -> PoolsterEncodedMultipart {{\n        let definition = try JSONDecoder().decode(PoolsterOrderedDefinition.self, from: Data({definition:?}.utf8))\n        return try kajiOrderedEncode(parts: parts, contentType: definition.content_type, named: definition.encoding ?? [:], prefix: definition.prefix_encoding ?? [], item: definition.item_encoding, maximumBodyBytes: maximumBodyBytes)\n    }}\n}}\n"
     );
     if mixed(operation) {
         let json = operation
@@ -517,7 +517,7 @@ fn render_ordered_body(operation: &Operation) -> Result<String> {
             .map(|schema| swift_type(schema, false))
             .unwrap_or_else(|| "JSONValue".into());
         let wrapper = body_type(operation).unwrap();
-        source.push_str(&format!("\npublic enum {wrapper}: Sendable {{\n    case multipart({name})\n    case json({ty})\n    internal func kajiEncoded() throws -> KajiEncodedMultipart {{\n        switch self {{\n        case .multipart(let value): return try value.kajiEncoded()\n        case .json(let value):\n            try Task.checkCancellation()\n            let bytes = try JSONEncoder().encode(value)\n            guard bytes.count <= {MAX_BODY_BYTES} else {{ throw KajiMultipartError.bodyTooLarge }}\n            return KajiEncodedMultipart(body: bytes, contentType: {:?})\n        }}\n    }}\n}}\n",json.content_type));
+        source.push_str(&format!("\npublic enum {wrapper}: Sendable {{\n    case multipart({name})\n    case json({ty})\n    internal func kajiEncoded() throws -> PoolsterEncodedMultipart {{\n        switch self {{\n        case .multipart(let value): return try value.poolsterEncoded()\n        case .json(let value):\n            try Task.checkCancellation()\n            let bytes = try JSONEncoder().encode(value)\n            guard bytes.count <= {MAX_BODY_BYTES} else {{ throw PoolsterMultipartError.bodyTooLarge }}\n            return PoolsterEncodedMultipart(body: bytes, contentType: {:?})\n        }}\n    }}\n}}\n",json.content_type));
     }
     Ok(source)
 }
@@ -528,7 +528,7 @@ pub(crate) fn emit(api: &Api, root: &str, module: &str, tree: &mut GeneratedTree
     insert(
         tree,
         root,
-        &format!("Sources/{module}/KajiMultipart.swift"),
+        &format!("Sources/{module}/PoolsterMultipart.swift"),
         include_str!("multipart.swift.txt").into(),
     )?;
     for operation in api

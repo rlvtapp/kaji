@@ -1,6 +1,6 @@
 //! Package-author middleware is compiled into the default runtime.
 use anyhow::{Result, ensure};
-use kaji_core::{GeneratedFile, GeneratedTree, customization::BundledMiddleware};
+use poolster_core::{GeneratedFile, GeneratedTree, customization::BundledMiddleware};
 
 pub(crate) fn bundle(tree: &mut GeneratedTree, middleware: &[BundledMiddleware]) -> Result<()> {
     if middleware.is_empty() {
@@ -119,12 +119,12 @@ mod tests {
             async_symbol: None,
         };
         assert!(bundle(&mut tree, std::slice::from_ref(&policy)).is_err());
-        let api = kaji_core::Api {
+        let api = poolster_core::Api {
             name: "demo".into(),
             version: "1.0.0".into(),
             ..Default::default()
         };
-        let generated = kaji_core::engine::Packages::new()
+        let generated = poolster_core::engine::Packages::new()
             .package(
                 crate::package("sdk")
                     .with(crate::sdk())

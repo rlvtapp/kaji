@@ -1,4 +1,4 @@
-//! Symfony integration packages for generated Kaji PHP SDKs.
+//! Symfony integration packages for generated Poolster PHP SDKs.
 //!
 //! The package intentionally wraps the portable PSR-18 SDK instead of
 //! re-rendering models or operations. Symfony applications receive normal
@@ -6,7 +6,7 @@
 //! continue to use the same generated PHP SDK unchanged.
 
 use anyhow::Result;
-use kaji_core::{Api, GeneratedFile, GeneratedTree};
+use poolster_core::{Api, GeneratedFile, GeneratedTree};
 
 mod package;
 pub use package::{PackageExt, Sdk, Settings, Symfony, package, sdk};

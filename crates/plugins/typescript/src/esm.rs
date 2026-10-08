@@ -3,7 +3,7 @@
 //! importable by Node. This pass uses the assembled file inventory, including
 //! custom providers and bundled middleware, without modifying source overlays.
 use anyhow::Result;
-use kaji_core::{GeneratedFile, GeneratedTree};
+use poolster_core::{GeneratedFile, GeneratedTree};
 use std::{
     collections::BTreeSet,
     path::{Component, Path, PathBuf},

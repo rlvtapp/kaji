@@ -1,6 +1,6 @@
 //! Declared integer query pagination; all requests use the normal operation API.
 use super::*;
-use kaji_core::pagination::{PaginationKind, SelectorSegment, normalize_pagination};
+use poolster_core::pagination::{PaginationKind, SelectorSegment, normalize_pagination};
 
 /// Validate the renderer ABI in addition to the shared wire-level plan.
 pub(super) fn validate(api: &Api, operation: &Operation) -> Result<()> {
@@ -229,7 +229,7 @@ fn render_url(
     output: &mut String,
     api: &Api,
     operation: &Operation,
-    plan: &kaji_core::pagination::PaginationPlan,
+    plan: &poolster_core::pagination::PaginationPlan,
 ) {
     if validate(api, operation).is_err() {
         return;
@@ -261,14 +261,14 @@ fn render_url(
         for (var pageIndex=0;pageIndex<10000;pageIndex++) {{
             cancellationToken.ThrowIfCancellationRequested();
             if(nextURL is not null && !seenURLs.Add(nextURL)) throw new InvalidOperationException("Repeated continuation URL");
-            var responsePage=await {name}KajiURLAsync({args}nextURL).ConfigureAwait(false);
+            var responsePage=await {name}PoolsterURLAsync({args}nextURL).ConfigureAwait(false);
             yield return responsePage;
-            nextURL=KajiJsonPath(JsonSerializer.SerializeToElement(responsePage,JsonOptions),{path:?});
+            nextURL=PoolsterJsonPath(JsonSerializer.SerializeToElement(responsePage,JsonOptions),{path:?});
             if(string.IsNullOrEmpty(nextURL)) yield break;
         }}
         throw new InvalidOperationException("Pagination exceeded 10000 pages");
     }}
-    private Uri {name}KajiURLTarget(string next) {{
+    private Uri {name}PoolsterURLTarget(string next) {{
         if(!Uri.TryCreate(next,UriKind.Absolute,out var uri) || (uri.Scheme!="http" && uri.Scheme!="https") || uri.Scheme!=_baseUri.Scheme || !string.Equals(uri.IdnHost,_baseUri.IdnHost,StringComparison.OrdinalIgnoreCase) || uri.Port!=_baseUri.Port || uri.UserInfo.Length!=0 || uri.Fragment.Length!=0) throw new InvalidOperationException("Unsafe continuation URL");
         return uri;
     }}
@@ -278,7 +278,7 @@ fn render_url(
 #[cfg(test)]
 mod url_tests {
     use super::*;
-    use kaji_core::{HttpMethod, OperationParameter, OperationResponse};
+    use poolster_core::{HttpMethod, OperationParameter, OperationResponse};
     fn api() -> Api {
         let mut operation = Operation {
             id: "listLinks".into(),
@@ -295,13 +295,13 @@ mod url_tests {
             responses: vec![OperationResponse::json(
                 "200",
                 SchemaValue::new(SchemaKind::Object {
-                    fields: vec![kaji_core::Field {
+                    fields: vec![poolster_core::Field {
                         name: "next".into(),
                         value: SchemaValue::new(SchemaKind::String),
                         required: false,
                         annotations: Default::default(),
                     }],
-                    additional_properties: kaji_core::AdditionalProperties::Forbidden,
+                    additional_properties: poolster_core::AdditionalProperties::Forbidden,
                 }),
             )],
             ..Default::default()
@@ -329,7 +329,7 @@ mod url_tests {
             .map(str::to_owned)
             .unwrap_or_else(|| render_operation_chunk(&api, &api.operations, "Probe"));
         assert!(source.contains("ListLinksPagesAsync"));
-        assert!(source.contains("ListLinksKajiURLAsync"));
+        assert!(source.contains("ListLinksPoolsterURLAsync"));
         assert!(source.contains("uri.IdnHost"));
         assert!(source.contains("uri.UserInfo.Length!=0"));
         assert!(source.contains("uri.Port!=_baseUri.Port"));

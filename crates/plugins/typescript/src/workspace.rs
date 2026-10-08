@@ -1,7 +1,7 @@
 //! Shared TypeScript package state and immutable provider contracts.
 use crate::TypeScript;
 use anyhow::{Result, bail};
-use kaji_core::{
+use poolster_core::{
     GeneratedFile,
     engine::{Contract, FinalizeContext},
 };

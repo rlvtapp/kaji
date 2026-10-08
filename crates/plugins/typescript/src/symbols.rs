@@ -1,5 +1,5 @@
 //! Allocate public names before rendering, including case-insensitive paths.
-use kaji_core::{Api, SchemaKind};
+use poolster_core::{Api, SchemaKind};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) fn identifier(value: &str) -> String {
@@ -173,7 +173,7 @@ pub(crate) fn prepare(api: &Api) -> Api {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kaji_core::{Operation, OperationResponse, Schema, SchemaValue};
+    use poolster_core::{Operation, OperationResponse, Schema, SchemaValue};
 
     #[test]
     fn allocations_preserve_distinct_wire_contracts_and_resolve_references() {
@@ -221,8 +221,8 @@ mod tests {
     #[test]
     #[ignore = "requires Node and KAJI_TSC_JS"]
     fn collision_heavy_sdk_compiles_with_original_provider_contract_keys() {
-        use kaji_core::engine::Packages;
-        use kaji_core::{HttpMethod, OperationMediaType, OperationRequestBody};
+        use poolster_core::engine::Packages;
+        use poolster_core::{HttpMethod, OperationMediaType, OperationRequestBody};
         let long = "LongComponent".repeat(15);
         let api = Api {
             name: "Collision API".into(),

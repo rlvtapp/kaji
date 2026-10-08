@@ -10,7 +10,7 @@ fn check(name: &str, status: &str, action: &str) -> Value {
 /// Diagnose an existing generated output without building, writing or publishing.
 pub fn doctor(root: &Path, repository: Option<&str>) -> Result<Value> {
     let mut checks = Vec::new();
-    let inventory = root.join(kaji_core::files::OWNERSHIP_PATH);
+    let inventory = root.join(poolster_core::files::OWNERSHIP_PATH);
     let inventory_safe = !root
         .symlink_metadata()
         .is_ok_and(|metadata| metadata.file_type().is_symlink())
@@ -18,7 +18,7 @@ pub fn doctor(root: &Path, repository: Option<&str>) -> Result<Value> {
             .symlink_metadata()
             .is_ok_and(|metadata| metadata.file_type().is_symlink())
         && !root
-            .join(".kaji")
+            .join(".poolster")
             .symlink_metadata()
             .is_ok_and(|metadata| metadata.file_type().is_symlink());
     let ownership = inventory_safe
@@ -31,7 +31,7 @@ pub fn doctor(root: &Path, repository: Option<&str>) -> Result<Value> {
     checks.push(check(
         "ownership",
         if valid { "ready" } else { "needs_action" },
-        "Generate into a dedicated output root; retain its .kaji ownership inventory.",
+        "Generate into a dedicated output root; retain its .poolster ownership inventory.",
     ));
     let mut packages = Vec::new();
     if let Some(files) = ownership
@@ -40,7 +40,7 @@ pub fn doctor(root: &Path, repository: Option<&str>) -> Result<Value> {
         .and_then(|value| value["files"].as_object())
     {
         for path in files.keys().filter(|path| {
-            path.ends_with("/.kaji/package.json") || path.as_str() == ".kaji/package.json"
+            path.ends_with("/.poolster/package.json") || path.as_str() == ".poolster/package.json"
         }) {
             let relative = Path::new(path);
             let safe = !relative.is_absolute()
@@ -60,7 +60,7 @@ pub fn doctor(root: &Path, repository: Option<&str>) -> Result<Value> {
                 .then(|| fs::read(root.join(relative)).ok())
                 .flatten()
                 .and_then(|bytes| {
-                    serde_json::from_slice::<kaji_core::release::PackageMetadata>(&bytes).ok()
+                    serde_json::from_slice::<poolster_core::release::PackageMetadata>(&bytes).ok()
                 })
                 .filter(|metadata| metadata.validate().is_ok());
             match metadata {
@@ -132,7 +132,7 @@ pub fn doctor(root: &Path, repository: Option<&str>) -> Result<Value> {
     let ready = checks.iter().all(|check| check["status"] == "ready");
     Ok(
         json!({"schema_version":1,"status":if ready {"ready_for_review"} else {"needs_action"},"checks":checks,"packages":packages,"remote":remote,
-        "next_steps":["generate --config kaji.json","generate --config kaji.json --check","sdk run --root generated --package PATH --phase build","sdk run --root generated --package PATH --phase test","sdk init --root generated --dry-run","sdk pr --config kaji.json --repository OWNER/REPO --dry-run"],
+        "next_steps":["generate --config poolster.json","generate --config poolster.json --check","sdk run --root generated --package PATH --phase build","sdk run --root generated --package PATH --phase test","sdk init --root generated --dry-run","sdk pr --config poolster.json --repository OWNER/REPO --dry-run"],
         "limits":"Tool presence and metadata checks do not verify credential values, registry trust, branch protection, workflow health or publication. No package commands are executed."}),
     )
 }
@@ -141,8 +141,8 @@ pub fn doctor(root: &Path, repository: Option<&str>) -> Result<Value> {
 pub fn inspect(root: &Path) -> Result<Value> {
     for path in [
         root.to_path_buf(),
-        root.join(".kaji"),
-        root.join(kaji_core::files::OWNERSHIP_PATH),
+        root.join(".poolster"),
+        root.join(poolster_core::files::OWNERSHIP_PATH),
     ] {
         anyhow::ensure!(
             !path.symlink_metadata()?.file_type().is_symlink(),
@@ -150,7 +150,7 @@ pub fn inspect(root: &Path) -> Result<Value> {
         );
     }
     let inventory: Value =
-        serde_json::from_slice(&fs::read(root.join(kaji_core::files::OWNERSHIP_PATH))?)?;
+        serde_json::from_slice(&fs::read(root.join(poolster_core::files::OWNERSHIP_PATH))?)?;
     anyhow::ensure!(inventory["version"] == 1, "unsupported ownership inventory");
     let files = inventory["files"]
         .as_object()
@@ -168,17 +168,20 @@ mod tests {
     #[test]
     fn doctor_projects_metadata_without_executing_commands_and_inspection_lists_owners() {
         let root = tempfile::tempdir().unwrap();
-        let mut metadata = kaji_core::release::PackageMetadata::new("probe");
+        let mut metadata = poolster_core::release::PackageMetadata::new("probe");
         metadata.language = "typescript".into();
         metadata.version = "0.1.0".into();
-        metadata.build.push(kaji_core::release::PackageCommand {
+        metadata.build.push(poolster_core::release::PackageCommand {
             program: "MUST_NOT_EXECUTE".into(),
             args: vec!["SECRET_ARG".into()],
         });
-        let mut tree = kaji_core::GeneratedTree::default();
+        let mut tree = poolster_core::GeneratedTree::default();
         tree.insert(
-            kaji_core::GeneratedFile::new("sdk/.kaji/package.json", metadata.to_json().unwrap())
-                .unwrap(),
+            poolster_core::GeneratedFile::new(
+                "sdk/.poolster/package.json",
+                metadata.to_json().unwrap(),
+            )
+            .unwrap(),
         )
         .unwrap();
         tree.write_to(root.path()).unwrap();
@@ -195,10 +198,10 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let report = doctor(root.path(), None).unwrap();
         assert_eq!(report["status"], "needs_action");
-        fs::create_dir_all(root.path().join(".kaji")).unwrap();
+        fs::create_dir_all(root.path().join(".poolster")).unwrap();
         fs::write(
-            root.path().join(kaji_core::files::OWNERSHIP_PATH),
-            br#"{"version":1,"files":{"../secret/.kaji/package.json":{}}}"#,
+            root.path().join(poolster_core::files::OWNERSHIP_PATH),
+            br#"{"version":1,"files":{"../secret/.poolster/package.json":{}}}"#,
         )
         .unwrap();
         let report = doctor(root.path(), None).unwrap();

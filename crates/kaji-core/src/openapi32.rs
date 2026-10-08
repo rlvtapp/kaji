@@ -94,17 +94,17 @@ fn read<T: for<'de> Deserialize<'de>>(
         .unwrap_or_else(|| Ok(Vec::new()))
 }
 pub fn request_content(operation: &Operation) -> serde_json::Result<Vec<ContentDefinition>> {
-    read(&operation.annotations, "kaji.request_content")
+    read(&operation.annotations, "poolster.request_content")
 }
 pub fn response_content(
     operation: &Operation,
 ) -> serde_json::Result<Vec<ResponseContentDefinition>> {
-    read(&operation.annotations, "kaji.response_content")
+    read(&operation.annotations, "poolster.response_content")
 }
 pub fn parameter_content(
     parameter: &OperationParameter,
 ) -> serde_json::Result<Vec<ContentDefinition>> {
-    read(&parameter.annotations, "kaji.parameter_content")
+    read(&parameter.annotations, "poolster.parameter_content")
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

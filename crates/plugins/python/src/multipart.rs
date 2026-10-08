@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use super::super::*;
-    use kaji_core::{
+    use poolster_core::{
         Field, HttpMethod, OperationMediaType, OperationParameter, OperationRequestBody,
     };
     use std::{fs, process::Command};

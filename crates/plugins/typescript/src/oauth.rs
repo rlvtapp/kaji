@@ -1,12 +1,12 @@
 use crate::TypeScript;
 use anyhow::Result;
-use kaji_core::{
+use poolster_core::{
     GeneratedFile,
     engine::{Meta, Plugin, PluginContext, Requirement},
 };
 pub struct OAuth {
     meta: Meta,
-    transport: Option<kaji_core::engine::Handle<crate::composition::Transport>>,
+    transport: Option<poolster_core::engine::Handle<crate::composition::Transport>>,
 }
 pub fn oauth() -> OAuth {
     OAuth {
@@ -17,7 +17,7 @@ pub fn oauth() -> OAuth {
 impl OAuth {
     pub fn using_transport(
         mut self,
-        transport: kaji_core::engine::Handle<crate::composition::Transport>,
+        transport: poolster_core::engine::Handle<crate::composition::Transport>,
     ) -> Self {
         self.transport = Some(transport);
         self
@@ -39,7 +39,7 @@ impl Plugin<TypeScript> for OAuth {
     fn generate(&self, cx: &mut PluginContext<'_, TypeScript>) -> Result<()> {
         let transport = cx.inputs.get::<crate::composition::Transport>()?;
         anyhow::ensure!(
-            transport.module == std::path::Path::new(".kaji/client"),
+            transport.module == std::path::Path::new(".poolster/client"),
             "OAuth requires the maintained TypeScript transport"
         );
         cx.workspace
@@ -59,21 +59,21 @@ mod tests {
     #[test]
     #[ignore = "requires KAJI_TSC_JS and Node"]
     fn native_oauth_singleflight_replay_cancellation_and_redaction() {
-        let api = kaji_core::Api {
+        let api = poolster_core::Api {
             name: "OAuth".into(),
-            schemas: vec![kaji_core::Schema::new(
+            schemas: vec![poolster_core::Schema::new(
                 "Thing",
-                kaji_core::SchemaValue::new(kaji_core::SchemaKind::String),
+                poolster_core::SchemaValue::new(poolster_core::SchemaKind::String),
             )],
-            operations: vec![kaji_core::Operation {
+            operations: vec![poolster_core::Operation {
                 id: "getThing".into(),
-                method: kaji_core::HttpMethod::Get,
+                method: poolster_core::HttpMethod::Get,
                 path: "/thing".into(),
                 ..Default::default()
             }],
             ..Default::default()
         };
-        let tree = kaji_core::engine::Packages::new()
+        let tree = poolster_core::engine::Packages::new()
             .package(crate::package("sdk").with(crate::sdk()).with(oauth()))
             .generate(&api, None)
             .unwrap();

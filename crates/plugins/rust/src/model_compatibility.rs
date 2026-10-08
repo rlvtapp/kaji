@@ -40,7 +40,7 @@ pub(crate) fn render_open_enum(output: &mut String, name: &str, values: &[Value]
 #[cfg(test)]
 mod tests {
     use crate::PackageExt;
-    use kaji_core::{AdditionalProperties, Api, Field, Schema, SchemaKind, SchemaValue};
+    use poolster_core::{AdditionalProperties, Api, Field, Schema, SchemaKind, SchemaValue};
     fn api() -> Api {
         let mut state = SchemaValue::new(SchemaKind::String);
         state.enum_values = vec![
@@ -75,7 +75,7 @@ mod tests {
         for sdk in [true, false] {
             for enabled in [true, false] {
                 let package = crate::package("sdk").open_enums(enabled);
-                let packages = kaji_core::engine::Packages::new();
+                let packages = poolster_core::engine::Packages::new();
                 let tree = if sdk {
                     packages.package(package.with(crate::sdk()))
                 } else {
@@ -99,7 +99,7 @@ mod tests {
             unreachable!()
         };
         fields[0].name = "additional_properties".into();
-        let tree = kaji_core::engine::Packages::new()
+        let tree = poolster_core::engine::Packages::new()
             .package(crate::package("sdk").with(crate::sdk()))
             .generate(&api, None)
             .unwrap();
@@ -111,7 +111,7 @@ mod tests {
     #[ignore = "requires cached generated Cargo dependencies"]
     fn native_nested_future_enum_absent_null_and_unknown_fields_roundtrip() {
         let root = tempfile::tempdir().unwrap();
-        kaji_core::engine::Packages::new()
+        poolster_core::engine::Packages::new()
             .package(crate::package("sdk").open_enums(true).with(crate::sdk()))
             .generate(&api(), None)
             .unwrap()
@@ -123,17 +123,17 @@ mod tests {
 #[cfg(test)] mod sequence_probe {
  use super::*;
  #[test] fn framing() {
-  let lines:Vec<serde_json::Value>=kaji_decode_json(b"false\n0\nnull\n{\"future\":true}\r\n", "application/x-ndjson").unwrap();
+  let lines:Vec<serde_json::Value>=poolster_decode_json(b"false\n0\nnull\n{\"future\":true}\r\n", "application/x-ndjson").unwrap();
   assert_eq!(lines,serde_json::json!([false,0,null,{"future":true}]).as_array().unwrap().clone());
-  let seq:Vec<serde_json::Value>=kaji_decode_json(b"\x1e{\n\"future\":true\n}\n\x1e0\n", "application/json-seq").unwrap();
+  let seq:Vec<serde_json::Value>=poolster_decode_json(b"\x1e{\n\"future\":true\n}\n\x1e0\n", "application/json-seq").unwrap();
   assert_eq!(seq.len(),2);
-  for malformed in [b"missing separator".as_slice(), b"\x1e\x1e0", b"\x1e0 trailing"] { assert!(kaji_decode_json::<Vec<serde_json::Value>>(malformed,"application/json-seq").is_err()); }
-  assert!(kaji_decode_json::<Vec<serde_json::Value>>(b"{\n\"a\":1\n}","application/x-ndjson").is_err());
+  for malformed in [b"missing separator".as_slice(), b"\x1e\x1e0", b"\x1e0 trailing"] { assert!(poolster_decode_json::<Vec<serde_json::Value>>(malformed,"application/json-seq").is_err()); }
+  assert!(poolster_decode_json::<Vec<serde_json::Value>>(b"{\n\"a\":1\n}","application/x-ndjson").is_err());
   let records=serde_json::json!([false,0,null,{"future":"雪"}]);
-  for media in ["application/x-ndjson","application/json-seq"] {let encoded=kaji_encode_sequence(&records,media).unwrap();let decoded:serde_json::Value=kaji_decode_json(&encoded,media).unwrap();assert_eq!(decoded,records);}
-  assert!(kaji_encode_sequence(&serde_json::json!({}),"application/x-ndjson").is_err());
-  assert!(kaji_valid_raw_query("a=0&b=false&name=%E9%9B%AA"));
-  for invalid in ["?a=1","a=#fragment","a=%ZZ","a=%","a=\n"] { assert!(!kaji_valid_raw_query(invalid)); }
+  for media in ["application/x-ndjson","application/json-seq"] {let encoded=poolster_encode_sequence(&records,media).unwrap();let decoded:serde_json::Value=poolster_decode_json(&encoded,media).unwrap();assert_eq!(decoded,records);}
+  assert!(poolster_encode_sequence(&serde_json::json!({}),"application/x-ndjson").is_err());
+  assert!(poolster_valid_raw_query("a=0&b=false&name=%E9%9B%AA"));
+  for invalid in ["?a=1","a=#fragment","a=%ZZ","a=%","a=\n"] { assert!(!poolster_valid_raw_query(invalid)); }
  }
 }
 "#;

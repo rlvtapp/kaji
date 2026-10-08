@@ -1,4 +1,4 @@
-use kaji_input_asyncapi::parse;
+use poolster_input_asyncapi::parse;
 #[test]
 fn official_asyncapi_corpus() {
     for (name, source, operations, schemas) in [

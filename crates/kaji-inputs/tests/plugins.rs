@@ -1,12 +1,12 @@
 #![cfg(feature = "graphql")]
 use anyhow::Result;
-use kaji_core::{
+use poolster_core::{
     Api, GeneratedFile,
     engine::{
         Contract, Handle, Language, Meta, Package, Packages, Plugin, PluginContext, Requirement,
     },
 };
-use kaji_inputs::{
+use poolster_inputs::{
     InputContract, InputPlugin, InputProvider, default_registry, graphql::GraphqlDocument,
 };
 use std::{path::Path, sync::Arc};
@@ -87,7 +87,7 @@ impl InputPlugin for Replacement {
         "graphql"
     }
     fn load(&self, _: &Path) -> Result<InputContract> {
-        let document = kaji_inputs::graphql::parse("type Query { replacement: String }")?;
+        let document = poolster_inputs::graphql::parse("type Query { replacement: String }")?;
         let mut contract = InputContract::new(document.summary());
         contract.publish(document)?;
         Ok(contract)

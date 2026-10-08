@@ -20,7 +20,7 @@ pub(super) fn apply(config: &mut ProjectConfig) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kaji_core::SourceLayout;
+    use poolster_core::SourceLayout;
 
     #[test]
     fn layout_defaults_inherit_and_explicit_overrides_survive() {
@@ -71,21 +71,23 @@ mod tests {
         }))
         .unwrap();
         apply(&mut config).unwrap();
-        let api = kaji_core::Api {
+        let api = poolster_core::Api {
             name: "Example".into(),
             version: "1.0.0".into(),
-            operations: vec![kaji_core::Operation {
+            operations: vec![poolster_core::Operation {
                 id: "readItem".into(),
-                method: kaji_core::HttpMethod::Get,
+                method: poolster_core::HttpMethod::Get,
                 path: "/items".into(),
                 ..Default::default()
             }],
             ..Default::default()
         };
-        let profiles =
-            super::super::config_profiles(kaji_core::SdkClientStyle::Namespaced, &config.packages)
-                .unwrap();
-        let tree = kaji::generate(&api, profiles).unwrap();
+        let profiles = super::super::config_profiles(
+            poolster_core::SdkClientStyle::Namespaced,
+            &config.packages,
+        )
+        .unwrap();
+        let tree = poolster::generate(&api, profiles).unwrap();
         assert!(tree.iter().any(|(path, _)| {
             path.to_string_lossy()
                 .contains("react-query_operations/readItem.ts")

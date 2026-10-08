@@ -57,7 +57,7 @@ fn object(
             result
         }
         SchemaKind::AllOf { variants } if !variants.is_empty() => {
-            let mut fields: Vec<kaji_core::Field> = Vec::new();
+            let mut fields: Vec<poolster_core::Field> = Vec::new();
             let mut additional_properties = AdditionalProperties::Unspecified;
             for variant in variants {
                 let SchemaKind::Object {
@@ -105,7 +105,7 @@ mod tests {
 
     fn object_value(name: &str, required: bool) -> SchemaValue {
         SchemaValue::new(SchemaKind::Object {
-            fields: vec![kaji_core::Field {
+            fields: vec![poolster_core::Field {
                 name: name.into(),
                 value: SchemaValue::new(SchemaKind::String),
                 required,

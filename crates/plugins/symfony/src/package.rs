@@ -1,5 +1,5 @@
 use anyhow::Result;
-use kaji_core::engine::{Language, Meta, Package, Plugin, PluginContext};
+use poolster_core::engine::{Language, Meta, Package, Plugin, PluginContext};
 
 pub struct Symfony;
 #[derive(Default)]

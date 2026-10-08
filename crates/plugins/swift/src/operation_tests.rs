@@ -1,8 +1,8 @@
 use super::*;
-use kaji_core::engine::{Meta, Plugin, PluginContext};
+use poolster_core::engine::{Meta, Plugin, PluginContext};
 pub struct OperationTests {
     meta: Meta,
-    options: kaji_core::samples::SampleOptions,
+    options: poolster_core::samples::SampleOptions,
     limit: usize,
 }
 pub fn operation_tests() -> OperationTests {
@@ -13,7 +13,7 @@ pub fn operation_tests() -> OperationTests {
     }
 }
 impl OperationTests {
-    pub fn sample_options(mut self, options: kaji_core::samples::SampleOptions) -> Self {
+    pub fn sample_options(mut self, options: poolster_core::samples::SampleOptions) -> Self {
         self.options = options;
         self
     }
@@ -25,9 +25,9 @@ impl OperationTests {
 fn sample(
     api: &Api,
     value: &SchemaValue,
-    options: kaji_core::samples::SampleOptions,
+    options: poolster_core::samples::SampleOptions,
 ) -> std::result::Result<Value, String> {
-    let report = kaji_core::samples::schema_samples(api, value, options);
+    let report = poolster_core::samples::schema_samples(api, value, options);
     report
         .samples
         .into_iter()
@@ -38,7 +38,7 @@ fn sample(
 fn fixture(
     api: &Api,
     op: &Operation,
-    options: kaji_core::samples::SampleOptions,
+    options: poolster_core::samples::SampleOptions,
 ) -> std::result::Result<Value, String> {
     if crate::multipart::selected(op) {
         return Err("multipart MIME requests require the dedicated native test adapter".into());
@@ -192,7 +192,7 @@ impl Plugin<crate::Swift> for OperationTests {
                     } else {
                         call
                     };
-                    code.push_str(&format!("do {{let sample=try JSONSerialization.jsonObject(with:Data({fixture}.utf8)) as! [String:Any]\n let driver=ProbeTransport(sample:sample)\n let client=KajiClient(options:.init(baseURL:URL(string:\"https://unused.example\")!),transport:driver)\n {result}\n guard driver.calls==1 else {{throw ProbeError.mismatch}}\n}}\n"));
+                    code.push_str(&format!("do {{let sample=try JSONSerialization.jsonObject(with:Data({fixture}.utf8)) as! [String:Any]\n let driver=ProbeTransport(sample:sample)\n let client=PoolsterClient(options:.init(baseURL:URL(string:\"https://unused.example\")!),transport:driver)\n {result}\n guard driver.calls==1 else {{throw ProbeError.mismatch}}\n}}\n"));
                     count += 1;
                 }
             }
@@ -221,12 +221,12 @@ mod tests {
             operations: vec![
                 Operation {
                     id: "readThing".into(),
-                    method: kaji_core::HttpMethod::Get,
+                    method: poolster_core::HttpMethod::Get,
                     path: "/thing".into(),
-                    responses: vec![kaji_core::OperationResponse {
+                    responses: vec![poolster_core::OperationResponse {
                         status: "200".into(),
                         description: None,
-                        media_types: vec![kaji_core::OperationMediaType {
+                        media_types: vec![poolster_core::OperationMediaType {
                             content_type: "application/json".into(),
                             schema: Some(SchemaValue::new(SchemaKind::String)),
                         }],
@@ -235,9 +235,9 @@ mod tests {
                 },
                 Operation {
                     id: "deleteThing".into(),
-                    method: kaji_core::HttpMethod::Delete,
+                    method: poolster_core::HttpMethod::Delete,
                     path: "/thing".into(),
-                    responses: vec![kaji_core::OperationResponse {
+                    responses: vec![poolster_core::OperationResponse {
                         status: "204".into(),
                         description: None,
                         media_types: vec![],
@@ -249,14 +249,14 @@ mod tests {
         };
         api.operations.push(Operation {
             id: "createThing".into(),
-            method: kaji_core::HttpMethod::Post,
+            method: poolster_core::HttpMethod::Post,
             path: "/thing".into(),
-            request_body: Some(kaji_core::OperationRequestBody::json(
+            request_body: Some(poolster_core::OperationRequestBody::json(
                 SchemaValue::new(SchemaKind::Boolean),
                 true,
             )),
             parameters: vec![
-                kaji_core::OperationParameter {
+                poolster_core::OperationParameter {
                     name: "flag".into(),
                     location: "query".into(),
                     required: true,
@@ -264,7 +264,7 @@ mod tests {
                     description: None,
                     annotations: Default::default(),
                 },
-                kaji_core::OperationParameter {
+                poolster_core::OperationParameter {
                     name: "count".into(),
                     location: "header".into(),
                     required: true,
@@ -273,10 +273,10 @@ mod tests {
                     annotations: Default::default(),
                 },
             ],
-            responses: vec![kaji_core::OperationResponse {
+            responses: vec![poolster_core::OperationResponse {
                 status: "200".into(),
                 description: None,
-                media_types: vec![kaji_core::OperationMediaType {
+                media_types: vec![poolster_core::OperationMediaType {
                     content_type: "application/json".into(),
                     schema: Some(SchemaValue::new(SchemaKind::Boolean)),
                 }],
@@ -285,9 +285,9 @@ mod tests {
         });
         api.operations.push(Operation {
             id: "retryThing".into(),
-            method: kaji_core::HttpMethod::Post,
+            method: poolster_core::HttpMethod::Post,
             path: "/thing".into(),
-            parameters: vec![kaji_core::OperationParameter {
+            parameters: vec![poolster_core::OperationParameter {
                 name: "X-Once".into(),
                 location: "header".into(),
                 required: false,
@@ -295,7 +295,7 @@ mod tests {
                 description: None,
                 annotations: Default::default(),
             }],
-            responses: vec![kaji_core::OperationResponse {
+            responses: vec![poolster_core::OperationResponse {
                 status: "204".into(),
                 description: None,
                 media_types: vec![],
@@ -306,7 +306,7 @@ mod tests {
             )]),
             ..Default::default()
         });
-        let tree = kaji_core::engine::Packages::new()
+        let tree = poolster_core::engine::Packages::new()
             .package(
                 crate::package("sdk")
                     .with(crate::sdk())
@@ -320,15 +320,15 @@ mod tests {
         let probe = cwd.join("test/OperationTests.swift");
         let source = std::fs::read_to_string(&probe).unwrap();
         let extra = r#"
-let retry=RetryProbe();let client=KajiClient(options:.init(baseURL:URL(string:"https://unused.example")!,maxAttempts:2,retryBaseDelay:0),transport:retry)
+let retry=RetryProbe();let client=PoolsterClient(options:.init(baseURL:URL(string:"https://unused.example")!,maxAttempts:2,retryBaseDelay:0),transport:retry)
 try await client.deleteThing();guard retry.calls==2 else{throw ProbeError.mismatch}
 retry.calls=0;retry.keys=[];try await client.retryThing();guard retry.calls==2,retry.keys[0]==retry.keys[1],retry.keys[0]?.count==36 else{throw ProbeError.mismatch}
 retry.calls=0;retry.keys=[];var request=URLRequest(url:URL(string:"https://unused.example")!);request.httpMethod="POST"
-do{try await client.sendVoid(request);throw ProbeError.mismatch}catch KajiAPIError.status{ } ;guard retry.calls==1 else{throw ProbeError.mismatch}
+do{try await client.sendVoid(request);throw ProbeError.mismatch}catch PoolsterAPIError.status{ } ;guard retry.calls==1 else{throw ProbeError.mismatch}
 retry.calls=0;retry.keys=[];request.httpMethod="PATCH";request.setValue("stable",forHTTPHeaderField:"X-Once")
 try await client.sendVoid(request,idempotencyHeader:"X-Once");guard retry.calls==2,retry.keys==["stable","stable"] else{throw ProbeError.mismatch}
-retry.calls=0;request.setValue("  ",forHTTPHeaderField:"X-Once");do{try await client.sendVoid(request,idempotencyHeader:"X-Once");throw ProbeError.mismatch}catch KajiAPIError.status{ };guard retry.calls==1 else{throw ProbeError.mismatch}
-let waiting=RetryProbe();waiting.delay="60000";let slow=KajiClient(options:.init(baseURL:URL(string:"https://unused.example")!,maxAttempts:2,retryMaxDelay:60),transport:waiting)
+retry.calls=0;request.setValue("  ",forHTTPHeaderField:"X-Once");do{try await client.sendVoid(request,idempotencyHeader:"X-Once");throw ProbeError.mismatch}catch PoolsterAPIError.status{ };guard retry.calls==1 else{throw ProbeError.mismatch}
+let waiting=RetryProbe();waiting.delay="60000";let slow=PoolsterClient(options:.init(baseURL:URL(string:"https://unused.example")!,maxAttempts:2,retryMaxDelay:60),transport:waiting)
 let cancelled=Task {try await slow.deleteThing()};try await Task.sleep(nanoseconds:20_000_000);cancelled.cancel();do{try await cancelled.value;throw ProbeError.mismatch}catch is CancellationError{};guard waiting.calls==1 else{throw ProbeError.mismatch}
 "#;
         let source = source.replace("\n}}\n", &(extra.to_owned() + "\n}}\n"))

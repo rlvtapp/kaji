@@ -1,5 +1,5 @@
 use super::*;
-use kaji_core::engine::{Meta, Plugin, PluginContext};
+use poolster_core::engine::{Meta, Plugin, PluginContext};
 pub struct Webhooks {
     meta: Meta,
 }
@@ -18,7 +18,7 @@ impl Plugin<Java> for Webhooks {
             cx.settings
                 .package_name
                 .as_deref()
-                .unwrap_or(&format!("io.kaji.{}", package_segment(&cx.api.name))),
+                .unwrap_or(&format!("io.poolster.{}", package_segment(&cx.api.name))),
         );
         cx.files.emit(GeneratedFile::new(
             format!(
@@ -33,7 +33,7 @@ impl Plugin<Java> for Webhooks {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kaji_core::engine::Packages;
+    use poolster_core::engine::Packages;
     #[test]
     fn opt_in_emits_standard_webhook_verifier() {
         let tree = Packages::new()

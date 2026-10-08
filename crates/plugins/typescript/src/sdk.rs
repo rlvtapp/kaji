@@ -4,7 +4,7 @@ use crate::models::{
     ModelOptions, ModelRenderOptions, ModelRenderer, operation_model_file_identifier,
 };
 use anyhow::{Result, bail};
-use kaji_core::{
+use poolster_core::{
     Api, GeneratedFile, GeneratedTree, Operation, SdkClientStyle, SecuritySchemeCatalog,
 };
 use serde_json::Value;
@@ -73,7 +73,7 @@ pub(crate) fn generate_sdk(
             .and_then(Value::as_str)
             == Some("page")
         {
-            kaji_core::pagination::normalize_pagination(api, operation, None)?;
+            poolster_core::pagination::normalize_pagination(api, operation, None)?;
         }
     }
     generate_typescript_sdk(api, profile, security_schemes)
@@ -84,8 +84,8 @@ fn generate_typescript_sdk(
     profile: &SdkConfig,
     security_schemes: Option<&SecuritySchemeCatalog>,
 ) -> Result<GeneratedTree> {
-    // Kaji's tag-directory layout otherwise puts every untagged operation in
-    // `default`. Kaji's SDK surface uses the first meaningful path segment as
+    // Poolster's tag-directory layout otherwise puts every untagged operation in
+    // `default`. Poolster's SDK surface uses the first meaningful path segment as
     // a stable resource namespace, matching the native targets.
     let mut sdk_api = crate::symbols::prepare(api);
     if profile.group_by_tag {
@@ -111,7 +111,7 @@ fn generate_typescript_sdk(
     let client_options = ClientRenderOptions {
         model_options: Some(profile.model_options.clone()),
         output_dir: clients_dir,
-        runtime_dir: ".kaji".into(),
+        runtime_dir: ".poolster".into(),
         throw_on_error: profile.throw_on_error,
         group_by_tag: profile.group_by_tag,
         group_default_directory: profile.group_by_tag,
@@ -134,8 +134,8 @@ fn generate_typescript_sdk(
         tree.insert(file)?;
     }
     tree.insert(GeneratedFile::new(
-        format!("{root}/.kaji/client.ts"),
-        kaji_runtime(profile.transport, security_schemes),
+        format!("{root}/.poolster/client.ts"),
+        poolster_runtime(profile.transport, security_schemes),
     )?)?;
     let client_name = (profile.surface == SdkSurface::Client).then(|| {
         profile
@@ -144,22 +144,22 @@ fn generate_typescript_sdk(
             .unwrap_or_else(|| sdk_client_name(&sdk_api.name))
     });
     if let Some(client_name) = &client_name {
-        for file in kaji_sdk_client(
+        for file in poolster_sdk_client(
             &sdk_api,
             client_name,
             profile.group_by_tag,
             profile.client_style,
             root,
-            ".kaji",
+            ".poolster",
         )? {
             tree.insert(file)?;
         }
     }
     tree.insert_custom(GeneratedFile::new(
         format!("{root}/custom/index.ts"),
-        "// This module is created once and never overwritten by Kaji.\n// Add stable helpers, exports, or product-specific wrappers here.\nexport {}\n",
+        "// This module is created once and never overwritten by Poolster.\n// Add stable helpers, exports, or product-specific wrappers here.\nexport {}\n",
     )?)?;
-    for file in kaji_barrels(
+    for file in poolster_barrels(
         &tree,
         root,
         &sdk_api,
@@ -171,11 +171,11 @@ fn generate_typescript_sdk(
     }
     tree.insert(GeneratedFile::new(
         format!("{root}/package.json"),
-        kaji_package(&sdk_api, profile.transport, profile.package_name.as_deref())?,
+        poolster_package(&sdk_api, profile.transport, profile.package_name.as_deref())?,
     )?)?;
     tree.insert(GeneratedFile::new(
         format!("{root}/README.md"),
-        kaji_readme(&sdk_api, profile),
+        poolster_readme(&sdk_api, profile),
     )?)?;
     tree.insert(GeneratedFile::new(
         format!("{root}/tsconfig.json"),
@@ -189,7 +189,7 @@ const BARREL_EXPORTS_PER_FILE: usize = 100;
 /// Builds a shallow, stable public export topology. A large API no longer
 /// writes every symbol into `index.ts`: consumers retain normal root imports
 /// while TypeScript only has to parse small barrel modules at each level.
-fn kaji_barrels(
+fn poolster_barrels(
     tree: &GeneratedTree,
     root: &str,
     api: &Api,
@@ -208,7 +208,7 @@ fn kaji_barrels(
     if let Some(client_name) = client_name {
         output.push_str(&format!("export {{ {client_name} }} from './client'\n"));
     }
-    output.push_str("export { createClient } from './.kaji/client'\nexport type { ClientConfig, ClientInstance, RequestOptions, ClientMiddleware, MiddlewareNext, MiddlewareResponse } from './.kaji/client'\n");
+    output.push_str("export { createClient } from './.poolster/client'\nexport type { ClientConfig, ClientInstance, RequestOptions, ClientMiddleware, MiddlewareNext, MiddlewareResponse } from './.poolster/client'\n");
     output.push_str("export * from './models'\nexport * from './clients'\n");
     files.push(("index.ts".into(), output));
 
@@ -414,7 +414,7 @@ fn render_client_barrel_chunks(
     Ok(names)
 }
 
-pub(crate) fn kaji_sdk_client(
+pub(crate) fn poolster_sdk_client(
     api: &Api,
     class_name: &str,
     group_by_tag: bool,
@@ -425,15 +425,15 @@ pub(crate) fn kaji_sdk_client(
     match style {
         SdkClientStyle::Flat => Ok(vec![GeneratedFile::new(
             format!("{root}/client.ts"),
-            kaji_flat_sdk_client(api, class_name, group_by_tag, runtime_dir),
+            poolster_flat_sdk_client(api, class_name, group_by_tag, runtime_dir),
         )?]),
         SdkClientStyle::Namespaced => {
-            kaji_namespaced_sdk_client(api, class_name, group_by_tag, root, runtime_dir)
+            poolster_namespaced_sdk_client(api, class_name, group_by_tag, root, runtime_dir)
         }
     }
 }
 
-pub(crate) fn kaji_flat_sdk_client(
+pub(crate) fn poolster_flat_sdk_client(
     api: &Api,
     class_name: &str,
     group_by_tag: bool,
@@ -492,7 +492,7 @@ pub(crate) fn kaji_flat_sdk_client(
     output
 }
 
-fn kaji_namespaced_sdk_client(
+fn poolster_namespaced_sdk_client(
     api: &Api,
     class_name: &str,
     group_by_tag: bool,
@@ -1084,14 +1084,14 @@ fn operation_tag_directory_if_present(operation: &Operation) -> Option<String> {
         .filter(|tag| !tag.is_empty())
 }
 
-pub(crate) fn kaji_package(
+pub(crate) fn poolster_package(
     api: &Api,
     transport: SdkTransport,
     name: Option<&str>,
 ) -> Result<String> {
     let package_name = name
         .map(str::to_owned)
-        .unwrap_or_else(|| kaji_package_name(api, transport));
+        .unwrap_or_else(|| poolster_package_name(api, transport));
     let mut package = serde_json::json!({
         "name": package_name,
         "version": package_version(&api.version),
@@ -1111,7 +1111,7 @@ pub(crate) fn kaji_package(
     Ok(format!("{}\n", serde_json::to_string_pretty(&package)?))
 }
 
-fn kaji_package_name(api: &Api, transport: SdkTransport) -> String {
+fn poolster_package_name(api: &Api, transport: SdkTransport) -> String {
     format!(
         "@kaji/{}-{}",
         package_slug(&api.name),
@@ -1122,11 +1122,11 @@ fn kaji_package_name(api: &Api, transport: SdkTransport) -> String {
     )
 }
 
-fn kaji_readme(api: &Api, profile: &SdkConfig) -> String {
+fn poolster_readme(api: &Api, profile: &SdkConfig) -> String {
     let package_name = profile
         .package_name
         .clone()
-        .unwrap_or_else(|| kaji_package_name(api, profile.transport));
+        .unwrap_or_else(|| poolster_package_name(api, profile.transport));
     let client_name = profile
         .client_name
         .clone()
@@ -1179,7 +1179,7 @@ fn kaji_readme(api: &Api, profile: &SdkConfig) -> String {
         "{middleware}\n## Response shape checks\n\nSet `validateResponses: true` in client configuration to check declared buffered successful JSON response shapes, including responses returned or rewritten by middleware. Checks are disabled by default; a request can override the setting. `ResponseDecodeError` reports the failing path without response values. Extra fields and new enum strings remain accepted. HEAD, 204, SSE, error responses, and absent or unmatched response schemas are outside this scope. These checks cover structural types, required properties, nullability, and supported compositions, rather than all JSON Schema constraints.\n"
     );
     format!(
-        "# {} TypeScript SDK\n\nGenerated by Kaji.\n\n```sh\nnpm install {package_name}\n```\n\n```ts\n{client}\n```\n\nSee [STYLE_GUIDE.md](STYLE_GUIDE.md) for the selected client surface.\n\n{middleware}",
+        "# {} TypeScript SDK\n\nGenerated by Poolster.\n\n```sh\nnpm install {package_name}\n```\n\n```ts\n{client}\n```\n\nSee [STYLE_GUIDE.md](STYLE_GUIDE.md) for the selected client surface.\n\n{middleware}",
         api.name
     )
 }
@@ -1216,7 +1216,7 @@ fn package_version(version: &str) -> String {
     "0.1.0".to_owned()
 }
 
-pub(crate) fn kaji_runtime(
+pub(crate) fn poolster_runtime(
     transport: SdkTransport,
     security_schemes: Option<&SecuritySchemeCatalog>,
 ) -> String {
@@ -1351,7 +1351,7 @@ const resolvePaginationUrl = (nextUrl: string, baseUrl?: string): string => {
   return target.toString()
 }
 const codecFor = (codecs: Record<string, Codec> | undefined, contentType: string) => codecs?.[contentType.split(';')[0].trim()] ?? codecs?.['*/*']
-const validate = async (validator: Validator | undefined, value: unknown) => { if (!validator) return; if (typeof validator === 'function') return validator(value); const result = await validator['~standard']?.validate(value); if (result?.issues?.length) throw new TypeError(`Kaji validation failed: ${result.issues.map(String).join(', ')}`) }
+const validate = async (validator: Validator | undefined, value: unknown) => { if (!validator) return; if (typeof validator === 'function') return validator(value); const result = await validator['~standard']?.validate(value); if (result?.issues?.length) throw new TypeError(`Poolster validation failed: ${result.issues.map(String).join(', ')}`) }
 const formEntries = (name: string, value: unknown, encoding: FormEncoding = {}): Array<[string, string | Blob]> => {
   if (value === undefined || value === null) return []
   const style = encoding.style ?? 'form'; const explode = encoding.explode ?? true
@@ -1632,7 +1632,7 @@ const serializeQuery = (query: Record<string, unknown>, styles?: ParameterStyles
 }
 const resolvePath = (template: string, path?: Record<string, unknown>, styles?: ParameterStyles) => template.replace(/\{([^}]+)\}/g, (_match, key) => serializePath(key, path?.[key], styleFor(styles, 'path', key)) || `{${key}}`)
 const codecFor = (codecs: Record<string, Codec> | undefined, contentType: string) => codecs?.[contentType.split(';')[0].trim()] ?? codecs?.['*/*']
-const validate = async (validator: Validator | undefined, value: unknown) => { if (!validator) return; if (typeof validator === 'function') return validator(value); const result = await validator['~standard']?.validate(value); if (result?.issues?.length) throw new TypeError(`Kaji validation failed: ${result.issues.map(String).join(', ')}`) }
+const validate = async (validator: Validator | undefined, value: unknown) => { if (!validator) return; if (typeof validator === 'function') return validator(value); const result = await validator['~standard']?.validate(value); if (result?.issues?.length) throw new TypeError(`Poolster validation failed: ${result.issues.map(String).join(', ')}`) }
 const formEntries = (name: string, value: unknown, encoding: FormEncoding = {}): Array<[string, unknown]> => {
   if (value === undefined || value === null) return []
   const style = encoding.style ?? 'form'; const explode = encoding.explode ?? true
@@ -1771,7 +1771,7 @@ const createTransport = (config: ClientConfig = {}): ClientInstance => {
         throw error
       }
     }
-    throw new Error('Kaji retry loop completed without a response')
+    throw new Error('Poolster retry loop completed without a response')
   }
 }
 export const toEventStream = async <T>(response: Promise<unknown>): Promise<EventStreamResult<T>> => {
@@ -1900,7 +1900,7 @@ fn package_slug(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kaji_core::{
+    use poolster_core::{
         HttpMethod, OperationMediaType, OperationRequestBody, SecurityRequirement, SecurityScheme,
         SecuritySchemeKind,
     };
@@ -1913,12 +1913,12 @@ mod tests {
                 id: "listMessages".into(),
                 method: HttpMethod::Get,
                 path: "/messages".into(),
-                responses: vec![kaji_core::OperationResponse {
+                responses: vec![poolster_core::OperationResponse {
                     status: "200".into(),
                     description: None,
-                    media_types: vec![kaji_core::OperationMediaType {
+                    media_types: vec![poolster_core::OperationMediaType {
                         content_type: "application/json".into(),
-                        schema: Some(kaji_core::SchemaValue::reference(
+                        schema: Some(poolster_core::SchemaValue::reference(
                             "#/components/schemas/MessageList",
                         )),
                     }],
@@ -1942,7 +1942,7 @@ mod tests {
         };
 
         let tree = generate_sdk(&api, &SdkConfig::new("sdk/typescript"), Some(&catalog)).unwrap();
-        let runtime = tree.get("sdk/typescript/.kaji/client.ts").unwrap();
+        let runtime = tree.get("sdk/typescript/.poolster/client.ts").unwrap();
         let operation = tree
             .get("sdk/typescript/clients/messages/listMessages.ts")
             .unwrap();
@@ -2129,7 +2129,7 @@ mod tests {
         assert!(iterator.contains("kajiPaginationUrl(response, \"$.links.next\")"));
         assert!(!iterator.contains("url: nextUrl"));
 
-        let fetch_runtime = kaji_runtime(SdkTransport::Fetch, None);
+        let fetch_runtime = poolster_runtime(SdkTransport::Fetch, None);
         assert!(fetch_runtime.contains("paginationUrl?: string"));
         assert!(fetch_runtime.contains("Pagination URL must use the configured API origin"));
         assert!(
@@ -2137,7 +2137,7 @@ mod tests {
                 .contains("applySecurity(mergedHeaders, resolvedQuery, security, config.auth)")
         );
 
-        let axios_runtime = kaji_runtime(SdkTransport::Axios, None);
+        let axios_runtime = poolster_runtime(SdkTransport::Axios, None);
         assert!(axios_runtime.contains("Pagination URL must use the configured API origin"));
         assert!(
             axios_runtime
@@ -2173,7 +2173,7 @@ mod tests {
 
     #[test]
     fn fetch_runtime_has_openapi_serializers_codecs_and_status_results() {
-        let runtime = kaji_runtime(SdkTransport::Fetch, None);
+        let runtime = poolster_runtime(SdkTransport::Fetch, None);
         assert!(runtime.contains("export interface Codec"));
         assert!(runtime.contains("export type StatusResult<T>"));
         assert!(runtime.contains("export type ResponseResult<T"));
@@ -2199,7 +2199,7 @@ mod tests {
 
     #[test]
     fn axios_runtime_has_openapi_serializers_codecs_and_status_results() {
-        let runtime = kaji_runtime(SdkTransport::Axios, None);
+        let runtime = poolster_runtime(SdkTransport::Axios, None);
         assert!(runtime.contains("export type FormEncoding"));
         assert!(runtime.contains("export type FormPartHeader"));
         assert!(runtime.contains("export interface MultipartEncoder"));
@@ -2226,7 +2226,7 @@ mod tests {
 
     #[test]
     fn sdk_client_names_strip_the_openapi_api_suffix() {
-        assert_eq!(sdk_client_name("Kaji Email API"), "KajiEmail");
+        assert_eq!(sdk_client_name("Poolster Email API"), "PoolsterEmail");
         assert_eq!(sdk_client_name("Mistral API"), "Mistral");
     }
 }

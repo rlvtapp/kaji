@@ -1,5 +1,5 @@
-use kaji::{ProfileSet, generate, mock};
-use kaji_core::Api;
+use poolster::{ProfileSet, generate, mock};
+use poolster_core::Api;
 
 #[test]
 fn embedding_works_without_a_language_plugin_dependency() {

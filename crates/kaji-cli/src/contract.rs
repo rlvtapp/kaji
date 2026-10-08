@@ -4,11 +4,11 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail, ensure};
-use kaji_inputs::default_registry;
+use poolster_inputs::default_registry;
 
 const HELP: &str = "Usage:
-  kaji contract plugins [--format human|json]
-  kaji contract inspect <file> --input-format <graphql|asyncapi|arazzo|protobuf|capnproto> [--provider <id>] [--format human|json]
+  poolster contract plugins [--format human|json]
+  poolster contract inspect <file> --input-format <graphql|asyncapi|arazzo|protobuf|capnproto> [--provider <id>] [--format human|json]
 
 Loads native contracts through registered input plugins. Cap'n Proto requires capnp.
 ";
@@ -17,14 +17,14 @@ pub fn run(arguments: Vec<OsString>) -> Result<()> {
     let mut args = arguments.into_iter();
     let command = args
         .next()
-        .context("contract requires inspect; run kaji contract --help")?;
+        .context("contract requires inspect; run poolster contract --help")?;
     if command == "--help" || command == "-h" {
         print!("{HELP}");
         return Ok(());
     }
     ensure!(
         command == "inspect" || command == "plugins",
-        "contract supports inspect; run kaji contract --help"
+        "contract supports inspect; run poolster contract --help"
     );
     let listing = command == "plugins";
     let mut provider = None;

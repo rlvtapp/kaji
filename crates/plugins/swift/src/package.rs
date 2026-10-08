@@ -1,7 +1,7 @@
 //! Typed package integration for the Swift SDK generator.
 use anyhow::Result;
-use kaji_core::SdkClientStyle;
-use kaji_core::engine::{Language, Meta, Package, Plugin, PluginContext};
+use poolster_core::SdkClientStyle;
+use poolster_core::engine::{Language, Meta, Package, Plugin, PluginContext};
 
 pub struct Swift;
 
@@ -14,7 +14,7 @@ impl Language for Swift {
     const NAME: &'static str = "swift";
     type Settings = Settings;
     type Workspace = ();
-    fn finalize_files(tree: &mut kaji_core::GeneratedTree) -> Result<()> {
+    fn finalize_files(tree: &mut poolster_core::GeneratedTree) -> Result<()> {
         if tree.get("test/OperationTests.swift").is_some() {
             anyhow::ensure!(
                 tree.get("Package.swift").is_some(),
@@ -42,11 +42,11 @@ impl Language for Swift {
             ")]\n)",
             ", dependencies: [.product(name: \"Crypto\", package: \"swift-crypto\")])]\n)",
         );
-        tree.replace(kaji_core::GeneratedFile::new("Package.swift", updated)?)
+        tree.replace(poolster_core::GeneratedFile::new("Package.swift", updated)?)
     }
     fn bundle_middleware(
-        tree: &mut kaji_core::GeneratedTree,
-        middleware: &[kaji_core::customization::BundledMiddleware],
+        tree: &mut poolster_core::GeneratedTree,
+        middleware: &[poolster_core::customization::BundledMiddleware],
     ) -> Result<()> {
         crate::bundled::bundle(tree, middleware)
     }

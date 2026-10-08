@@ -51,7 +51,7 @@ fn imports_three_vendors_and_bundles_references_without_editing_sources() {
         );
         assert_eq!(fs::read_to_string(&path).unwrap(), config);
         let native: Value =
-            serde_json::from_slice(&fs::read(root.path().join("converted/kaji.json")).unwrap())
+            serde_json::from_slice(&fs::read(root.path().join("converted/poolster.json")).unwrap())
                 .unwrap();
         assert_eq!(native["packages"][0]["language"], "python");
         assert_eq!(native["openapi"]["version"], "0.1.0"); // Generator version is not an SDK version.
@@ -62,7 +62,7 @@ fn imports_three_vendors_and_bundles_references_without_editing_sources() {
         assert!(!report.contains("DO-NOT-COPY-SECRET"));
         let generated = run(
             root.path(),
-            &["generate", "--config", "converted/kaji.json"],
+            &["generate", "--config", "converted/poolster.json"],
         );
         assert!(
             generated.status.success(),
@@ -125,7 +125,7 @@ fn direct_vendor_generation_and_automatic_project_detection() {
         );
         assert!(root.path().join("kaji-generated").is_dir());
     }
-    assert!(!root.path().join("kaji.json").exists());
+    assert!(!root.path().join("poolster.json").exists());
     assert!(!root.path().join("kaji-migration").exists());
 }
 #[test]
@@ -213,7 +213,7 @@ fn multi_target_migrations_report_custom_hooks_without_copying_credentials() {
             "{}",
             String::from_utf8_lossy(&result.stderr)
         );
-        let recipe = fs::read_to_string(root.path().join("converted/kaji.json")).unwrap();
+        let recipe = fs::read_to_string(root.path().join("converted/poolster.json")).unwrap();
         let native: Value = serde_json::from_str(&recipe).unwrap();
         assert_eq!(native["packages"].as_array().unwrap().len(), 2);
         let report =

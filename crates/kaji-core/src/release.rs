@@ -13,7 +13,7 @@ use crate::{
     engine::{Contract, Enforce, Language, Meta, Plugin, PluginContext, Provision},
 };
 
-pub const PACKAGE_METADATA_PATH: &str = ".kaji/package.json";
+pub const PACKAGE_METADATA_PATH: &str = ".poolster/package.json";
 pub const PACKAGE_METADATA_VERSION: u32 = 1;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -155,7 +155,7 @@ impl PackageMetadata {
 }
 
 impl Contract for PackageMetadata {
-    const NAME: &'static str = "kaji.package-metadata";
+    const NAME: &'static str = "poolster.package-metadata";
 }
 
 pub struct Metadata<L: Language> {
@@ -240,7 +240,7 @@ mod tests {
             )
             .unwrap();
         let value: PackageMetadata =
-            serde_json::from_str(tree.get("sdk/.kaji/package.json").unwrap()).unwrap();
+            serde_json::from_str(tree.get("sdk/.poolster/package.json").unwrap()).unwrap();
         assert_eq!(value.language, "community");
         assert_eq!(value.version, "1.2.3");
         assert_eq!(value.build[0].args[1], "$(literal)");

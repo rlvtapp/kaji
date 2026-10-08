@@ -8,7 +8,7 @@ struct Input {
 fn input(
     api: &Api,
     operation: &Operation,
-    plan: &kaji_core::pagination::PaginationPlan,
+    plan: &poolster_core::pagination::PaginationPlan,
     role: &str,
 ) -> Option<Input> {
     let input = plan
@@ -42,10 +42,10 @@ fn input(
     })
 }
 fn plan(api: &Api, operation: &Operation) -> Option<(Input, Option<Input>, String)> {
-    let plan = kaji_core::pagination::normalize_pagination(api, operation, None)
+    let plan = poolster_core::pagination::normalize_pagination(api, operation, None)
         .ok()
         .flatten()?;
-    if plan.kind != kaji_core::pagination::PaginationKind::Page {
+    if plan.kind != poolster_core::pagination::PaginationKind::Page {
         return None;
     }
     let page = input(api, operation, &plan, "page")?;
@@ -128,11 +128,11 @@ pub(super) fn documentation(api: &Api) -> String {
     let mut output = String::new();
     for operation in &api.operations {
         let Ok(Some(normalized)) =
-            kaji_core::pagination::normalize_pagination(api, operation, None)
+            poolster_core::pagination::normalize_pagination(api, operation, None)
         else {
             continue;
         };
-        if normalized.kind != kaji_core::pagination::PaginationKind::Page {
+        if normalized.kind != poolster_core::pagination::PaginationKind::Page {
             continue;
         }
         if supported(api, operation) {

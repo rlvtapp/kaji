@@ -1,5 +1,5 @@
 use super::*;
-use kaji_core::engine::{Meta, Plugin, PluginContext};
+use poolster_core::engine::{Meta, Plugin, PluginContext};
 pub struct OAuth {
     meta: Meta,
 }
@@ -18,7 +18,7 @@ impl Plugin<Java> for OAuth {
             cx.settings
                 .package_name
                 .as_deref()
-                .unwrap_or(&format!("io.kaji.{}", package_segment(&cx.api.name))),
+                .unwrap_or(&format!("io.poolster.{}", package_segment(&cx.api.name))),
         );
         for (name, source) in [
             ("OAuthClientCredentials", include_str!("oauth.java.txt")),
@@ -46,10 +46,10 @@ mod tests {
             name: "OAuth".into(),
             ..Default::default()
         };
-        let tree = kaji_core::engine::Packages::new()
+        let tree = poolster_core::engine::Packages::new()
             .package(
                 crate::package("sdk")
-                    .name("io.kaji.oauth")
+                    .name("io.poolster.oauth")
                     .with(crate::sdk())
                     .with(oauth()),
             )
@@ -69,7 +69,7 @@ mod tests {
                 "-q",
                 "test-compile",
                 "org.codehaus.mojo:exec-maven-plugin:3.5.0:java",
-                "-Dexec.mainClass=io.kaji.oauth.OAuthProbe",
+                "-Dexec.mainClass=io.poolster.oauth.OAuthProbe",
                 "-Dexec.classpathScope=test",
             ])
             .current_dir(cwd)

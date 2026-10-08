@@ -1,5 +1,5 @@
 use anyhow::{Result, bail};
-use kaji_core::{engine::Contract, input::*};
+use poolster_core::{engine::Contract, input::*};
 use std::{
     path::Path,
     sync::{

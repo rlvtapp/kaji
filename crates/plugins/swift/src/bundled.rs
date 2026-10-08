@@ -1,5 +1,5 @@
 use anyhow::{Result, ensure};
-use kaji_core::{GeneratedFile, GeneratedTree, customization::BundledMiddleware};
+use poolster_core::{GeneratedFile, GeneratedTree, customization::BundledMiddleware};
 
 pub(crate) fn bundle(tree: &mut GeneratedTree, middleware: &[BundledMiddleware]) -> Result<()> {
     if middleware.is_empty() {
@@ -9,24 +9,24 @@ pub(crate) fn bundle(tree: &mut GeneratedTree, middleware: &[BundledMiddleware])
         .iter()
         .filter(|(path, _)| {
             path.to_str()
-                .is_some_and(|p| p.starts_with("Sources/") && p.ends_with("/KajiClient.swift"))
+                .is_some_and(|p| p.starts_with("Sources/") && p.ends_with("/PoolsterClient.swift"))
         })
         .map(|(path, _)| path.to_owned())
         .collect();
     ensure!(
         clients.len() == 1,
-        "Swift bundled middleware requires exactly one generated KajiClient"
+        "Swift bundled middleware requires exactly one generated PoolsterClient"
     );
     let client_path = &clients[0];
     let parent = client_path.parent().unwrap();
     let mut source = tree.get(client_path).unwrap().to_owned();
-    let marker = "self.transport = transport ?? KajiURLSessionTransport(session: session)";
+    let marker = "self.transport = transport ?? PoolsterURLSessionTransport(session: session)";
     ensure!(
         source.matches(marker).count() == 1
-            && source.contains("public struct KajiMiddlewareTransport"),
+            && source.contains("public struct PoolsterMiddlewareTransport"),
         "Swift bundled middleware requires the default transport runtime"
     );
-    let mut chain = "transport ?? KajiURLSessionTransport(session: session)".to_owned();
+    let mut chain = "transport ?? PoolsterURLSessionTransport(session: session)".to_owned();
     for layer in middleware {
         ensure!(
             layer.async_symbol.is_none(),
@@ -35,7 +35,7 @@ pub(crate) fn bundle(tree: &mut GeneratedTree, middleware: &[BundledMiddleware])
         ensure!(
             layer.path.parent() == Some(parent)
                 && layer.path.extension().is_some_and(|e| e == "swift"),
-            "Swift middleware path must be a .swift file beside the generated KajiClient"
+            "Swift middleware path must be a .swift file beside the generated PoolsterClient"
         );
         ensure!(
             identifier(&layer.symbol),
@@ -48,7 +48,7 @@ pub(crate) fn bundle(tree: &mut GeneratedTree, middleware: &[BundledMiddleware])
     }
     for layer in middleware.iter().rev() {
         chain = format!(
-            "KajiMiddlewareTransport(inner: {chain}, middleware: {}())",
+            "PoolsterMiddlewareTransport(inner: {chain}, middleware: {}())",
             layer.symbol
         );
     }
@@ -92,19 +92,19 @@ mod tests {
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
-public func authorPolicy() -> KajiMiddleware {
+public func authorPolicy() -> PoolsterMiddleware {
     { request, _ in
         (Data("\"author\"".utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: [:])!)
     }
 }
 "#.into(),
         };
-        let api = kaji_core::Api {
+        let api = poolster_core::Api {
             name: "demo".into(),
             version: "1.0.0".into(),
             ..Default::default()
         };
-        let tree = kaji_core::engine::Packages::new()
+        let tree = poolster_core::engine::Packages::new()
             .package(
                 crate::package("sdk")
                     .name("demo-sdk")
@@ -116,7 +116,8 @@ public func authorPolicy() -> KajiMiddleware {
         let root = tempfile::tempdir().unwrap();
         std::fs::write(
             root.path().join("Client.swift"),
-            tree.get("sdk/Sources/DemoSdk/KajiClient.swift").unwrap(),
+            tree.get("sdk/Sources/DemoSdk/PoolsterClient.swift")
+                .unwrap(),
         )
         .unwrap();
         std::fs::write(
@@ -129,7 +130,7 @@ public func authorPolicy() -> KajiMiddleware {
             r#"import Foundation
 @main struct Probe {
     static func main() async throws {
-        let client = KajiClient(options: .init(baseURL: URL(string:"https://unused.example")!))
+        let client = PoolsterClient(options: .init(baseURL: URL(string:"https://unused.example")!))
         let request = try client.makeRequest(method:"GET", path:"/label")
         let value = try await client.send(request, as:String.self)
         precondition(value == "author")
@@ -172,7 +173,8 @@ public func authorPolicy() -> KajiMiddleware {
     fn rejects_unsupported_paths_and_collisions() {
         let mut tree = GeneratedTree::default();
         tree.insert(
-            GeneratedFile::new("Sources/Demo/KajiClient.swift", crate::client_runtime()).unwrap(),
+            GeneratedFile::new("Sources/Demo/PoolsterClient.swift", crate::client_runtime())
+                .unwrap(),
         )
         .unwrap();
         let policy = BundledMiddleware {
@@ -183,7 +185,7 @@ public func authorPolicy() -> KajiMiddleware {
         };
         assert!(bundle(&mut tree, &[policy]).is_err());
         let policy = BundledMiddleware {
-            path: "Sources/Demo/KajiClient.swift".into(),
+            path: "Sources/Demo/PoolsterClient.swift".into(),
             contents: "".into(),
             symbol: "policy".into(),
             async_symbol: None,

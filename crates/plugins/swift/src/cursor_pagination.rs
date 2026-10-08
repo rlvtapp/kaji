@@ -1,5 +1,5 @@
 use super::*;
-use kaji_core::pagination::{
+use poolster_core::pagination::{
     PaginationKind, PaginationValueKind, SelectorSegment, normalize_pagination,
 };
 
@@ -100,7 +100,7 @@ pub(super) fn render(api: &Api) -> Result<String> {
             .collect::<Vec<_>>()
             .join(", ");
         let guard = if cursor.required {
-            "            guard let kajiCursorValue else { throw KajiPaginationError.invalidResults }\n"
+            "            guard let kajiCursorValue else { throw PoolsterPaginationError.invalidResults }\n"
         } else {
             ""
         };
@@ -124,7 +124,7 @@ pub(super) fn render(api: &Api) -> Result<String> {
         let name = function_name(&operation.id);
         writeln!(
             output,
-            "    func {name}Pages({signature}) -> KajiCursorSequence<{response}> {{\n        KajiCursorSequence(cursor: {cursor_name}) {{ kajiCursorValue in\n{guard}            let response = try await self.{name}({args})\n            return (response, try kajiNextCursor(response, [{selector}]))\n        }}\n    }}"
+            "    func {name}Pages({signature}) -> PoolsterCursorSequence<{response}> {{\n        PoolsterCursorSequence(cursor: {cursor_name}) {{ kajiCursorValue in\n{guard}            let response = try await self.{name}({args})\n            return (response, try kajiNextCursor(response, [{selector}]))\n        }}\n    }}"
         )?;
     }
     Ok(output)
@@ -136,12 +136,12 @@ mod tests {
     fn api() -> Api {
         let mut operation = Operation {
             id: "listItems".into(),
-            method: kaji_core::HttpMethod::Get,
+            method: poolster_core::HttpMethod::Get,
             path: "/items".into(),
             ..Default::default()
         };
         operation.parameters = vec![
-            kaji_core::OperationParameter {
+            poolster_core::OperationParameter {
                 name: "cursor".into(),
                 location: "query".into(),
                 required: false,
@@ -149,7 +149,7 @@ mod tests {
                 description: None,
                 annotations: Default::default(),
             },
-            kaji_core::OperationParameter {
+            poolster_core::OperationParameter {
                 name: "X-Label".into(),
                 location: "header".into(),
                 required: false,
@@ -160,7 +160,7 @@ mod tests {
         ];
         let mut next = SchemaValue::new(SchemaKind::String);
         next.nullable = true;
-        operation.responses = vec![kaji_core::OperationResponse::json(
+        operation.responses = vec![poolster_core::OperationResponse::json(
             "200",
             SchemaValue::new(SchemaKind::Object {
                 fields: vec![Field {
@@ -184,7 +184,7 @@ mod tests {
     fn string_cursor_preserves_operation_arguments_and_rejects_body_integer() {
         let mut api = api();
         let output = render(&api).unwrap();
-        assert!(output.contains("KajiCursorSequence(cursor: cursor)"));
+        assert!(output.contains("PoolsterCursorSequence(cursor: cursor)"));
         assert!(output.contains("listItems(cursor: kajiCursorValue, xLabel: xLabel)"));
         api.operations[0].parameters[0].schema = Some(SchemaValue::new(SchemaKind::Integer));
         assert!(render(&api).is_err());
@@ -202,7 +202,7 @@ import Foundation
 import FoundationNetworking
 #endif
 actor Calls {var cursors:[String?]=[];func record(_ value:String?){cursors.append(value)};func snapshot()->[String?]{cursors}}
-struct Driver:KajiTransport {
+struct Driver:PoolsterTransport {
  let calls:Calls
  func execute(_ request:URLRequest) async throws ->(Data,URLResponse){
   let cursor=URLComponents(url:request.url!,resolvingAgainstBaseURL:false)!.queryItems?.first(where:{$0.name=="cursor"})?.value
@@ -216,10 +216,10 @@ struct Driver:KajiTransport {
 @main struct Test {
  static func main() async throws {
   let calls=Calls()
-  let transport=KajiMiddlewareTransport(inner:Driver(calls:calls)){request,next in
+  let transport=PoolsterMiddlewareTransport(inner:Driver(calls:calls)){request,next in
    var modified=request;modified.setValue("enabled",forHTTPHeaderField:"X-Policy");return try await next(modified)
   }
-  let client=KajiClient(options:.init(baseURL:URL(string:"https://unused.example")!),transport:transport)
+  let client=PoolsterClient(options:.init(baseURL:URL(string:"https://unused.example")!),transport:transport)
   var iterator=client.items.listItemsPages(xLabel:"caller").makeAsyncIterator()
   let before=await calls.snapshot();precondition(before.isEmpty)
   let first=try await iterator.next();precondition(first != nil)
@@ -228,7 +228,7 @@ struct Driver:KajiTransport {
   let seen=await calls.snapshot();precondition(seen.count==2 && seen[0]==nil && seen[1]=="a")
   var explicit=client.listItemsPages(cursor:"a",xLabel:"caller").makeAsyncIterator()
   _=try await explicit.next();let repeated=try await explicit.next();precondition(repeated==nil)
-  var null=KajiCursorSequence<Int>(cursor:nil){_ in (1,nil)}.makeAsyncIterator()
+  var null=PoolsterCursorSequence<Int>(cursor:nil){_ in (1,nil)}.makeAsyncIterator()
   _=try await null.next();let finished=try await null.next();precondition(finished==nil)
  }
 }

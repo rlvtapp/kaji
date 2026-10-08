@@ -1,11 +1,11 @@
 use crate::TypeScript;
 use anyhow::Result;
-use kaji_core::{
+use poolster_core::{
     GeneratedFile,
     engine::{Meta, Plugin, PluginContext, Requirement},
 };
 pub struct Webhooks {
-    models: Option<kaji_core::engine::Handle<crate::composition::Models>>,
+    models: Option<poolster_core::engine::Handle<crate::composition::Models>>,
     meta: Meta,
 }
 pub fn webhooks() -> Webhooks {
@@ -17,7 +17,7 @@ pub fn webhooks() -> Webhooks {
 impl Webhooks {
     pub fn using_models(
         mut self,
-        models: kaji_core::engine::Handle<crate::composition::Models>,
+        models: poolster_core::engine::Handle<crate::composition::Models>,
     ) -> Self {
         self.models = Some(models);
         self
@@ -49,21 +49,21 @@ mod tests {
     #[test]
     #[ignore = "requires KAJI_TSC_JS and Node"]
     fn native_standard_webhook_vectors_execute() {
-        let api = kaji_core::Api {
+        let api = poolster_core::Api {
             name: "Webhook".into(),
-            schemas: vec![kaji_core::Schema::new(
+            schemas: vec![poolster_core::Schema::new(
                 "Event",
-                kaji_core::SchemaValue::new(kaji_core::SchemaKind::String),
+                poolster_core::SchemaValue::new(poolster_core::SchemaKind::String),
             )],
-            operations: vec![kaji_core::Operation {
+            operations: vec![poolster_core::Operation {
                 id: "getEvent".into(),
-                method: kaji_core::HttpMethod::Get,
+                method: poolster_core::HttpMethod::Get,
                 path: "/event".into(),
                 ..Default::default()
             }],
             ..Default::default()
         };
-        let tree = kaji_core::engine::Packages::new()
+        let tree = poolster_core::engine::Packages::new()
             .package(crate::package("sdk").with(crate::sdk()).with(webhooks()))
             .generate(&api, None)
             .unwrap();

@@ -1,5 +1,5 @@
 [package]
-name = "kaji-plugin-dotnet"
+name = "poolster-plugin-dotnet"
 version.workspace = true
 edition = "2024"
 license.workspace = true
@@ -9,5 +9,5 @@ description = "Deprecated compatibility facade for Kaji's C# SDK generator"
 publish = false
 
 [dependencies]
-kaji-core = { path = "../../kaji-core" }
-kaji-plugin-csharp = { path = "../csharp" }
+poolster-core = { path = "../../kaji-core" }
+poolster-plugin-csharp = { path = "../csharp" }

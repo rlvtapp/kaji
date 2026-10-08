@@ -1,5 +1,5 @@
 use super::*;
-use kaji_core::pagination::{PaginationKind, SelectorSegment, normalize_pagination};
+use poolster_core::pagination::{PaginationKind, SelectorSegment, normalize_pagination};
 pub(super) fn render(api: &Api, operation: &Operation) -> Result<Option<String>> {
     let extension = operation
         .annotations
@@ -133,7 +133,7 @@ fn ensure_buffered_json(operation: &Operation) -> Result<()> {
 
 fn render_url(
     operation: &Operation,
-    plan: &kaji_core::pagination::PaginationPlan,
+    plan: &poolster_core::pagination::PaginationPlan,
 ) -> Result<Option<String>> {
     let segments = plan
         .continuation
@@ -164,7 +164,7 @@ fn render_url(
             count >= 10000 -> {{[{{:error, :pagination_limit}}], :halt}}
             url != nil and MapSet.member?(seen, url) -> {{[{{:error, :pagination_loop}}], :halt}}
             true ->
-              request_options = if url == nil, do: Keyword.delete(options, :_kaji_pagination_url), else: Keyword.put(options, :_kaji_pagination_url, url)
+              request_options = if url == nil, do: Keyword.delete(options, :_poolster_pagination_url), else: Keyword.put(options, :_poolster_pagination_url, url)
               case {name}(client, request_options) do
                 {{:ok, response}} ->
                   seen = if url == nil, do: seen, else: MapSet.put(seen, url)
@@ -189,7 +189,7 @@ mod tests {
     use super::*;
     #[test]
     fn page_plan_emits_lazy_canonical_helpers_and_facades() {
-        use kaji_core::{HttpMethod, OperationParameter, OperationResponse};
+        use poolster_core::{HttpMethod, OperationParameter, OperationResponse};
         let mut operation = Operation {
             id: "listPets".into(),
             method: HttpMethod::Get,
@@ -236,7 +236,7 @@ mod tests {
 #[cfg(test)]
 mod expanded_tests {
     use super::*;
-    use kaji_core::{
+    use poolster_core::{
         AdditionalProperties, Field, HttpMethod, OperationParameter, OperationResponse,
     };
     fn fixture(kind: &str) -> Api {
@@ -306,9 +306,11 @@ mod expanded_tests {
         let api = fixture("url");
         let helper = render(&api, &api.operations[0]).unwrap().unwrap();
         assert!(helper.contains("MapSet.member?"));
-        assert!(helper.contains("_kaji_pagination_url"));
+        assert!(helper.contains("_poolster_pagination_url"));
         assert!(render_api_facade("Probe", &api).contains("list_pets_pages"));
-        assert!(render_operation("Probe", &api, &api.operations[0]).contains("{:kaji_url, url}"));
+        assert!(
+            render_operation("Probe", &api, &api.operations[0]).contains("{:poolster_url, url}")
+        );
         let runtime = render_client("Probe");
         assert!(runtime.contains("next.port == base.port"));
         assert!(runtime.contains("next.userinfo == nil and next.fragment == nil"));
@@ -355,7 +357,7 @@ mod native_tests {
     #[test]
     #[ignore = "requires Elixir toolchain"]
     fn generated_page_stream_executes_lazily() {
-        use kaji_core::{HttpMethod, OperationParameter, OperationResponse};
+        use poolster_core::{HttpMethod, OperationParameter, OperationResponse};
         let mut operation = Operation {
             id: "listPets".into(),
             method: HttpMethod::Get,

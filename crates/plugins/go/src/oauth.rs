@@ -1,8 +1,8 @@
 use super::*;
-use kaji_core::engine::{Meta, Plugin, PluginContext, Requirement};
+use poolster_core::engine::{Meta, Plugin, PluginContext, Requirement};
 pub struct OAuth {
     meta: Meta,
-    client: Option<kaji_core::engine::Handle<providers::Client>>,
+    client: Option<poolster_core::engine::Handle<providers::Client>>,
 }
 pub fn oauth() -> OAuth {
     OAuth {
@@ -11,7 +11,10 @@ pub fn oauth() -> OAuth {
     }
 }
 impl OAuth {
-    pub fn using_client(mut self, client: kaji_core::engine::Handle<providers::Client>) -> Self {
+    pub fn using_client(
+        mut self,
+        client: poolster_core::engine::Handle<providers::Client>,
+    ) -> Self {
         self.client = Some(client);
         self
     }

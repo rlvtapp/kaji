@@ -14,7 +14,7 @@ fn generated_middleware_fetch_and_axios_execute() {
     ] {
         std::fs::write(
             directory.join(format!("{name}.ts")),
-            crate::sdk::kaji_runtime(transport, None),
+            crate::sdk::poolster_runtime(transport, None),
         )
         .unwrap();
     }
@@ -160,7 +160,7 @@ for (const [index, runtime] of runtimes.entries()) {
 #[test]
 #[ignore = "requires Node, KAJI_TSC_JS and KAJI_AXIOS_NODE_MODULES"]
 fn bundled_middleware_is_enabled_without_customer_registration() {
-    use kaji_core::{
+    use poolster_core::{
         Api, HttpMethod, Operation, OperationMediaType, OperationResponse, SchemaKind, SchemaValue,
         customization::BundledMiddleware,
     };
@@ -188,21 +188,21 @@ fn bundled_middleware_is_enabled_without_customer_registration() {
     };
     #[cfg(unix)]
     std::os::unix::fs::symlink(modules, root.path().join("node_modules")).unwrap();
-    let mut generated = kaji_core::GeneratedTree::default();
+    let mut generated = poolster_core::GeneratedTree::default();
     for (name, sdk) in [
         ("fetch", crate::sdk().fetch()),
         ("axios", crate::sdk().axios()),
     ] {
         let package = crate::package(name).with(sdk.client_name("BundledSdk").flat()).middleware(BundledMiddleware {
             path: "middleware/policy.ts".into(), symbol: "authorPolicy".into(), async_symbol: None,
-            contents: r#"import type { ClientMiddleware, MiddlewareResponse } from '../.kaji/client'
+            contents: r#"import type { ClientMiddleware, MiddlewareResponse } from '../.poolster/client'
 export const authorPolicy: ClientMiddleware = async (request, next) => {
   const response = await next({ ...request, query: { ...request.query, tenant: 'author' } }) as MiddlewareResponse
   return { ...response, data: 'bundled:' + response.data }
 }
 "#.into(),
         });
-        let tree = kaji_core::engine::Packages::new()
+        let tree = poolster_core::engine::Packages::new()
             .package(package)
             .generate(&api, None)
             .unwrap();

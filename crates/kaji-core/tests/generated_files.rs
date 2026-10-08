@@ -1,4 +1,4 @@
-use kaji_core::{GeneratedFile, GeneratedTree};
+use poolster_core::{GeneratedFile, GeneratedTree};
 
 #[test]
 fn generated_files_cannot_escape_the_output_directory() {

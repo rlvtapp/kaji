@@ -29,7 +29,7 @@ impl BundledMiddleware {
     }
 }
 
-/// Code supplied by the SDK author. Contents are data; Kaji never executes them.
+/// Code supplied by the SDK author. Contents are data; Poolster never executes them.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CodeCustomization {
     Add {
@@ -84,13 +84,17 @@ fn normalized(path: &Path) -> Result<PathBuf> {
     }
     if matches!(
         path.to_str(),
-        Some(".kaji/ownership.json" | ".kaji/generation.lock.json" | ".kaji/package.json")
-    ) || path.ends_with(".kaji/ownership.json")
-        || path.ends_with(".kaji/generation.lock.json")
-        || path.ends_with(".kaji/package.json")
+        Some(
+            ".poolster/ownership.json"
+                | ".poolster/generation.lock.json"
+                | ".poolster/package.json"
+        )
+    ) || path.ends_with(".poolster/ownership.json")
+        || path.ends_with(".poolster/generation.lock.json")
+        || path.ends_with(".poolster/package.json")
     {
         bail!(
-            "customization cannot replace Kaji bookkeeping: {}",
+            "customization cannot replace Poolster bookkeeping: {}",
             path.display()
         );
     }
@@ -217,8 +221,8 @@ mod tests {
         for path in [
             "../escape",
             ".",
-            ".kaji/package.json",
-            "ts/.kaji/ownership.json",
+            ".poolster/package.json",
+            "ts/.poolster/ownership.json",
             "custom.ts",
         ] {
             assert!(

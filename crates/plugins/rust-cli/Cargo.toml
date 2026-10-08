@@ -1,5 +1,5 @@
 [package]
-name = "kaji-plugin-rust-cli"
+name = "poolster-plugin-rust-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,7 +10,7 @@ publish = false
 
 [dependencies]
 anyhow = "1.0.102"
-kaji-core = { path = "../../kaji-core" }
+poolster-core = { path = "../../kaji-core" }
 serde_json = "1.0.138"
 
 [dev-dependencies]

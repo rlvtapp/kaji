@@ -1,7 +1,7 @@
 //! Offline regression coverage of GitHub's real published GraphQL schema.
 //! Source, pinned revision, checksums and MIT license live alongside the fixture.
-use kaji_core::input::InputPlugin;
-use kaji_input_graphql::{GraphqlDocument, GraphqlInput, parse};
+use poolster_core::input::InputPlugin;
+use poolster_input_graphql::{GraphqlDocument, GraphqlInput, parse};
 
 const GITHUB: &str = include_str!("fixtures/github/schema.graphql");
 

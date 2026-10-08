@@ -1,6 +1,6 @@
 //! Execute the emitted provider through real Plugin Framework plan/state values.
 use super::*;
-use kaji_core::{HttpMethod, Operation};
+use poolster_core::{HttpMethod, Operation};
 use std::{fs, process::Command};
 
 pub(super) fn fixture() -> EntityCatalog {

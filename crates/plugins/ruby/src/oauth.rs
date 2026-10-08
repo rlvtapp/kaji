@@ -1,5 +1,5 @@
 use super::*;
-use kaji_core::engine::{Handle, Meta, Plugin, PluginContext, Requirement};
+use poolster_core::engine::{Handle, Meta, Plugin, PluginContext, Requirement};
 pub struct OAuth {
     meta: Meta,
     models: Option<Handle<crate::package::RubyModels>>,
@@ -50,9 +50,9 @@ mod tests {
             operations: vec![
                 Operation {
                     id: "deleteThing".into(),
-                    method: kaji_core::HttpMethod::Delete,
+                    method: poolster_core::HttpMethod::Delete,
                     path: "/thing".into(),
-                    responses: vec![kaji_core::OperationResponse {
+                    responses: vec![poolster_core::OperationResponse {
                         status: "204".into(),
                         description: None,
                         media_types: vec![],
@@ -61,9 +61,9 @@ mod tests {
                 },
                 Operation {
                     id: "unsafeCreate".into(),
-                    method: kaji_core::HttpMethod::Post,
+                    method: poolster_core::HttpMethod::Post,
                     path: "/thing".into(),
-                    responses: vec![kaji_core::OperationResponse {
+                    responses: vec![poolster_core::OperationResponse {
                         status: "204".into(),
                         description: None,
                         media_types: vec![],
@@ -72,13 +72,13 @@ mod tests {
                 },
                 Operation {
                     id: "retryThing".into(),
-                    method: kaji_core::HttpMethod::Post,
+                    method: poolster_core::HttpMethod::Post,
                     path: "/thing".into(),
                     annotations: BTreeMap::from([(
                         "x-kaji-idempotency".into(),
                         serde_json::json!({"header":"X-Once","auto_generate":true}),
                     )]),
-                    responses: vec![kaji_core::OperationResponse {
+                    responses: vec![poolster_core::OperationResponse {
                         status: "204".into(),
                         description: None,
                         media_types: vec![],
@@ -88,7 +88,7 @@ mod tests {
             ],
             ..Default::default()
         };
-        let tree = kaji_core::engine::Packages::new()
+        let tree = poolster_core::engine::Packages::new()
             .package(crate::package("sdk").with(crate::sdk()).with(oauth()))
             .generate(&api, None)
             .unwrap();

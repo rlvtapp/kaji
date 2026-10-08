@@ -1,5 +1,5 @@
     /** Read declared JSON Pointer or JSONPath field/index selectors without evaluation. */
-    private static function kajiJsonPath(mixed $value, string $path): mixed
+    private static function poolsterJsonPath(mixed $value, string $path): mixed
     {
         $pointer = str_starts_with($path, '/');
         if ($pointer) {
@@ -34,7 +34,7 @@
     }
 
     /** Copy a generated JSON body while preserving its declared class. */
-    private static function kajiWithBodyValue(mixed $body, string $wireName, mixed $value): mixed
+    private static function poolsterWithBodyValue(mixed $body, string $wireName, mixed $value): mixed
     {
         if (is_array($body)) { $copy = $body; $copy[$wireName] = $value; return $copy; }
         if ($body instanceof \JsonSerializable && method_exists($body::class, 'fromArray')) {

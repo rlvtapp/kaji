@@ -1,7 +1,7 @@
 //! Terraform-specific semantic catalog. No lifecycle inference leaks into core.
 use anyhow::{Context, Result, bail, ensure};
-use kaji_core::engine::Contract;
-use kaji_core::{
+use poolster_core::engine::Contract;
+use poolster_core::{
     Api, Field, HttpMethod, Operation, SchemaKind, SchemaValue, SecuritySchemeCatalog,
     SecuritySchemeKind,
 };
@@ -1201,8 +1201,8 @@ fn object_fields(api: &Api, value: &SchemaValue) -> Result<Vec<Field>> {
     ensure!(
         matches!(
             additional_properties,
-            kaji_core::AdditionalProperties::Unspecified
-                | kaji_core::AdditionalProperties::Forbidden
+            poolster_core::AdditionalProperties::Unspecified
+                | poolster_core::AdditionalProperties::Forbidden
         ),
         "explicit additional properties unsupported in v1"
     );
@@ -1295,7 +1295,8 @@ fn field_shape(api: &Api, value: &SchemaValue) -> Result<ShapePlan> {
                 additional_properties,
             } => {
                 if fields.is_empty() {
-                    if let kaji_core::AdditionalProperties::Schema { value } = additional_properties
+                    if let poolster_core::AdditionalProperties::Schema { value } =
+                        additional_properties
                     {
                         return Ok(ShapePlan::Map {
                             element: Box::new(walk(api, value, depth + 1, seen)?),
@@ -1305,7 +1306,7 @@ fn field_shape(api: &Api, value: &SchemaValue) -> Result<ShapePlan> {
                 ensure!(
                     matches!(
                         additional_properties,
-                        kaji_core::AdditionalProperties::Forbidden
+                        poolster_core::AdditionalProperties::Forbidden
                     ),
                     "nested objects require fixed properties or typed additionalProperties-only maps"
                 );
@@ -1443,7 +1444,7 @@ fn annotated_bindings(api: &Api) -> Result<Vec<ResourceBinding>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kaji_core::{
+    use poolster_core::{
         AdditionalProperties, OperationParameter, OperationRequestBody, OperationResponse, Schema,
         SecurityRequirement, SecurityScheme,
     };
@@ -1716,7 +1717,7 @@ mod tests {
         use crate::{PackageExt, entities, provider};
         let entity = entities();
         let handle = entity.catalog_handle();
-        let tree = kaji_core::engine::Packages::new()
+        let tree = poolster_core::engine::Packages::new()
             .package(
                 crate::package("tf")
                     .module("example.com/provider")
@@ -1733,7 +1734,7 @@ mod tests {
         assert!(source.contains("RemoveResource"));
         assert!(!source.contains("JSON request document"));
         let catalog: EntityCatalog =
-            serde_json::from_str(tree.get("tf/.kaji/terraform-plan.json").unwrap()).unwrap();
+            serde_json::from_str(tree.get("tf/.poolster/terraform-plan.json").unwrap()).unwrap();
         assert_eq!(catalog.resources.len(), 1);
     }
     #[test]
@@ -1756,7 +1757,7 @@ mod tests {
         assert!(analyze(&api, &[], true).is_err());
         let mut api = fixture();
         api.operations.retain(|op| op.method != HttpMethod::Delete);
-        let result = kaji_core::engine::Packages::new()
+        let result = poolster_core::engine::Packages::new()
             .package(crate::package("tf").with(crate::provider()))
             .generate(&api, None);
         let error = format!("{:#}", result.err().unwrap());
@@ -1793,11 +1794,11 @@ mod tests {
                 && !explanation.contains("private-field-example")
         );
         assert!(explanation.contains("createProject"));
-        let tree = kaji_core::engine::Packages::new()
+        let tree = poolster_core::engine::Packages::new()
             .package(crate::package("tf").with(crate::provider()))
             .generate(&api, None)
             .unwrap();
-        let artifact = tree.get("tf/.kaji/terraform-plan.json").unwrap();
+        let artifact = tree.get("tf/.poolster/terraform-plan.json").unwrap();
         assert!(
             !artifact.contains("private-source-example")
                 && !artifact.contains("private-field-example")

@@ -7,12 +7,12 @@ mod tests {
             version: "1.0.0".into(),
             operations: vec![Operation {
                 id: "getEvents".into(),
-                method: kaji_core::HttpMethod::Get,
+                method: poolster_core::HttpMethod::Get,
                 path: "/events".into(),
-                responses: vec![kaji_core::OperationResponse {
+                responses: vec![poolster_core::OperationResponse {
                     status: "200".into(),
                     description: None,
-                    media_types: vec![kaji_core::OperationMediaType {
+                    media_types: vec![poolster_core::OperationMediaType {
                         content_type: "text/event-stream".into(),
                         schema: Some(SchemaValue::new(SchemaKind::String)),
                     }],
@@ -26,10 +26,12 @@ mod tests {
     fn emits_incremental_lazy_sequence_and_explicit_transport_capability() {
         let tree = render_sdk(&api(), "sdk", Some("Streams"), SdkClientStyle::Namespaced).unwrap();
         let operations = tree.get("sdk/Sources/Streams/Operations.swift").unwrap();
-        assert!(operations.contains("func getEvents() -> KajiEventSequence"));
+        assert!(operations.contains("func getEvents() -> PoolsterEventSequence"));
         assert!(!operations.contains("async throws -> String"));
-        let runtime = tree.get("sdk/Sources/Streams/KajiClient.swift").unwrap();
-        assert!(runtime.contains("as? any KajiStreamingTransport"));
+        let runtime = tree
+            .get("sdk/Sources/Streams/PoolsterClient.swift")
+            .unwrap();
+        assert!(runtime.contains("as? any PoolsterStreamingTransport"));
         assert!(runtime.contains("session.delegate == nil"));
         let stream = tree.get("sdk/Sources/Streams/Streaming.swift").unwrap();
         assert!(stream.contains("bufferingOldest(32)"));

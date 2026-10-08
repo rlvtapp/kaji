@@ -20,11 +20,11 @@ use crate::ast::{
 };
 use crate::{Api, Field, HttpMethod, Operation, Schema};
 
-/// An [`Adapter`] over the artifact directory emitted by Kaji's bundled Go
+/// An [`Adapter`] over the artifact directory emitted by Poolster's bundled Go
 /// OpenAPI compiler.
 ///
 /// The free `load_operations` and `load_security_schemes` functions remain
-/// available for callers migrating from earlier Kaji releases. New code can
+/// available for callers migrating from earlier Poolster releases. New code can
 /// use this type anywhere an input [`Adapter`] is accepted.
 #[derive(Clone, Debug)]
 pub struct OpenApiSidecar {
@@ -143,7 +143,7 @@ struct SidecarParameter {
 type SidecarMediaType = crate::openapi32::ContentDefinition;
 
 /// Kept source-compatible with `openapi.ExampleDoc`, which is also the shape
-/// consumed by Kaji Docs' operation playground payload.
+/// consumed by Poolster Docs' operation playground payload.
 #[derive(Debug, Deserialize, serde::Serialize)]
 struct SidecarExample {
     label: String,
@@ -233,9 +233,10 @@ pub fn load_operations(output_dir: &Path, name: String, version: String) -> Resu
             .with_context(|| format!("sidecar operation index is missing {key:?}"))?;
         let document: SidecarOperation = read_json(&output_dir.join("operations").join(file))?;
         let mut annotations = document.extensions;
+        alias_poolster_extensions(&mut annotations);
         if !document.kind.is_empty() {
             annotations.insert(
-                "kaji.openapi.operation_kind".into(),
+                "poolster.openapi.operation_kind".into(),
                 Value::String(document.kind),
             );
         }
@@ -243,7 +244,7 @@ pub fn load_operations(output_dir: &Path, name: String, version: String) -> Resu
         add_optional_annotation(&mut annotations, "description", document.description);
         if !document.servers.is_empty() {
             annotations.insert(
-                "kaji.openapi.servers".into(),
+                "poolster.openapi.servers".into(),
                 serde_json::to_value(&document.servers)?,
             );
         }
@@ -253,7 +254,7 @@ pub fn load_operations(output_dir: &Path, name: String, version: String) -> Resu
         let response_examples = document.responses.iter().filter_map(|response| response.example_json.as_ref().map(|example| serde_json::json!({"status":response.code, "content_type":response.content_type, "example_json":example, "label":response.description}))).collect::<Vec<_>>();
         if !response_examples.is_empty() {
             annotations.insert(
-                "kaji.docs.response_examples".into(),
+                "poolster.docs.response_examples".into(),
                 serde_json::to_value(response_examples)?,
             );
         }
@@ -263,7 +264,7 @@ pub fn load_operations(output_dir: &Path, name: String, version: String) -> Resu
         if !document.request_examples.is_empty() {
             // Preserve per-operation examples for documentation generators.
             annotations.insert(
-                "kaji.docs.request_examples".into(),
+                "poolster.docs.request_examples".into(),
                 serde_json::to_value(&document.request_examples)
                     .expect("sidecar request examples are JSON-compatible"),
             );
@@ -277,7 +278,7 @@ pub fn load_operations(output_dir: &Path, name: String, version: String) -> Resu
                 .collect::<BTreeMap<_, _>>();
             if !encodings.is_empty() {
                 annotations.insert(
-                    "kaji.request_body_encodings".into(),
+                    "poolster.request_body_encodings".into(),
                     serde_json::to_value(encodings)
                         .expect("sidecar form encodings are JSON-compatible"),
                 );
@@ -285,7 +286,7 @@ pub fn load_operations(output_dir: &Path, name: String, version: String) -> Resu
         }
         if let Some(body) = &document.request_body {
             annotations.insert(
-                "kaji.request_content".into(),
+                "poolster.request_content".into(),
                 serde_json::to_value(&body.media_types)?,
             );
         }
@@ -305,7 +306,7 @@ pub fn load_operations(output_dir: &Path, name: String, version: String) -> Resu
             .collect::<Vec<_>>();
         if !responses.is_empty() {
             annotations.insert(
-                "kaji.response_content".into(),
+                "poolster.response_content".into(),
                 serde_json::to_value(responses)?,
             );
         }
@@ -334,7 +335,7 @@ pub fn load_operations(output_dir: &Path, name: String, version: String) -> Resu
                     }
                     if !parameter.content.is_empty() {
                         annotations.insert(
-                            "kaji.parameter_content".into(),
+                            "poolster.parameter_content".into(),
                             serde_json::to_value(&parameter.content)
                                 .expect("typed content is JSON compatible"),
                         );
@@ -383,7 +384,7 @@ pub fn load_operations(output_dir: &Path, name: String, version: String) -> Resu
     if metadata_path.exists() {
         let metadata: crate::openapi32::ApiMetadata = read_json(&metadata_path)?;
         annotations.insert(
-            "kaji.openapi.metadata".into(),
+            "poolster.openapi.metadata".into(),
             serde_json::to_value(metadata)?,
         );
     }
@@ -410,8 +411,10 @@ pub fn load_operations(output_dir: &Path, name: String, version: String) -> Resu
             operation.id
         );
     }
-    api.annotations
-        .insert("kaji.vendor.report".into(), serde_json::to_value(report)?);
+    api.annotations.insert(
+        "poolster.vendor.report".into(),
+        serde_json::to_value(report)?,
+    );
     Ok(api)
 }
 
@@ -430,7 +433,7 @@ fn disambiguate_source_operation_ids(operations: &mut [Operation]) -> Result<()>
     for operation in operations {
         let kind = operation
             .annotations
-            .get("kaji.openapi.operation_kind")
+            .get("poolster.openapi.operation_kind")
             .and_then(Value::as_str)
             .unwrap_or("operation");
         let identity = format!("{kind}: {} {}", operation.method.as_str(), operation.path);
@@ -449,7 +452,7 @@ fn disambiguate_source_operation_ids(operations: &mut [Operation]) -> Result<()>
                 "operation identifier collision after allocating {candidate}"
             );
             operation.annotations.insert(
-                "kaji.openapi.original_operation_id".into(),
+                "poolster.openapi.original_operation_id".into(),
                 serde_json::json!(original),
             );
             operation.id = candidate;
@@ -708,7 +711,33 @@ pub(crate) fn convert_value(schema: &Value) -> SchemaValue {
             value.constraints.insert(key.clone(), raw.clone());
         }
     }
+    alias_poolster_extensions(&mut value.extensions);
     value
+}
+
+/// Keep existing OpenAPI extension names readable while Poolster names become
+/// the preferred spelling. A canonical value wins if both names are supplied.
+fn alias_poolster_extensions(extensions: &mut BTreeMap<String, Value>) {
+    let aliases: Vec<_> = extensions
+        .iter()
+        .filter_map(|(name, value)| {
+            name.strip_prefix("x-poolster-")
+                .map(|suffix| (format!("x-kaji-{suffix}"), value.clone()))
+        })
+        .collect();
+    for (name, value) in aliases {
+        extensions.insert(name, value);
+    }
+    let aliases: Vec<_> = extensions
+        .iter()
+        .filter_map(|(name, value)| {
+            name.strip_prefix("x-kaji-")
+                .map(|suffix| (format!("x-poolster-{suffix}"), value.clone()))
+        })
+        .collect();
+    for (name, value) in aliases {
+        extensions.entry(name).or_insert(value);
+    }
 }
 
 fn convert_kind(schema: &Map<String, Value>) -> SchemaKind {
@@ -930,7 +959,7 @@ mod tests {
         assert_eq!(forward, reverse);
         assert_ne!(forward[0].id, forward[1].id);
         assert_eq!(
-            forward[0].annotations["kaji.openapi.original_operation_id"],
+            forward[0].annotations["poolster.openapi.original_operation_id"],
             "repeat"
         );
         forward[1].path = forward[0].path.clone();
@@ -1148,7 +1177,7 @@ mod tests {
         assert_eq!(request.media_types[1].content_type, "application/xml");
         let encodings = operation
             .annotations
-            .get("kaji.request_body_encodings")
+            .get("poolster.request_body_encodings")
             .and_then(Value::as_object)
             .unwrap();
         let metadata = &encodings["multipart/form-data"]["metadata"];
@@ -1205,23 +1234,23 @@ mod tests {
         let api = load_operations(temp.path(), "Widgets".into(), "1.0.0".into()).unwrap();
         let examples = api.operations[0]
             .annotations
-            .get("kaji.docs.request_examples")
+            .get("poolster.docs.request_examples")
             .and_then(Value::as_array)
             .unwrap();
         let operation = &api.operations[0];
         assert_eq!(
-            operation.annotations["kaji.openapi.servers"][0]["variables"][0]["default"],
+            operation.annotations["poolster.openapi.servers"][0]["variables"][0]["default"],
             "eu"
         );
         assert_eq!(operation.annotations["tags"][0], "Widgets");
         assert_eq!(operation.parameters[0].annotations["allowReserved"], true);
         assert_eq!(operation.parameters[0].annotations["example"], "name=value");
         assert_eq!(
-            operation.annotations["kaji.docs.response_examples"][0]["status"],
+            operation.annotations["poolster.docs.response_examples"][0]["status"],
             "201"
         );
         assert_eq!(
-            operation.annotations["kaji.docs.response_examples"][0]["example_json"],
+            operation.annotations["poolster.docs.response_examples"][0]["example_json"],
             r#"{"id":"w1"}"#
         );
         assert_eq!(examples.len(), 2);
@@ -1234,7 +1263,7 @@ mod tests {
     }
 
     #[test]
-    fn preserves_kaji_mock_contract_for_typed_extraction() {
+    fn preserves_poolster_mock_contract_for_typed_extraction() {
         let temp = tempfile::tempdir().unwrap();
         let operations = temp.path().join("operations");
         fs::create_dir_all(&operations).unwrap();

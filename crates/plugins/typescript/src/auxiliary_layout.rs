@@ -2,7 +2,7 @@
 //! entrypoints are rebuilt rather than slicing generated TypeScript text.
 use crate::render::{self, ArtifactOptions};
 use anyhow::Result;
-use kaji_core::{AdditionalProperties, Api, GeneratedFile, SchemaKind, SchemaValue};
+use poolster_core::{AdditionalProperties, Api, GeneratedFile, SchemaKind, SchemaValue};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) fn prepare(api: &Api) -> Api {
@@ -11,13 +11,13 @@ pub(crate) fn prepare(api: &Api) -> Api {
         value
             .value
             .extensions
-            .entry("kaji.aux.schema_name".into())
+            .entry("poolster.aux.schema_name".into())
             .or_insert_with(|| original.name.clone().into());
     }
     for (value, original) in prepared.operations.iter_mut().zip(&api.operations) {
         value
             .annotations
-            .entry("kaji.aux.operation_id".into())
+            .entry("poolster.aux.operation_id".into())
             .or_insert_with(|| original.id.clone().into());
     }
     prepared
@@ -30,7 +30,7 @@ fn group_indices(
 ) -> Result<Vec<Vec<usize>>> {
     let units = lengths
         .enumerate()
-        .map(|(index, bytes)| kaji_core::SourceUnit {
+        .map(|(index, bytes)| poolster_core::SourceUnit {
             bytes,
             resource: resources.get(index).map(String::as_str),
         })
@@ -38,7 +38,7 @@ fn group_indices(
     config
         .layout
         .clone()
-        .unwrap_or_else(|| kaji_core::SourceLayout::chunked(config.max_file_bytes))
+        .unwrap_or_else(|| poolster_core::SourceLayout::chunked(config.max_file_bytes))
         .groups(&units, 1024)
 }
 pub(crate) fn uses_modules(
@@ -53,7 +53,7 @@ pub(crate) fn uses_modules(
         api.schemas.len() + api.operations.len()
     };
     let units = (0..count)
-        .map(|_| kaji_core::SourceUnit {
+        .map(|_| poolster_core::SourceUnit {
             bytes: bytes / count.max(1),
             resource: None,
         })
@@ -61,7 +61,7 @@ pub(crate) fn uses_modules(
     config
         .layout
         .clone()
-        .unwrap_or_else(|| kaji_core::SourceLayout::chunked(config.max_file_bytes))
+        .unwrap_or_else(|| poolster_core::SourceLayout::chunked(config.max_file_bytes))
         .uses_modules(&units, 0)
 }
 fn operation_resources(api: &Api) -> Vec<String> {
@@ -196,7 +196,7 @@ pub(crate) fn zod(api: &Api, config: &ArtifactOptions) -> Result<Vec<GeneratedFi
         for &i in indices {
             let s = &api.schemas[i];
             let n = name(&s.name);
-            source.push_str(&format!("import type {{ {n} as __KajiModel{n} }} from '../models';\nexport const {n}Schema: z.ZodType<__KajiModel{n}> = {};\nexport type {n} = z.infer<typeof {n}Schema>;\n", render::render_zod(&s.value)));
+            source.push_str(&format!("import type {{ {n} as __PoolsterModel{n} }} from '../models';\nexport const {n}Schema: z.ZodType<__PoolsterModel{n}> = {};\nexport type {n} = z.infer<typeof {n}Schema>;\n", render::render_zod(&s.value)));
             root.push_str(&format!("export {{ {n}Schema }} from './zod_chunks/schemas_{chunk:04}';\nexport type {{ {n} }} from './zod_chunks/schemas_{chunk:04}';\n"));
         }
         source.push_str("export const __kajiSchemas = {\n");
@@ -205,7 +205,7 @@ pub(crate) fn zod(api: &Api, config: &ArtifactOptions) -> Result<Vec<GeneratedFi
             let key = s
                 .value
                 .extensions
-                .get("kaji.aux.schema_name")
+                .get("poolster.aux.schema_name")
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or(&s.name);
             source.push_str(&format!(
@@ -291,8 +291,8 @@ pub(crate) fn zod(api: &Api, config: &ArtifactOptions) -> Result<Vec<GeneratedFi
             source,
         )?);
     }
-    root.push_str(&format!("export const kajiSchemas: {} = {{ {} }} as const;\nexport type KajiSchemaName = keyof typeof kajiSchemas;\nexport type KajiSchema = (typeof kajiSchemas)[KajiSchemaName];\nexport const getKajiSchema = <Name extends KajiSchemaName>(name: Name): (typeof kajiSchemas)[Name] => kajiSchemas[name];\n", if schema_registries.is_empty() { "Record<never, never>".into() } else { (0..schema_registries.len()).map(|i| format!("typeof schemas{i}")).collect::<Vec<_>>().join(" & ") }, schema_registries.join(", ")));
-    root.push_str(&format!("export const kajiOperationSchemas: {} = {{ {} }} as const;\nexport type KajiOperationId = keyof typeof kajiOperationSchemas;\nexport type KajiOperationSchemas = typeof kajiOperationSchemas;\nexport const getKajiOperationSchemas = <Operation extends KajiOperationId>(operation: Operation): KajiOperationSchemas[Operation] => kajiOperationSchemas[operation];\n", if operation_registries.is_empty() { "Record<never, never>".into() } else { (0..operation_registries.len()).map(|i| format!("typeof operations{i}")).collect::<Vec<_>>().join(" & ") }, operation_registries.join(", ")));
+    root.push_str(&format!("export const kajiSchemas: {} = {{ {} }} as const;\nexport type PoolsterSchemaName = keyof typeof kajiSchemas;\nexport type PoolsterSchema = (typeof kajiSchemas)[PoolsterSchemaName];\nexport const getPoolsterSchema = <Name extends PoolsterSchemaName>(name: Name): (typeof kajiSchemas)[Name] => kajiSchemas[name];\n", if schema_registries.is_empty() { "Record<never, never>".into() } else { (0..schema_registries.len()).map(|i| format!("typeof schemas{i}")).collect::<Vec<_>>().join(" & ") }, schema_registries.join(", ")));
+    root.push_str(&format!("export const kajiOperationSchemas: {} = {{ {} }} as const;\nexport type PoolsterOperationId = keyof typeof kajiOperationSchemas;\nexport type PoolsterOperationSchemas = typeof kajiOperationSchemas;\nexport const getPoolsterOperationSchemas = <Operation extends PoolsterOperationId>(operation: Operation): PoolsterOperationSchemas[Operation] => kajiOperationSchemas[operation];\n", if operation_registries.is_empty() { "Record<never, never>".into() } else { (0..operation_registries.len()).map(|i| format!("typeof operations{i}")).collect::<Vec<_>>().join(" & ") }, operation_registries.join(", ")));
     files.push(file(config, "zod.ts", root)?);
     Ok(files)
 }
@@ -304,7 +304,7 @@ fn split_operations(
 ) -> Result<Vec<GeneratedFile>> {
     let mut unsplit = config.clone();
     unsplit.max_file_bytes = usize::MAX;
-    unsplit.layout = Some(kaji_core::SourceLayout::SingleFile);
+    unsplit.layout = Some(poolster_core::SourceLayout::SingleFile);
     let lengths = api
         .operations
         .iter()
@@ -378,7 +378,7 @@ fn local_cypress_config(api: &Api, config: &ArtifactOptions) -> ArtifactOptions 
         api.operations.iter().any(|operation| {
             operation
                 .annotations
-                .get("kaji.aux.operation_id")
+                .get("poolster.aux.operation_id")
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or(&operation.id)
                 == id
@@ -408,10 +408,10 @@ pub(crate) fn models(api: &Api, config: &ArtifactOptions) -> Result<Vec<Generate
     let layout = config
         .layout
         .clone()
-        .unwrap_or_else(|| kaji_core::SourceLayout::chunked(config.max_file_bytes));
+        .unwrap_or_else(|| poolster_core::SourceLayout::chunked(config.max_file_bytes));
     let units = declarations
         .iter()
-        .map(|source| kaji_core::SourceUnit {
+        .map(|source| poolster_core::SourceUnit {
             bytes: source.len(),
             resource: None,
         })

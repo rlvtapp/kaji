@@ -1,6 +1,6 @@
 use super::*;
-use kaji_core::engine::Packages;
-use kaji_core::{
+use poolster_core::engine::Packages;
+use poolster_core::{
     Field, HttpMethod, Operation, OperationMediaType, OperationParameter, OperationRequestBody,
     OperationResponse, Schema, SecurityRequirement, SecurityScheme, SecuritySchemeCatalog,
     SecuritySchemeKind,
@@ -65,11 +65,11 @@ fn api() -> Api {
             annotations: BTreeMap::from([
                 ("tags".into(), json!(["Pets"])),
                 (
-                    "kaji.openapi.servers".into(),
+                    "poolster.openapi.servers".into(),
                     json!([{"url":"https://api.example.com/{version}","variables":[{"name":"version","default":"v1"}]}]),
                 ),
                 (
-                    "kaji.docs.request_examples".into(),
+                    "poolster.docs.request_examples".into(),
                     json!([{"content_type":"application/json","example_json":"{\"name\":\"cat\",\"password\":\"do-not-export\",\"access_token\":\"live-token\"}"}]),
                 ),
             ]),
@@ -77,13 +77,13 @@ fn api() -> Api {
         annotations: Default::default(),
     }
 }
-fn generate(api: &Api, catalog: Option<&SecuritySchemeCatalog>) -> kaji_core::GeneratedTree {
+fn generate(api: &Api, catalog: Option<&SecuritySchemeCatalog>) -> poolster_core::GeneratedTree {
     Packages::new()
         .package(package("postman").with(collection()).with(environment()))
         .generate(api, catalog)
         .unwrap()
 }
-fn document(tree: &kaji_core::GeneratedTree) -> Value {
+fn document(tree: &poolster_core::GeneratedTree) -> Value {
     serde_json::from_str(tree.get("postman/collection.json").unwrap()).unwrap()
 }
 #[test]
@@ -218,7 +218,7 @@ fn unsupported_styles_and_missing_security_are_visible_or_fail_strictly() {
     assert!(
         tree.get("postman/collection.json")
             .unwrap()
-            .contains("Kaji mapping diagnostics")
+            .contains("Poolster mapping diagnostics")
     );
     assert!(
         Packages::new()
