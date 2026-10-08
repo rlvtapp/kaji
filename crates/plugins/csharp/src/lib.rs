@@ -672,7 +672,15 @@ fn render_operation(output: &mut String, operation: &Operation) {
         );
     }
     if let Some(policy) = kaji_core::idempotency::resolved(operation) {
-        let name = camel_case(&policy.parameter_name);
+        let name = operation
+            .parameters
+            .iter()
+            .find(|parameter| {
+                parameter.location == "header"
+                    && parameter.name.eq_ignore_ascii_case(&policy.parameter_name)
+            })
+            .map(parameter_name)
+            .unwrap_or_else(|| camel_case(&policy.parameter_name));
         if policy.auto_generate {
             let _ = writeln!(
                 output,
@@ -1932,6 +1940,43 @@ mod tests {
             ],
             annotations: BTreeMap::new(),
         }
+    }
+
+    #[test]
+    fn idempotency_generation_uses_allocated_header_argument() {
+        let mut operation = Operation {
+            id: "createItem".into(),
+            method: HttpMethod::Post,
+            path: "/items".into(),
+            ..Default::default()
+        };
+        operation.parameters.push(OperationParameter {
+            name: "x_once".into(),
+            location: "query".into(),
+            required: false,
+            schema: Some(SchemaValue::new(SchemaKind::String)),
+            description: None,
+            annotations: BTreeMap::new(),
+        });
+        operation.annotations.insert(
+            "x-kaji-idempotency".into(),
+            serde_json::json!({"header":"Query", "auto_generate":true}),
+        );
+        let api = Api {
+            operations: vec![operation],
+            ..api()
+        };
+        let api = kaji_core::idempotency::prepare_api(&api, &Default::default()).unwrap();
+        let tree = render_test_sdk(&api, "sdk", Some("example-api-sdk")).unwrap();
+        let operations = tree
+            .get("sdk/Operations/KajiClientOperations000.cs")
+            .unwrap();
+        assert!(operations.contains(
+            "if (query2 is null) request.Headers.TryAddWithoutValidation(\"Query\", Guid.NewGuid()"
+        ));
+        assert!(!operations.contains(
+            "if (query is null) request.Headers.TryAddWithoutValidation(\"Query\", Guid.NewGuid()"
+        ));
     }
 
     #[test]

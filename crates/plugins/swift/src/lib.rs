@@ -910,7 +910,16 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
     if let Some(policy) =
         kaji_core::idempotency::resolved(operation).filter(|policy| policy.auto_generate)
     {
-        let value = identifier(&policy.parameter_name);
+        let value = operation
+            .parameters
+            .iter()
+            .find(|parameter| {
+                parameter.location == "header"
+                    && (parameter.name == policy.parameter_name
+                        || parameter.name.eq_ignore_ascii_case(&policy.header))
+            })
+            .map(parameter_name)
+            .unwrap_or_else(|| identifier(&policy.parameter_name));
         let _ = writeln!(
             output,
             "{indent}    if {value} == nil {{ request.setValue(UUID().uuidString.lowercased(), forHTTPHeaderField: {:?}) }}",
@@ -1776,7 +1785,7 @@ struct Mock: KajiTransport {
     #[test]
     #[ignore = "requires a Swift toolchain"]
     fn generated_idempotency_keys_preserve_caller_values() {
-        let api = Api {
+        let mut api = Api {
             operations: vec![Operation {
                 id: "createItem".into(),
                 method: HttpMethod::Post,
@@ -1793,7 +1802,33 @@ struct Mock: KajiTransport {
             }],
             ..Default::default()
         };
+        api.operations.push(Operation {
+            id: "collide".into(),
+            method: HttpMethod::Post,
+            path: "/collisions".into(),
+            parameters: vec![OperationParameter {
+                name: "request2".into(),
+                location: "query".into(),
+                required: false,
+                schema: Some(SchemaValue::new(SchemaKind::String)),
+                description: None,
+                annotations: Default::default(),
+            }],
+            responses: vec![OperationResponse::json(
+                "200",
+                SchemaValue::new(SchemaKind::Integer),
+            )],
+            annotations: BTreeMap::from([(
+                "x-kaji-idempotency".into(),
+                serde_json::json!({"header":"Request","auto_generate":true}),
+            )]),
+            ..Default::default()
+        });
         let api = kaji_core::idempotency::prepare_api(&api, &Default::default()).unwrap();
+        let api = native_api(&api);
+        let collision = &api.operations[1];
+        assert_eq!(parameter_name(&collision.parameters[0]), "request2");
+        assert_eq!(parameter_name(&collision.parameters[1]), "request3");
         let root = tempfile::tempdir().unwrap();
         std::fs::write(root.path().join("Client.swift"), client_runtime()).unwrap();
         std::fs::write(
@@ -1806,6 +1841,9 @@ struct Mock: KajiTransport {
 import FoundationNetworking
 #endif
 actor Events {
+ var collisions:[String]=[]
+ func addCollision(_ key:String)->Int { collisions.append(key); return collisions.count }
+ func collisionSnapshot()->[String]{collisions}
  var keys:[String]=[]
  func add(_ key:String){ keys.append(key) }
  func snapshot()->[String]{keys}
@@ -1813,6 +1851,13 @@ actor Events {
 struct Mock:KajiTransport {
  let events:Events
  func execute(_ request:URLRequest) async throws -> (Data,URLResponse) {
+  if request.url!.absoluteString.contains("/collisions") {
+   let query = URLComponents(url:request.url!,resolvingAgainstBaseURL:false)!.queryItems!
+   precondition(query.first { $0.name == "request2" }!.value == "query-only")
+   let key = request.value(forHTTPHeaderField:"Request")!
+   let count = await events.addCollision(key)
+   return(Data("1".utf8),HTTPURLResponse(url:request.url!,statusCode:count % 2 == 1 ? 503 : 200,httpVersion:nil,headerFields:[:])!)
+  }
   precondition(request.url!.absoluteString.contains("/prefix%2Fkeep/items"))
   await events.add(request.value(forHTTPHeaderField:"X-Once")!)
   return(Data("1".utf8),HTTPURLResponse(url:request.url!,statusCode:200,httpVersion:nil,headerFields:[:])!)
@@ -1820,8 +1865,13 @@ struct Mock:KajiTransport {
 }
 @main struct Probe {
  static func main() async throws {
-  let events=Events();let client=KajiClient(options:.init(baseURL:URL(string:"https://unused.test/prefix%2Fkeep/")!),transport:Mock(events:events))
+  let events=Events();let client=KajiClient(options:.init(baseURL:URL(string:"https://unused.test/prefix%2Fkeep/")!, maxAttempts:2, retryBaseDelay:0, retryMaxDelay:0),transport:Mock(events:events))
   _ = try await client.createItem();_ = try await client.createItem();_ = try await client.createItem(xOnce:"durable-key");_ = try await client.createItem(xOnce:"")
+  _ = try await client.collide(request2:"query-only")
+  _ = try await client.collide(request2:"query-only",request3:"caller-key")
+  let collisionKeys=await events.collisionSnapshot(); precondition(collisionKeys.count==4)
+  precondition(UUID(uuidString:collisionKeys[0]) != nil); precondition(collisionKeys[0]==collisionKeys[1])
+  precondition(collisionKeys[2]=="caller-key" && collisionKeys[3]=="caller-key")
   let literal = try client.makeRequest(method: "GET", path: "/literal?x#y")
   precondition(literal.url!.absoluteString == "https://unused.test/prefix%2Fkeep/literal%3Fx%23y")
   let keys=await events.snapshot();precondition(keys.count==4);precondition(keys[0] != keys[1]);precondition(UUID(uuidString:keys[0]) != nil);precondition(keys[2]=="durable-key");precondition(keys[3]=="");precondition(keys[0].split(separator:"-")[2].first=="4")

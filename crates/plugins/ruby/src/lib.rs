@@ -671,7 +671,12 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
                 .get("parameter_name")
                 .and_then(serde_json::Value::as_str)
             {
-                let variable = ruby_identifier(parameter);
+                let variable = operation
+                    .parameters
+                    .iter()
+                    .find(|item| item.name == parameter && item.location == "header")
+                    .map(|item| ruby_parameter_identifier(operation, item))
+                    .unwrap_or_else(|| ruby_identifier(parameter));
                 let _ = writeln!(
                     out,
                     "      require 'securerandom'\n      {variable} = SecureRandom.uuid if {variable}.nil?"
@@ -2068,6 +2073,10 @@ begin;client.get_item;raise 'error accepted';rescue ProbeSdk::ApiError=>error;ra
         });
         op.annotations.insert("x-kaji-idempotency-resolved".into(),serde_json::json!({"header":"X-Request-Key","parameter_name":"X-Request-Key","auto_generate":true}));
         api.operations.push(op);
+        let mut collision = api.operations[0].parameters[0].clone();
+        collision.name = "X_Request_Key".into();
+        collision.location = "query".into();
+        api.operations[0].parameters.insert(0, collision);
         let root = tempfile::tempdir().unwrap();
         render_sdk(&api, "ruby", Some("probe-sdk"), SdkClientStyle::Flat)
             .unwrap()
@@ -2076,7 +2085,7 @@ begin;client.get_item;raise 'error accepted';rescue ProbeSdk::ApiError=>error;ra
         let script = r#"require 'probe_sdk'
 Response=Struct.new(:code,:body);seen=[]
 client=ProbeSdk::Client.new(base_url:'https://example.invalid',transport:->(request){seen<<request['X-Request-Key'];Response.new('200','{}')})
-client.create_item;client.create_item;client.create_item(x_request_key:'provided')
+client.create_item(x_request_key:'query-value');client.create_item;client.create_item(x_request_key_:'provided')
 raise unless seen[0].match?(/\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/) && seen[0]!=seen[1] && seen[2]=='provided'
 "#;
         let output = std::process::Command::new("ruby")

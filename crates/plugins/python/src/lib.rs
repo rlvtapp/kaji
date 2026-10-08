@@ -1509,7 +1509,12 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
                 .get("parameter_name")
                 .and_then(serde_json::Value::as_str)
             {
-                let variable = python_identifier(parameter);
+                let variable = operation
+                    .parameters
+                    .iter()
+                    .find(|item| item.name == parameter && item.location == "header")
+                    .map(|item| python_parameter_identifier(operation, item))
+                    .unwrap_or_else(|| python_identifier(parameter));
                 let _ = writeln!(
                     output,
                     "        if {variable} is None:\n            {variable} = str(uuid4())"
@@ -4056,6 +4061,10 @@ asyncio.run(main())
         op.annotations
             .get_mut("x-kaji-idempotency-resolved")
             .unwrap()["parameter_name"] = serde_json::json!("X-Request-Key");
+        let mut collision = op.parameters[0].clone();
+        collision.name = "X_Request_Key".into();
+        collision.location = "query".into();
+        op.parameters.insert(0, collision);
         let root = tempfile::tempdir().unwrap();
         render_sdk_with_async(
             &source,
@@ -4086,7 +4095,7 @@ def send(request,**kwargs):
     return Response()
 runtime.urlopen=send
 client=Client('https://example.invalid',max_retries=1,retry_initial_delay=0,retry_max_delay=0)
-client.create_contact();assert seen[0]==seen[1] and uuid.UUID(seen[0]).version==4
+client.create_contact(x_request_key='query-value');assert seen[0]==seen[1] and uuid.UUID(seen[0]).version==4
 delays=[];runtime.time.sleep=delays.append
 client.retry_max_delay=.4
 client._retry_delay(0,'2','250');assert delays.pop()==.25
@@ -4095,14 +4104,14 @@ client._retry_delay(0,'.2','invalid');assert delays.pop()==.2
 client._retry_delay(0,'2','0');assert delays.pop()==0
 client.retry_max_delay=0
 first=seen[0];client.create_contact();assert seen[2]==seen[3] and seen[2]!=first
-client.create_contact(x_request_key='provided');assert seen[-2:]==['provided','provided']
+client.create_contact(x_request_key_='provided');assert seen[-2:]==['provided','provided']
 # The same header on an unconfigured operation cannot confer retry safety.
 seen.clear()
 try: client._request('POST','/contacts',headers={'X-Request-Key':'untrusted'},retryable=True)
 except Exception: pass
 assert len(seen)==1
 seen.clear()
-try: client.create_contact(x_request_key='')
+try: client.create_contact(x_request_key_='')
 except Exception: pass
 assert seen==['']
 class AsyncResponse:
@@ -4116,9 +4125,9 @@ class Driver:
 async def run():
     seen.clear();client=AsyncClient('https://example.invalid',http_client=Driver(),max_retries=1,retry_initial_delay=0,retry_max_delay=0)
     await client.create_contact();assert seen[0]==seen[1] and uuid.UUID(seen[0]).version==4
-    await client.create_contact(x_request_key='provided');assert seen[-2:]==['provided','provided']
+    await client.create_contact(x_request_key_='provided');assert seen[-2:]==['provided','provided']
     seen.clear()
-    try: await client.create_contact(x_request_key='')
+    try: await client.create_contact(x_request_key_='')
     except Exception: pass
     assert seen==['']
     delays=[]

@@ -649,7 +649,15 @@ fn render_operation(operation: &Operation, config: &RenderOptions) -> String {
     if let Some(policy) =
         kaji_core::idempotency::resolved(operation).filter(|policy| policy.auto_generate)
     {
-        let field = rust_field_name(&policy.parameter_name);
+        let field = operation
+            .parameters
+            .iter()
+            .find(|parameter| {
+                parameter.location == "header"
+                    && parameter.name.eq_ignore_ascii_case(&policy.parameter_name)
+            })
+            .map(parameter_name)
+            .unwrap_or_else(|| rust_field_name(&policy.parameter_name));
         let _ = writeln!(
             output,
             "        let mut input = input;\n        if input.{field}.is_none() {{ input.{field} = Some(uuid::Uuid::new_v4().to_string()); }}"
@@ -2064,9 +2072,17 @@ mod tests {
                 "200",
                 SchemaValue::new(SchemaKind::Integer),
             )],
+            parameters: vec![OperationParameter {
+                name: "x_once".into(),
+                location: "query".into(),
+                required: false,
+                schema: Some(SchemaValue::new(SchemaKind::String)),
+                description: None,
+                annotations: BTreeMap::new(),
+            }],
             annotations: BTreeMap::from([(
                 "x-kaji-idempotency".into(),
-                serde_json::json!({"header":"X-Once", "auto_generate":true}),
+                serde_json::json!({"header":"Query", "auto_generate":true}),
             )]),
             ..Default::default()
         };
@@ -2111,15 +2127,16 @@ use idempotency_sdk::{Client,client::{CreateItemRequest,RetryConfig},transport::
 use std::sync::{Arc,Mutex};
 struct Mock(Arc<Mutex<Vec<String>>>);
 impl Transport for Mock {fn execute(&self,request:reqwest::Request)->TransportFuture<'_>{
- let key=request.headers().get("X-Once").unwrap().to_str().unwrap().to_owned();let mut seen=self.0.lock().unwrap();seen.push(key);let status=if seen.len()%2==1 {503}else{200};
+ assert_eq!(request.url().query(),Some("x_once=query-value"));
+ let key=request.headers().get("Query").unwrap().to_str().unwrap().to_owned();let mut seen=self.0.lock().unwrap();seen.push(key);let status=if seen.len()%2==1 {503}else{200};
  Box::pin(async move{Ok(http::Response::builder().status(status).body(reqwest::Body::from("1")).unwrap().into())})
 }}
 #[tokio::test] async fn stable_and_overridable(){
  let seen=Arc::new(Mutex::new(Vec::new()));let client=Client::new("https://unused.test").with_transport(Arc::new(Mock(seen.clone()))).with_retry(RetryConfig {max_attempts:2,initial_delay:std::time::Duration::ZERO,max_delay:std::time::Duration::ZERO});
- for _ in 0..2 {assert_eq!(client.create_item(CreateItemRequest{x_once:None}).await.unwrap(),1);}
- assert_eq!(client.create_item(CreateItemRequest{x_once:Some("durable-key".into())}).await.unwrap(),1);
+ for _ in 0..2 {assert_eq!(client.create_item(CreateItemRequest{x_once:Some("query-value".into()),query2:None}).await.unwrap(),1);}
+ assert_eq!(client.create_item(CreateItemRequest{x_once:Some("query-value".into()),query2:Some("durable-key".into())}).await.unwrap(),1);
  let keys=seen.lock().unwrap();assert_eq!(keys.len(),6);assert_eq!(keys[0],keys[1]);assert_eq!(keys[2],keys[3]);assert_ne!(keys[0],keys[2]);assert_eq!(uuid::Uuid::parse_str(&keys[0]).unwrap().get_version_num(),4);assert_eq!(keys[4],"durable-key");assert_eq!(keys[4],keys[5]);drop(keys);
- for blank in ["", "   "] {seen.lock().unwrap().clear();assert!(client.create_item(CreateItemRequest{x_once:Some(blank.into())}).await.is_err());let keys=seen.lock().unwrap();assert_eq!(keys.len(),1);assert_eq!(keys[0],blank);}
+ for blank in ["", "   "] {seen.lock().unwrap().clear();assert!(client.create_item(CreateItemRequest{x_once:Some("query-value".into()),query2:Some(blank.into())}).await.is_err());let keys=seen.lock().unwrap();assert_eq!(keys.len(),1);assert_eq!(keys[0],blank);}
 }
 "#).unwrap();
         let output = crate::native_cargo()
