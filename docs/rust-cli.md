@@ -50,34 +50,39 @@ needs provider-authored workflow, safety, and product guidance.
 ## Authentication and customization
 
 `auth set-token` stores a local bearer token and `<COMMAND>_TOKEN` supplies an ephemeral
-token in CI. Poolster creates `src/poolster_extension.rs` and `src/poolster_auth.rs` only once, so
-both are preserved when the CLI is regenerated. The latter's `ExtensionV1` contract is
-versioned.
+token in CI. Poolster creates `src/poolster_extension.rs` once and preserves it
+when the CLI is regenerated.
 
 ### Implement custom authentication
 
-Implement `pre_authenticate` to add custom OAuth, SSO, keychain, or signing credentials,
-then return `AuthenticationResult::Handled`; return `AuthenticationResult::Fallback` to
-retain Poolster's environment/profile token lookup. `before_request` and `after_response` in
-`poolster_extension.rs` are available for logging, tracing, and audit events.
+Implement `Extension::authenticate` to add custom OAuth, SSO, keychain, or signing
+credentials, then return `AuthenticationResult::Handled`. Return
+`AuthenticationResult::UseOpenApi` to apply the declared OpenAPI security using
+the configured environment or profile credentials. `before_request` and
+`after_response` are available for logging, tracing, and audit events.
 
-Existing `authenticate` implementations returning an optional bearer token remain
-supported. The generated `auth login` command delegates to `login`.
+The generated `auth login` command delegates to `login`. Replace the generated
+empty `impl Extension for PoolsterExtension` with your implementation:
 
 ```rust
-impl ExtensionV1 for PoolsterAuthExtension {
-    fn pre_authenticate(
+impl Extension for PoolsterExtension {
+    fn authenticate(
         &self,
-        auth: &mut AuthenticateContext<'_, '_, '_>,
+        headers: &mut HeaderMap,
+        _query: &mut Vec<(&'static str, String)>,
+        _context: &AuthContext<'_>,
     ) -> anyhow::Result<AuthenticationResult> {
-        auth.bearer_token(&read_enterprise_token()?)?;
+        headers.insert(
+            reqwest::header::AUTHORIZATION,
+            format!("Bearer {}", read_enterprise_token()?).parse()?,
+        );
         Ok(AuthenticationResult::Handled)
     }
 }
 ```
 
-Returning `Fallback` is useful when an extension only adds context such as a tenant
-header and should still use the configured token.
+Returning `UseOpenApi` is useful when an extension only adds context such as a
+tenant header and should still use the configured security scheme.
 
 ## API keys and profiles
 
