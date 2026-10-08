@@ -44,11 +44,11 @@ impl Plugin<Terraform> for ReleaseScaffold {
         for (path, source) in [
             (
                 ".goreleaser.yml",
-                include_str!("terraform.goreleaser.yml.txt").replace("__PROVIDER__", name),
+                include_str!("../templates/goreleaser.yml.tmpl").replace("__PROVIDER__", name),
             ),
             (
                 ".poolster/templates/terraform-release.yml",
-                include_str!("terraform-release.yml.txt").to_owned(),
+                include_str!("../templates/release.yml.tmpl").to_owned(),
             ),
             (
                 "terraform-registry-manifest.json",

@@ -13,11 +13,11 @@ pub(crate) fn render(
     let mut tree = GeneratedTree::default();
     tree.insert(GeneratedFile::new(
         "go.mod",
-        include_str!("framework.go.mod.template").replace("__MODULE__", module),
+        include_str!("../templates/go.mod.tmpl").replace("__MODULE__", module),
     )?)?;
     tree.insert(GeneratedFile::new(
         "go.sum",
-        include_str!("framework.go.sum"),
+        include_str!("../templates/go.sum"),
     )?)?;
     tree.insert(GeneratedFile::new(
         "main.go",
@@ -29,7 +29,7 @@ pub(crate) fn render(
     )?)?;
     tree.insert(GeneratedFile::new(
         "internal/provider/nested_values.go",
-        include_str!("nested_runtime.go.txt"),
+        include_str!("../templates/nested_runtime.go.tmpl"),
     )?)?;
     if catalog
         .resources
@@ -38,7 +38,7 @@ pub(crate) fn render(
     {
         tree.insert(GeneratedFile::new(
             "internal/provider/polling.go",
-            include_str!("polling_runtime.go.txt"),
+            include_str!("../templates/polling_runtime.go.tmpl"),
         )?)?;
     }
     for resource in &catalog.resources {

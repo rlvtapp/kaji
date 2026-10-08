@@ -113,7 +113,7 @@ fn generated_nested_provider_executes_native_framework_lifecycle() {
     tree.insert(
         GeneratedFile::new(
             "internal/provider/nested_lifecycle_test.go",
-            include_str!("nested_lifecycle_test.go.txt"),
+            include_str!("../tests/fixtures/nested_lifecycle_test.go"),
         )
         .unwrap(),
     )

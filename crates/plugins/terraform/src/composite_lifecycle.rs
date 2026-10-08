@@ -71,7 +71,7 @@ fn generated_composite_provider_executes_native_framework_lifecycle() {
     tree.insert(
         GeneratedFile::new(
             "internal/provider/composite_lifecycle_test.go",
-            include_str!("composite_lifecycle_test.go.txt"),
+            include_str!("../tests/fixtures/composite_lifecycle_test.go"),
         )
         .unwrap(),
     )

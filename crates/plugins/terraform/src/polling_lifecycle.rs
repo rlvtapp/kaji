@@ -78,7 +78,7 @@ fn generated_polling_provider_executes_native_framework_lifecycle() {
     tree.insert(
         GeneratedFile::new(
             "internal/provider/polling_lifecycle_test.go",
-            include_str!("polling_lifecycle_test.go.txt"),
+            include_str!("../tests/fixtures/polling_lifecycle_test.go"),
         )
         .unwrap(),
     )
