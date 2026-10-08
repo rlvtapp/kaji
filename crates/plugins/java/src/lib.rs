@@ -5,6 +5,7 @@
 //! the JDK's `java.net.http.HttpClient`; Jackson is the only runtime dependency
 //! and handles generated records, JSON bodies, and typed responses.
 
+mod errors;
 #[cfg(test)]
 mod model_compat_tests;
 mod models;
@@ -19,6 +20,7 @@ mod presence;
 mod resources;
 mod runtime;
 mod surface;
+use errors::*;
 #[cfg(test)]
 use models::render_model;
 use models::render_model_parts;
@@ -387,86 +389,6 @@ fn style_guide(api: &Api, package: &str, style: SdkClientStyle) -> String {
         "# {} Java SDK style guide\n\nPackage: `{package}`.\n\n{surface}\n\n## Pagination\n\nA declared safe cursor or offset/limit contract adds `{{operation}}Pages(input)`, a lazy `Iterable` of the operation's normal response type. It reuses the ordinary operation for every page. Cursor inputs may be string query, header, or required path parameters; path cursors require an initial value under OpenAPI. Legacy offset/page inputs use optional direct integer query parameters; referenced integer control schemas do not receive helpers. declared `type: page` also accepts required integer query inputs and validates `outputs.results` against the response schema. Omitted pages default to 1 and offsets to 0; explicit zero is preserved. Results-based helpers stop on empty or short arrays, guard integer overflow, and reject negative inputs or nonpositive limits. Cursor and same-origin URL helpers stop on repeated continuations. Every helper stops after 10,000 pages. JSONPath field/array selectors and RFC 6901 pointers are supported. Body continuations stay explicit rather than being guessed.\n\n## Media and streaming\n\nNon-JSON success responses are returned as `byte[]`; non-JSON request bodies accept `byte[]`. A `text/event-stream` operation returns `Stream<String>` containing complete event data payloads (multiline data fields are joined with a newline; metadata and comments are ignored). Close that stream when finished.\n",
         api.name
     )
-}
-
-fn declared_error_responses(operation: &Operation) -> Vec<&OperationResponse> {
-    operation
-        .responses
-        .iter()
-        .filter(|response| {
-            response
-                .status
-                .parse::<u16>()
-                .is_ok_and(|status| !(200..300).contains(&status))
-        })
-        .collect()
-}
-
-fn declared_error_schema(response: &OperationResponse) -> Option<&SchemaValue> {
-    response
-        .media_types
-        .iter()
-        .find(|media| is_json_media(&media.content_type))
-        .and_then(|media| media.schema.as_ref())
-}
-
-fn java_error_name(operation: &Operation, response: &OperationResponse) -> String {
-    format!(
-        "{}Status{}Exception",
-        type_name(&operation.id),
-        response.status
-    )
-}
-
-fn java_error_mapper_name(operation: &Operation) -> String {
-    format!("map{}Error", type_name(&operation.id))
-}
-
-/// Error types are nested under Client so the package retains one public
-/// transport exception file while callers can catch operation/status-specific
-/// classes. A malformed declared error body remains available as raw text.
-fn render_declared_error_types(output: &mut String, api: &Api) {
-    for operation in &api.operations {
-        let responses = declared_error_responses(operation);
-        if responses.is_empty() {
-            continue;
-        }
-        let mapper = java_error_mapper_name(operation);
-        let _ = writeln!(
-            output,
-            "    private RuntimeException {mapper}(ApiException error) {{\n        return switch (error.statusCode()) {{"
-        );
-        for response in &responses {
-            let status = &response.status;
-            let error = java_error_name(operation, response);
-            if let Some(schema) = declared_error_schema(response) {
-                let class = response_class(schema);
-                let _ = writeln!(
-                    output,
-                    "            case {status} -> new {error}(error, decodeDeclaredError(error.responseBody(), {class}.class));"
-                );
-            } else {
-                let _ = writeln!(output, "            case {status} -> new {error}(error);");
-            }
-        }
-        output.push_str("            default -> error;\n        };\n    }\n\n");
-        for response in responses {
-            let error = java_error_name(operation, response);
-            if let Some(schema) = declared_error_schema(response) {
-                let body = operation_response_type(schema);
-                let _ = writeln!(
-                    output,
-                    "    public static final class {error} extends ApiException {{\n        private final {body} body;\n        private {error}(ApiException source, {body} body) {{ super(source.statusCode(), source.responseBody(), source.retryAfter(), source.retryAfterMillis()); this.body = body; }}\n        public {body} body() {{ return body; }}\n    }}\n"
-                );
-            } else {
-                let _ = writeln!(
-                    output,
-                    "    public static final class {error} extends ApiException {{\n        private {error}(ApiException source) {{ super(source.statusCode(), source.responseBody(), source.retryAfter(), source.retryAfterMillis()); }}\n    }}\n"
-                );
-            }
-        }
-    }
-    output.push_str("    private <T> T decodeDeclaredError(String response, Class<T> type) {\n        if (response == null || response.isBlank()) return null;\n        try { return mapper.readValue(response, type); } catch (JsonProcessingException ignored) { return null; }\n    }\n\n");
 }
 
 #[cfg(test)]
