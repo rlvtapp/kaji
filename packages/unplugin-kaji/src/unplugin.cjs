@@ -1,14 +1,14 @@
 'use strict';
 
-const kaji = require('./index.cjs');
+const poolster = require('./index.cjs');
 
 function loadUnplugin() {
   try {
     return require('unplugin');
   } catch {
-    throw new Error('The bundler adapter entry points require `unplugin`. Install it with your bundler, then import @relevate/unplugin-kaji/vite, /rollup, /webpack, /esbuild, /rspack, /rolldown, or /farm.');
+    throw new Error('The bundler adapter entry points require `unplugin`. Install it with your bundler, then import @relevate/unplugin-poolster/vite, /rollup, /webpack, /esbuild, /rspack, /rolldown, or /farm.');
   }
 }
 
 const { createUnplugin } = loadUnplugin();
-module.exports = createUnplugin((options) => kaji(options));
+module.exports = createUnplugin((options) => poolster(options));

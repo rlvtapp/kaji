@@ -1,12 +1,12 @@
-# @relevate/unplugin-kaji
+# @relevate/unplugin-poolster
 
-Generate Kaji SDKs as part of a Vite, Rollup, webpack, esbuild, Rspack,
+Generate Poolster SDKs as part of a Vite, Rollup, webpack, esbuild, Rspack,
 Rolldown, Farm, Nuxt, or Astro build. The
-plugin runs the installed native `kajicli` CLI before each build and
+plugin runs the installed native `poolster` CLI before each build and
 regenerates when the recipe or local OpenAPI source changes.
 
 ```sh
-npm install --save-dev kajicli @relevate/unplugin-kaji unplugin
+npm install --save-dev poolster @relevate/unplugin-poolster unplugin
 ```
 
 ## Vite
@@ -14,10 +14,10 @@ npm install --save-dev kajicli @relevate/unplugin-kaji unplugin
 ```ts
 // vite.config.ts
 import { defineConfig } from 'vite';
-import kaji from '@relevate/unplugin-kaji/vite';
+import poolster from '@relevate/unplugin-poolster/vite';
 
 export default defineConfig({
-  plugins: [kaji({ config: 'kaji.json' })],
+  plugins: [poolster({ config: 'poolster.json' })],
 });
 ```
 
@@ -28,21 +28,21 @@ entry point is a dependency-free Rollup/Vite-style plugin if an adapter is not
 needed:
 
 ```js
-const kaji = require('@relevate/unplugin-kaji');
+const poolster = require('@relevate/unplugin-poolster');
 
-module.exports = { plugins: [kaji()] };
+module.exports = { plugins: [poolster()] };
 ```
 
 ## Options
 
-`config` defaults to `kaji.json`, and generates with
-`kaji generate --config kaji.json`. The recipe and its local
+`config` defaults to `poolster.json`, and generates with
+`poolster generate --config poolster.json`. The recipe and its local
 `openapi.input` are watched automatically. Include local `$ref` files or any
 other contract dependencies with `watchFiles`:
 
 ```ts
-kaji({
-  config: 'api/kaji.json',
+poolster({
+  config: 'api/poolster.json',
   watchFiles: ['api/components/common.yaml'],
 })
 ```
@@ -51,23 +51,23 @@ For direct CLI generation, supply exact arguments and disable the implicit
 recipe:
 
 ```ts
-kaji({
+poolster({
   config: false,
   args: ['generate', 'openapi.yaml', '--output', 'src/generated', '--language', 'typescript'],
 })
 ```
 
 Other options are `cwd`, `env`, `watch` (defaults to `true`), `silent`, and
-`onGenerate`. `command` can point to a local Kaji executable; by default the
-plugin resolves the `kajicli` launcher from the consuming project.
+`onGenerate`. `command` can point to a local Poolster executable; by default the
+plugin resolves the `poolster` launcher from the consuming project.
 
 The plugin never serves generated code as a virtual module. Point normal source
-imports at Kaji's configured output directory. Remote OpenAPI URLs are generated
+imports at Poolster's configured output directory. Remote OpenAPI URLs are generated
 during the initial build but are not polled; use a local downloaded contract if
 watch-mode refreshes are needed.
 
 ## Development
 
 ```sh
-node --test packages/unplugin-kaji/test/*.test.cjs
+node --test packages/unplugin-poolster/test/*.test.cjs
 ```

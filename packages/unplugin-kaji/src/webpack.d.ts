@@ -1,2 +1,2 @@
-import kaji = require('./index');
-export = kaji;
+import poolster = require('./index');
+export = poolster;

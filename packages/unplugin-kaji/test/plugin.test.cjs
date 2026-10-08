@@ -6,7 +6,7 @@ const Module = require('node:module');
 const os = require('node:os');
 const path = require('node:path');
 const { test } = require('node:test');
-const kaji = require('../src/index.cjs');
+const poolster = require('../src/index.cjs');
 
 const adapterFiles = ['unplugin', 'vite', 'rollup', 'webpack', 'esbuild', 'rspack', 'rolldown', 'farm', 'astro', 'nuxt'];
 
@@ -45,18 +45,18 @@ function unpluginMock() {
 }
 
 function fixture() {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'unplugin-kaji-'));
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'unplugin-poolster-'));
   return {
     directory,
     remove() { fs.rmSync(directory, { recursive: true, force: true }); },
   };
 }
 
-test('runs explicit Kaji arguments before the bundler starts', async (t) => {
+test('runs explicit Poolster arguments before the bundler starts', async (t) => {
   const sandbox = fixture();
   t.after(() => sandbox.remove());
   const output = [];
-  const plugin = kaji({
+  const plugin = poolster({
     config: false,
     command: process.execPath,
     args: ['-e', 'console.log("generated")'],
@@ -73,13 +73,13 @@ test('runs explicit Kaji arguments before the bundler starts', async (t) => {
 test('watches the recipe, local OpenAPI input, and explicit local dependencies', async (t) => {
   const sandbox = fixture();
   t.after(() => sandbox.remove());
-  fs.writeFileSync(path.join(sandbox.directory, 'kaji.json'), JSON.stringify({
+  fs.writeFileSync(path.join(sandbox.directory, 'poolster.json'), JSON.stringify({
     openapi: { input: './openapi.yaml' },
   }));
   fs.writeFileSync(path.join(sandbox.directory, 'openapi.yaml'), 'openapi: 3.1.0');
   fs.writeFileSync(path.join(sandbox.directory, 'shared.yaml'), 'components: {}');
   const watched = [];
-  const plugin = kaji({
+  const plugin = poolster({
     command: process.execPath,
     args: ['-e', ''],
     cwd: sandbox.directory,
@@ -89,7 +89,7 @@ test('watches the recipe, local OpenAPI input, and explicit local dependencies',
   await plugin.buildStart.call({ addWatchFile: (file) => watched.push(file) });
 
   assert.deepEqual(new Set(watched), new Set([
-    path.join(sandbox.directory, 'kaji.json'),
+    path.join(sandbox.directory, 'poolster.json'),
     path.join(sandbox.directory, 'openapi.yaml'),
     path.join(sandbox.directory, 'shared.yaml'),
   ]));
@@ -98,10 +98,10 @@ test('watches the recipe, local OpenAPI input, and explicit local dependencies',
 test('regenerates only for registered files in watch mode', async (t) => {
   const sandbox = fixture();
   t.after(() => sandbox.remove());
-  const config = path.join(sandbox.directory, 'kaji.json');
+  const config = path.join(sandbox.directory, 'poolster.json');
   fs.writeFileSync(config, '{}');
   let runs = 0;
-  const plugin = kaji({
+  const plugin = poolster({
     command: process.execPath,
     args: ['-e', ''],
     cwd: sandbox.directory,
@@ -118,17 +118,17 @@ test('regenerates only for registered files in watch mode', async (t) => {
 test('keeps subsequent watch runs available after a generator error', async (t) => {
   const sandbox = fixture();
   t.after(() => sandbox.remove());
-  const config = path.join(sandbox.directory, 'kaji.json');
+  const config = path.join(sandbox.directory, 'poolster.json');
   fs.writeFileSync(config, '{}');
-  const plugin = kaji({
+  const plugin = poolster({
     command: process.execPath,
     args: ['-e', 'process.exit(7)'],
     cwd: sandbox.directory,
     silent: true,
   });
   const context = { addWatchFile() {} };
-  await assert.rejects(plugin.buildStart.call(context), /Kaji generation failed/);
-  await assert.rejects(plugin.watchChange.call(context, config), /Kaji generation failed/);
+  await assert.rejects(plugin.buildStart.call(context), /Poolster generation failed/);
+  await assert.rejects(plugin.watchChange.call(context, config), /Poolster generation failed/);
 });
 
 test('exposes native unplugin adapters for Rspack, Rolldown, and Farm', () => {
@@ -137,19 +137,19 @@ test('exposes native unplugin adapters for Rspack, Rolldown, and Farm', () => {
       const createPlugin = require(`../src/${adapter}.cjs`);
       const result = createPlugin({ config: false, args: ['generate'] });
       assert.equal(result.adapter, adapter);
-      assert.equal(result.plugin.name, 'kaji');
+      assert.equal(result.plugin.name, 'poolster');
     }
   });
 });
 
-test('Astro integration appends Kaji to Astro Vite plugins', () => {
+test('Astro integration appends Poolster to Astro Vite plugins', () => {
   withMocks({ unplugin: unpluginMock() }, () => {
-    const astroKaji = require('../src/astro.cjs');
-    const integration = astroKaji({ config: false, args: ['generate'] });
+    const astroPoolster = require('../src/astro.cjs');
+    const integration = astroPoolster({ config: false, args: ['generate'] });
     const astro = { config: {} };
     integration.hooks['astro:config:setup'](astro);
 
-    assert.equal(integration.name, '@relevate/unplugin-kaji');
+    assert.equal(integration.name, '@relevate/unplugin-poolster');
     assert.equal(astro.config.vite.plugins.length, 1);
     assert.equal(astro.config.vite.plugins[0].adapter, 'vite');
   });
@@ -165,10 +165,10 @@ test('Nuxt module registers both supported builders', () => {
       addWebpackPlugin: (plugin) => added.push(['webpack', plugin]),
     },
   }, () => {
-    const nuxtKaji = require('../src/nuxt.cjs');
-    nuxtKaji.setup({ config: false, args: ['generate'] });
+    const nuxtPoolster = require('../src/nuxt.cjs');
+    nuxtPoolster.setup({ config: false, args: ['generate'] });
 
-    assert.equal(nuxtKaji.meta.configKey, 'kaji');
+    assert.equal(nuxtPoolster.meta.configKey, 'poolster');
     assert.deepEqual(added.map(([builder]) => builder), ['vite', 'webpack']);
     assert.equal(added[0][1]().adapter, 'vite');
     assert.equal(added[1][1]().adapter, 'webpack');

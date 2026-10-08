@@ -1,7 +1,7 @@
 {
-  "name": "@relevate/unplugin-kaji",
+  "name": "@relevate/unplugin-poolster",
   "version": "0.1.0",
-  "description": "Run Kaji OpenAPI generation from Vite, Rollup, webpack, esbuild, Rspack, Rolldown, Farm, Nuxt, and Astro builds.",
+  "description": "Run Poolster OpenAPI generation from Vite, Rollup, webpack, esbuild, Rspack, Rolldown, Farm, Nuxt, and Astro builds.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -85,7 +85,7 @@
   "keywords": [
     "openapi",
     "codegen",
-    "kaji",
+    "poolster",
     "unplugin",
     "vite",
     "rollup",

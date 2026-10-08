@@ -1,5 +1,5 @@
-declare namespace kaji {
-  export interface KajiResult {
+declare namespace poolster {
+  export interface PoolsterResult {
     command: string;
     args: string[];
     stdout: string;
@@ -8,14 +8,14 @@ declare namespace kaji {
     signal: string | null;
   }
 
-  export interface KajiOptions {
-    /** Kaji recipe, relative to cwd. Defaults to `kaji.json`. Set false with args. */
+  export interface PoolsterOptions {
+    /** Poolster recipe, relative to cwd. Defaults to `poolster.json`. Set false with args. */
     config?: string | false;
-    /** Exact Kaji CLI arguments, for direct generation instead of a recipe. */
+    /** Exact Poolster CLI arguments, for direct generation instead of a recipe. */
     args?: string[];
     /** Working directory used for generation and relative watch paths. */
     cwd?: string;
-    /** A Kaji executable. By default the installed kajicli launcher is used. */
+    /** A Poolster executable. By default the installed poolster launcher is used. */
     command?: string;
     /** Path to a Node launcher; mainly useful for local development and tests. */
     launcher?: string;
@@ -24,18 +24,18 @@ declare namespace kaji {
     watchFiles?: string[];
     /** Regenerate for watched file changes. Defaults to true. */
     watch?: boolean;
-    /** Do not forward Kaji output to the terminal. */
+    /** Do not forward Poolster output to the terminal. */
     silent?: boolean;
-    onGenerate?: (result: KajiResult) => void;
+    onGenerate?: (result: PoolsterResult) => void;
   }
 
-  export interface KajiPlugin {
+  export interface PoolsterPlugin {
     name: string;
     enforce: 'pre';
-    buildStart(this: { addWatchFile?: (id: string) => void }): Promise<KajiResult>;
-    watchChange(this: { addWatchFile?: (id: string) => void }, id: string): Promise<KajiResult> | undefined;
+    buildStart(this: { addWatchFile?: (id: string) => void }): Promise<PoolsterResult>;
+    watchChange(this: { addWatchFile?: (id: string) => void }, id: string): Promise<PoolsterResult> | undefined;
   }
 }
 
-declare function kaji(options?: kaji.KajiOptions): kaji.KajiPlugin;
-export = kaji;
+declare function poolster(options?: poolster.PoolsterOptions): poolster.PoolsterPlugin;
+export = poolster;

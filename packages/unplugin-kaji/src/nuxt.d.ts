@@ -1,14 +1,14 @@
-import kaji = require('./index');
+import poolster = require('./index');
 
-declare namespace kajiNuxtModule {
-  export interface KajiNuxtModule {
+declare namespace poolsterNuxtModule {
+  export interface PoolsterNuxtModule {
     meta: {
       name: string;
       configKey: string;
     };
-    setup(options: kaji.KajiOptions): void;
+    setup(options: poolster.PoolsterOptions): void;
   }
 }
 
-declare const kajiNuxtModule: kajiNuxtModule.KajiNuxtModule;
-export = kajiNuxtModule;
+declare const poolsterNuxtModule: poolsterNuxtModule.PoolsterNuxtModule;
+export = poolsterNuxtModule;

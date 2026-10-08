@@ -6,12 +6,12 @@ const webpack = require('./webpack.cjs');
 
 /**
  * Nuxt selects its Vite or webpack builder at runtime. Registering both
- * adapters lets Kaji run before whichever builder the application uses.
+ * adapters lets Poolster run before whichever builder the application uses.
  */
 module.exports = defineNuxtModule({
   meta: {
-    name: '@relevate/unplugin-kaji',
-    configKey: 'kaji',
+    name: '@relevate/unplugin-poolster',
+    configKey: 'poolster',
   },
   setup(options) {
     addVitePlugin(() => vite(options));

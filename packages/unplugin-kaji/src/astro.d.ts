@@ -1,7 +1,7 @@
-import kaji = require('./index');
+import poolster = require('./index');
 
-declare namespace astroKaji {
-  export interface AstroKajiIntegration {
+declare namespace astroPoolster {
+  export interface AstroPoolsterIntegration {
     name: string;
     hooks: {
       'astro:config:setup': (astro: {
@@ -11,5 +11,5 @@ declare namespace astroKaji {
   }
 }
 
-declare function astroKaji(options?: kaji.KajiOptions): astroKaji.AstroKajiIntegration;
-export = astroKaji;
+declare function astroPoolster(options?: poolster.PoolsterOptions): astroPoolster.AstroPoolsterIntegration;
+export = astroPoolster;

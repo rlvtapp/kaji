@@ -3,13 +3,13 @@
 const unplugin = require('./unplugin.cjs');
 
 /**
- * An Astro integration that adds Kaji's Vite adapter to Astro's Vite config.
- * Kaji still runs through the normal build-start and watch hooks, keeping the
+ * An Astro integration that adds Poolster's Vite adapter to Astro's Vite config.
+ * Poolster still runs through the normal build-start and watch hooks, keeping the
  * behaviour identical to a direct Vite configuration.
  */
-module.exports = function astroKaji(options) {
+module.exports = function astroPoolster(options) {
   return {
-    name: '@relevate/unplugin-kaji',
+    name: '@relevate/unplugin-poolster',
     hooks: {
       'astro:config:setup': (astro) => {
         astro.config.vite ||= {};
