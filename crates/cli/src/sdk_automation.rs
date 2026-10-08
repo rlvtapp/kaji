@@ -167,7 +167,7 @@ fn packages(root: &Path) -> Result<Vec<LocatedPackage>> {
             let path = if relative.as_os_str().is_empty() {
                 ".".into()
             } else {
-                relative.to_string_lossy().replace('\\', "/")
+                git_tree_path(relative)?
             };
             result.push(LocatedPackage {
                 path,
@@ -209,7 +209,7 @@ fn relative_path(value: &str) -> Result<()> {
 
 /// Git revision:path expressions always use slash-separated repository paths,
 /// independent of the host filesystem's native separator.
-fn git_tree_path(path: &Path) -> Result<String> {
+pub(super) fn git_tree_path(path: &Path) -> Result<String> {
     let mut parts = Vec::new();
     for component in path.components() {
         match component {
@@ -225,6 +225,41 @@ fn git_tree_path(path: &Path) -> Result<String> {
     }
     ensure!(!parts.is_empty(), "Git tree path cannot be empty");
     Ok(parts.join("/"))
+}
+
+pub(super) fn portable_inventory(
+    files: &BTreeMap<PathBuf, String>,
+) -> Result<BTreeMap<String, &String>> {
+    let mut result = BTreeMap::new();
+    for (path, contents) in files {
+        let path = git_tree_path(path)?;
+        relative_path(&path)?;
+        ensure!(
+            result.insert(path, contents).is_none(),
+            "duplicate normalized setup path"
+        );
+    }
+    Ok(result)
+}
+
+/// Ownership keys are native filesystem paths on older installations. Normalize
+/// before protocol-style string comparisons and retain every fingerprint unchanged.
+fn normalize_owned_paths(inventory: &mut Value) -> Result<()> {
+    let entries = inventory
+        .get_mut("files")
+        .and_then(Value::as_object_mut)
+        .context("missing generated ownership inventory")?;
+    let mut normalized = serde_json::Map::new();
+    for (path, value) in std::mem::take(entries) {
+        let path = git_tree_path(Path::new(&path))?;
+        relative_path(&path)?;
+        ensure!(
+            normalized.insert(path, value).is_none(),
+            "duplicate normalized ownership path"
+        );
+    }
+    *entries = normalized;
+    Ok(())
 }
 
 fn repository(value: &str) -> Result<()> {
@@ -1233,7 +1268,8 @@ fn transfer_owned_output(source: &Path, destination: &Path) -> Result<()> {
     adopt_release_only_changes(source)?;
     let root = fs::canonicalize(source)?;
     let inventory_path = setup_path(&root, Path::new(poolster_core::files::OWNERSHIP_PATH))?;
-    let inventory: Value = serde_json::from_slice(&fs::read(inventory_path)?)?;
+    let mut inventory: Value = serde_json::from_slice(&fs::read(inventory_path)?)?;
+    normalize_owned_paths(&mut inventory)?;
     ensure!(
         inventory.get("version").and_then(Value::as_u64) == Some(1),
         "unsupported generated ownership inventory"
@@ -1435,6 +1471,7 @@ fn adopt_release_only_changes(destination: &Path) -> Result<()> {
     };
     let repository_root = PathBuf::from(repository_root.trim());
     let mut inventory: Value = serde_json::from_slice(&fs::read(&inventory_path)?)?;
+    normalize_owned_paths(&mut inventory)?;
     let entries = inventory
         .get_mut("files")
         .and_then(Value::as_object_mut)
@@ -1593,7 +1630,10 @@ fn write_scaffold(root: &Path, files: BTreeMap<PathBuf, String>, dry_run: bool) 
                 .parent()
                 .context("inventory needs a directory")?,
         )?;
-        fs::write(inventory_path, serde_json::to_vec_pretty(&previous)?)?;
+        fs::write(
+            inventory_path,
+            serde_json::to_vec_pretty(&portable_inventory(&previous)?)?,
+        )?;
     }
     Ok(())
 }
@@ -1714,7 +1754,8 @@ fn ensure_owned_language(destination: &Path, language: &str) -> Result<()> {
     if !inventory_path.exists() {
         return Ok(());
     }
-    let inventory: Value = serde_json::from_slice(&fs::read(inventory_path)?)?;
+    let mut inventory: Value = serde_json::from_slice(&fs::read(inventory_path)?)?;
+    normalize_owned_paths(&mut inventory)?;
     ensure!(
         inventory.get("version").and_then(Value::as_u64) == Some(1),
         "unsupported generated ownership inventory"
@@ -1915,8 +1956,8 @@ fn open_pr(options: &Options) -> Result<()> {
         ensure_owned_language(&generated, language)?;
     }
     transfer_owned_output(&generated, &destination)?;
-    let path = root.to_str().context("SDK output path is not UTF8")?;
-    if captured(&checkout, "git", &["status", "--porcelain", "--", path])?
+    let path = git_tree_path(&root)?;
+    if captured(&checkout, "git", &["status", "--porcelain", "--", &path])?
         .trim()
         .is_empty()
     {
@@ -1943,7 +1984,7 @@ fn open_pr(options: &Options) -> Result<()> {
             ],
         )?;
     }
-    captured(&checkout, "git", &["add", "--", path])?;
+    captured(&checkout, "git", &["add", "--", &path])?;
     let bump = diff.bump.as_str();
     let title = match bump {
         "major" => "feat(sdk)!: update generated SDKs",
@@ -2526,6 +2567,30 @@ mod tests {
         )
         .unwrap();
         assert!(packages(dir.path()).is_err());
+    }
+
+    #[test]
+    fn inventories_store_portable_paths_and_normalize_native_owned_keys() {
+        let path = Path::new("sdk").join(".poolster").join("package.json");
+        let files = BTreeMap::from([(path.clone(), "contents".into())]);
+        let stored = serde_json::to_value(portable_inventory(&files).unwrap()).unwrap();
+        assert_eq!(stored["sdk/.poolster/package.json"], "contents");
+        let fingerprint = json!({"sha256":"unchanged", "owner":"test"});
+        let mut inventory =
+            json!({"version":1,"files":{path.to_str().unwrap():fingerprint.clone()}});
+        normalize_owned_paths(&mut inventory).unwrap();
+        assert_eq!(
+            inventory["files"]["sdk/.poolster/package.json"],
+            fingerprint
+        );
+        assert!(normalize_owned_paths(&mut json!({"files":{"../escape":{}}})).is_err());
+        assert!(
+            portable_inventory(&BTreeMap::from([(
+                PathBuf::from("../escape"),
+                "unsafe".into()
+            )]))
+            .is_err()
+        );
     }
 
     #[test]

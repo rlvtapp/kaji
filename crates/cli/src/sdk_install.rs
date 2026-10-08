@@ -18,7 +18,7 @@ fn allowed(path: &Path) -> bool {
     {
         return false;
     }
-    let Some(value) = path.to_str() else {
+    let Ok(value) = crate::sdk_automation::git_tree_path(path) else {
         return false;
     };
     if value.contains('\\')
@@ -28,7 +28,7 @@ fn allowed(path: &Path) -> bool {
         return false;
     }
     if matches!(
-        value,
+        value.as_str(),
         INVENTORY
             | MANIFEST
             | "release-please-config.json"
@@ -142,7 +142,8 @@ fn updates(root: &Path, files: Files) -> Result<Files> {
     }
     writes.insert(
         PathBuf::from(INVENTORY),
-        serde_json::to_string_pretty(&previous)? + "\n",
+        serde_json::to_string_pretty(&crate::sdk_automation::portable_inventory(&previous)?)?
+            + "\n",
     );
     Ok(writes)
 }
@@ -269,7 +270,7 @@ pub fn install(
             &checkout,
             &config,
             "git",
-            &["add", "--", path.to_str().context("invalid path")?],
+            &["add", "--", &crate::sdk_automation::git_tree_path(&path)?],
         )?;
     }
     let changes = capture(
@@ -375,6 +376,41 @@ mod tests {
         assert!(validate("acme/sdk", "main", "main").is_err());
         assert!(validate("acme/sdk", "main", "--evil").is_err());
     }
+    #[test]
+    fn native_staged_action_paths_install_and_inventory_keys_are_portable() -> Result<()> {
+        let source = tempfile::tempdir()?;
+        let relative = Path::new(".github")
+            .join("actions")
+            .join("poolster-check")
+            .join("action.yml");
+        assert!(allowed(&relative));
+        assert!(!allowed(
+            &Path::new(".github")
+                .join("actions")
+                .join("poolster-check")
+                .join(".git")
+                .join("config")
+        ));
+        let action = source.path().join(&relative);
+        fs::create_dir_all(action.parent().unwrap())?;
+        fs::write(action, "name: Check\n")?;
+        let files = staged(source.path())?;
+        assert_eq!(
+            files.get(&relative).map(String::as_str),
+            Some("name: Check\n")
+        );
+        let destination = tempfile::tempdir()?;
+        let writes = updates(destination.path(), files)?;
+        let inventory: serde_json::Value =
+            serde_json::from_str(writes.get(Path::new(INVENTORY)).unwrap())?;
+        assert_eq!(
+            inventory[".github/actions/poolster-check/action.yml"],
+            "name: Check\n"
+        );
+        install(source.path(), "acme/sdk", "main", "sdk-setup", true)?;
+        Ok(())
+    }
+
     #[test]
     fn edits_are_protected_and_versions_preserved() -> Result<()> {
         let root = tempfile::tempdir()?;
