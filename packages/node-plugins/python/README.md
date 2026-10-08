@@ -1,12 +1,12 @@
-# @relevate/kaji-plugin-python
+# @relevate/poolster-plugin-python
 
-Select Kaji's python SDK renderer in a JavaScript config. Install this package
-with `@relevate/kaji`, then add `pluginPython()` to the config's
+Select Poolster's python SDK renderer in a JavaScript config. Install this package
+with `@relevate/poolster`, then add `pluginPython()` to the config's
 `plugins` array. Nothing is registered automatically.
 
 ```js
-import { defineConfig } from '@relevate/kaji/sdk'
-import { pluginPython } from '@relevate/kaji-plugin-python'
+import { defineConfig } from '@relevate/poolster'
+import { pluginPython } from '@relevate/poolster-plugin-python'
 
 export default defineConfig({
   input: './openapi.yaml',

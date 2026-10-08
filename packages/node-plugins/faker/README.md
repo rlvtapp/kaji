@@ -1,13 +1,13 @@
-# @relevate/kaji-plugin-faker
+# @relevate/poolster-plugin-faker
 
-Select Kaji's compiled Rust faker plugin from a JavaScript config. Install
-with `@relevate/kaji` and `@relevate/kaji-plugin-typescript`, then
+Select Poolster's compiled Rust faker plugin from a JavaScript config. Install
+with `@relevate/poolster` and `@relevate/poolster-plugin-typescript`, then
 list both factories in `plugins`. Nothing is registered automatically.
 
 ```js
-import { defineConfig } from '@relevate/kaji/sdk'
-import { pluginTypeScript } from '@relevate/kaji-plugin-typescript'
-import { pluginFaker } from '@relevate/kaji-plugin-faker'
+import { defineConfig } from '@relevate/poolster'
+import { pluginTypeScript } from '@relevate/poolster-plugin-typescript'
+import { pluginFaker } from '@relevate/poolster-plugin-faker'
 
 export default defineConfig({
   input: './openapi.yaml',

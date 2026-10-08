@@ -1,13 +1,13 @@
-# @relevate/kaji-plugin-react-query
+# @relevate/poolster-plugin-react-query
 
-Select Kaji's compiled Rust react-query plugin from a JavaScript config. Install
-with `@relevate/kaji` and `@relevate/kaji-plugin-typescript`, then
+Select Poolster's compiled Rust react-query plugin from a JavaScript config. Install
+with `@relevate/poolster` and `@relevate/poolster-plugin-typescript`, then
 list both factories in `plugins`. Nothing is registered automatically.
 
 ```js
-import { defineConfig } from '@relevate/kaji/sdk'
-import { pluginTypeScript } from '@relevate/kaji-plugin-typescript'
-import { pluginReactQuery } from '@relevate/kaji-plugin-react-query'
+import { defineConfig } from '@relevate/poolster'
+import { pluginTypeScript } from '@relevate/poolster-plugin-typescript'
+import { pluginReactQuery } from '@relevate/poolster-plugin-react-query'
 
 export default defineConfig({
   input: './openapi.yaml',

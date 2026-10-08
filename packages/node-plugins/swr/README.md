@@ -1,13 +1,13 @@
-# @relevate/kaji-plugin-swr
+# @relevate/poolster-plugin-swr
 
-Select Kaji's compiled Rust swr plugin from a JavaScript config. Install
-with `@relevate/kaji` and `@relevate/kaji-plugin-typescript`, then
+Select Poolster's compiled Rust swr plugin from a JavaScript config. Install
+with `@relevate/poolster` and `@relevate/poolster-plugin-typescript`, then
 list both factories in `plugins`. Nothing is registered automatically.
 
 ```js
-import { defineConfig } from '@relevate/kaji/sdk'
-import { pluginTypeScript } from '@relevate/kaji-plugin-typescript'
-import { pluginSwr } from '@relevate/kaji-plugin-swr'
+import { defineConfig } from '@relevate/poolster'
+import { pluginTypeScript } from '@relevate/poolster-plugin-typescript'
+import { pluginSwr } from '@relevate/poolster-plugin-swr'
 
 export default defineConfig({
   input: './openapi.yaml',

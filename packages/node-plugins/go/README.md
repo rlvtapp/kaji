@@ -1,12 +1,12 @@
-# @relevate/kaji-plugin-go
+# @relevate/poolster-plugin-go
 
-Select Kaji's go SDK renderer in a JavaScript config. Install this package
-with `@relevate/kaji`, then add `pluginGo()` to the config's
+Select Poolster's go SDK renderer in a JavaScript config. Install this package
+with `@relevate/poolster`, then add `pluginGo()` to the config's
 `plugins` array. Nothing is registered automatically.
 
 ```js
-import { defineConfig } from '@relevate/kaji/sdk'
-import { pluginGo } from '@relevate/kaji-plugin-go'
+import { defineConfig } from '@relevate/poolster'
+import { pluginGo } from '@relevate/poolster-plugin-go'
 
 export default defineConfig({
   input: './openapi.yaml',

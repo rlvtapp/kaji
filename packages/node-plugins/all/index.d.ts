@@ -1,4 +1,4 @@
-import type { NativePlugin, NativeAddon, NativeInputPlugin, SdkPackageOptions } from '@relevate/kaji/sdk';
+import type { NativePlugin, NativeAddon, NativeInputPlugin, SdkPackageOptions } from '@relevate/poolster';
 
 export type TypeScriptPluginOptions = Omit<SdkPackageOptions, 'language' | 'jobs'>;
 export function pluginTypeScript(options?: TypeScriptPluginOptions): NativePlugin;

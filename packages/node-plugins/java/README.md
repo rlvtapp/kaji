@@ -1,12 +1,12 @@
-# @relevate/kaji-plugin-java
+# @relevate/poolster-plugin-java
 
-Select Kaji's java SDK renderer in a JavaScript config. Install this package
-with `@relevate/kaji`, then add `pluginJava()` to the config's
+Select Poolster's java SDK renderer in a JavaScript config. Install this package
+with `@relevate/poolster`, then add `pluginJava()` to the config's
 `plugins` array. Nothing is registered automatically.
 
 ```js
-import { defineConfig } from '@relevate/kaji/sdk'
-import { pluginJava } from '@relevate/kaji-plugin-java'
+import { defineConfig } from '@relevate/poolster'
+import { pluginJava } from '@relevate/poolster-plugin-java'
 
 export default defineConfig({
   input: './openapi.yaml',

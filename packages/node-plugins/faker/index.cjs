@@ -5,7 +5,7 @@ function pluginFaker(options = {}) {
   for (const key of Object.keys(options)) if (key !== 'target' && key !== 'output') throw new TypeError('unknown pluginFaker option ' + key);
   if (options.target != null && (typeof options.target !== 'string' || !options.target)) throw new TypeError('target must be a nonempty string');
   if (options.output != null && (typeof options.output !== 'string' || !options.output)) throw new TypeError('output must be a nonempty string');
-  return { kind: 'native-addon', name: '@relevate/kaji-plugin-faker', plugin: 'faker', target: options.target ?? 'typescript', ...(options.output ? { output: options.output } : {}) };
+  return { kind: 'native-addon', name: '@relevate/poolster-plugin-faker', plugin: 'faker', target: options.target ?? 'typescript', ...(options.output ? { output: options.output } : {}) };
 }
 
 module.exports = { pluginFaker };

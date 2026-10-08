@@ -1,13 +1,13 @@
-# @relevate/kaji-plugin-cypress
+# @relevate/poolster-plugin-cypress
 
-Select Kaji's compiled Rust cypress plugin from a JavaScript config. Install
-with `@relevate/kaji` and `@relevate/kaji-plugin-typescript`, then
+Select Poolster's compiled Rust cypress plugin from a JavaScript config. Install
+with `@relevate/poolster` and `@relevate/poolster-plugin-typescript`, then
 list both factories in `plugins`. Nothing is registered automatically.
 
 ```js
-import { defineConfig } from '@relevate/kaji/sdk'
-import { pluginTypeScript } from '@relevate/kaji-plugin-typescript'
-import { pluginCypress } from '@relevate/kaji-plugin-cypress'
+import { defineConfig } from '@relevate/poolster'
+import { pluginTypeScript } from '@relevate/poolster-plugin-typescript'
+import { pluginCypress } from '@relevate/poolster-plugin-cypress'
 
 export default defineConfig({
   input: './openapi.yaml',

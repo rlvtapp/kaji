@@ -1,3 +1,3 @@
-import type { NativeInputPlugin } from '@relevate/kaji/sdk';
+import type { NativeInputPlugin } from '@relevate/poolster';
 
 export function inputCapnProto(): NativeInputPlugin;

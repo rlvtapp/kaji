@@ -1,7 +1,7 @@
 {
-  "name": "@relevate/kaji-plugin-python",
+  "name": "@relevate/poolster-plugin-python",
   "version": "0.5.0",
-  "description": "Kaji plugin exports for python",
+  "description": "Poolster plugin exports for python",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -27,7 +27,7 @@
     "node": ">=18"
   },
   "peerDependencies": {
-    "@relevate/kaji": "0.5.0"
+    "@relevate/poolster": "0.5.0"
   },
   "publishConfig": {
     "access": "public"

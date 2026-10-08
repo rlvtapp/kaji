@@ -1,7 +1,7 @@
 {
-  "name": "@relevate/kaji-plugin-cypress",
+  "name": "@relevate/poolster-plugin-cypress",
   "version": "0.5.0",
-  "description": "Kaji plugin exports for cypress",
+  "description": "Poolster plugin exports for cypress",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -27,7 +27,7 @@
     "node": ">=18"
   },
   "peerDependencies": {
-    "@relevate/kaji": "0.5.0"
+    "@relevate/poolster": "0.5.0"
   },
   "publishConfig": {
     "access": "public"

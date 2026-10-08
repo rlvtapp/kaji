@@ -1,7 +1,7 @@
 {
-  "name": "@relevate/kaji-plugin-rust",
+  "name": "@relevate/poolster-plugin-rust",
   "version": "0.5.0",
-  "description": "Kaji plugin exports for rust",
+  "description": "Poolster plugin exports for rust",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -27,7 +27,7 @@
     "node": ">=18"
   },
   "peerDependencies": {
-    "@relevate/kaji": "0.5.0"
+    "@relevate/poolster": "0.5.0"
   },
   "publishConfig": {
     "access": "public"
