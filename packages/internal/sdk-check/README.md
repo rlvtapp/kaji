@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: rlvtapp/kaji/packages/internal/sdk-check@YOUR_PINNED_REVISION
+      - uses: rlvtapp/poolster/packages/internal/sdk-check@YOUR_PINNED_REVISION
         with:
           path: generated/go
           language: go

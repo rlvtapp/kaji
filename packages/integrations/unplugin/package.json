@@ -5,7 +5,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/rlvtapp/kaji.git"
+    "url": "git+https://github.com/rlvtapp/poolster.git"
   },
   "main": "src/index.cjs",
   "types": "src/index.d.ts",

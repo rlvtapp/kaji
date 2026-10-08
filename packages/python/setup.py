@@ -45,11 +45,11 @@ setup(
     python_requires=">=3.9",
     license="MIT",
     author="Relevate",
-    url="https://github.com/rlvtapp/kaji",
+    url="https://github.com/rlvtapp/poolster",
     project_urls={
-        "Documentation": "https://github.com/rlvtapp/kaji/tree/main/docs",
-        "Source": "https://github.com/rlvtapp/kaji",
-        "Issues": "https://github.com/rlvtapp/kaji/issues",
+        "Documentation": "https://github.com/rlvtapp/poolster/tree/main/docs",
+        "Source": "https://github.com/rlvtapp/poolster",
+        "Issues": "https://github.com/rlvtapp/poolster/issues",
     },
     keywords="openapi swagger sdk codegen generator",
     classifiers=[

@@ -4,7 +4,7 @@ Include the template and pin it to a Poolster release tag:
 
 ```yaml
 include:
-  - remote: 'https://raw.githubusercontent.com/rlvtapp/kaji/<poolster-release-tag>/packages/integrations/gitlab/poolster.yml'
+  - remote: 'https://raw.githubusercontent.com/rlvtapp/poolster/<poolster-release-tag>/packages/integrations/gitlab/poolster.yml'
 
 generate-sdk:
   extends: .poolster:generate

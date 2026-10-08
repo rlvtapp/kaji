@@ -3,7 +3,7 @@
   "version": "0.5.0",
   "description": "Poolster command-line SDK generator",
   "license": "MIT",
-  "repository": { "type": "git", "url": "git+https://github.com/rlvtapp/kaji.git" },
+  "repository": { "type": "git", "url": "git+https://github.com/rlvtapp/poolster.git" },
   "bin": { "poolster": "bin/poolster.cjs" },
   "files": ["bin", "README.md", "LICENSE"],
   "engines": { "node": ">=18" },

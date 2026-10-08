@@ -3,7 +3,7 @@
   "version": "0.5.0",
   "description": "Poolster Node SDK for embedded and plugin-based generation",
   "license": "MIT",
-  "repository": { "type": "git", "url": "git+https://github.com/rlvtapp/kaji.git" },
+  "repository": { "type": "git", "url": "git+https://github.com/rlvtapp/poolster.git" },
   "exports": {
     ".": { "types": "./index.d.ts", "import": "./index.mjs", "require": "./index.cjs" },
     "./plugins": { "types": "./plugins.d.ts", "import": "./plugins.mjs", "require": "./plugins.cjs" },

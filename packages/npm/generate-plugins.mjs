@@ -65,7 +65,7 @@ function manifest(name) {
     version,
     description: `Poolster plugin exports for ${name.endsWith('-plugins') ? 'bundled inputs and outputs' : name.split('-').at(-1)}`,
     license: 'MIT',
-    repository: { type: 'git', url: 'git+https://github.com/rlvtapp/kaji.git' },
+    repository: { type: 'git', url: 'git+https://github.com/rlvtapp/poolster.git' },
     main: 'index.cjs',
     types: 'index.d.ts',
     exports: { '.': { types: './index.d.ts', import: './index.mjs', require: './index.cjs' } },

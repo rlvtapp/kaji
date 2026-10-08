@@ -4,7 +4,7 @@ Generate SDKs from `poolster.json` in GitHub Actions:
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: rlvtapp/kaji/packages/integrations/github@main
+- uses: rlvtapp/poolster/packages/integrations/github@main
   with:
     config: api/poolster.json
 ```
