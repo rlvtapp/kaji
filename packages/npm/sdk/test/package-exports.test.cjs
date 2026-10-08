@@ -8,7 +8,7 @@ const { pathToFileURL } = require('node:url');
 
 const root = path.resolve(__dirname, '../../..');
 const core = require('../package.json');
-const bundle = require('../../../node-plugins/all/index.cjs');
+const bundle = require('../../plugins-all/index.cjs');
 const languages = [
   ['typescript', 'TypeScript'], ['rust', 'Rust'], ['go', 'Go'],
   ['python', 'Python'], ['php', 'Php'], ['java', 'Java'],
@@ -50,7 +50,7 @@ const inputs = [
 
 test('native input providers have individual and bundled JS exports', async () => {
   for (const [format, suffix, provider] of inputs) {
-    const directory = path.join(root, 'node-plugins', `input-${format}`);
+    const directory = path.join(root, 'npm', 'inputs', format);
     const manifest = require(path.join(directory, 'package.json'));
     const factory = `input${suffix}`;
     assert.equal(manifest.name, `@relevate/poolster-input-${format}`);
@@ -65,7 +65,7 @@ test('native input providers have individual and bundled JS exports', async () =
 
 test('each language package has independently importable CommonJS and ESM exports', async () => {
   for (const [language, suffix] of languages) {
-    const directory = path.join(root, 'node-plugins', language);
+    const directory = path.join(root, 'npm', 'plugins', language);
     const manifest = require(path.join(directory, 'package.json'));
     const name = `@relevate/poolster-plugin-${language}`;
     const exportName = `plugin${suffix}`;
@@ -87,7 +87,7 @@ test('each language package has independently importable CommonJS and ESM export
 
 test('each Rust auxiliary has independent CommonJS and ESM exports', async () => {
   for (const [id, suffix] of auxiliaries) {
-    const directory = path.join(root, 'node-plugins', id);
+    const directory = path.join(root, 'npm', 'plugins', id);
     const manifest = require(path.join(directory, 'package.json'));
     const exportName = `plugin${suffix}`;
     assert.equal(manifest.name, `@relevate/poolster-plugin-${id}`);
@@ -100,7 +100,7 @@ test('each Rust auxiliary has independent CommonJS and ESM exports', async () =>
 });
 
 test('bundle package exposes the same named factories without pulling in individual packages', () => {
-  const manifest = require('../../../node-plugins/all/package.json');
+  const manifest = require('../../plugins-all/package.json');
   assert.equal(manifest.name, '@relevate/poolster-plugins');
   assert.deepEqual(Object.keys(bundle).sort(), [
     ...[...languages, ...auxiliaries].map(([, suffix]) => `plugin${suffix}`),

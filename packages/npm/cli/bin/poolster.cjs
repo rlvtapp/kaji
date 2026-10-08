@@ -16,7 +16,7 @@ function platformPackage(platform = process.platform, arch = process.arch, repor
   }
   if (key === 'darwin-arm64' || key === 'darwin-x64') return `@relevate/poolster-cli-${key}`;
   if (key === 'win32-x64') return '@relevate/poolster-cli-win32-x64-msvc';
-  throw new Error(`Poolster does not yet provide an npm binary for ${key}. Build crates/kaji-cli and openapi/ from source.`);
+  throw new Error(`Poolster does not yet provide an npm binary for ${key}. Build crates/cli and openapi/ from source.`);
 }
 
 function resolveBinary() {

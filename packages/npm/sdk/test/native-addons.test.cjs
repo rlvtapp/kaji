@@ -6,10 +6,10 @@ const path = require('node:path');
 const test = require('node:test');
 
 const { availableNativePlugins, generate } = require('../index.cjs');
-const bundle = require('../../../node-plugins/all/index.cjs');
-const { pluginTypeScript } = require('../../../node-plugins/typescript/index.cjs');
-const { pluginZod } = require('../../../node-plugins/zod/index.cjs');
-const { pluginReactQuery } = require('../../../node-plugins/react-query/index.cjs');
+const bundle = require('../../plugins-all/index.cjs');
+const { pluginTypeScript } = require('../../plugins/typescript/index.cjs');
+const { pluginZod } = require('../../plugins/zod/index.cjs');
+const { pluginReactQuery } = require('../../plugins/react-query/index.cjs');
 const { artifacts, config, temporary } = require('../test-support/helpers.cjs');
 
 test('JS config can select compiled Rust plugins within a native SDK package', async (t) => {

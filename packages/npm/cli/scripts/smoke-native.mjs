@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const root = path.resolve(packageRoot, '../..');
+const root = path.resolve(packageRoot, '../../..');
 const key = process.argv[2];
 if (!key || !/^(darwin-(arm64|x64)|linux-x64-gnu|win32-x64-msvc)$/.test(key)) {
   throw new Error('Supply a supported native platform directory');
@@ -22,11 +22,11 @@ environment.PATH = path.join(output, 'no-toolchains');
 fs.mkdirSync(environment.PATH);
 const result = spawnSync(process.execPath, [
   path.join(packageRoot, 'bin/poolster.cjs'), 'generate',
-  path.join(root, 'crates/kaji-cli/tests/fixtures/pets.yaml'),
+  path.join(root, 'crates/cli/tests/fixtures/pets.yaml'),
   '--output', output, '--language', 'go,typescript', '--jobs', '2',
 ], { stdio: 'inherit', env: {
   ...environment,
-  POOLSTER_BINARY: path.join(packageRoot, 'npm', key, key.startsWith('win32') ? 'poolster.exe' : 'poolster'),
+  POOLSTER_BINARY: path.join(packageRoot, '..', 'platform', 'cli', key, key.startsWith('win32') ? 'poolster.exe' : 'poolster'),
 } });
 if (result.error) throw result.error;
 if (result.status !== 0) throw new Error(`Packaged CLI failed (${result.status ?? result.signal})`);

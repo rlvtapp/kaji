@@ -16,7 +16,7 @@ const key = process.argv[2];
 if (!targets[key]) throw new Error(`Choose a platform: ${Object.keys(targets).join(', ')}`);
 const [target, os, cpu] = targets[key];
 const environment = os === 'darwin' ? { MACOSX_DEPLOYMENT_TARGET: key === 'darwin-arm64' ? '11.0' : '10.13' } : {};
-const output = path.join(packageRoot, 'npm', key);
+const output = path.join(packageRoot, '..', 'platform', 'node', key);
 const compilerName = os === 'win32' ? 'poolster-openapi.exe' : 'poolster-openapi';
 const library = os === 'win32' ? 'poolster_node.dll' : os === 'darwin' ? 'libpoolster_node.dylib' : 'libpoolster_node.so';
 

@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
 const platform = process.argv[2];
 if (!platform || !/^(darwin-(arm64|x64)|linux-x64-gnu|win32-x64-msvc)$/.test(platform)) {
   throw new Error('Supply a supported platform key');
@@ -32,10 +32,10 @@ function pack(relativePath) {
   return path.join(temporary, filename);
 }
 
-const cli = pack('packages/cli');
-const cliNative = pack(`packages/cli/npm/${platform}`);
-const sdk = pack('packages/cli/sdk');
-const sdkNative = pack(`packages/cli/sdk/npm/${platform}`);
+const cli = pack('packages/npm/cli');
+const cliNative = pack(`packages/npm/platform/cli/${platform}`);
+const sdk = pack('packages/npm/sdk');
+const sdkNative = pack(`packages/npm/platform/node/${platform}`);
 const cliConsumer = path.join(temporary, 'cli-consumer');
 const sdkConsumer = path.join(temporary, 'sdk-consumer');
 fs.mkdirSync(cliConsumer);
@@ -53,7 +53,7 @@ if (fs.existsSync(path.join(sdkConsumer, 'node_modules', 'poolster'))) {
 const version = run(process.execPath, [path.join(cliConsumer, 'node_modules', 'poolster', 'bin', 'poolster.cjs'), '--version'], cliConsumer);
 if (!/^poolster \d+\.\d+\.\d+/.test(version)) throw new Error(`Unexpected CLI version output: ${version}`);
 
-const fixture = path.join(root, 'crates/kaji-cli/tests/fixtures/pets.yaml');
+const fixture = path.join(root, 'crates/cli/tests/fixtures/pets.yaml');
 const sdkProgram = `
   const { defineConfig, createPoolster } = require('@relevate/poolster/sdk');
   const { pluginTypeScript } = require('@relevate/poolster/sdk/plugins');

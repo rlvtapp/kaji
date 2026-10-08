@@ -7,7 +7,7 @@ const path = require('node:path');
 const test = require('node:test');
 
 const { createPoolster, defineConfig, definePlugin } = require('../index.cjs');
-const { pluginTypeScript } = require('../../../node-plugins/typescript/index.cjs');
+const { pluginTypeScript } = require('../../plugins/typescript/index.cjs');
 const fixture = path.resolve(__dirname, '../../../../examples/cli-basic/openapi.yaml');
 
 async function temp(t) {

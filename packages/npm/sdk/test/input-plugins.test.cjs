@@ -7,7 +7,7 @@ const { spawnSync } = require('node:child_process');
 const test = require('node:test');
 
 const { availableInputPlugins, defineInputPlugin, generate, inspectInput } = require('../index.cjs');
-const bundle = require('../../../node-plugins/all/index.cjs');
+const bundle = require('../../plugins-all/index.cjs');
 const { artifacts, config, root, temporary } = require('../test-support/helpers.cjs');
 
 const cases = [

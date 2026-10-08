@@ -46,14 +46,14 @@ must be enabled. There are no install scripts or runtime binary downloads.
 From the repository root:
 
 ```sh
-node packages/cli/scripts/build-platform.mjs
-POOLSTER_BINARY="$PWD/packages/cli/npm/darwin-arm64/poolster" node packages/cli/bin/poolster.cjs --help
-node --test packages/cli/test/*.test.cjs
+node packages/npm/cli/scripts/build-platform.mjs
+POOLSTER_BINARY="$PWD/packages/npm/platform/cli/darwin-arm64/poolster" node packages/npm/cli/bin/poolster.cjs --help
+node --test packages/npm/cli/test/*.test.cjs
 ```
 
 Use your platform directory in the second command. The build script needs Rust,
 the selected Rust target, an appropriate linker and Go. Both native binaries are
-assembled under `packages/cli/npm/<platform>/`; source code and build tools are
+assembled under `packages/npm/platform/cli/<platform>/`; source code and build tools are
 not shipped to users. `POOLSTER_BINARY` is an optional local development override.
 `POOLSTER_OPENAPI_BIN` overrides the Go helper for source builds.
 

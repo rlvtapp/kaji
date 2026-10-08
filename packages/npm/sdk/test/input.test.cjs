@@ -6,7 +6,7 @@ const path = require('node:path');
 const test = require('node:test');
 
 const { defineConfig, generate } = require('../index.cjs');
-const { pluginTypeScript } = require('../../../node-plugins/typescript/index.cjs');
+const { pluginTypeScript } = require('../../plugins/typescript/index.cjs');
 const { artifacts, config, fixture, temporary } = require('../test-support/helpers.cjs');
 
 test('source and precompiled artifact inputs render identical SDK files', async (t) => {

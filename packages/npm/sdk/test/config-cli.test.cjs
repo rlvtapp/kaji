@@ -10,9 +10,9 @@ const test = require('node:test');
 const { generate, loadConfig } = require('../index.cjs');
 const { compiler, fixture, root, temporary } = require('../test-support/helpers.cjs');
 
-const cli = path.join(root, 'packages/cli/bin/poolster.cjs');
-const core = path.join(root, 'packages/cli/sdk/index.cjs');
-const tsPlugin = path.join(root, 'packages/node-plugins/typescript/index.cjs');
+const cli = path.join(root, 'packages/npm/cli/bin/poolster.cjs');
+const core = path.join(root, 'packages/npm/sdk/index.cjs');
+const tsPlugin = path.join(root, 'packages/npm/plugins/typescript/index.cjs');
 
 function runCli(args, cwd) {
   return spawnSync(process.execPath, [cli, ...args], {
@@ -26,7 +26,7 @@ test('JavaScript config files drive the Node CLI', async (t) => {
   const dir = await temporary(t);
   await fs.copyFile(fixture, path.join(dir, 'api.yaml'));
   await fs.mkdir(path.join(dir, 'node_modules/@relevate'), { recursive: true });
-  await fs.symlink(path.join(root, 'packages/cli/sdk'), path.join(dir, 'node_modules/@relevate/poolster'), 'dir');
+  await fs.symlink(path.join(root, 'packages/npm/sdk'), path.join(dir, 'node_modules/@relevate/poolster'), 'dir');
 
   await t.test('auto-discovered CommonJS config resolves paths from its own directory', async () => {
     const source = `const { defineConfig } = require(${JSON.stringify(core)});\nconst { pluginTypeScript } = require(${JSON.stringify(tsPlugin)});\nmodule.exports = defineConfig({ input: './api.yaml', output: { path: './generated' }, name: 'Widgets', version: '1.0.0', plugins: [pluginTypeScript(), { name: 'status', hooks: { generate(ctx) { ctx.emitFile({ path: 'status.txt', contents: 'ready\\n' }); } } }] });\n`;
@@ -62,10 +62,10 @@ test('JavaScript config files drive the Node CLI', async (t) => {
 
   await t.test('ESM config mixes registered Rust plugins and a JavaScript post plugin', async () => {
     const mixed = path.join(dir, 'mixed.config.mjs');
-    const ts = path.join(root, 'packages/node-plugins/typescript/index.mjs');
-    const zod = path.join(root, 'packages/node-plugins/zod/index.mjs');
-    const react = path.join(root, 'packages/node-plugins/react-query/index.mjs');
-    const source = `import { defineConfig } from ${JSON.stringify(pathToFileURL(path.join(root, 'packages/cli/sdk/index.mjs')).href)};
+    const ts = path.join(root, 'packages/npm/plugins/typescript/index.mjs');
+    const zod = path.join(root, 'packages/npm/plugins/zod/index.mjs');
+    const react = path.join(root, 'packages/npm/plugins/react-query/index.mjs');
+    const source = `import { defineConfig } from ${JSON.stringify(pathToFileURL(path.join(root, 'packages/npm/sdk/index.mjs')).href)};
 import { pluginTypeScript } from ${JSON.stringify(pathToFileURL(ts).href)};
 import { pluginZod } from ${JSON.stringify(pathToFileURL(zod).href)};
 import { pluginReactQuery } from ${JSON.stringify(pathToFileURL(react).href)};
@@ -92,9 +92,9 @@ export default defineConfig({ input: './api.yaml', output: './mixed-output', nam
 });
 
 test('ESM entry points expose the config and language plugin factories', async () => {
-  const coreModule = await import(pathToFileURL(path.join(root, 'packages/cli/sdk/index.mjs')).href);
-  const languageModule = await import(pathToFileURL(path.join(root, 'packages/node-plugins/typescript/index.mjs')).href);
-  const bundleModule = await import(pathToFileURL(path.join(root, 'packages/node-plugins/all/index.mjs')).href);
+  const coreModule = await import(pathToFileURL(path.join(root, 'packages/npm/sdk/index.mjs')).href);
+  const languageModule = await import(pathToFileURL(path.join(root, 'packages/npm/plugins/typescript/index.mjs')).href);
+  const bundleModule = await import(pathToFileURL(path.join(root, 'packages/npm/plugins-all/index.mjs')).href);
   assert.equal(typeof coreModule.loadConfig, 'function');
   assert.equal(typeof coreModule.definePlugin, 'function');
   assert.equal(typeof coreModule.defineContract, 'function');

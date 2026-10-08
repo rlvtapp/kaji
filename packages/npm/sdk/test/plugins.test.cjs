@@ -6,7 +6,7 @@ const path = require('node:path');
 const test = require('node:test');
 
 const { definePlugin, generate } = require('../index.cjs');
-const { pluginTypeScript } = require('../../../node-plugins/typescript/index.cjs');
+const { pluginTypeScript } = require('../../plugins/typescript/index.cjs');
 const { artifacts, config, temporary } = require('../test-support/helpers.cjs');
 
 test('JavaScript plugins compose around native SDK renderers', async (t) => {

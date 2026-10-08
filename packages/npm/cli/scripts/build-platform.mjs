@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const root = path.resolve(packageRoot, '../..');
+const root = path.resolve(packageRoot, '../../..');
 const manifest = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf8'));
 const platforms = {
   'darwin-arm64': ['aarch64-apple-darwin', 'darwin', 'arm64'],
@@ -17,7 +17,7 @@ const platforms = {
 const key = process.argv[2] ?? `${process.platform}-${process.arch}${process.platform === 'linux' ? '-gnu' : process.platform === 'win32' ? '-msvc' : ''}`;
 if (!platforms[key]) throw new Error(`Unsupported platform ${key}. Choose ${Object.keys(platforms).join(', ')}`);
 const [target, goos, goarch] = platforms[key];
-const output = path.join(packageRoot, 'npm', key);
+const output = path.join(packageRoot, '..', 'platform', 'cli', key);
 const exe = goos === 'windows' ? '.exe' : '';
 const cargoDirectory = path.join(root, 'target');
 const platformEnvironment = goos === 'darwin'

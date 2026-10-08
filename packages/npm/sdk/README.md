@@ -176,7 +176,7 @@ into a prebuilt native binary.
 
 To expose another Rust plugin, link its crate into the addon, add its
 constructor and option mapping to the native registry in
-`crates/kaji-node/src/lib.rs`, then publish a small npm factory package for
+`crates/node/src/lib.rs`, then publish a small npm factory package for
 explicit selection. The `availableNativePlugins()` list and generation tests
 should cover that registration. The existing packages are examples of this
 build-time registration model.
@@ -228,9 +228,9 @@ From the repository root:
 
 ```sh
 (cd openapi && go build -o ../target/debug/poolster-openapi .)
-node packages/cli/sdk/scripts/build-native.mjs
-node packages/node-plugins/generate.mjs --check
-npm test --prefix packages/cli/sdk
+node packages/npm/sdk/scripts/build-native.mjs
+node packages/npm/generate-plugins.mjs --check
+npm test --prefix packages/npm/sdk
 ```
 
 The packages are prepared in this repository; npm installation requires
