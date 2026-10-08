@@ -644,7 +644,7 @@ fn bundled_author_middleware_is_scoped_and_tracks_source_drift() {
     assert!(
         fs::read_to_string(&runtime)
             .unwrap()
-            .contains("[kajiBundledMiddleware0, ...(config.middleware ?? [])]")
+            .contains("[poolsterBundledMiddleware0, ...(config.middleware ?? [])]")
     );
     let bundled = working.path().join("generated/web/middleware/policy.ts");
     assert_eq!(
@@ -670,7 +670,7 @@ fn bundled_author_middleware_is_scoped_and_tracks_source_drift() {
     assert!(
         !fs::read_to_string(runtime)
             .unwrap()
-            .contains("kajiBundledMiddleware0")
+            .contains("poolsterBundledMiddleware0")
     );
 }
 
