@@ -21,11 +21,11 @@ fn render_sdk(
     let sdk_package = sdk_package
         .filter(|value| !value.trim().is_empty())
         .map(str::to_owned)
-        .unwrap_or_else(|| format!("kaji/{}-sdk", slug(&api.name)));
+        .unwrap_or_else(|| format!("poolster/{}-sdk", slug(&api.name)));
     let package_name = package_name
         .filter(|value| !value.trim().is_empty())
         .map(str::to_owned)
-        .unwrap_or_else(|| format!("kaji/{}-symfony", slug(&api.name)));
+        .unwrap_or_else(|| format!("poolster/{}-symfony", slug(&api.name)));
     let package_namespace = namespace(&package_name);
     let sdk_namespace = namespace(&sdk_package);
     let bundle_name = format!("{}Bundle", class_name(&api.name));
