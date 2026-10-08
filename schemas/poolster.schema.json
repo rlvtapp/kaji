@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/poolster.schema.json",
+  "title": "Poolster configuration (latest)",
+  "description": "Alias for the latest Poolster JSON Schema. Pin schemas/v1/poolster.schema.json in checked-in configs.",
+  "$ref": "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/v1/poolster.schema.json"
+}
