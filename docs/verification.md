@@ -7,7 +7,7 @@ properties separately and make their release workflow run the same checks.
 
 ## Latest 0.5.0 integration evidence
 
-The integrated workspace passes 463 tests, formatting checks and Clippy with
+The integrated workspace passes 469 tests, formatting checks and Clippy with
 warnings denied. Freshly generated SDKs pass 163 shared HTTP scenarios across
 all ten runtimes. Additional native probes cover rebuilding an ejected renderer,
 local-reference provenance, OpenAPI 3.2 QUERY requests, scoped HTTP controls,
@@ -29,6 +29,11 @@ The complete pinned OpenAI contract generates and compiles or imports in
 TypeScript, Rust, Python, Go, Java, C# and Ruby. All six pinned public contracts
 compile in Go. The manual public-contract matrix records results for ten language
 targets; this does not establish that every contract works in every target.
+
+The broader [205-contract compatibility baseline](guru-compatibility.md) attempts
+all ten languages and records generation/native failures beyond these curated
+fixtures. Go passes all 205; the other targets have explicit failures. Use that
+matrix when assessing large-contract compatibility and stability.
 
 These checks use local fixtures and mock HTTP servers. Live GitHub synchronization
 and registry publication remain prepared workflows, without a live delivery trial.

@@ -199,7 +199,8 @@ and [Rust API CLI](docs/rust-cli.md) guides.
 - **Large Go APIs:** split model/operation files and bounded rendering workers.
   A [pinned 205-contract corpus](docs/large-specs.md#apisguru-corpus) covers
   200 OpenAPI providers plus five Azure services, with native-check workflows
-  for every SDK language.
+  for every SDK language. See the [cross-language results](docs/guru-compatibility.md)
+  for current failures and supported-subset limits.
 - **Validation and frontend helpers:** add Zod, TanStack React/Vue Query, SWR,
   Faker, MSW, and Cypress beside a TypeScript package through `kaji.json`.
 - **Documentation artifacts:** add ReDoc or an MCP tool manifest through the

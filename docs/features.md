@@ -38,7 +38,7 @@ supported. Version 0.5.0 is on the branch; use a source build until published.
 | Safe regeneration | Preflight all packages, ownership manifest, unchanged stale-file removal, edited-file protection | [Regeneration](safe-regeneration.md) |
 | Read-only drift and inspection | `generate --check`, SDK doctor and inspectable compiler/package artifacts | [CLI](cli.md), [verification](verification.md) |
 | Existing generator projects | Stainless/Fern/Speakeasy config import and direct generation; supported annotations normalized; unsupported settings reported for review | [Migration](migration.md) |
-| Large public contract regression | Pinned Graph, six official contracts and 205 APIs.guru contracts (including five Azure services); 205/205 Go generation/native passes, checksums and manual native matrices | [Large specs](large-specs.md) |
+| Large public contract regression | Pinned Graph, six official contracts and 205 APIs.guru contracts (including five Azure services); 205/205 Go generation/native passes; other targets have [recorded failures](guru-compatibility.md) | [Large specs](large-specs.md) |
 | Arbitrary custom languages | Rust library `Language`/`Plugin` implementations and optional delivery metadata. CLI needs explicit registry integration | [Library plugins](library/plugins.md) |
 | Ejectable generator sources | `kaji eject` exports rebuildable renderers, runtime sources and plugin interfaces, with a SHA-256 manifest | [Own the sources](source-customization.md) |
 

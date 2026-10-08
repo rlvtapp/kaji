@@ -184,6 +184,10 @@ the official repository, including their complete local reference closure,
 checksums and size limits. The fetcher verifies every file before assembling an
 isolated source tree. No missing schemas are guessed or skipped.
 
+The subsequent [cross-language baseline](guru-compatibility.md) attempts all
+2,050 cases and retains generation and native failures in the other targets.
+This is a compatibility assessment, not an all-language pass claim.
+
 Selecting `all` in the workflow requests 2,050 generation/native-check cases
 across ten language lanes. That is available coverage, not evidence that every
 contract or runtime behavior passes in every language.
