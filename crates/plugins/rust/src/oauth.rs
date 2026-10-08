@@ -42,7 +42,7 @@ impl Plugin<Rust> for OAuth {
         cx.workspace.oauth = true;
         cx.files.emit(GeneratedFile::new(
             "src/oauth.rs",
-            include_str!("oauth.rs.txt"),
+            include_str!("../templates/oauth.rs.tmpl"),
         )?)
     }
 }
@@ -89,7 +89,8 @@ mod tests {
         tree.write_to(dir.path()).unwrap();
         let cwd = dir.path().join("sdk");
         let path = cwd.join("src/oauth.rs");
-        let source = std::fs::read_to_string(&path).unwrap() + include_str!("oauth_probe.rs.txt");
+        let source = std::fs::read_to_string(&path).unwrap()
+            + include_str!("../tests/fixtures/oauth_probe.rs");
         std::fs::write(path, source).unwrap();
         let mut command = crate::native_cargo();
         let output = command

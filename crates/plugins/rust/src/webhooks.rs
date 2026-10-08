@@ -37,7 +37,7 @@ impl Plugin<Rust> for Webhooks {
         cx.workspace.webhooks = true;
         cx.files.emit(GeneratedFile::new(
             "src/webhooks.rs",
-            include_str!("webhooks.rs.txt"),
+            include_str!("../templates/webhooks.rs.tmpl"),
         )?)
     }
 }

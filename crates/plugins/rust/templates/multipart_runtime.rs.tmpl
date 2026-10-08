@@ -11,7 +11,7 @@ impl std::fmt::Display for MultipartBodyError {fn fmt(&self,f:&mut std::fmt::For
 impl std::error::Error for MultipartBodyError {}
 impl Default for MultipartBody {fn default()->Self{Self::new()}}
 impl MultipartBody {
- pub fn new()->Self {static SEQUENCE:std::sync::atomic::AtomicU64=std::sync::atomic::AtomicU64::new(0);let stamp=std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos();Self{boundary:format!("kaji-{stamp:x}-{:x}",SEQUENCE.fetch_add(1,std::sync::atomic::Ordering::Relaxed)),parts:Vec::new()}}
+ pub fn new()->Self {static SEQUENCE:std::sync::atomic::AtomicU64=std::sync::atomic::AtomicU64::new(0);let stamp=std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos();Self{boundary:format!("poolster-{stamp:x}-{:x}",SEQUENCE.fetch_add(1,std::sync::atomic::Ordering::Relaxed)),parts:Vec::new()}}
  pub fn add_text(&mut self,name:&str,value:impl AsRef<str>)->Result<&mut Self,MultipartBodyError>{self.add_part(name,None,"text/plain; charset=utf-8",value.as_ref().as_bytes())}
  pub fn add_file(&mut self,name:&str,filename:&str,content_type:&str,value:impl AsRef<[u8]>)->Result<&mut Self,MultipartBodyError>{self.add_part(name,Some(filename),content_type,value.as_ref())}
  pub fn add_json<T:serde::Serialize>(&mut self,name:&str,value:&T)->Result<&mut Self,MultipartBodyError>{let data=serde_json::to_vec(value).map_err(|_|MultipartBodyError)?;self.add_part(name,None,"application/json",&data)}

@@ -427,10 +427,10 @@ fn poolster_query_pairs<T: Serialize>(name: &str, value: &T, style: &str, explod
     if has_pagination {
         output.push_str(render_pagination_runtime());
     }
-    output.push_str(include_str!("token_provider_contract.rs.txt"));
-    output.push_str(include_str!("multipart_runtime.rs.txt"));
-    output.push_str(include_str!("call_options_runtime.rs.txt"));
-    output.push_str(include_str!("sequential_json.rs.txt"));
+    output.push_str(include_str!("../templates/token_provider_contract.rs.tmpl"));
+    output.push_str(include_str!("../templates/multipart_runtime.rs.tmpl"));
+    output.push_str(include_str!("../templates/call_options_runtime.rs.tmpl"));
+    output.push_str(include_str!("../templates/sequential_json.rs.tmpl"));
     output.push_str(
         "impl Client {\n    pub fn new(base_url: impl Into<String>) -> Self {\n        Self { base_url: base_url.into().trim_end_matches('/').to_owned(), http: reqwest::Client::new(), bearer_token: None }\n    }\n\n    /// Configures a bearer token for operations that declare OpenAPI security.\n    /// Other credential kinds are intentionally not guessed by this generated client.\n    pub fn with_bearer_token(mut self, token: impl Into<String>) -> Self {\n        self.bearer_token = Some(token.into());\n        self\n    }\n\n",
     );
@@ -444,8 +444,8 @@ fn poolster_query_pairs<T: Serialize>(name: &str, value: &T, style: &str, explod
         "    /// Replaces the conservative default retry policy. Set `max_attempts` to one to disable retries.\n    pub fn with_retry(mut self, retry: RetryConfig) -> Self {\n        self.retry = retry;\n        self\n    }\n\n    /// Adds package-level lifecycle hooks without changing generated operation signatures.\n    pub fn with_hooks(mut self, hooks: Arc<dyn ClientHooks>) -> Self {\n        self.hooks = Some(hooks);\n        self\n    }\n\n    fn poolster_before_request(&self, request: &RequestInfo) {\n        if let Some(hooks) = &self.hooks { hooks.before_request(request); }\n    }\n\n    fn poolster_after_response(&self, request: &RequestInfo, response: &reqwest::Response) {\n        if let Some(hooks) = &self.hooks {\n            hooks.after_response(&ResponseInfo { request: request.clone(), status: response.status(), headers: response.headers().clone() });\n        }\n    }\n\n    fn poolster_on_error(&self, request: &RequestInfo, error: &str) {\n        if let Some(hooks) = &self.hooks { hooks.on_error(request, error); }\n    }\n\n    fn poolster_retry_delay(&self, completed_attempts: usize, retry_after: Option<Duration>) -> Duration {\n        if let Some(retry_after) = retry_after { return retry_after.min(self.retry.max_delay); }\n        let factor = 1_u32 << completed_attempts.saturating_sub(1).min(16);\n        self.retry.initial_delay.saturating_mul(factor).min(self.retry.max_delay)\n    }\n\n    /// Configures a bearer token for operations that declare OpenAPI security.\n",
         1,
     );
-    output.push_str(include_str!("token_provider_runtime.rs.txt"));
-    output.push_str(include_str!("call_options_methods.rs.txt"));
+    output.push_str(include_str!("../templates/token_provider_runtime.rs.tmpl"));
+    output.push_str(include_str!("../templates/call_options_methods.rs.tmpl"));
     output.push_str("    /// Substitute the request executor without changing operation signatures.\n    pub fn with_transport(mut self, transport: Arc<dyn crate::transport::Transport>) -> Self { self.transport = transport; self }\n}\n");
     output = output.replace(
         "    http: reqwest::Client,",
@@ -2265,7 +2265,7 @@ impl Transport for Mock {fn execute(&self,request:reqwest::Request)->TransportFu
         fs::create_dir(sdk.join("tests")).unwrap();
         fs::write(
             sdk.join("tests/url.rs"),
-            include_str!("url_pagination_test.rs.txt"),
+            include_str!("../tests/fixtures/url_pagination_test.rs"),
         )
         .unwrap();
         let output = crate::native_cargo()

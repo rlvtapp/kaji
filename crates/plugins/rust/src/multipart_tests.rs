@@ -119,7 +119,8 @@ fn native_multipart_buffered_parts_preserve_bytes_and_safe_retries() {
     let dir = tempfile::tempdir().unwrap();
     tree.write_to(dir.path()).unwrap();
     let path = dir.path().join("sdk/src/client/mod.rs");
-    let source = std::fs::read_to_string(&path).unwrap() + include_str!("multipart_probe.rs.txt");
+    let source = std::fs::read_to_string(&path).unwrap()
+        + include_str!("../tests/fixtures/multipart_probe.rs");
     std::fs::write(path, source).unwrap();
     let result = crate::native_cargo()
         .args(["test", "--quiet"])
