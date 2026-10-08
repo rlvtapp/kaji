@@ -89,7 +89,7 @@ export const createClient = (config = {}) => {
                 await retryDelay(attempt, retry ?? {});
             }
         }
-        throw new Error('Kaji retry loop completed without a response');
+        throw new Error('Poolster retry loop completed without a response');
     };
 };
 export const toEventStream = async (response) => {

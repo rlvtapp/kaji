@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/v1/poolster.schema.json",
+  "$schema": "https://raw.githubusercontent.com/rlvtapp/poolster/main/schemas/v1/poolster.schema.json",
   "openapi": {
     "input": "./openapi.yaml",
     "name": "Mail",

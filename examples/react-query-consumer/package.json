@@ -1,5 +1,5 @@
 {
-  "name": "kaji-react-query-consumer-example",
+  "name": "poolster-react-query-consumer-example",
   "private": true,
   "scripts": { "typecheck": "tsc --noEmit" },
   "dependencies": {

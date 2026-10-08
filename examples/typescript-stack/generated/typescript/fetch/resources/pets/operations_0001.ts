@@ -1,4 +1,4 @@
-import type { ClientInstance } from '../../.kaji/client'
+import type { ClientInstance } from '../../.poolster/client'
 import { listPets } from '../../clients/pets/listPets'
 import { createPet } from '../../clients/pets/createPet'
 import { getPet } from '../../clients/pets/getPet'

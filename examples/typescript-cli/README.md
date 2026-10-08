@@ -58,7 +58,7 @@ cd generated/notes-rust
 cargo run -- messages send --from hello@example.test --to recipient@example.test --subject "Welcome" --html-file ./welcome.html
 ```
 
-The Rust CLI preserves `src/kaji_extension.rs` on regeneration. Implement its
+The Rust CLI preserves `src/poolster_extension.rs` on regeneration. Implement its
 `login` hook for provider-specific OAuth or SSO; `notes auth login` calls it.
 
 ## Terminal and reference behavior in 0.4.0

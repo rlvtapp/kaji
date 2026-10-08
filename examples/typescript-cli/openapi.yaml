@@ -10,7 +10,7 @@ paths:
   /messages:
     post:
       operationId: sendMessage
-      x-kaji-cli:
+      x-poolster-cli:
         group: messages
         command: send
       tags: [messages]

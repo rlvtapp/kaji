@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
-  title: Kaji Pets
+  title: Poolster Pets
   version: 1.0.0
-  description: A compact contract used by Kaji's complete TypeScript example.
+  description: A compact contract used by Poolster's complete TypeScript example.
 servers:
   - url: https://api.example.test/v1
 paths:

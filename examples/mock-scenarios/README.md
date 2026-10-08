@@ -33,10 +33,10 @@ both a health check and a bounded, machine-readable request log—without a
 dashboard or Docker. Start the native server, then make a few calls:
 
 ```sh
-curl http://127.0.0.1:4010/_kaji/health
+curl http://127.0.0.1:4010/_poolster/health
 curl http://127.0.0.1:4010/notes/random
 curl http://127.0.0.1:4010/notes/random
-curl http://127.0.0.1:4010/_kaji/requests
+curl http://127.0.0.1:4010/_poolster/requests
 ```
 
 `/notes/random` has no fixed examples, so the two successful responses contain
@@ -45,6 +45,6 @@ matched, status code, optional scenario, and a safely bounded request body.
 That lets a person or agent distinguish a malformed call, an unmatched route,
 and an intentional `rate-limited` scenario quickly.
 
-The `x-kaji-mock` extension belongs in the OpenAPI source. Regenerate after
+The `x-poolster-mock` extension belongs in the OpenAPI source. Regenerate after
 changing it instead of editing generated fixture YAML. See
 [contract mocking](../../docs/mocking.md) for all predicates and response fields.

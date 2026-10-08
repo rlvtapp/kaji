@@ -1,8 +1,8 @@
 /* eslint-disable no-alert, no-console */
 
-import type { Options, Unwrappable, RequestResult } from '../../.kaji/client'
+import type { Options, Unwrappable, RequestResult } from '../../.poolster/client'
 import type { GetPetOptions, GetPetResponses } from '../../models/pets/GetPet'
-import { client, withUnwrap } from '../../.kaji/client'
+import { client, withUnwrap } from '../../.poolster/client'
 
 /**
  * {@link /pets/:petId}

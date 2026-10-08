@@ -1,5 +1,5 @@
 /* eslint-disable no-alert, no-console */
-import { client, withUnwrap } from '../../.kaji/client';
+import { client, withUnwrap } from '../../.poolster/client';
 /**
  * {@link /pets/:petId}
  */

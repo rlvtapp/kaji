@@ -1,4 +1,4 @@
 {
   "command": "npx",
-  "args": ["@relevate/kaji", "mcp", "generator"]
+  "args": ["@relevate/poolster", "mcp", "generator"]
 }

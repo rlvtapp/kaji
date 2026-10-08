@@ -27,8 +27,8 @@ Check the portable export using the editable checker and jsonschema 4.23.0:
 
 ```sh
 python3 -m pip install 'jsonschema==4.23.0'
-KAJI_COLLECTION=examples/api-artifacts/generated/postman/widgets.postman_collection.json \
-KAJI_ENVIRONMENT=examples/api-artifacts/generated/postman/widgets.postman_environment.json \
+POOLSTER_COLLECTION=examples/api-artifacts/generated/postman/widgets.postman_collection.json \
+POOLSTER_ENVIRONMENT=examples/api-artifacts/generated/postman/widgets.postman_environment.json \
 python3 packages/internal/postman-check/check.py
 ```
 

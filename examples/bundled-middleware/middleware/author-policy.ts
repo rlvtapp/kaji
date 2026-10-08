@@ -1,4 +1,4 @@
-import type { ClientMiddleware } from '../.kaji/client'
+import type { ClientMiddleware } from '../.poolster/client'
 
 /** Author policy shipped and enabled by default; customers need no setup. */
 export const authorPolicy: ClientMiddleware = async (request, next) => {

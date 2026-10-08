@@ -1,4 +1,4 @@
-import type { Options, Unwrappable, RequestResult } from '../../.kaji/client';
+import type { Options, Unwrappable, RequestResult } from '../../.poolster/client';
 import type { ListPetsOptions, ListPetsResponses } from '../../models/pets/ListPets';
 /**
  * {@link /pets}

@@ -1,5 +1,5 @@
-import type { ClientConfig, ClientInstance } from './.kaji/client'
-import { createClient } from './.kaji/client'
+import type { ClientConfig, ClientInstance } from './.poolster/client'
+import { createClient } from './.poolster/client'
 import { PetsClient } from './resources/pets'
 
 export class Pets {

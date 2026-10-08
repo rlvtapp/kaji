@@ -1,4 +1,4 @@
-import type { ClientConfig, ClientInstance } from './.kaji/client';
+import type { ClientConfig, ClientInstance } from './.poolster/client';
 import { PetsClient } from './resources/pets';
 export declare class Pets {
     /** Configured request transport for direct operations and generated framework hooks. */

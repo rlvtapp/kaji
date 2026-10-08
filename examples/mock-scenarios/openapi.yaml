@@ -27,7 +27,7 @@ paths:
           in: path
           required: true
           schema: { type: string }
-      x-kaji-mock:
+      x-poolster-mock:
         scenarios:
           - name: rate-limited
             when:

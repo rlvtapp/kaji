@@ -1,8 +1,8 @@
 {
-  "$schema": "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/v1/poolster.schema.json",
+  "$schema": "https://raw.githubusercontent.com/rlvtapp/poolster/main/schemas/v1/poolster.schema.json",
   "openapi": {
     "input": "./openapi.yaml",
-    "name": "Kaji Pets",
+    "name": "Poolster Pets",
     "version": "1.0.0"
   },
   "output": {

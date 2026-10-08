@@ -118,7 +118,7 @@ docker compose up --build
 ```
 
 It listens on `http://localhost:4010` by default. Add durable conditional
-responses to the OpenAPI document with `x-kaji-mock`; see
+responses to the OpenAPI document with `x-poolster-mock`; see
 [contract mocking](../../docs/mocking.md).
 
 ## What is intentionally separate

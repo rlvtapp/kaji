@@ -1,4 +1,4 @@
-# Kaji Pets TypeScript SDK style guide
+# Poolster Pets TypeScript SDK style guide
 
 This package selected the **namespaced instantiated client** surface. Generated models and direct operation exports are available in every mode.
 

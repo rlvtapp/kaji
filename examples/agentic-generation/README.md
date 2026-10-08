@@ -18,10 +18,10 @@ The server exposes only two tools:
 
 | Tool | Purpose |
 | --- | --- |
-| `kaji_languages` | Lists maintained SDK targets. |
-| `kaji_generate` | Generates one or more SDKs from a local OpenAPI file. |
+| `poolster_languages` | Lists maintained SDK targets. |
+| `poolster_generate` | Generates one or more SDKs from a local OpenAPI file. |
 
-An MCP host should call `kaji_generate` with paths that it is allowed to read
+An MCP host should call `poolster_generate` with paths that it is allowed to read
 and write. A representative tool input is:
 
 ```json

@@ -1,4 +1,4 @@
-import { createClient } from './.kaji/client';
+import { createClient } from './.poolster/client';
 import { PetsClient } from './resources/pets';
 export class Pets {
     /** Configured request transport for direct operations and generated framework hooks. */
