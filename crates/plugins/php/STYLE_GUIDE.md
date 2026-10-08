@@ -3,7 +3,7 @@
 Select the style on the SDK plugin:
 
 ```rust
-use kaji::{php, prelude::*};
+use poolster::{php, prelude::*};
 
 let package = php::package("php")
     .with(php::sdk().namespaced()); // Default; use .flat() for direct methods.

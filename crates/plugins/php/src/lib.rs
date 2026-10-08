@@ -25,15 +25,11 @@ fn pagination_annotation(operation: &Operation) -> Option<&Value> {
     operation
         .annotations
         .get("x-poolster-pagination")
-        .or_else(|| operation.annotations.get("x-kaji-pagination"))
         .or_else(|| operation.annotations.get("x-speakeasy-pagination"))
 }
 
 fn idempotency_annotation(operation: &Operation) -> Option<&Value> {
-    operation
-        .annotations
-        .get("x-poolster-idempotency-resolved")
-        .or_else(|| operation.annotations.get("x-kaji-idempotency-resolved"))
+    operation.annotations.get("x-poolster-idempotency-resolved")
 }
 
 /// Generates an installable PHP 8.2+ package.

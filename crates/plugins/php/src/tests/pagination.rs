@@ -90,7 +90,7 @@ fn emits_offset_paginators_only_for_declared_integer_inputs() {
         },
     ];
     source.operations[0].annotations.insert(
-        "x-kaji-pagination".into(),
+        "x-poolster-pagination".into(),
         serde_json::json!({
             "type": "offsetLimit",
             "inputs": [
@@ -133,7 +133,7 @@ fn emits_safe_body_cursor_and_url_paginators() {
         }],
     });
     source.operations[0].annotations.insert(
-        "x-kaji-pagination".into(),
+        "x-poolster-pagination".into(),
         serde_json::json!({
             "type": "cursor",
             "inputs": [{ "name": "cursor-token", "in": "requestBody", "type": "cursor" }],
@@ -161,7 +161,7 @@ fn emits_safe_body_cursor_and_url_paginators() {
     source.operations[0].request_body = None;
     source.operations[0].method = HttpMethod::Get;
     source.operations[0].annotations.insert(
-        "x-kaji-pagination".into(),
+        "x-poolster-pagination".into(),
         serde_json::json!({
             "type": "url",
             "outputs": { "nextUrl": "$.links.next" }

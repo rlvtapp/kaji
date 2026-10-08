@@ -37,7 +37,7 @@ client constructor. Optional `beforeRequest`, `afterResponse`, and `onError`
 callbacks support instrumentation without changing generated operation calls.
 Binary bodies and downloads use PHP strings.
 
-An operation that explicitly declares `x-kaji-pagination` (or compatible
+An operation that explicitly declares `x-poolster-pagination` (or compatible
 `x-speakeasy-pagination`) with `type: cursor`, an existing cursor parameter,
 and `outputs.nextCursor` receives a lazy `\Generator`, for example
 `$client->listPetsPages(cursor: null)`. Namespaced clients mirror it at
