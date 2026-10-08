@@ -8,6 +8,10 @@ use std::time::Instant;
 
 use anyhow::{Context, Result, bail, ensure};
 use check_rules::{CHECK_RULES, CheckDiagnostic, CheckSidecarOperation, check_api};
+use generation_lock::{
+    GENERATION_LOCK_PATH, GENERATION_LOCK_VERSION, GenerationReplayLock, UpdateInputLock,
+    UpdateLock, generation_lock,
+};
 #[cfg(test)]
 use mock_http::{
     mock_path_matches, mock_path_parameters, mock_path_specificity, mock_response_body,
@@ -31,6 +35,7 @@ mod config_defaults;
 mod contract;
 mod credentials;
 mod eject;
+mod generation_lock;
 mod mcp;
 mod migration;
 mod mock_http;
@@ -3278,199 +3283,6 @@ fn write_sdk(artifacts: &Path, options: &Generate, reporter: &Reporter) -> Resul
         &options.output,
     );
     Ok(())
-}
-
-const GENERATION_LOCK_VERSION: u8 = 1;
-const GENERATION_LOCK_PATH: &str = ".poolster/generation.lock.json";
-
-/// A deliberately small, secret-free account of exactly what Poolster rendered.
-/// It is an output artifact rather than an input lock: regenerate it whenever
-/// the contract or selected generator settings change, then review it in the
-/// same change as generated code.
-#[derive(Debug, Serialize)]
-struct GenerationLock {
-    version: u8,
-    generator: GeneratorLock,
-    input: GenerationInputLock,
-    api: GeneratedApiLock,
-    paths: PathSelection,
-    targets: Vec<String>,
-    settings: GenerationSettingsLock,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    replay: Option<GenerationReplayLock>,
-}
-
-/// Direct generation has no separate recipe to re-run. Preserve its
-/// non-secret inputs so `poolster update` can faithfully replay it later.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct GenerationReplayLock {
-    source: Option<String>,
-    artifacts: Option<String>,
-    languages: Vec<String>,
-    name: String,
-    version: String,
-    client_style: String,
-    typescript_transport: Option<String>,
-    typescript_surface: String,
-    typescript_client_name: Option<String>,
-    go_jobs: Option<usize>,
-    compiler: Option<String>,
-    paths: PathSelection,
-}
-
-#[derive(Debug, Deserialize)]
-struct UpdateLock {
-    version: u8,
-    input: UpdateInputLock,
-    #[serde(default)]
-    replay: Option<GenerationReplayLock>,
-}
-
-#[derive(Debug, Deserialize)]
-struct UpdateInputLock {
-    #[serde(default)]
-    source_sha256: Option<String>,
-    artifacts_sha256: String,
-}
-
-#[derive(Debug, Serialize)]
-struct GeneratorLock {
-    name: &'static str,
-    version: &'static str,
-}
-
-#[derive(Debug, Serialize)]
-struct GenerationInputLock {
-    kind: &'static str,
-    locator: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    source_sha256: Option<String>,
-    artifacts_sha256: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    config_sha256: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct GeneratedApiLock {
-    name: String,
-    version: String,
-    operations: Vec<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct GenerationSettingsLock {
-    client_style: &'static str,
-    typescript_transport: Option<&'static str>,
-    typescript_surface: &'static str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    typescript_client_name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    go_jobs: Option<usize>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    compiler: Option<String>,
-}
-
-fn generation_lock(artifacts: &Path, options: &Generate, api: &Api) -> Result<String> {
-    let (kind, locator, source_sha256) = match (&options.artifacts, &options.source) {
-        (Some(path), _) => ("artifacts", path.to_string_lossy().into_owned(), None),
-        (None, Some(OpenApiInput::Path(path))) if remote_spec_url(path).is_none() => (
-            "openapi",
-            path.to_string_lossy().into_owned(),
-            options.source_sha256.clone().or(Some(sha256_file(path)?)),
-        ),
-        (None, Some(OpenApiInput::Path(path))) => (
-            "openapi",
-            path.to_string_lossy().into_owned(),
-            options.source_sha256.clone(),
-        ),
-        (None, Some(OpenApiInput::Remote(remote))) => {
-            ("openapi", remote.url.clone(), options.source_sha256.clone())
-        }
-        (None, None) => bail!("generation input is missing"),
-    };
-    let lock = GenerationLock {
-        version: GENERATION_LOCK_VERSION,
-        generator: GeneratorLock {
-            name: "poolster",
-            version: env!("CARGO_PKG_VERSION"),
-        },
-        input: GenerationInputLock {
-            kind,
-            locator,
-            source_sha256,
-            artifacts_sha256: sha256_directory(artifacts)?,
-            config_sha256: options.config_sha256.clone(),
-        },
-        api: GeneratedApiLock {
-            name: api.name.clone(),
-            version: api.version.clone(),
-            operations: api
-                .operations
-                .iter()
-                .map(|operation| format!("{} {}", operation.method.as_str(), operation.path))
-                .collect(),
-        },
-        paths: options.path_selection.clone(),
-        targets: configured_labels(options),
-        settings: GenerationSettingsLock {
-            client_style: match options.style {
-                SdkClientStyle::Namespaced => "namespaced",
-                SdkClientStyle::Flat => "flat",
-            },
-            typescript_transport: options
-                .typescript_transport
-                .map(|transport| match transport {
-                    TypeScriptTransport::Fetch => "fetch",
-                    TypeScriptTransport::Axios => "axios",
-                }),
-            typescript_surface: if options.raw { "raw" } else { "client" },
-            typescript_client_name: options.client_name.clone(),
-            go_jobs: (options.jobs != 0).then_some(options.jobs),
-            compiler: options
-                .compiler
-                .as_ref()
-                .map(|compiler| compiler.to_string_lossy().into_owned()),
-        },
-        replay: direct_generation_replay(options),
-    };
-    Ok(format!("{}\n", serde_json::to_string_pretty(&lock)?))
-}
-
-fn direct_generation_replay(options: &Generate) -> Option<GenerationReplayLock> {
-    options
-        .config_packages
-        .is_none()
-        .then(|| GenerationReplayLock {
-            source: options.source.as_ref().map(|source| match source {
-                OpenApiInput::Path(path) => path.to_string_lossy().into_owned(),
-                OpenApiInput::Remote(remote) => remote.url.clone(),
-            }),
-            artifacts: options
-                .artifacts
-                .as_ref()
-                .map(|path| path.to_string_lossy().into_owned()),
-            languages: options.languages.clone(),
-            name: options.name.clone(),
-            version: options.version.clone(),
-            client_style: match options.style {
-                SdkClientStyle::Namespaced => "namespaced".into(),
-                SdkClientStyle::Flat => "flat".into(),
-            },
-            typescript_transport: options
-                .typescript_transport
-                .map(|transport| match transport {
-                    TypeScriptTransport::Fetch => "fetch".into(),
-                    TypeScriptTransport::Axios => "axios".into(),
-                }),
-            typescript_surface: if options.raw { "raw" } else { "client" }.into(),
-            typescript_client_name: options.client_name.clone(),
-            go_jobs: (options.jobs != 0).then_some(options.jobs),
-            compiler: options
-                .compiler
-                .as_ref()
-                .map(|path| path.to_string_lossy().into_owned()),
-            paths: options.path_selection.clone(),
-        })
 }
 
 fn update(options: Update) -> Result<()> {
