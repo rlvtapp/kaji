@@ -142,7 +142,7 @@ impl Plugin<Python> for Webhooks {
         let module = crate::python_module_name(&distribution);
         cx.files.emit(poolster_core::GeneratedFile::new(
             format!("src/{module}/webhooks.py"),
-            include_str!("webhooks.py"),
+            include_str!("../templates/webhooks.py"),
         )?)
     }
 }

@@ -420,7 +420,7 @@ mod tests {
         );
     }
     #[test]
-    #[ignore = "requires Python 3.10+; set KAJI_TEST_PYTHON"]
+    #[ignore = "requires Python 3.10+; set POOLSTER_TEST_PYTHON"]
     fn generated_smoke_tests_execute_flat_and_namespaced() {
         for flat in [false, true] {
             let root = tempfile::tempdir().unwrap();
@@ -437,7 +437,9 @@ mod tests {
                 .write_to(root.path())
                 .unwrap();
             let output = std::process::Command::new(
-                std::env::var("KAJI_TEST_PYTHON").unwrap_or_else(|_| "python3".into()),
+                std::env::var("POOLSTER_TEST_PYTHON")
+                    .or_else(|_| std::env::var("KAJI_TEST_PYTHON"))
+                    .unwrap_or_else(|_| "python3".into()),
             )
             .args(["-m", "unittest", "discover", "-v"])
             .current_dir(root.path().join("sdk"))

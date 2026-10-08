@@ -98,7 +98,7 @@ pub(super) fn render(api: &Api) -> String {
     let encoded = serde_json::to_string(&catalog(api)).unwrap();
     format!(
         "{}\nPLANS = json.loads({})\n",
-        include_str!("response_validation.py"),
+        include_str!("../templates/response_validation.py"),
         serde_json::to_string(&encoded).unwrap()
     )
 }
@@ -151,7 +151,10 @@ del _module_info, _kind
 "#;
     files.push((
         "response_validation.py".into(),
-        format!("{}\n{loader}", include_str!("response_validation.py")),
+        format!(
+            "{}\n{loader}",
+            include_str!("../templates/response_validation.py")
+        ),
     ));
     files
 }

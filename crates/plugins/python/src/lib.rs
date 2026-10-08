@@ -88,7 +88,7 @@ fn render_sdk(
     }
     tree.insert(GeneratedFile::new(
         format!("{root}/src/{module}/models/_model_codec.py"),
-        include_str!("model_codec.py"),
+        include_str!("../templates/model_codec.py"),
     )?)?;
     for schema in &api.schemas {
         tree.insert(GeneratedFile::new(
@@ -105,7 +105,7 @@ fn render_sdk(
     )?)?;
     tree.insert(GeneratedFile::new(
         format!("{root}/src/{module}/presence.py"),
-        include_str!("presence.py"),
+        include_str!("../templates/presence.py"),
     )?)?;
     for (path, contents) in render_partitioned_errors(api) {
         tree.insert(GeneratedFile::new(
@@ -121,7 +121,7 @@ fn render_sdk(
     }
     tree.insert(GeneratedFile::new(
         format!("{root}/src/{module}/multipart.py"),
-        include_str!("multipart.py"),
+        include_str!("../templates/multipart.py"),
     )?)?;
     if api
         .operations
@@ -130,12 +130,12 @@ fn render_sdk(
     {
         tree.insert(GeneratedFile::new(
             format!("{root}/MULTIPART.md"),
-            include_str!("multipart_readme.md"),
+            include_str!("../templates/multipart_readme.md"),
         )?)?;
     }
     tree.insert(GeneratedFile::new(
         format!("{root}/src/{module}/oauth.py"),
-        include_str!("oauth.py"),
+        include_str!("../templates/oauth.py"),
     )?)?;
     for (index, range) in python_operation_groups(api).into_iter().enumerate() {
         let operations = &api.operations[range];
@@ -243,7 +243,7 @@ fn render_sdk_with_async(
     }
     tree.insert(GeneratedFile::new(
         format!("{prefix}async_runtime.py"),
-        include_str!("async_runtime.py"),
+        include_str!("../templates/async_runtime.py"),
     )?)?;
     let facade = render_client_facade(api, style)
         .replace(
@@ -2097,7 +2097,7 @@ fn render_readme(
             SdkClientStyle::Namespaced => "namespaced",
         },
         usage,
-    ) + include_str!("middleware_readme.md")
+    ) + include_str!("../templates/middleware_readme.md")
 }
 
 fn python_example(value: &SchemaValue) -> String {
@@ -4395,7 +4395,10 @@ assert [item.id for item in page.items]==['one','two'] and to_wire(page)==wire
         .write_to(root.path())
         .unwrap();
         let output = Command::new("python3")
-            .args(["-c", include_str!("call_options_probe.py.txt")])
+            .args([
+                "-c",
+                include_str!("../tests/fixtures/call_options_probe.py.txt"),
+            ])
             .env("PYTHONPATH", root.path().join("sdk/python/src"))
             .output()
             .unwrap();

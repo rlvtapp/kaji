@@ -105,10 +105,12 @@ mod tests {
         .unwrap();
         fs::write(
             root.path().join("sdk/probe.py"),
-            include_str!("multipart_probe.py"),
+            include_str!("../tests/fixtures/multipart_probe.py"),
         )
         .unwrap();
-        let python = std::env::var_os("KAJI_TEST_PYTHON").unwrap_or_else(|| "python3".into());
+        let python = std::env::var_os("POOLSTER_TEST_PYTHON")
+            .or_else(|| std::env::var_os("KAJI_TEST_PYTHON"))
+            .unwrap_or_else(|| "python3".into());
         let mut paths = vec![root.path().join("sdk/src")];
         if let Some(path) = std::env::var_os("PYTHONPATH") {
             paths.extend(std::env::split_paths(&path));
