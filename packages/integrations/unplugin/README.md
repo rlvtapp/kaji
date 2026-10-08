@@ -69,5 +69,5 @@ watch-mode refreshes are needed.
 ## Development
 
 ```sh
-node --test packages/unplugin-poolster/test/*.test.cjs
+node --test packages/integrations/unplugin/test/*.test.cjs
 ```
