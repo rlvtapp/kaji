@@ -6,7 +6,7 @@ const MAX_API_DIRECTORY_BYTES: u64 = 16 * 1024 * 1024;
 
 fn load_api_directory() -> Result<registry::Directory> {
     let client = reqwest::blocking::Client::builder()
-        .user_agent(concat!("kaji/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!("poolster/", env!("CARGO_PKG_VERSION")))
         .timeout(std::time::Duration::from_secs(30))
         .build()
         .context("configure API directory client")?;
@@ -103,7 +103,7 @@ pub(super) fn compiler_source_origin(remote: &RemoteInput) -> Result<String> {
 
 pub(super) fn download_openapi(source: &RemoteInput, destination: &Path) -> Result<()> {
     let client = reqwest::blocking::Client::builder()
-        .user_agent(concat!("kaji/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!("poolster/", env!("CARGO_PKG_VERSION")))
         .timeout(std::time::Duration::from_secs(120))
         .build()
         .context("configure OpenAPI download client")?;

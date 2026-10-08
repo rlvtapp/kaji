@@ -124,7 +124,7 @@ fn handle_mock_request(
     drop(reader);
     let (path, query) = mock_target_parts(&target);
 
-    if method == "GET" && matches!(path, "/_poolster/requests" | "/_kaji/requests") {
+    if method == "GET" && path == "/_poolster/requests" {
         let entries = requests
             .lock()
             .expect("mock request log poisoned")
@@ -138,7 +138,7 @@ fn handle_mock_request(
             &BTreeMap::new(),
         );
     }
-    if method == "GET" && matches!(path, "/_poolster/health" | "/_kaji/health") {
+    if method == "GET" && path == "/_poolster/health" {
         return write_mock_response(
             &mut stream,
             200,

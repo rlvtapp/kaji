@@ -110,20 +110,20 @@ fn native_openapi32_query_compiles_and_executes_typed_sdk_bytes() {
         "POST must remain guarded"
     );
     let mut cargo = Command::new("cargo");
-    if std::env::var("KAJI_RUNTIME_OFFLINE").as_deref() == Ok("1") {
+    if std::env::var("POOLSTER_RUNTIME_OFFLINE").as_deref() == Ok("1") {
         cargo.arg("--offline");
     }
     cargo.args(["test", "--lib"]).current_dir(&rust).env(
         "CARGO_TARGET_DIR",
-        std::env::var_os("KAJI_RUNTIME_RUST_TARGET")
+        std::env::var_os("POOLSTER_RUNTIME_RUST_TARGET")
             .map(std::path::PathBuf::from)
-            .unwrap_or_else(|| std::env::temp_dir().join("kaji-runtime-contract-rust-target")),
+            .unwrap_or_else(|| std::env::temp_dir().join("poolster-runtime-contract-rust-target")),
     );
     let output = checked(&mut cargo);
     assert!(String::from_utf8_lossy(&output.stdout).contains("4 passed"));
     let ts = temp.path().join("generated/typescript");
-    let compiler =
-        std::env::var_os("KAJI_TSC_JS").expect("KAJI_TSC_JS must identify TypeScript's tsc.js");
+    let compiler = std::env::var_os("POOLSTER_TSC_JS")
+        .expect("POOLSTER_TSC_JS must identify TypeScript's tsc.js");
     checked(
         Command::new("node")
             .arg(compiler)

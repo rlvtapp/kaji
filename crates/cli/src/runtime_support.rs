@@ -1,11 +1,9 @@
 use super::*;
 
 pub(super) fn compiler_path(override_path: Option<PathBuf>) -> Result<PathBuf> {
-    if let Some(path) = override_path.or_else(|| {
-        env::var_os("POOLSTER_OPENAPI_BIN")
-            .or_else(|| env::var_os("KAJI_OPENAPI_BIN"))
-            .map(PathBuf::from)
-    }) {
+    if let Some(path) =
+        override_path.or_else(|| env::var_os("POOLSTER_OPENAPI_BIN").map(PathBuf::from))
+    {
         return std::fs::canonicalize(&path)
             .with_context(|| format!("cannot find OpenAPI compiler {}", path.display()));
     }

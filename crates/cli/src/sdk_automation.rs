@@ -248,7 +248,7 @@ impl Default for WorkflowSettings {
         Self {
             auth: "app".into(),
             broker_url: None,
-            action_ref: format!("rlvtapp/kaji@v{}", env!("CARGO_PKG_VERSION")),
+            action_ref: format!("rlvtapp/poolster@v{}", env!("CARGO_PKG_VERSION")),
             local_actions: true,
             schedule: None,
             base: "main".into(),
@@ -267,7 +267,7 @@ impl WorkflowSettings {
             action_ref: options
                 .value(
                     "--action-ref",
-                    &format!("rlvtapp/kaji@v{}", env!("CARGO_PKG_VERSION")),
+                    &format!("rlvtapp/poolster@v{}", env!("CARGO_PKG_VERSION")),
                 )
                 .into(),
             local_actions: match options.value("--actions", "local") {
@@ -476,7 +476,7 @@ fn release_matrix(
 }
 
 fn app_manifest(options: &Options) -> Result<String> {
-    let url = reqwest::Url::parse(options.value("--url", "https://github.com/rlvtapp/kaji"))?;
+    let url = reqwest::Url::parse(options.value("--url", "https://github.com/rlvtapp/poolster"))?;
     ensure!(
         url.scheme() == "https" && url.username().is_empty() && url.password().is_none(),
         "App homepage must be an HTTPS URL without credentials"
@@ -2408,7 +2408,7 @@ mod tests {
                 "--actions",
                 "remote",
                 "--action-ref",
-                "acme/kaji@commit123",
+                "acme/poolster@commit123",
             ]
             .map(OsString::from),
         )
@@ -2428,7 +2428,7 @@ mod tests {
                 .unwrap()
                 .last()
                 .unwrap()["uses"],
-            "acme/kaji/packages/internal/spec-sync@commit123"
+            "acme/poolster/packages/internal/spec-sync@commit123"
         );
     }
 

@@ -2,7 +2,7 @@ use super::recipes::combined_optional_packages;
 use super::*;
 
 #[test]
-#[ignore = "requires Python jsonschema; set KAJI_TEST_PYTHON and PYTHONPATH"]
+#[ignore = "requires Python jsonschema; set POOLSTER_TEST_PYTHON and PYTHONPATH"]
 fn combined_optional_recipe_validates_actual_json_schema() {
     let config = serde_json::json!({"openapi":{"input":"api.yaml"},"output":{"path":"generated"},"packages":combined_optional_packages()});
     let directory = tempfile::tempdir().unwrap();
@@ -64,7 +64,7 @@ python['plugins'][1]['name'] = 'unsupported-operation-tests'
 assert not validator.is_valid(config)
 "#;
     let output = std::process::Command::new(
-        std::env::var("KAJI_TEST_PYTHON").unwrap_or_else(|_| "python3".into()),
+        std::env::var("POOLSTER_TEST_PYTHON").unwrap_or_else(|_| "python3".into()),
     )
     .args(["-c", script])
     .arg(concat!(

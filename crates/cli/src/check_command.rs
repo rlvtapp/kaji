@@ -206,7 +206,7 @@ pub(super) fn load_check_baseline(path: &Path) -> Result<BTreeSet<String>> {
 
 pub(super) fn write_check_baseline(path: &Path, diagnostics: &[CheckDiagnostic]) -> Result<()> {
     let document = CheckBaselineOutput {
-        schema: "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/v1/check-baseline.schema.json",
+        schema: "https://raw.githubusercontent.com/rlvtapp/poolster/main/schemas/v1/check-baseline.schema.json",
         version: 1,
         diagnostics: diagnostics
             .iter()

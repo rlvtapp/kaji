@@ -25,7 +25,7 @@ fn check_baselines_use_stable_fingerprints() {
     assert_eq!(document["version"], 1);
     assert_eq!(
         document["$schema"],
-        "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/v1/check-baseline.schema.json"
+        "https://raw.githubusercontent.com/rlvtapp/poolster/main/schemas/v1/check-baseline.schema.json"
     );
 }
 

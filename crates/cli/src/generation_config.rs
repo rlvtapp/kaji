@@ -128,7 +128,7 @@ pub(super) fn init_config(init: Init) -> Result<()> {
         );
     }
     let document = serde_json::json!({
-        "$schema": "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/v1/poolster.schema.json",
+        "$schema": "https://raw.githubusercontent.com/rlvtapp/poolster/main/schemas/v1/poolster.schema.json",
         "openapi": {
             "input": init.input,
             "name": init.name,

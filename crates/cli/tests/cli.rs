@@ -365,7 +365,7 @@ fn init_writes_a_json_recipe_without_overwriting_existing_work() {
         serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
     assert_eq!(
         document["$schema"],
-        "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/v1/poolster.schema.json"
+        "https://raw.githubusercontent.com/rlvtapp/poolster/main/schemas/v1/poolster.schema.json"
     );
     assert_eq!(document["openapi"]["input"], "contract/openapi.json");
     assert_eq!(document["packages"][0]["plugins"][1]["name"], "zod");
