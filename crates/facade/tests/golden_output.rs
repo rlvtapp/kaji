@@ -55,10 +55,7 @@ fn snapshot() -> String {
 #[test]
 fn every_maintained_target_matches_the_approved_output_snapshot() {
     let actual = snapshot();
-    if std::env::var_os("POOLSTER_UPDATE_GOLDEN_SNAPSHOT")
-        .or_else(|| std::env::var_os("KAJI_UPDATE_GOLDEN_SNAPSHOT"))
-        .is_some()
-    {
+    if std::env::var_os("POOLSTER_UPDATE_GOLDEN_SNAPSHOT").is_some() {
         std::fs::write("tests/fixtures/all-targets.snapshot", &actual)
             .expect("update approved generated-output snapshot");
         return;

@@ -116,7 +116,7 @@ fn contract_api() -> Api {
                 ],
                 security: secured.clone(),
                 annotations: BTreeMap::from([(
-                    "x-kaji-pagination".into(),
+                    "x-poolster-pagination".into(),
                     json!({
                         "type": "cursor",
                         "inputs": [{ "name": "cursor", "in": "parameters", "type": "cursor" }],

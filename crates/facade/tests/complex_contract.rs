@@ -33,7 +33,7 @@ fn fixture_is_explicitly_versioned_and_contains_complex_cases() {
 #[ignore = "requires built Poolster OpenAPI compiler and Swift 6"]
 fn real_openapi_complex_models_compile_and_round_trip_with_explicit_collision_errors() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let compiler = std::env::var_os("KAJI_OPENAPI_BIN")
+    let compiler = std::env::var_os("POOLSTER_OPENAPI_BIN")
         .map(PathBuf::from)
         .unwrap_or_else(|| root.join("target/debug/poolster-openapi"));
     let temp = tempfile::tempdir().unwrap();

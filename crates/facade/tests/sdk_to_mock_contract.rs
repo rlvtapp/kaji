@@ -119,7 +119,7 @@ import (
 
 func TestPoolsterContractMock(t *testing.T) {
     client, err := NewClient(ClientConfig{
-        BaseURL: os.Getenv("KAJI_CONTRACT_MOCK_URL"),
+        BaseURL: os.Getenv("POOLSTER_CONTRACT_MOCK_URL"),
         APIKey: "contract-test-token",
         APIKeyHeader: "Authorization",
         APIKeyPrefix: "Bearer",
@@ -135,7 +135,7 @@ func TestPoolsterContractMock(t *testing.T) {
     let go_status = Command::new("go")
         .args(["test", "./..."])
         .current_dir(output.path().join("sdk/go"))
-        .env("KAJI_CONTRACT_MOCK_URL", &mock.base_url)
+        .env("POOLSTER_CONTRACT_MOCK_URL", &mock.base_url)
         .env("GOCACHE", output.path().join("go-cache"))
         .status()
         .expect("run generated Go SDK test");
@@ -144,14 +144,14 @@ func TestPoolsterContractMock(t *testing.T) {
     let python_program = r#"from contract_sdk import Client
 import os
 
-client = Client(os.environ["KAJI_CONTRACT_MOCK_URL"], api_key="contract-test-token")
+client = Client(os.environ["POOLSTER_CONTRACT_MOCK_URL"], api_key="contract-test-token")
 contact = client.get_contact()
 assert contact.id == "contact_123", contact
 "#;
     let python_status = Command::new("python3")
         .arg("-c")
         .arg(python_program)
-        .env("KAJI_CONTRACT_MOCK_URL", &mock.base_url)
+        .env("POOLSTER_CONTRACT_MOCK_URL", &mock.base_url)
         .env("PYTHONPATH", output.path().join("sdk/python/src"))
         .env("PYTHONPYCACHEPREFIX", output.path().join("python-cache"))
         .status()

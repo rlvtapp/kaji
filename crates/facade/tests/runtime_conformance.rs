@@ -48,7 +48,7 @@ fn export_runtime_contract_fixture() {
         "200",
         poolster_core::SchemaValue::reference("#/components/schemas/ContactPage"),
     )];
-    listing.annotations.insert("x-kaji-pagination".into(), serde_json::json!({"type":"page","inputs":[{"name":"page","in":"parameters","type":"page"},{"name":"limit","in":"parameters","type":"limit"}],"outputs":{"results":"/items"}}));
+    listing.annotations.insert("x-poolster-pagination".into(), serde_json::json!({"type":"page","inputs":[{"name":"page","in":"parameters","type":"page"},{"name":"limit","in":"parameters","type":"limit"}],"outputs":{"results":"/items"}}));
     api.operations.push(listing);
     let mut creating = api.operations[0].clone();
     creating.id = "createContact".into();
@@ -56,7 +56,7 @@ fn export_runtime_contract_fixture() {
     creating.path = "/contacts".into();
     creating.parameters.clear();
     creating.annotations.insert(
-        "x-kaji-idempotency".into(),
+        "x-poolster-idempotency".into(),
         serde_json::json!({"header":"X-Once", "auto_generate":true}),
     );
     let mut patching = creating.clone();
@@ -249,7 +249,7 @@ fn export_runtime_contract_fixture() {
             "missing page-number helper {language}: {pager}"
         );
     }
-    if let Some(directory) = std::env::var_os("KAJI_RUNTIME_EXPORT") {
+    if let Some(directory) = std::env::var_os("POOLSTER_RUNTIME_EXPORT") {
         tree.write_to(std::path::Path::new(&directory)).unwrap();
     }
 }
