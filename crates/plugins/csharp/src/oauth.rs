@@ -24,7 +24,7 @@ macro_rules! implementation {
                 );
                 cx.files.emit(GeneratedFile::new(
                     "OAuthClientCredentials.cs",
-                    include_str!("oauth.cs.txt").replace("__PACKAGE__", &namespace),
+                    include_str!("../templates/oauth.cs.tmpl").replace("__PACKAGE__", &namespace),
                 )?)
             }
         }
@@ -40,12 +40,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(
             dir.path().join("OAuth.cs"),
-            include_str!("oauth.cs.txt").replace("__PACKAGE__", "ProbeSDK"),
+            include_str!("../templates/oauth.cs.tmpl").replace("__PACKAGE__", "ProbeSDK"),
         )
         .unwrap();
         std::fs::write(
             dir.path().join("Probe.cs"),
-            include_str!("oauth_probe.cs.txt"),
+            include_str!("../tests/fixtures/oauth_probe.cs"),
         )
         .unwrap();
         std::fs::write(dir.path().join("Probe.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings></PropertyGroup></Project>").unwrap();

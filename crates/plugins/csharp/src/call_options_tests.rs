@@ -30,7 +30,7 @@ fn native_call_scopes_preserve_headers_and_cancel_timeout_without_mutation() {
     tree.write_to(dir.path()).unwrap();
     std::fs::write(
         dir.path().join("sdk/tests/OperationTests/Program.cs"),
-        include_str!("call_options_probe.cs.txt"),
+        include_str!("../tests/fixtures/call_options_probe.cs"),
     )
     .unwrap();
     let output = std::process::Command::new("dotnet")

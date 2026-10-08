@@ -323,11 +323,11 @@ pub(crate) fn emit(api: &Api, root: &str, namespace: &str, tree: &mut GeneratedT
     );
     tree.insert(GeneratedFile::new(
         output_path(root, "MultipartFile.cs"),
-        include_str!("multipart.cs.txt").replace("__NAMESPACE__", namespace),
+        include_str!("../templates/multipart.cs.tmpl").replace("__NAMESPACE__", namespace),
     )?)?;
     tree.insert(GeneratedFile::new(
         output_path(root, "OrderedMultipart.cs"),
-        include_str!("ordered_multipart.cs.txt").replace("__NAMESPACE__", namespace),
+        include_str!("../templates/ordered_multipart.cs.tmpl").replace("__NAMESPACE__", namespace),
     )?)?;
     for op in api.operations.iter().filter(|op| selected(op)) {
         let name = body_name(op);
@@ -583,7 +583,7 @@ mod tests {
         tree.write_to(dir.path()).unwrap();
         std::fs::write(
             dir.path().join("sdk/tests/OperationTests/Program.cs"),
-            include_str!("multipart_probe.cs.txt"),
+            include_str!("../tests/fixtures/multipart_probe.cs"),
         )
         .unwrap();
         let output = std::process::Command::new("dotnet")
@@ -664,7 +664,7 @@ mod tests {
         tree.write_to(dir.path()).unwrap();
         std::fs::write(
             dir.path().join("sdk/tests/OperationTests/Program.cs"),
-            include_str!("multipart_complex_probe.cs.txt"),
+            include_str!("../tests/fixtures/multipart_complex_probe.cs"),
         )
         .unwrap();
         let output = std::process::Command::new("dotnet")

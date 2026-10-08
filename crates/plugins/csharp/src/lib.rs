@@ -616,11 +616,11 @@ fn render_client(api: &Api, namespace: &str, client_style: SdkClientStyle) -> St
         return current.ValueKind == JsonValueKind.String ? current.GetString() : null;
     }
 "#);
-    output.push_str(include_str!("call_options.cs.txt"));
-    output.push_str(include_str!("sequential_json.cs.txt"));
+    output.push_str(include_str!("../templates/call_options.cs.tmpl"));
+    output.push_str(include_str!("../templates/sequential_json.cs.tmpl"));
     output.push_str("}\n");
     output=output.replacen("/// <summary>Typed asynchronous client", "public sealed record PoolsterCallOptions { public IReadOnlyDictionary<string,string>? Headers {get;init;} public TimeSpan? Timeout {get;init;} }\n\n/// <summary>Typed asynchronous client",1);
-    let deadline = include_str!("call_deadline.cs.txt");
+    let deadline = include_str!("../templates/call_deadline.cs.tmpl");
     let headers = "        if (_callHeaders is not null) foreach(var header in _callHeaders) { request.Headers.Remove(header.Key); request.Headers.TryAddWithoutValidation(header.Key,header.Value); }\n";
     for signature in [
         "    private async Task<T> SendWithRetryAsync<T>(HttpRequestMessage template, CancellationToken cancellationToken)\n    {\n",

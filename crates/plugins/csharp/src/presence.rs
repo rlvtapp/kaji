@@ -46,7 +46,7 @@ pub(crate) fn render(
     }
     tree.insert(GeneratedFile::new(
         output_path(&root, "Presence.cs"),
-        include_str!("presence.cs.txt").replace("__NAMESPACE__", &namespace),
+        include_str!("../templates/presence.cs.tmpl").replace("__NAMESPACE__", &namespace),
     )?)?;
     tree.insert(GeneratedFile::new(output_path(&root,"PRESENCE.md"), "Optional fields use Presence<T> when preserve_presence is enabled. default(Presence<T>) means omitted; Presence<T>.Present(null) sends explicit JSON null; Presence<T>.Present(value) sends a value. Required fields retain their native types. Generated System.Text.Json converters and property omission attributes preserve these distinctions. This opt-in changes optional property types; default SDK ABI is unchanged. Unknown string enums require the separate open_enums setting. Union aliases retain raw JSON rather than promising complete variant validation.")?)?;
     Ok(tree)

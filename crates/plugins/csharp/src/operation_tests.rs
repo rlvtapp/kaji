@@ -85,7 +85,7 @@ fn render(api: &Api, sdk: &NativeSdk, bound: usize) -> Result<(String, Value)> {
         }
     }
     Ok((
-        include_str!("operation_driver.cs.txt")
+        include_str!("../tests/fixtures/operation_driver.cs")
             .replace("__PACKAGE__", &sdk.namespace)
             .replace("__CASES__", &code),
         json!({"version":1,"supported":cases,"unsupported":unsupported}),

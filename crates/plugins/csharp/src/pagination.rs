@@ -360,7 +360,7 @@ mod url_tests {
         std::fs::write(&project, contents).unwrap();
         std::fs::write(
             sdk.join("Program.cs"),
-            include_str!("url_pagination_probe.cs"),
+            include_str!("../tests/fixtures/url_pagination_probe.cs"),
         )
         .unwrap();
         let output = std::process::Command::new("dotnet")

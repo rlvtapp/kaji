@@ -22,7 +22,7 @@ impl Plugin<CSharp> for Webhooks {
         );
         cx.files.emit(GeneratedFile::new(
             "StandardWebhooks.cs",
-            include_str!("webhooks.cs.txt").replace("__PACKAGE__", &namespace),
+            include_str!("../templates/webhooks.cs.tmpl").replace("__PACKAGE__", &namespace),
         )?)
     }
 }
@@ -43,7 +43,7 @@ impl Plugin<crate::DotNet> for Webhooks {
         );
         cx.files.emit(GeneratedFile::new(
             "StandardWebhooks.cs",
-            include_str!("webhooks.cs.txt").replace("__PACKAGE__", &namespace),
+            include_str!("../templates/webhooks.cs.tmpl").replace("__PACKAGE__", &namespace),
         )?)
     }
 }
@@ -75,12 +75,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(
             dir.path().join("StandardWebhooks.cs"),
-            include_str!("webhooks.cs.txt").replace("__PACKAGE__", "ProbeSDK"),
+            include_str!("../templates/webhooks.cs.tmpl").replace("__PACKAGE__", "ProbeSDK"),
         )
         .unwrap();
         std::fs::write(
             dir.path().join("Probe.cs"),
-            include_str!("webhooks_probe.cs.txt")
+            include_str!("../tests/fixtures/webhooks_probe.cs")
                 .replace(
                     "__BODY__",
                     &serde_json::to_string(&vector["raw_body"]).unwrap(),
