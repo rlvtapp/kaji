@@ -16,7 +16,8 @@ const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
 function run(command, args, cwd) {
   const result = spawnSync(command, args, {
-    cwd, encoding: 'utf8', shell: process.platform === 'win32',
+    // Only npm.cmd needs cmd.exe; preserve Node's multiline -e argument verbatim.
+    cwd, encoding: 'utf8', shell: process.platform === 'win32' && command === npm,
     env: { ...process.env, npm_config_cache: path.join(temporary, 'npm-cache') },
   });
   if (result.error || result.status !== 0) {
