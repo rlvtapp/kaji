@@ -21,7 +21,7 @@ impl MultipartBody {
  }
  pub fn add_nested(&mut self,name:&str,value:MultipartBody)->Result<&mut Self,MultipartBodyError>{self.push(MultipartPart{name:name.into(),filename:None,content_type:"multipart/mixed".into(),headers:Default::default(),body:MultipartPartBody::Nested(value)})}
  fn push(&mut self,part:MultipartPart)->Result<&mut Self,MultipartBodyError>{
-  if self.parts.len()>=10000||!kaji_part_token(&part.name)||part.filename.as_deref().is_some_and(|f|!kaji_part_token(f))||!kaji_part_token(&part.content_type)||!part.content_type.is_ascii()||part.headers.len()>64{return Err(MultipartBodyError)}
+  if self.parts.len()>=10000||!poolster_part_token(&part.name)||part.filename.as_deref().is_some_and(|f|!poolster_part_token(f))||!poolster_part_token(&part.content_type)||!part.content_type.is_ascii()||part.headers.len()>64{return Err(MultipartBodyError)}
   for (key,value) in &part.headers {if key.is_empty()||!key.bytes().all(|b|b.is_ascii_alphanumeric()||b"!#$%&'*+-.^_`|~".contains(&b))||matches!(key.to_ascii_lowercase().as_str(),"content-type"|"content-disposition")||value.chars().any(|c|c.is_control())||value.len()>8192{return Err(MultipartBodyError)}}
   self.parts.push(part);if self.encode_plan(&serde_json::Value::Null,0).is_err(){self.parts.pop();return Err(MultipartBodyError)}Ok(self)
  }
@@ -30,7 +30,7 @@ impl MultipartBody {
  fn encode_plan(&self,plan:&serde_json::Value,depth:usize)->Result<(String,Vec<u8>),MultipartBodyError>{
   if depth>16{return Err(MultipartBodyError)}
   let media=plan.get("content_type").or_else(||plan.get("contentType")).and_then(|v|v.as_str()).unwrap_or("multipart/form-data");
-  if !media.starts_with("multipart/")||!kaji_part_token(media)||!media.is_ascii(){return Err(MultipartBodyError)}
+  if !media.starts_with("multipart/")||!poolster_part_token(media)||!media.is_ascii(){return Err(MultipartBodyError)}
   let mut bytes=Vec::new();
   for(index,part)in self.parts.iter().enumerate(){
    let encoding=plan.get("prefix_encoding").or_else(||plan.get("prefixEncoding")).and_then(|v|v.get(index)).or_else(||plan.get("item_encoding")).or_else(||plan.get("itemEncoding")).or_else(||plan.get("encoding").and_then(|v|v.get(&part.name))).unwrap_or(&serde_json::Value::Null);
@@ -39,7 +39,7 @@ impl MultipartBody {
     MultipartPartBody::Bytes(bytes)=>(declared.unwrap_or(&part.content_type).to_owned(),bytes.clone()),
     MultipartPartBody::Nested(nested)=>{let mut nested_plan=encoding.clone();if !nested_plan.is_object(){nested_plan=serde_json::json!({})}nested_plan["contentType"]=serde_json::json!(declared.unwrap_or("multipart/mixed"));nested.encode_plan(&nested_plan,depth+1)?}
    };
-   if !kaji_part_token(&content_type)||!content_type.is_ascii(){return Err(MultipartBodyError)}
+   if !poolster_part_token(&content_type)||!content_type.is_ascii(){return Err(MultipartBodyError)}
    let mut headers=part.headers.clone();
    if let Some(declarations)=encoding.get("headers").and_then(|v|v.as_object()){for(name,definition)in declarations {
     if name.eq_ignore_ascii_case("Content-Type"){continue}
@@ -57,4 +57,4 @@ impl MultipartBody {
   bytes.extend_from_slice(format!("--{}--\r\n",self.boundary).as_bytes());Ok((format!("{media}; boundary={}",self.boundary),bytes))
  }
 }
-fn kaji_part_token(value:&str)->bool{!value.is_empty()&&value.len()<=8192&&!value.chars().any(|c|c.is_control()||c=='"'||c=='\\')}
+fn poolster_part_token(value:&str)->bool{!value.is_empty()&&value.len()<=8192&&!value.chars().any(|c|c.is_control()||c=='"'||c=='\\')}

@@ -17,7 +17,7 @@
  struct SequenceDriver;
  impl Transport for SequenceDriver {fn execute(&self,request:reqwest::Request)->TransportFuture<'_>{
   assert_eq!(request.url().query(),Some("zero=0&false=false&name=%E9%9B%AA"));assert_eq!(request.headers()["content-type"],"application/x-ndjson");
-  let bytes=request.body().unwrap().as_bytes().unwrap().to_vec();let value:serde_json::Value=kaji_decode_json(&bytes,"application/x-ndjson").unwrap();assert_eq!(value,serde_json::json!([false,0,null,{"future":"雪"}]));
+  let bytes=request.body().unwrap().as_bytes().unwrap().to_vec();let value:serde_json::Value=poolster_decode_json(&bytes,"application/x-ndjson").unwrap();assert_eq!(value,serde_json::json!([false,0,null,{"future":"雪"}]));
   Box::pin(async move{Ok(http::Response::builder().status(200).header("content-type","application/x-ndjson").body(reqwest::Body::from(bytes)).unwrap().into())})
  }}
  #[tokio::test]async fn sequence_operation_wire(){let records=serde_json::json!([false,0,null,{"future":"雪"}]).as_array().unwrap().clone();let client=Client::new("https://api.test").with_transport(std::sync::Arc::new(SequenceDriver));let result=client.sequence(crate::client::operations::SequenceRequest{whole_query:"zero=0&false=false&name=%E9%9B%AA".into()},&records).await.unwrap();assert_eq!(result,records);}

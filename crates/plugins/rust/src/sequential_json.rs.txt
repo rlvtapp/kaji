@@ -1,5 +1,5 @@
 #[allow(dead_code)]
-fn kaji_decode_json<T: serde::de::DeserializeOwned>(body: &[u8], content_type: &str) -> Result<T, serde_json::Error> {
+fn poolster_decode_json<T: serde::de::DeserializeOwned>(body: &[u8], content_type: &str) -> Result<T, serde_json::Error> {
     let media = content_type.split(';').next().unwrap_or("").trim();
     if !matches!(media, "application/x-ndjson" | "application/ndjson" | "application/jsonl" | "application/json-seq") { return serde_json::from_slice(body); }
     let fail = |message: &str| <serde_json::Error as serde::de::Error>::custom(message);
@@ -18,13 +18,13 @@ fn kaji_decode_json<T: serde::de::DeserializeOwned>(body: &[u8], content_type: &
 }
 
 #[allow(dead_code)]
-fn kaji_valid_raw_query(raw:&str)->bool {
+fn poolster_valid_raw_query(raw:&str)->bool {
  let bytes=raw.as_bytes(); let mut index=0;
  if raw.starts_with('?'){return false}
  while index<bytes.len(){let byte=bytes[index];if byte<32||byte==127||byte==b'#'{return false} if byte==b'%' {if index+2>=bytes.len()||!bytes[index+1].is_ascii_hexdigit()||!bytes[index+2].is_ascii_hexdigit(){return false}index+=2;}index+=1;}true
 }
 #[allow(dead_code)]
-fn kaji_encode_sequence<T:serde::Serialize>(body:&T,media:&str)->Result<Vec<u8>,serde_json::Error> {
+fn poolster_encode_sequence<T:serde::Serialize>(body:&T,media:&str)->Result<Vec<u8>,serde_json::Error> {
     let value=serde_json::to_value(body)?;
     let fail=|message:&str| <serde_json::Error as serde::ser::Error>::custom(message);
     let items=value.as_array().ok_or_else(||fail("Sequential JSON request requires an array"))?;
@@ -34,4 +34,4 @@ fn kaji_encode_sequence<T:serde::Serialize>(body:&T,media:&str)->Result<Vec<u8>,
     Ok(bytes)
 }
 
-#[allow(dead_code)]fn kaji_parameter_json<T:serde::Serialize>(value:&T)->String{serde_json::to_string(value).expect("generated JSON parameter serialization")}
+#[allow(dead_code)]fn poolster_parameter_json<T:serde::Serialize>(value:&T)->String{serde_json::to_string(value).expect("generated JSON parameter serialization")}
