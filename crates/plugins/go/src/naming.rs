@@ -1,5 +1,3 @@
-use super::*;
-
 pub(super) fn go_package_name(value: &str) -> String {
     let mut package = identifier_words(value)
         .into_iter()

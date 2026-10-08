@@ -177,8 +177,7 @@ fn case(api: &Api, operation: &Operation) -> Result<Value> {
         "HEAD has no buffered response"
     );
     ensure!(
-        !poolster_core::poolster_extension(&operation.annotations, "idempotency-resolved")
-            .is_some(),
+        poolster_core::poolster_extension(&operation.annotations, "idempotency-resolved").is_none(),
         "auto idempotency requires replay-specific fixtures"
     );
     let responses = operation
