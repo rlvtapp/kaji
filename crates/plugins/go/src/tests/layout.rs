@@ -25,7 +25,7 @@ fn generated_client_exposes_declared_offset_pagers() {
         },
     ];
     operation.annotations.insert(
-        "x-kaji-pagination".into(),
+        "x-poolster-pagination".into(),
         serde_json::json!({
             "type": "offsetLimit",
             "inputs": [

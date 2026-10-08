@@ -45,7 +45,7 @@ fn page_number_pagers_execute_normalized_plan_with_native_encoding() {
         .collect();
     operation.responses[0].media_types[0].schema =
         Some(SchemaValue::reference("#/components/schemas/Page"));
-    operation.annotations.insert("x-kaji-pagination".into(),serde_json::json!({"type":"page","inputs":[{"name":"page","type":"page","in":"parameters"},{"name":"limit","type":"limit","in":"parameters"}],"outputs":{"results":"/groups/0/a~1b~0c"}}));
+    operation.annotations.insert("x-poolster-pagination".into(),serde_json::json!({"type":"page","inputs":[{"name":"page","type":"page","in":"parameters"},{"name":"limit","type":"limit","in":"parameters"}],"outputs":{"results":"/groups/0/a~1b~0c"}}));
     let mut required = operation.clone();
     required.id = "listRequired".into();
     required

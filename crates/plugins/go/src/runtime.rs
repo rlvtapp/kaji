@@ -73,9 +73,6 @@ pub(super) fn render_runtime(api: &Api, package: &str, client_style: SdkClientSt
         operation
             .annotations
             .contains_key("x-poolster-idempotency-resolved")
-            || operation
-                .annotations
-                .contains_key("x-kaji-idempotency-resolved")
     }) {
         output = output.replace("\t\"context\"\n", "\t\"context\"\n\t\"crypto/rand\"\n");
         output = output.replace("return strings.TrimSpace(request.Header.Get(\"Idempotency-Key\")) != \"\"", "header, _ := request.Context().Value(poolsterIdempotencyContextKey{}).(string)\n\t\treturn strings.TrimSpace(request.Header.Get(\"Idempotency-Key\")) != \"\" || (header != \"\" && strings.TrimSpace(request.Header.Get(header)) != \"\")");

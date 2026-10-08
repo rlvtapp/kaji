@@ -88,10 +88,7 @@ pub(super) fn render_operation(output: &mut String, api: &Api, operation: &Opera
             &response_kind,
         );
     }
-    let idempotency = operation
-        .annotations
-        .get("x-poolster-idempotency-resolved")
-        .or_else(|| operation.annotations.get("x-kaji-idempotency-resolved"));
+    let idempotency = operation.annotations.get("x-poolster-idempotency-resolved");
     if let Some(rule) = idempotency {
         if rule
             .get("auto_generate")

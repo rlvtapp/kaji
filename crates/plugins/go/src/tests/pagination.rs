@@ -146,7 +146,7 @@ fn generated_client_preserves_typed_body_cursor_pagination() {
         }],
     }];
     operation.annotations.insert(
-        "x-kaji-pagination".into(),
+        "x-poolster-pagination".into(),
         serde_json::json!({
             "type": "cursor",
             "inputs": [{ "name": "cursor", "in": "requestBody", "type": "cursor" }],
