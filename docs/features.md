@@ -65,8 +65,8 @@ than imposing one runtime interface on every language.
 | Swift | Swift package; Foundation | Cursor, page, offset, next URL | Opt-in | 17/17; retries opt-in |
 
 The corpus contains 17 scenarios per target. Unsupported scenarios are recorded,
-not counted as passes. See the [executable manifest](../packages/runtime-contract/scenarios.json)
-and [requirements](../packages/runtime-contract/README.md). Pagination bindings
+not counted as passes. See the [executable manifest](../packages/internal/runtime-contract/scenarios.json)
+and [requirements](../packages/internal/runtime-contract/README.md). Pagination bindings
 and selector restrictions are in the [pagination guide](guides/pagination.md).
 
 ## Runtime behavior
@@ -119,8 +119,8 @@ Read [auxiliary generators](auxiliary-generators.md), [mocking](mocking.md),
 | --- | --- | --- |
 | Postman Collection 2.1 | Implemented: operation folders, parameters/media/auth, examples, stable IDs and secret redaction | [Postman](postman.md) |
 | Postman environment | Create-once template; customer credentials are not overwritten | [Postman](postman.md) |
-| Collection checks | Official pinned schema validation; bounded local Newman execution | [Execution](../packages/postman-execute/README.md) |
-| Postman remote sync | Collection and environment existing UIDs; secrets/manual environment variables preserved; read-only check and reviewed-hash publication; mocked tests, live service unverified | [Sync helper](../packages/postman-sync/README.md) |
+| Collection checks | Official pinned schema validation; bounded local Newman execution | [Execution](../packages/internal/postman-execute/README.md) |
+| Postman remote sync | Collection and environment existing UIDs; secrets/manual environment variables preserved; read-only check and reviewed-hash publication; mocked tests, live service unverified | [Sync helper](../packages/internal/postman-sync/README.md) |
 | Typed Terraform provider | Framework CRUD bindings, typed nested plan/state, single/composite import, authentication, drift and diagnostics | [Terraform](terraform-provider.md) |
 | Terraform data sources | Supported single-entity reads | [Terraform](terraform-provider.md) |
 | Terraform native verification | Framework object tests and real local CLI lifecycle against a mock | [Verification](verification.md) |

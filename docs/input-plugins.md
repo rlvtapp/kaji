@@ -22,7 +22,7 @@ The current providers support inspection and native contract publication. Existi
 HTTP SDKs consume `AdaptedApi`; GraphQL, event, RPC and workflow SDKs need native
 output consumers. See [architecture](architecture.md) for the layer boundaries.
 
-The [Node API](../packages/cli/sdk/README.md#input-plugins) exposes the same five
+The [Node API](../packages/npm/sdk/README.md#input-plugins) exposes the same five
 compiled Rust providers through individually installable npm input packages and
 the `@relevate/poolster-plugins` bundle. A JavaScript output plugin can consume
 their summary and diagnostics. `defineInputPlugin` also lets Node packages
@@ -180,7 +180,7 @@ SHA-256 digests; normal tests do not download documents.
 | Protobuf | Official v21.12 conformance schema and imports, 51 KB | 135 types, 2 methods, repository import roots; v29.3 editions rejected explicitly |
 | Cap’n Proto | Official v1.1.0 test/schema/RPC corpus, 158 KB, plus 320 KB compiler request | 277 types, 49 methods, streaming identity, binary inspection and source compilation |
 
-`crates/kaji-inputs/tests/native_pipeline.rs` routes each native document through
+`crates/inputs/bundle/tests/native_pipeline.rs` routes each native document through
 `InputProvider`, typed requirements, graph ordering and an output consumer that
 emits documentation. This establishes source-to-artifact routing. It does not
 establish format-specific SDK runtime behavior; those generators need their own

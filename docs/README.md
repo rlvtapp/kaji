@@ -17,7 +17,7 @@ Input plugins → Poolster → Output plugins → Your packages
 | Use an SDK someone gave you | [Generated SDKs](generated-sdks.md) and its package README |
 | Add a format or generator | [Plugin development](library/README.md) |
 | Embed Poolster in your own tool | [Rust quickstart](library/quickstart.md) |
-| Use JavaScript or TypeScript plugins | [Node API](../packages/cli/sdk/README.md) |
+| Use JavaScript or TypeScript plugins | [Node API](../packages/npm/sdk/README.md) |
 | Move an existing SDK project | [Migration](migration.md) |
 
 ## Understand the pieces
@@ -38,7 +38,7 @@ SDK generator compatible with every format.
 Compose packages, resolve dependencies and manage generated files.
 
 [Architecture](architecture.md) · [CLI workflow](cli/README.md) ·
-[Rust workflow](library/README.md) · [Node workflow](../packages/cli/sdk/README.md) ·
+[Rust workflow](library/README.md) · [Node workflow](../packages/npm/sdk/README.md) ·
 [Safe regeneration](safe-regeneration.md)
 
 <a id="api-artifacts"></a>
@@ -77,7 +77,7 @@ exposes its compiled-in plugins. [Full authoring reference →](typed-plugins.md
 
 In Node.js, install the input or output packages you want and select their
 exports in `poolster.config.mjs`. You can also write JavaScript input and output
-plugins. [Node authoring guide →](../packages/cli/sdk/README.md)
+plugins. [Node authoring guide →](../packages/npm/sdk/README.md)
 
 ## Generate, review, release
 

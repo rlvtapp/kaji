@@ -61,7 +61,7 @@ its useful lifetime.
    broker-issued tokens.
 2. Generate its private key and store it in your deployment's secret manager or
    a private mounted file. Do not commit it. Workflow files need no App key.
-3. Copy [policy.example.json](../packages/github-app-broker/policy.example.json)
+3. Copy [policy.example.json](../packages/internal/github-app-broker/policy.example.json)
    into an administrator-managed deployment configuration. Replace names and
    all source/destination/installation IDs with your own values.
 4. Protect the allowed source branch. The workflow must run on that branch with
@@ -103,7 +103,7 @@ Requires Node.js 22 or newer. Supply:
 | `PORT` | Port, default `8787` |
 
 ```sh
-node packages/github-app-broker/server.mjs
+node packages/internal/github-app-broker/server.mjs
 ```
 
 Startup validates configuration and credentials before listening. The server
@@ -199,7 +199,7 @@ same identity.
 ## Verification
 
 ```sh
-node --test packages/github-app-broker/broker.test.mjs
+node --test packages/internal/github-app-broker/broker.test.mjs
 ```
 
 Tests generate real RSA key pairs and signed JWTs, mock the official JWKS/GitHub

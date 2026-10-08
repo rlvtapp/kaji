@@ -20,192 +20,192 @@
         },
         {
           "type": "json",
-          "path": "packages/cli/package.json",
+          "path": "packages/npm/cli/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "packages/cli/sdk/package.json",
+          "path": "packages/npm/sdk/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/typescript/package.json",
+          "path": "packages/npm/plugins/typescript/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/typescript/package.json",
+          "path": "packages/npm/plugins/typescript/package.json",
           "jsonpath": "$.peerDependencies[\"@relevate/poolster\"]"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/rust/package.json",
+          "path": "packages/npm/plugins/rust/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/rust/package.json",
+          "path": "packages/npm/plugins/rust/package.json",
           "jsonpath": "$.peerDependencies[\"@relevate/poolster\"]"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/go/package.json",
+          "path": "packages/npm/plugins/go/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/go/package.json",
+          "path": "packages/npm/plugins/go/package.json",
           "jsonpath": "$.peerDependencies[\"@relevate/poolster\"]"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/python/package.json",
+          "path": "packages/npm/plugins/python/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/python/package.json",
+          "path": "packages/npm/plugins/python/package.json",
           "jsonpath": "$.peerDependencies[\"@relevate/poolster\"]"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/php/package.json",
+          "path": "packages/npm/plugins/php/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/php/package.json",
+          "path": "packages/npm/plugins/php/package.json",
           "jsonpath": "$.peerDependencies[\"@relevate/poolster\"]"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/java/package.json",
+          "path": "packages/npm/plugins/java/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/java/package.json",
+          "path": "packages/npm/plugins/java/package.json",
           "jsonpath": "$.peerDependencies[\"@relevate/poolster\"]"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/csharp/package.json",
+          "path": "packages/npm/plugins/csharp/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/csharp/package.json",
+          "path": "packages/npm/plugins/csharp/package.json",
           "jsonpath": "$.peerDependencies[\"@relevate/poolster\"]"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/elixir/package.json",
+          "path": "packages/npm/plugins/elixir/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/elixir/package.json",
+          "path": "packages/npm/plugins/elixir/package.json",
           "jsonpath": "$.peerDependencies[\"@relevate/poolster\"]"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/ruby/package.json",
+          "path": "packages/npm/plugins/ruby/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/ruby/package.json",
+          "path": "packages/npm/plugins/ruby/package.json",
           "jsonpath": "$.peerDependencies[\"@relevate/poolster\"]"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/swift/package.json",
+          "path": "packages/npm/plugins/swift/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/swift/package.json",
+          "path": "packages/npm/plugins/swift/package.json",
           "jsonpath": "$.peerDependencies[\"@relevate/poolster\"]"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/all/package.json",
+          "path": "packages/npm/plugins-all/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/all/package.json",
+          "path": "packages/npm/plugins-all/package.json",
           "jsonpath": "$.peerDependencies[\"@relevate/poolster\"]"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/zod/package.json",
+          "path": "packages/npm/plugins/zod/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/zod/package.json",
+          "path": "packages/npm/plugins/zod/package.json",
           "jsonpath": "$.peerDependencies[\"@relevate/poolster\"]"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/faker/package.json",
+          "path": "packages/npm/plugins/faker/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/faker/package.json",
+          "path": "packages/npm/plugins/faker/package.json",
           "jsonpath": "$.peerDependencies[\"@relevate/poolster\"]"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/msw/package.json",
+          "path": "packages/npm/plugins/msw/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/msw/package.json",
+          "path": "packages/npm/plugins/msw/package.json",
           "jsonpath": "$.peerDependencies[\"@relevate/poolster\"]"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/cypress/package.json",
+          "path": "packages/npm/plugins/cypress/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/cypress/package.json",
+          "path": "packages/npm/plugins/cypress/package.json",
           "jsonpath": "$.peerDependencies[\"@relevate/poolster\"]"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/react-query/package.json",
+          "path": "packages/npm/plugins/react-query/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/react-query/package.json",
+          "path": "packages/npm/plugins/react-query/package.json",
           "jsonpath": "$.peerDependencies[\"@relevate/poolster\"]"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/vue-query/package.json",
+          "path": "packages/npm/plugins/vue-query/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/vue-query/package.json",
+          "path": "packages/npm/plugins/vue-query/package.json",
           "jsonpath": "$.peerDependencies[\"@relevate/poolster\"]"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/swr/package.json",
+          "path": "packages/npm/plugins/swr/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/swr/package.json",
+          "path": "packages/npm/plugins/swr/package.json",
           "jsonpath": "$.peerDependencies[\"@relevate/poolster\"]"
         },
         {
@@ -214,92 +214,92 @@
         },
         {
           "type": "json",
-          "path": "packages/cli/sdk/package.json",
+          "path": "packages/npm/sdk/package.json",
           "jsonpath": "$.optionalDependencies[\"@relevate/poolster-node-darwin-arm64\"]"
         },
         {
           "type": "json",
-          "path": "packages/cli/sdk/package.json",
+          "path": "packages/npm/sdk/package.json",
           "jsonpath": "$.optionalDependencies[\"@relevate/poolster-node-darwin-x64\"]"
         },
         {
           "type": "json",
-          "path": "packages/cli/sdk/package.json",
+          "path": "packages/npm/sdk/package.json",
           "jsonpath": "$.optionalDependencies[\"@relevate/poolster-node-linux-x64-gnu\"]"
         },
         {
           "type": "json",
-          "path": "packages/cli/sdk/package.json",
+          "path": "packages/npm/sdk/package.json",
           "jsonpath": "$.optionalDependencies[\"@relevate/poolster-node-win32-x64-msvc\"]"
         },
         {
           "type": "json",
-          "path": "packages/cli/package.json",
+          "path": "packages/npm/cli/package.json",
           "jsonpath": "$.optionalDependencies[\"@relevate/poolster-cli-darwin-arm64\"]"
         },
         {
           "type": "json",
-          "path": "packages/cli/package.json",
+          "path": "packages/npm/cli/package.json",
           "jsonpath": "$.optionalDependencies[\"@relevate/poolster-cli-darwin-x64\"]"
         },
         {
           "type": "json",
-          "path": "packages/cli/package.json",
+          "path": "packages/npm/cli/package.json",
           "jsonpath": "$.optionalDependencies[\"@relevate/poolster-cli-linux-x64-gnu\"]"
         },
         {
           "type": "json",
-          "path": "packages/cli/package.json",
+          "path": "packages/npm/cli/package.json",
           "jsonpath": "$.optionalDependencies[\"@relevate/poolster-cli-win32-x64-msvc\"]"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/input-graphql/package.json",
+          "path": "packages/npm/inputs/graphql/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/input-graphql/package.json",
+          "path": "packages/npm/inputs/graphql/package.json",
           "jsonpath": "$.peerDependencies[\"@relevate/poolster\"]"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/input-asyncapi/package.json",
+          "path": "packages/npm/inputs/asyncapi/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/input-asyncapi/package.json",
+          "path": "packages/npm/inputs/asyncapi/package.json",
           "jsonpath": "$.peerDependencies[\"@relevate/poolster\"]"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/input-arazzo/package.json",
+          "path": "packages/npm/inputs/arazzo/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/input-arazzo/package.json",
+          "path": "packages/npm/inputs/arazzo/package.json",
           "jsonpath": "$.peerDependencies[\"@relevate/poolster\"]"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/input-protobuf/package.json",
+          "path": "packages/npm/inputs/protobuf/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/input-protobuf/package.json",
+          "path": "packages/npm/inputs/protobuf/package.json",
           "jsonpath": "$.peerDependencies[\"@relevate/poolster\"]"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/input-capnproto/package.json",
+          "path": "packages/npm/inputs/capnproto/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "packages/node-plugins/input-capnproto/package.json",
+          "path": "packages/npm/inputs/capnproto/package.json",
           "jsonpath": "$.peerDependencies[\"@relevate/poolster\"]"
         }
       ],

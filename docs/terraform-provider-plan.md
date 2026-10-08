@@ -19,7 +19,7 @@ Read does not remove a missing object from state.
 
 This is a prototype to evolve, not a production lifecycle implementation to expose unchanged.
 
-`crates/kaji-core/src/ast.rs` already represents operations, request/response schemas, path/query/header parameters, security requirements, schema constraints, readOnly/writeOnly, composition, and annotations. `openapi/types.go`, `openapi/openapi.go`, and `openapi/schema_walk.go` produce the Go sidecar representation; `crates/kaji-core/src/adapter/openapi_sidecar.rs` converts it. Operation and schema extensions survive today, but parameter extensions, response headers/links/extensions, root metadata, and server provenance need a deliberate preservation audit. Generic metadata gaps should be fixed there; Terraform-specific types should not be added there.
+`crates/core/src/ast.rs` already represents operations, request/response schemas, path/query/header parameters, security requirements, schema constraints, readOnly/writeOnly, composition, and annotations. `openapi/types.go`, `openapi/openapi.go`, and `openapi/schema_walk.go` produce the Go sidecar representation; `crates/core/src/adapter/openapi_sidecar.rs` converts it. Operation and schema extensions survive today, but parameter extensions, response headers/links/extensions, root metadata, and server provenance need a deliberate preservation audit. Generic metadata gaps should be fixed there; Terraform-specific types should not be added there.
 
 The facade and CLI do not currently expose Terraform as a normal target. The existing plugin engine, typed provider/consumer contracts, generated-file ownership, create-once files, and check mode can support it without adding lifecycle logic to unrelated generators.
 
@@ -280,9 +280,9 @@ Existing files to change when implementation is approved:
 | `crates/plugins/terraform/src/package.rs` | Replace prototype rendering with validated-plan orchestration; retain versioned migration path. |
 | `crates/plugins/terraform/Cargo.toml` | Dependencies for semantic serialization/testing/shared helpers. |
 | `openapi/types.go`, `openapi/openapi.go`, `openapi/schema_walk.go` | Preserve missing generic metadata, source provenance, headers/links/server/extensions; focused compiler tests. |
-| `crates/kaji-core/src/adapter/openapi_sidecar.rs`, `crates/kaji-core/src/ast.rs` | Generic metadata conversion only, backward-compatible/defaulted fields; no Terraform entity types. |
-| `crates/kaji/Cargo.toml`, `crates/kaji/src/lib.rs` | Optional native Terraform plugin dependency/reexports following existing target conventions. |
-| `crates/kaji-cli/src/main.rs` | Terraform config decoding/target selection and explain command integration through plugin APIs. |
+| `crates/core/src/adapter/openapi_sidecar.rs`, `crates/core/src/ast.rs` | Generic metadata conversion only, backward-compatible/defaulted fields; no Terraform entity types. |
+| `crates/facade/Cargo.toml`, `crates/facade/src/lib.rs` | Optional native Terraform plugin dependency/reexports following existing target conventions. |
+| `crates/cli/src/main.rs` | Terraform config decoding/target selection and explain command integration through plugin APIs. |
 | `schemas/v1/poolster.schema.json`, `schemas/poolster.schema.json` | Versioned Terraform target config and extension documentation pointers. |
 | Existing workspace manifests/tests | Add dependencies/features only as required; Terraform crate is already a workspace member. |
 

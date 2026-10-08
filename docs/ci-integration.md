@@ -10,20 +10,20 @@ install the published npm launcher, so CI needs Node but not Rust or Go.
 ```yaml
 steps:
   - uses: actions/checkout@v4
-  - uses: rlvtapp/kaji/packages/github-action@main
+  - uses: rlvtapp/kaji/packages/integrations/github@main
     with:
       config: api/poolster.json
 ```
 
 The action accepts `config`, `version`, and `working-directory`. Pin the action
 and npm `version` to a release in production. See the
-[action README](../packages/github-action/README.md) for all inputs.
+[action README](../packages/integrations/github/README.md) for all inputs.
 
 ## GitLab CI
 
 ```yaml
 include:
-  - remote: 'https://raw.githubusercontent.com/rlvtapp/kaji/<poolster-release-tag>/packages/gitlab-ci/poolster.yml'
+  - remote: 'https://raw.githubusercontent.com/rlvtapp/kaji/<poolster-release-tag>/packages/integrations/gitlab/poolster.yml'
 
 generate-sdk:
   extends: .poolster:generate
@@ -39,7 +39,7 @@ generate-sdk:
 
 **Linux requires glibc.** The template uses Debian-based Node; Alpine/musl is
 unsupported by the published launcher. See the
-[template README](../packages/gitlab-ci/README.md).
+[template README](../packages/integrations/gitlab/README.md).
 
 ## GitHub Marketplace
 
@@ -71,8 +71,8 @@ The new `poolster` and `@relevate/poolster-node-<platform>` names need an initia
 publication by an authorized maintainer before npm trusted publishing can be
 configured for them.
 
-The tag version must match `packages/cli/package.json` and
-`packages/cli/sdk/package.json`. Publish a
+The tag version must match `packages/npm/cli/package.json` and
+`packages/npm/sdk/package.json`. Publish a
 release only after the tag is protected and the trusted-publisher relationship
 has been configured in npm.
 

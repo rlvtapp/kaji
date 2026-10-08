@@ -88,7 +88,7 @@ New input providers and unreleased 0.5.0 features require a
 
 ## Use Poolster from Node.js
 
-The [Node API](packages/cli/sdk/README.md) embeds the Rust renderers and loads a
+The [Node API](packages/npm/sdk/README.md) embeds the Rust renderers and loads a
 `poolster.config.mjs`. Install `@relevate/poolster` for this API, then add individual
 language and input packages, or the
 `@relevate/poolster-plugins` bundle, then add only the exports you use. JavaScript

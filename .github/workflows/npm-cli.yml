@@ -45,41 +45,41 @@ jobs:
         with:
           python-version: '3.12'
       - run: cargo test -p poolster-cli --locked
-      - run: node --test packages/cli/test/launcher.test.cjs
-      - run: node packages/cli/scripts/build-platform.mjs ${{ matrix.platform }}
-      - run: node packages/cli/scripts/smoke-native.mjs ${{ matrix.platform }}
-      - run: node packages/cli/sdk/scripts/build-native.mjs
-      - run: npm test --prefix packages/cli/sdk
+      - run: node --test packages/npm/cli/test/launcher.test.cjs
+      - run: node packages/npm/cli/scripts/build-platform.mjs ${{ matrix.platform }}
+      - run: node packages/npm/cli/scripts/smoke-native.mjs ${{ matrix.platform }}
+      - run: node packages/npm/sdk/scripts/build-native.mjs
+      - run: npm test --prefix packages/npm/sdk
         env:
-          POOLSTER_OPENAPI_BIN: ${{ github.workspace }}/packages/cli/npm/${{ matrix.platform }}/${{ matrix.compiler }}
+          POOLSTER_OPENAPI_BIN: ${{ github.workspace }}/packages/npm/platform/cli/${{ matrix.platform }}/${{ matrix.compiler }}
       - name: Compile generated TypeScript with Rust add-ons
         if: matrix.platform == 'linux-x64-gnu'
         env:
-          POOLSTER_OPENAPI_BIN: ${{ github.workspace }}/packages/cli/npm/${{ matrix.platform }}/${{ matrix.compiler }}
+          POOLSTER_OPENAPI_BIN: ${{ github.workspace }}/packages/npm/platform/cli/${{ matrix.platform }}/${{ matrix.compiler }}
           POOLSTER_EXAMPLE_OUTPUT: ${{ runner.temp }}/poolster-node-mixed
         run: |
           node examples/node-embedded/native-contracts.mjs
           npm install --prefix "$POOLSTER_EXAMPLE_OUTPUT/web" --ignore-scripts --no-audit --no-fund
           npm run build --prefix "$POOLSTER_EXAMPLE_OUTPUT/web"
-          node packages/cli/sdk/test-support/assert-generated-runtime.mjs "$POOLSTER_EXAMPLE_OUTPUT/web"
-      - run: node packages/cli/sdk/scripts/build-platform.mjs ${{ matrix.platform }}
-      - run: node packages/cli/sdk/scripts/smoke-platform.mjs ${{ matrix.platform }}
-      - run: node packages/cli/scripts/smoke-split.mjs ${{ matrix.platform }}
+          node packages/npm/sdk/test-support/assert-generated-runtime.mjs "$POOLSTER_EXAMPLE_OUTPUT/web"
+      - run: node packages/npm/sdk/scripts/build-platform.mjs ${{ matrix.platform }}
+      - run: node packages/npm/sdk/scripts/smoke-platform.mjs ${{ matrix.platform }}
+      - run: node packages/npm/cli/scripts/smoke-split.mjs ${{ matrix.platform }}
       - run: node packages/python/scripts/build-wheel.mjs ${{ matrix.platform }}
       - name: Pack native artifacts (does not publish)
-        working-directory: packages/cli/npm/${{ matrix.platform }}
+        working-directory: packages/npm/platform/cli/${{ matrix.platform }}
         run: npm pack --ignore-scripts
       - name: Pack SDK native artifacts (does not publish)
-        working-directory: packages/cli/sdk/npm/${{ matrix.platform }}
+        working-directory: packages/npm/platform/node/${{ matrix.platform }}
         run: npm pack --ignore-scripts
       - uses: actions/upload-artifact@v7
         with:
           name: poolster-${{ matrix.platform }}
-          path: packages/cli/npm/${{ matrix.platform }}/*.tgz
+          path: packages/npm/platform/cli/${{ matrix.platform }}/*.tgz
       - uses: actions/upload-artifact@v7
         with:
           name: poolster-sdk-${{ matrix.platform }}
-          path: packages/cli/sdk/npm/${{ matrix.platform }}/*.tgz
+          path: packages/npm/platform/node/${{ matrix.platform }}/*.tgz
       - uses: actions/upload-artifact@v7
         with:
           name: poolster-python-${{ matrix.platform }}
@@ -94,22 +94,24 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - run: node --test packages/cli/test/launcher.test.cjs
+      - run: node --test packages/npm/cli/test/launcher.test.cjs
       - run: PYTHONPATH=packages/python/src python -m unittest discover -s packages/python/tests -v
-      - run: node packages/node-plugins/generate.mjs --check
+      - run: node packages/npm/generate-plugins.mjs --check
       - run: npm pack --ignore-scripts
-        working-directory: packages/cli
+        working-directory: packages/npm/cli
       - run: npm pack --ignore-scripts
-        working-directory: packages/cli/sdk
+        working-directory: packages/npm/sdk
       - name: Pack language plugins
         run: |
-          for package in packages/node-plugins/*/package.json; do
+          for package in packages/npm/plugins/*/package.json packages/npm/inputs/*/package.json packages/npm/plugins-all/package.json; do
             (cd "$(dirname "$package")" && npm pack --ignore-scripts)
           done
       - uses: actions/upload-artifact@v7
         with:
           name: poolster-node-launchers
           path: |
-            packages/cli/*.tgz
-            packages/cli/sdk/*.tgz
-            packages/node-plugins/*/*.tgz
+            packages/npm/cli/*.tgz
+            packages/npm/sdk/*.tgz
+            packages/npm/plugins/*/*.tgz
+            packages/npm/inputs/*/*.tgz
+            packages/npm/plugins-all/*.tgz

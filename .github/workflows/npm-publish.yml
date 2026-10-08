@@ -44,9 +44,9 @@ jobs:
           (cd openapi && go build -o ../target/debug/poolster-openapi .)
       - name: Verify Node embedding and plugins
         run: |
-          node packages/cli/sdk/scripts/build-native.mjs
-          node packages/node-plugins/generate.mjs --check
-          npm test --prefix packages/cli/sdk
+          node packages/npm/sdk/scripts/build-native.mjs
+          node packages/npm/generate-plugins.mjs --check
+          npm test --prefix packages/npm/sdk
       - name: Compile generated TypeScript with Rust add-ons
         env:
           POOLSTER_EXAMPLE_OUTPUT: ${{ runner.temp }}/poolster-node-mixed
@@ -54,12 +54,12 @@ jobs:
           node examples/node-embedded/native-contracts.mjs
           npm install --prefix "$POOLSTER_EXAMPLE_OUTPUT/web" --ignore-scripts --no-audit --no-fund
           npm run build --prefix "$POOLSTER_EXAMPLE_OUTPUT/web"
-          node packages/cli/sdk/test-support/assert-generated-runtime.mjs "$POOLSTER_EXAMPLE_OUTPUT/web"
+          node packages/npm/sdk/test-support/assert-generated-runtime.mjs "$POOLSTER_EXAMPLE_OUTPUT/web"
       - name: Verify release examples
         run: python scripts/check-release-examples.py
       - name: Generate cross-language SDK fixture
         run: >-
-          target/debug/poolster generate crates/kaji-cli/tests/fixtures/pets.yaml
+          target/debug/poolster generate crates/cli/tests/fixtures/pets.yaml
           --output "$RUNNER_TEMP/generated-sdk-fixture"
           --language rust,typescript,go,python,php,java,csharp,elixir,ruby,swift
           --name "CI Pets" --sdk-version 1.0.0 --color never
@@ -183,28 +183,28 @@ jobs:
         with:
           python-version: '3.12'
       - run: cargo test -p poolster-cli --locked
-      - run: node --test packages/cli/test/launcher.test.cjs
-      - run: node packages/cli/scripts/build-platform.mjs ${{ matrix.platform }}
-      - run: node packages/cli/scripts/smoke-native.mjs ${{ matrix.platform }}
-      - run: node packages/cli/sdk/scripts/build-platform.mjs ${{ matrix.platform }}
-      - run: node packages/cli/sdk/scripts/smoke-platform.mjs ${{ matrix.platform }}
-      - run: node packages/cli/scripts/smoke-split.mjs ${{ matrix.platform }}
+      - run: node --test packages/npm/cli/test/launcher.test.cjs
+      - run: node packages/npm/cli/scripts/build-platform.mjs ${{ matrix.platform }}
+      - run: node packages/npm/cli/scripts/smoke-native.mjs ${{ matrix.platform }}
+      - run: node packages/npm/sdk/scripts/build-platform.mjs ${{ matrix.platform }}
+      - run: node packages/npm/sdk/scripts/smoke-platform.mjs ${{ matrix.platform }}
+      - run: node packages/npm/cli/scripts/smoke-split.mjs ${{ matrix.platform }}
       - run: node packages/python/scripts/build-wheel.mjs ${{ matrix.platform }}
       - name: Pack native package
-        working-directory: packages/cli/npm/${{ matrix.platform }}
+        working-directory: packages/npm/platform/cli/${{ matrix.platform }}
         run: npm pack --ignore-scripts
       - name: Pack SDK native package
-        working-directory: packages/cli/sdk/npm/${{ matrix.platform }}
+        working-directory: packages/npm/platform/node/${{ matrix.platform }}
         run: npm pack --ignore-scripts
       - uses: actions/upload-artifact@v7
         with:
           name: native-${{ matrix.platform }}
-          path: packages/cli/npm/${{ matrix.platform }}/*.tgz
+          path: packages/npm/platform/cli/${{ matrix.platform }}/*.tgz
           if-no-files-found: error
       - uses: actions/upload-artifact@v7
         with:
           name: sdk-native-${{ matrix.platform }}
-          path: packages/cli/sdk/npm/${{ matrix.platform }}/*.tgz
+          path: packages/npm/platform/node/${{ matrix.platform }}/*.tgz
           if-no-files-found: error
       - uses: actions/upload-artifact@v7
         with:
@@ -223,34 +223,37 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - run: node --test packages/cli/test/launcher.test.cjs
+      - run: node --test packages/npm/cli/test/launcher.test.cjs
       - run: PYTHONPATH=packages/python/src python -m unittest discover -s packages/python/tests -v
       - name: Pack CLI
-        working-directory: packages/cli
+        working-directory: packages/npm/cli
         run: npm pack --ignore-scripts
       - name: Pack SDK
-        working-directory: packages/cli/sdk
+        working-directory: packages/npm/sdk
         run: npm pack --ignore-scripts
       - name: Pack language plugins
         run: |
-          node packages/node-plugins/generate.mjs --check
-          for package in packages/node-plugins/*/package.json; do
+          node packages/npm/generate-plugins.mjs --check
+          for package in packages/npm/plugins/*/package.json packages/npm/inputs/*/package.json packages/npm/plugins-all/package.json; do
             (cd "$(dirname "$package")" && npm pack --ignore-scripts)
           done
       - uses: actions/upload-artifact@v7
         with:
           name: node-packages
-          path: packages/cli/*.tgz
+          path: packages/npm/cli/*.tgz
           if-no-files-found: error
       - uses: actions/upload-artifact@v7
         with:
           name: node-sdk
-          path: packages/cli/sdk/*.tgz
+          path: packages/npm/sdk/*.tgz
           if-no-files-found: error
       - uses: actions/upload-artifact@v7
         with:
           name: node-plugins
-          path: packages/node-plugins/*/*.tgz
+          path: |
+            packages/npm/plugins/*/*.tgz
+            packages/npm/inputs/*/*.tgz
+            packages/npm/plugins-all/*.tgz
           if-no-files-found: error
 
   publish:
@@ -292,9 +295,9 @@ jobs:
       - name: Verify release version
         run: |
           tag="${GITHUB_REF_NAME#v}"
-          test "$tag" = "$(node -p "require('./packages/cli/package.json').version")"
-          test "$tag" = "$(node -p "require('./packages/cli/sdk/package.json').version")"
-          for package in packages/node-plugins/*/package.json; do
+          test "$tag" = "$(node -p "require('./packages/npm/cli/package.json').version")"
+          test "$tag" = "$(node -p "require('./packages/npm/sdk/package.json').version")"
+          for package in packages/npm/plugins/*/package.json packages/npm/inputs/*/package.json packages/npm/plugins-all/package.json; do
             test "$tag" = "$(node -p "require('./$package').version")"
           done
       - name: Publish native packages

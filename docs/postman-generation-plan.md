@@ -161,8 +161,8 @@ can accept those commands once the collection plugin exists.
 2. Create `crates/plugins/postman` with `package.rs`, `contracts.rs`,
    `requests.rs`, `auth.rs`, `examples.rs`, `collection.rs`, `environment.rs` and
    `diagnostics.rs`. Unit-test bindings before rendering files.
-3. Add a versioned optional recipe plugin through `crates/kaji-cli/src/main.rs`,
-   facade reexports/dependency in `crates/kaji`, workspace membership and
+3. Add a versioned optional recipe plugin through `crates/cli/src/main.rs`,
+   facade reexports/dependency in `crates/facade`, workspace membership and
    `schemas/v1/poolster.schema.json`. Keep standalone consumers compatible with
    existing artifact packages.
 4. Validate generated Collection JSON and mock-server execution fixtures for

@@ -78,6 +78,6 @@ single-use OIDC replay store; multiple instances need shared storage.
 fine-grained token with target repository access so SDK PRs trigger CI. Scope
 cross-repository credentials to the repositories being synchronized.
 
-Editable sources: [broker](../packages/github-app-broker),
-[checks](../packages/sdk-check), [publishers](../packages/sdk-publish),
-and [workflow generator](../crates/kaji-cli/src/sdk_automation.rs).
+Editable sources: [broker](../packages/internal/github-app-broker),
+[checks](../packages/internal/sdk-check), [publishers](../packages/internal/sdk-publish),
+and [workflow generator](../crates/cli/src/sdk_automation.rs).

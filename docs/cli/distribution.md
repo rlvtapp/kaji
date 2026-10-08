@@ -4,14 +4,14 @@
 
 ## npm layout and release preparation
 
-- `crates/kaji-cli`: native Rust command-line implementation.
-- `packages/cli`: `poolster` Node launcher with version-pinned optional native packages.
-- `packages/cli/npm/<platform>`: generated platform package, containing both executables.
-- `packages/cli/sdk`: separate `@relevate/poolster` SDK and NAPI runtime.
-- `packages/cli/sdk/npm/<platform>`: generated SDK addon and OpenAPI compiler.
+- `crates/cli`: native Rust command-line implementation.
+- `packages/npm/cli`: `poolster` Node launcher with version-pinned optional native packages.
+- `packages/npm/platform/cli/<platform>`: generated platform package, containing both executables.
+- `packages/npm/sdk`: separate `@relevate/poolster` SDK and NAPI runtime.
+- `packages/npm/platform/node/<platform>`: generated SDK addon and OpenAPI compiler.
 
 ```sh
-node packages/cli/scripts/build-platform.mjs
+node packages/npm/cli/scripts/build-platform.mjs
 ```
 
 An explicit platform argument can be `darwin-arm64`, `darwin-x64`,
@@ -33,7 +33,7 @@ reserved for the Node SDK and its addon. This is a breaking npm package change;
 publish migration notes with the release. Neither package depends on the other.
 
 For a local launcher smoke test, set `POOLSTER_BINARY` to the built Rust binary and
-invoke `node packages/cli/bin/poolster.cjs --help`.
+invoke `node packages/npm/cli/bin/poolster.cjs --help`.
 Normal installed usage resolves the
 matching optional package and verifies its version matches the launcher.
 Do not

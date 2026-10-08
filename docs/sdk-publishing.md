@@ -290,7 +290,7 @@ commands must implement their own safe retry rules.
 
 ## Verification available in this repository
 
-`node --test packages/sdk-publish/test/*.test.mjs` exercises argument handling,
+`node --test packages/internal/sdk-publish/test/*.test.mjs` exercises argument handling,
 digest comparisons, duplicate races, path boundaries, canonical Go tags and failed
 registry requests using mocked registries/publishers. Set `POOLSTER_TEST_PYTHON` to a
 Python 3.11+ interpreter for the archive fixture when the default Python is older.

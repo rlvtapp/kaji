@@ -43,10 +43,10 @@ test('release updates inherited workspace and lock versions without changing dep
     assert.deepEqual(after.package[i], expected);
   }
   assert.equal(changed, names.size);
-  const launcher = JSON.parse(updated.get('packages/cli/package.json'));
+  const launcher = JSON.parse(updated.get('packages/npm/cli/package.json'));
   assert.equal(launcher.version, '0.5.1');
   for (const value of Object.values(launcher.optionalDependencies)) assert.equal(value, '0.5.1');
-  const sdk = JSON.parse(updated.get('packages/cli/sdk/package.json'));
+  const sdk = JSON.parse(updated.get('packages/npm/sdk/package.json'));
   assert.equal(sdk.version, '0.5.1');
   for (const value of Object.values(sdk.optionalDependencies)) assert.equal(value, '0.5.1');
   assert.match(updated.get('packages/python/setup.py'), /version="0\.5\.1"/);

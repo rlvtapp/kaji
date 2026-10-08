@@ -10,12 +10,12 @@ This guide is for developing Poolster itself. To use it on an API, start with th
 | Path | Purpose |
 | --- | --- |
 | `openapi/` | Bundled Go OpenAPI compiler and its tests. |
-| `crates/kaji-core` | Language-neutral AST, artifact adapter, typed plugin engine, SDK semantics, and mock primitives. |
-| `crates/kaji` | First-party composition facade and mock package plugin. |
+| `crates/core` | Language-neutral AST, artifact adapter, typed plugin engine, SDK semantics, and mock primitives. |
+| `crates/facade` | First-party composition facade and mock package plugin. |
 | `crates/plugins/*` | Language implementations and language-owned configuration. |
-| `crates/kaji-cli` | Native command-line application. |
-| `packages/cli` | Thin Node launcher and platform package build tooling. |
-| `packages/cli/sdk` | Node SDK with NAPI bindings and JavaScript plugins. |
+| `crates/cli` | Native command-line application. |
+| `packages/npm/cli` | Thin Node launcher and platform package build tooling. |
+| `packages/npm/sdk` | Node SDK with NAPI bindings and JavaScript plugins. |
 | `docs/` | User guides, configuration, architecture, and verification. |
 
 ## Local checks
@@ -37,7 +37,7 @@ From the repository root, run optional broader checks:
 ```sh
 cargo test -p poolster --test sdk_to_mock_contract -- --ignored
 bash scripts/test-large-graph.sh
-node --test packages/cli/test/*.test.cjs
+node --test packages/npm/cli/test/*.test.cjs
 ```
 
 Check generated Fetch SDK consumers with a locally installed TypeScript compiler

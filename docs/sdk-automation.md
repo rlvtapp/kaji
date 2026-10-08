@@ -426,7 +426,7 @@ an explicit `--bump` to `sdk pr` bypasses source comparison, so no inferred API
 notes are available for that invocation.
 
 For a disposable end-to-end verification, use the prepared
-[delivery workflow template](../packages/sdk-delivery-test/README.md). It defaults
+[delivery workflow template](../packages/internal/sdk-delivery-test/README.md). It defaults
 to preview and requires configured allowlists and a protected environment before
 opening a test SDK PR. Registry publication follows the destination's regular
 reviewed release workflow. This template has not been dispatched or published

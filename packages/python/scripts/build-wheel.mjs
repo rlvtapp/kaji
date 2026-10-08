@@ -12,7 +12,7 @@ const platforms = new Set(['darwin-arm64', 'darwin-x64', 'linux-x64-gnu', 'win32
 if (!platforms.has(key)) throw new Error(`Unsupported platform ${key}. Choose ${[...platforms].join(', ')}`);
 
 const suffix = key.startsWith('win32') ? '.exe' : '';
-const source = path.join(root, 'packages', 'cli', 'npm', key);
+const source = path.join(root, 'packages', 'npm', 'platform', 'cli', key);
 const destination = path.join(packageRoot, 'src', 'poolster', 'bin');
 const dist = path.join(packageRoot, 'dist');
 fs.rmSync(dist, { recursive: true, force: true });

@@ -111,7 +111,7 @@ from the specification or execute requests during generation.
 
 ## Validate before distributing
 
-The editable [Postman check action](../packages/postman-check/README.md) validates
+The editable [Postman check action](../packages/internal/postman-check/README.md) validates
 exports against the pinned official Collection 2.1 schema, verifies unique request IDs
 and checks that secret environment values stay blank. It does not run requests. Copy its
 source into your repository or use a revision that includes the action:
@@ -126,7 +126,7 @@ source into your repository or use a revision that includes the action:
 ### Run a local execution check
 
 For an opt-in execution check, the editable [local Newman
-runner](../packages/postman-execute/README.md) executes one bounded iteration against
+runner](../packages/internal/postman-execute/README.md) executes one bounded iteration against
 its own ephemeral loopback mock. It rejects existing collection scripts, replaces all
 request destinations/auth helpers, and asserts the first saved successful response
 status.
@@ -134,8 +134,8 @@ status.
 No environment credentials or remote API access are used:
 
 ```sh
-npm ci --prefix packages/postman-execute --ignore-scripts
-node packages/postman-execute/run.mjs generated/postman/api.postman_collection.json
+npm ci --prefix packages/internal/postman-execute --ignore-scripts
+node packages/internal/postman-execute/run.mjs generated/postman/api.postman_collection.json
 ```
 
 The runner tests and an actual generated collection execution passed with pinned Newman
@@ -149,7 +149,7 @@ Execution through Postman or Newman is a separate, deliberate test step. Use an 
 sandbox/mock URL and test fixtures, especially for create/delete operations. Portable
 export and validation are implemented.
 
-The editable [Postman synchronization helper](../packages/postman-sync/README.md) checks
+The editable [Postman synchronization helper](../packages/internal/postman-sync/README.md) checks
 or updates an explicitly selected existing collection with a reviewed remote hash. The
 companion environment action checks and publishes reviewed updates to an existing
 environment, preserving remote secrets and manually added variables.

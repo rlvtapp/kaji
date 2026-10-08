@@ -59,7 +59,7 @@ and registry publication remain prepared workflows, without a live delivery tria
 <details>
 <summary>Read the recorded checks and limits</summary>
 
-The [runtime contract](../../packages/runtime-contract/README.md) exports the same
+The [runtime contract](../../packages/internal/runtime-contract/README.md) exports the same
 API into ten SDK targets and drives their public operations against a loopback
 server.
 Its manifest declares 17 scenarios and every supported/unsupported
@@ -83,7 +83,7 @@ exported collection against a local mock; a real Terraform CLI exercises
 create/read/update/import/destroy and a supported single-entity data source.
 These tests have the limits stated in each artifact's guide.
 
-The [delivery test workflow](../../packages/sdk-delivery-test/README.md) is prepared
+The [delivery test workflow](../../packages/internal/sdk-delivery-test/README.md) is prepared
 only. Local drift, immutable-tag mock publishing and workflow validation passed;
 no workflow dispatch, GitHub App installation, registry trust configuration or
 real package publication has been performed.

@@ -68,7 +68,7 @@ to exercise the native HTTP stack.
 
 ### Output snapshots
 
-`crates/kaji/tests/golden_output.rs` checks generated runtimes, models,
+`crates/facade/tests/golden_output.rs` checks generated runtimes, models,
 READMEs and manifests across the maintained target set. Review changes before
 updating the snapshot.
 
@@ -103,7 +103,7 @@ cargo fmt --all --check
 cargo test --workspace --no-fail-fast
 cargo clippy --workspace --all-targets -- -D warnings
 (cd openapi && go test ./...)
-node --test packages/sdk-check/test/*.mjs packages/sdk-publish/test/*.mjs packages/github-app-broker/*.test.mjs
+node --test packages/internal/sdk-check/test/*.mjs packages/internal/sdk-publish/test/*.mjs packages/internal/github-app-broker/*.test.mjs
 ```
 
 | Requirement | Used by |
@@ -127,7 +127,7 @@ cargo test -p poolster-plugin-postman validates_actual_official_draft04_schema -
 ```
 
 This uses the pinned official Collection 2.1 Draft04 schema.
-[Collection execution →](../packages/postman-execute/README.md)
+[Collection execution →](../packages/internal/postman-execute/README.md)
 
 ### Exercise a Terraform provider
 
@@ -154,7 +154,7 @@ For earlier runtime checks, use [recorded integration evidence](verification/evi
 
 ## Shared runtime contract and artifact execution
 
-The shared [runtime contract](../packages/runtime-contract/README.md) defines
+The shared [runtime contract](../packages/internal/runtime-contract/README.md) defines
 17 scenarios per target. Its manifest records supported and unsupported cases.
 The recorded baseline has 163 supported passes across ten SDK runtimes.
 
@@ -184,7 +184,7 @@ remain unsupported.
 
 ## Live delivery
 
-The [delivery test workflow](../packages/sdk-delivery-test/README.md) is prepared.
+The [delivery test workflow](../packages/internal/sdk-delivery-test/README.md) is prepared.
 Live GitHub synchronization and registry publication have not been established
 by the mocked tests.
 

@@ -92,7 +92,7 @@ repository's recorded verification, not universal consumer compatibility.
 
 ## Verify runtime behavior across languages
 
-The [runtime contract](../../packages/runtime-contract/README.md) generates ten
+The [runtime contract](../../packages/internal/runtime-contract/README.md) generates ten
 SDKs and checks 17 scenarios through a loopback service. Scenarios cover auth,
 middleware, errors, retries, decoding, mutation replay, idempotency key lifetime,
 page iteration and exact path/query/body serialization.
@@ -101,17 +101,17 @@ Consult its coverage table and unsupported-scenario manifest. Reproduce a check:
 
 ```sh
 KAJI_RUNTIME_EXPORT=/tmp/poolster-runtime-fixture cargo test -p poolster --test runtime_conformance
-node packages/runtime-contract/runner.mjs go /tmp/poolster-runtime-fixture/sdk/go
-node --test packages/runtime-contract/test.mjs packages/sdk-delivery-test/test/*.mjs
+node packages/internal/runtime-contract/runner.mjs go /tmp/poolster-runtime-fixture/sdk/go
+node --test packages/internal/runtime-contract/test.mjs packages/internal/sdk-delivery-test/test/*.mjs
 ```
 
-The [installed TypeScript check](../../packages/runtime-contract/README.md#installed-typescript-package)
+The [installed TypeScript check](../../packages/internal/runtime-contract/README.md#installed-typescript-package)
 verifies ESM exports and customer types. Source snapshots and compilation alone
 cannot establish that a published package imports successfully.
 
 ### Other integration checks
 
-[Postman execution](../../packages/postman-execute/README.md) runs Newman against
+[Postman execution](../../packages/internal/postman-execute/README.md) runs Newman against
 a local service. The [Terraform suite](../terraform-provider.md) runs a real CLI
 lifecycle against a mock.
 

@@ -32,15 +32,15 @@ jobs:
         run: python scripts/layout-audit.py --check-source-size
       - name: Test CI integration templates
         run: |
-          node --test packages/github-action/test/*.test.cjs packages/gitlab-ci/test/*.test.cjs
+          node --test packages/integrations/github/test/*.test.cjs packages/integrations/gitlab/test/*.test.cjs
           python3 scripts/test-public-contracts.test.py
           python3 scripts/test-guru-corpus.py
       - name: Test editable SDK delivery and App broker sources
-        run: node --test packages/sdk-check/test/*.mjs packages/sdk-publish/test/*.mjs packages/github-app-broker/*.test.mjs packages/spec-sync/test/*.test.mjs packages/sdk-delivery-test/test/*.test.mjs packages/runtime-contract/test.mjs packages/postman-sync/test/*.mjs
+        run: node --test packages/internal/sdk-check/test/*.mjs packages/internal/sdk-publish/test/*.mjs packages/internal/github-app-broker/*.test.mjs packages/internal/spec-sync/test/*.test.mjs packages/internal/sdk-delivery-test/test/*.test.mjs packages/internal/runtime-contract/test.mjs packages/internal/postman-sync/test/*.mjs
       - name: Test portable collection checker
         run: |
           python -m pip install --disable-pip-version-check 'jsonschema==4.23.0'
-          python -m unittest discover -s packages/postman-check/test -v
+          python -m unittest discover -s packages/internal/postman-check/test -v
       - name: Test Python CLI launcher
         run: PYTHONPATH=packages/python/src python -m unittest discover -s packages/python/tests -v
       - name: Test workspace release version updates
@@ -94,8 +94,8 @@ jobs:
         run: cargo test -p poolster-plugin-postman validates_actual_official_draft04_schema -- --ignored
       - name: Verify exported collections with Newman against a local mock
         run: |
-          npm ci --prefix packages/postman-execute --ignore-scripts --no-audit --no-fund
-          node --test packages/postman-execute/test/*.test.mjs
+          npm ci --prefix packages/internal/postman-execute --ignore-scripts --no-audit --no-fund
+          node --test packages/internal/postman-execute/test/*.test.mjs
           cargo test -p poolster-plugin-postman generated_collection_executes_with_newman_local_mock -- --ignored
       - name: Verify generated Terraform lifecycle with native Framework state
         run: |
@@ -125,7 +125,7 @@ jobs:
           cargo build -p poolster-cli --locked
           (cd openapi && go build -o ../target/debug/poolster-openapi .)
       - name: Verify local delivery generation drift and previews
-        run: node packages/sdk-delivery-test/delivery.mjs --mode local --binary "$GITHUB_WORKSPACE/target/debug/poolster"
+        run: node packages/internal/sdk-delivery-test/delivery.mjs --mode local --binary "$GITHUB_WORKSPACE/target/debug/poolster"
       - name: Export shared native runtime contract fixture
         env:
           KAJI_RUNTIME_EXPORT: ${{ runner.temp }}/runtime-contract-fixture
@@ -134,7 +134,7 @@ jobs:
         env:
           KAJI_PACKAGE_FIXTURE: ${{ runner.temp }}/runtime-contract-fixture/sdk/typescript
           KAJI_TSC_JS: ${{ runner.temp }}/kaji-ts-runtime/node_modules/typescript/lib/tsc.js
-        run: node --test packages/runtime-contract/package-consumer.test.mjs
+        run: node --test packages/internal/runtime-contract/package-consumer.test.mjs
       - uses: actions/upload-artifact@v7
         with:
           name: runtime-contract-fixture
@@ -144,7 +144,7 @@ jobs:
       - name: Verify portable API artifacts
         run: |
           target/debug/poolster generate --config examples/api-artifacts/poolster.json
-          POOLSTER_COLLECTION=examples/api-artifacts/generated/postman/widgets.postman_collection.json POOLSTER_ENVIRONMENT=examples/api-artifacts/generated/postman/widgets.postman_environment.json python packages/postman-check/check.py
+          POOLSTER_COLLECTION=examples/api-artifacts/generated/postman/widgets.postman_collection.json POOLSTER_ENVIRONMENT=examples/api-artifacts/generated/postman/widgets.postman_environment.json python packages/internal/postman-check/check.py
           (cd examples/api-artifacts/generated/terraform && go mod tidy && go test ./... && go build ./...)
           target/debug/poolster generate --config examples/api-artifacts/poolster.json --check --format json
       - name: Verify release examples
@@ -162,7 +162,7 @@ jobs:
           retention-days: 1
       - name: Generate cross-language SDK fixture once
         run: >-
-          target/debug/poolster generate crates/kaji-cli/tests/fixtures/pets.yaml
+          target/debug/poolster generate crates/cli/tests/fixtures/pets.yaml
           --output "$RUNNER_TEMP/generated-sdk-fixture"
           --language rust,typescript,go,python,php,java,csharp,elixir,ruby,swift
           --name "CI Pets" --sdk-version 1.0.0 --color never
@@ -366,4 +366,4 @@ jobs:
           cargo test -p poolster-plugin-rust native_nested_future_enum_absent_null_and_unknown_fields_roundtrip -- --ignored
           cargo test -p poolster-plugin-rust native_multipart_buffered_parts_preserve_bytes_and_safe_retries -- --ignored
       - name: Execute generated public operations against shared runtime scenarios
-        run: node packages/runtime-contract/runner.mjs "${{ matrix.path }}" "$RUNNER_TEMP/runtime-contract-fixture/sdk/${{ matrix.path }}"
+        run: node packages/internal/runtime-contract/runner.mjs "${{ matrix.path }}" "$RUNNER_TEMP/runtime-contract-fixture/sdk/${{ matrix.path }}"

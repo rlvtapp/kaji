@@ -11,9 +11,9 @@
 /openapi/.gomodcache/
 
 # Locally assembled native npm distribution packages.
-/packages/cli/npm/
-/packages/cli/sdk/npm/
-/packages/cli/sdk/native/
+/packages/npm/platform/cli/
+/packages/npm/platform/node/
+/packages/npm/sdk/native/
 *.tgz
 node_modules/
 examples/microsoft-graph/generated/

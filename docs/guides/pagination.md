@@ -93,7 +93,7 @@ Java, C#, PHP and Elixir execution remains dependent on their CI toolchains; gen
 assertions alone do not prove native runtime behavior.
 
 See [testing generated SDKs](testing.md) and the [runtime contract
-coverage](../../packages/runtime-contract/README.md).
+coverage](../../packages/internal/runtime-contract/README.md).
 
 Swift cursor helpers accept unconstrained string parameter controls, preserve caller
 arguments and middleware, and stop on empty/missing or repeated cursors. Body and

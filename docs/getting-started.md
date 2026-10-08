@@ -26,8 +26,8 @@ Until the crates are published, use paths to a Poolster clone:
 ```toml
 [dependencies]
 anyhow = "1"
-poolster = { path = "../kaji/crates/kaji" }
-poolster-core = { path = "../kaji/crates/kaji-core" }
+poolster = { path = "../kaji/crates/facade" }
+poolster-core = { path = "../kaji/crates/core" }
 poolster-plugin-typescript = { path = "../kaji/crates/plugins/typescript" }
 ```
 

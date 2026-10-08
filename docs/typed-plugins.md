@@ -352,7 +352,7 @@ behavior, streaming ownership, retry timing and regeneration after removing the
 plugin. A renderer string assertion cannot substitute for a runtime test of a
 new transport ABI.
 
-Core graph tests live in `crates/kaji-core/tests/typed_packages.rs`; language
+Core graph tests live in `crates/core/tests/typed_packages.rs`; language
 provider tests live beside their renderers. TypeScript's opt-in compiler/runtime
 tests require a local TypeScript installation and actual framework dependencies.
 Native language compilation tests require their toolchains. State which tests

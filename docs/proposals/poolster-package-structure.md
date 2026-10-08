@@ -134,8 +134,8 @@ requires each factory to appear in `plugins` or `input.plugin` in the config.
 | --- | --- | --- |
 | `@relevate/unplugin-kaji` | `@relevate/unplugin-poolster` | Public bundler adapter; peer or executable lookup follows the new CLI. |
 | PyPI `kaji-cli` in `packages/python` | `poolster` | Platform wheels for Python users; console command and Python module `poolster`. No Node dependency. |
-| GitHub Action in `packages/github-action` | Poolster action and inputs | Repository action, not an npm SDK dependency. |
-| GitLab template in `packages/gitlab-ci` | Poolster template and command | Template, not an npm SDK dependency. |
+| GitHub Action in `packages/integrations/github` | Poolster action and inputs | Repository action, not an npm SDK dependency. |
+| GitLab template in `packages/integrations/gitlab` | Poolster template and command | Template, not an npm SDK dependency. |
 | `@relevate/kaji-spec-sync-action` | `@relevate/poolster-spec-sync-action` | Keep private unless there is a separate reason to publish. |
 | `@relevate/kaji-sdk-publish-action` | `@relevate/poolster-sdk-publish-action` | Keep private unless there is a separate reason to publish. |
 | `@kaji/runtime-contract`, `@kaji/postman-execute`, `@kaji/github-app-broker` | `@poolster/...` | Internal test or service packages; keep `private: true`. |
@@ -255,10 +255,11 @@ The parallel installation names would be `npx poolster` for npm CLI users,
 embedding. Homebrew and a shell installer can be considered later. Neither is
 part of the first distribution plan.
 
-## Suggested repository layout after a rename
+## Repository layout
 
 ```text
 crates/{core,facade,cli,node,inputs,plugins}/...  # Cargo package names carry poolster-
+crates/inputs/bundle/                          # poolster-inputs
 packages/npm/cli/                              # poolster
 packages/npm/sdk/                              # @relevate/poolster
 packages/npm/plugins/{typescript,...}/         # individual output plugins
@@ -267,12 +268,16 @@ packages/npm/plugins-all/                      # optional bundle
 packages/npm/platform/{cli,node}/<platform>/   # generated native packages
 packages/integrations/{unplugin,github,gitlab}/
 packages/internal/{runtime-contract,...}/
+packages/python/                              # PyPI launcher and wheels
+openapi/                                      # Go OpenAPI compiler
 ```
 
-Directory moves are optional cleanup, separate from package identity. Keeping
-the current source directories for one migration commit is acceptable if it
-reduces review noise. The important boundary is in the manifests and dependency
-graph, not the folder names.
+This layout is implemented on `poolster-sdk-layout`. Source folder names stay
+separate from published package identities. The native platform directories
+contain ignored build output. Integrations are grouped under
+`packages/integrations`; release tools, contract tooling and internal services
+are grouped under `packages/internal`. The shared factory generator lives at
+`packages/npm/generate-plugins.mjs` and owns both plugin and input factories.
 
 ## Release checklist after the source rename
 

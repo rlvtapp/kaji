@@ -12,7 +12,7 @@ Choose the layer you want to extend. Follow the linked guide for a working examp
 | `InputRegistry::{register, plugins, load}` | Register, list and select providers; ambiguous formats need explicit selection | [Provider selection](input-plugins.md#select-or-replace-a-provider) |
 | `InputContract::{publish, get, take}` | Store, borrow or remove a native capability; duplicate publication fails | [Input graph](input-plugins.md#feed-an-input-into-the-output-graph) |
 | `InputProvider<C>::new(...).using(...).handle()` | Publish one selected input capability into a package graph | [Input bridge](input-plugins.md#feed-an-input-into-the-output-graph) |
-| `Adapter::adapt() -> Result<AdaptedApi>` | Normalize a source directly to the existing HTTP API and security catalog | [Adapter source](../crates/kaji-core/src/adapter/mod.rs) |
+| `Adapter::adapt() -> Result<AdaptedApi>` | Normalize a source directly to the existing HTTP API and security catalog | [Adapter source](../crates/core/src/adapter/mod.rs) |
 | `poolster::generate_with_adapter` / `poolster::generate_with_input` | Generate HTTP packages from an adapter or published `AdaptedApi` | [HTTP capability](input-plugins.md#supply-a-normalized-http-input-later) |
 
 `InputContract::summary` and `diagnostics` support inspection. Native GraphQL,
@@ -131,5 +131,5 @@ Test binding errors, publication failures, file collisions and package isolation
 Compile and exercise the emitted consumer when you change a language or transport ABI.
 [Authoring checks →](typed-plugins.md#validate-the-extension-before-releasing-it)
 
-The public definitions are in [engine.rs](../crates/kaji-core/src/engine.rs),
-[input.rs](../crates/kaji-core/src/input.rs) and [files.rs](../crates/kaji-core/src/files.rs).
+The public definitions are in [engine.rs](../crates/core/src/engine.rs),
+[input.rs](../crates/core/src/input.rs) and [files.rs](../crates/core/src/files.rs).

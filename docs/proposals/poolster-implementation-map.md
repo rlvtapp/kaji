@@ -1,6 +1,6 @@
 # Poolster implementation map
 
-Status: source rename in progress on `poolster-sdk-layout`; publication disabled.
+Status: package rename and repository layout implemented on `poolster-sdk-layout`; publication disabled.
 This map supplements the [package naming plan](poolster-package-structure.md)
 with the boundaries and remaining release work in this repository.
 
@@ -8,15 +8,15 @@ with the boundaries and remaining release work in this repository.
 
 | Current path | Proposed Cargo package | Responsibility |
 | --- | --- | --- |
-| `crates/kaji-core/` | `poolster-core` | Shared AST, contracts, plugin engine, file ownership. |
-| `crates/kaji/` | `poolster` | Rust embedding API and profiles; future crates.io package. |
-| `crates/kaji-cli/` | `poolster-cli` | Internal Rust command and `poolster` binary for npm/PyPI bundles. |
-| `crates/kaji-node/` | `poolster-node` | Internal NAPI addon; not a crates.io package. |
-| `crates/inputs/*/`, `crates/kaji-inputs/` | `poolster-input-*`, `poolster-inputs` | Native parsers and optional bundle. |
+| `crates/core/` | `poolster-core` | Shared AST, contracts, plugin engine, file ownership. |
+| `crates/facade/` | `poolster` | Rust embedding API and profiles; future crates.io package. |
+| `crates/cli/` | `poolster-cli` | Internal Rust command and `poolster` binary for npm/PyPI bundles. |
+| `crates/node/` | `poolster-node` | Internal NAPI addon; not a crates.io package. |
+| `crates/inputs/*/`, `crates/inputs/bundle/` | `poolster-input-*`, `poolster-inputs` | Native parsers and optional bundle. |
 | `crates/plugins/*/` | `poolster-plugin-*` | Native language and output plugins. |
 
-Cargo package names can change without moving these directories. Keep paths
-stable for the first naming change, then decide whether directory moves help.
+The folders now follow the repository layout in the package naming plan.
+Cargo package names remain independent of their source directory names.
 The Rust SDK facade starts without language plugins by default. Rust consumers
 add the plugin crates they select. The CLI and NAPI addon link the built-in
 plugin set they expose. Rust examples and tests exercise this explicit
@@ -27,11 +27,11 @@ The other source and distribution paths keep distinct jobs:
 | Current path | Job |
 | --- | --- |
 | `openapi/` | Go OpenAPI compiler executable used by the CLI and Node SDK. |
-| `packages/cli/` | npm CLI launcher and prebuilt platform packages. |
-| `packages/cli/sdk/` | Node SDK, JS plugin engine, and NAPI platform packages. |
-| `packages/node-plugins/` | Individually installable JS plugin factories and optional bundle. |
+| `packages/npm/cli/` | npm CLI launcher and prebuilt platform packages. |
+| `packages/npm/sdk/` | Node SDK, JS plugin engine, and NAPI platform packages. |
+| `packages/npm/plugins/` | Individually installable JS plugin factories and optional bundle. |
 | `packages/python/` | PyPI CLI launcher and platform wheels. |
-| `packages/unplugin-kaji/`, `packages/github-action/`, `packages/gitlab-ci/` | Build-tool and CI integrations. |
+| `packages/integrations/unplugin/`, `packages/integrations/github/`, `packages/integrations/gitlab/` | Build-tool and CI integrations. |
 
 ## Public installs by ecosystem
 
@@ -41,10 +41,11 @@ The other source and distribution paths keep distinct jobs:
 | PyPI | `poolster` platform wheel | No Python embedding package proposed |
 | crates.io | No CLI package | `poolster` and explicitly selected `poolster-plugin-*` / `poolster-input-*` crates |
 
-The npm CLI, Node SDK, and PyPI CLI already have separate packaging paths.
-`packages/cli/sdk/` is an independent Node package nested under the CLI
-directory; move it to a sibling such as `packages/node-sdk/` only in a separate
-layout change. Folder names do not determine published package names.
+The npm CLI and Node SDK are sibling packages under `packages/npm/`; PyPI
+keeps its launcher under `packages/python/`. Generated native packages belong
+under `packages/npm/platform/{cli,node}/`. Input factories, output factories
+and the optional bundle occupy distinct folders under `packages/npm/`.
+Folder names do not determine published package names.
 
 The proposed Rust embedding experience makes plugin selection visible in the
 dependency list and in code:

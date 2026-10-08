@@ -170,8 +170,8 @@ If their branches differ,
 edit the generated workflow to set the source trigger and destination action
 `base` independently.
 The upstream
-[spec-sync action](../packages/spec-sync/action.yml) and
-[relay implementation](../packages/spec-sync/sync.mjs) are available for review.
+[spec-sync action](../packages/internal/spec-sync/action.yml) and
+[relay implementation](../packages/internal/spec-sync/sync.mjs) are available for review.
 
 
 **Relay limit: one specification file.** Bundle external relative `$ref` files
