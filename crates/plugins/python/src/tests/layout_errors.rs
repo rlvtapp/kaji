@@ -7,7 +7,7 @@ fn emits_same_origin_url_pagination_without_bypassing_the_operation() {
     source.operations[0].path = "/v1/contacts".into();
     source.operations[0].parameters.clear();
     source.operations[0].annotations.insert(
-        "x-kaji-pagination".into(),
+        "x-poolster-pagination".into(),
         serde_json::json!({
             "type": "url",
             "outputs": { "nextUrl": "$.links.next" }

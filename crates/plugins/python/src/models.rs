@@ -242,7 +242,6 @@ pub(super) fn render_schema(output: &mut String, schema: &Schema) {
                 .value
                 .extensions
                 .get("x-poolster-open-enum")
-                .or_else(|| schema.value.extensions.get("x-kaji-open-enum"))
                 .and_then(serde_json::Value::as_bool)
                 == Some(true)
             {

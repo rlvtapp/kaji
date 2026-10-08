@@ -46,7 +46,7 @@ mod tests {
                 }),
                 responses: vec![],
                 annotations: BTreeMap::from([(
-                    "x-kaji-idempotency-resolved".into(),
+                    "x-poolster-idempotency-resolved".into(),
                     serde_json::json!({"header":"Idempotency-Key","parameter_name":"Idempotency-Key","auto_generate":false}),
                 )]),
             }],
@@ -109,7 +109,7 @@ mod tests {
         )
         .unwrap();
         let python = std::env::var_os("POOLSTER_TEST_PYTHON")
-            .or_else(|| std::env::var_os("KAJI_TEST_PYTHON"))
+            .or_else(|| std::env::var_os("POOLSTER_TEST_PYTHON"))
             .unwrap_or_else(|| "python3".into());
         let mut paths = vec![root.path().join("sdk/src")];
         if let Some(path) = std::env::var_os("PYTHONPATH") {

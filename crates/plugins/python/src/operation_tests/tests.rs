@@ -91,7 +91,7 @@ fn generated_smoke_tests_execute_flat_and_namespaced() {
             .unwrap();
         let output = std::process::Command::new(
             std::env::var("POOLSTER_TEST_PYTHON")
-                .or_else(|_| std::env::var("KAJI_TEST_PYTHON"))
+                .or_else(|_| std::env::var("POOLSTER_TEST_PYTHON"))
                 .unwrap_or_else(|_| "python3".into()),
         )
         .args(["-m", "unittest", "discover", "-v"])

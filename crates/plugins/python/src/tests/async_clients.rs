@@ -107,7 +107,7 @@ fn async_pagination_awaits_each_page_and_forwards_resource_iterator() {
         description: None,
         annotations: Default::default(),
     }];
-    source.operations[0].annotations.insert("x-kaji-pagination".into(), serde_json::json!({"type":"cursor", "inputs":[{"name":"cursor", "in":"parameters", "type":"cursor"}], "outputs":{"nextCursor":"$.next"}}));
+    source.operations[0].annotations.insert("x-poolster-pagination".into(), serde_json::json!({"type":"cursor", "inputs":[{"name":"cursor", "in":"parameters", "type":"cursor"}], "outputs":{"nextCursor":"$.next"}}));
     if let SchemaKind::Object {
         additional_properties,
         ..

@@ -16,11 +16,11 @@ fn native_auto_idempotency_reuses_secure_keys_and_preserves_explicit_values() {
         description: None,
         annotations: Default::default(),
     }];
-    op.annotations.insert("x-kaji-idempotency-resolved".into(),serde_json::json!({"header":"X-Request-Key","parameter_name":"requestKey","auto_generate":true}));
+    op.annotations.insert("x-poolster-idempotency-resolved".into(),serde_json::json!({"header":"X-Request-Key","parameter_name":"requestKey","auto_generate":true}));
     // Normalization preserves the wire header as the actual parameter name.
     op.parameters[0].name = "X-Request-Key".into();
     op.annotations
-        .get_mut("x-kaji-idempotency-resolved")
+        .get_mut("x-poolster-idempotency-resolved")
         .unwrap()["parameter_name"] = serde_json::json!("X-Request-Key");
     let mut collision = op.parameters[0].clone();
     collision.name = "X_Request_Key".into();

@@ -14,7 +14,7 @@ fn emits_cursor_paginators_only_for_declared_operation_inputs() {
         annotations: Default::default(),
     }];
     source.operations[0].annotations.insert(
-        "x-kaji-pagination".into(),
+        "x-poolster-pagination".into(),
         serde_json::json!({
             "type": "cursor",
             "inputs": [{ "name": "cursor", "in": "parameters", "type": "cursor" }],
@@ -51,7 +51,7 @@ fn emits_cursor_paginators_only_for_declared_operation_inputs() {
     assert!(status.success());
 
     source.operations[0].annotations.insert(
-        "x-kaji-pagination".into(),
+        "x-poolster-pagination".into(),
         serde_json::json!({
             "type": "cursor",
             "inputs": [{ "name": "missing", "in": "parameters", "type": "cursor" }],
@@ -94,7 +94,7 @@ fn page_pagination_executes_sync_async_defaults_and_selectors() {
             additional_properties: AdditionalProperties::Any,
         }),
     )];
-    op.annotations.insert("x-kaji-pagination".into(), serde_json::json!({
+    op.annotations.insert("x-poolster-pagination".into(), serde_json::json!({
             "type":"page", "inputs":[{"name":"page","in":"parameters","type":"page"},{"name":"limit","in":"parameters","type":"limit"}],
             "outputs":{"results":"/items"}
         }));
@@ -209,7 +209,7 @@ fn body_page_pagination_preserves_limit_filters_and_original_inputs() {
             additional_properties: AdditionalProperties::Any,
         }),
     )];
-    op.annotations.insert("x-kaji-pagination".into(),serde_json::json!({"type":"page","inputs":[{"name":"page-number","in":"requestBody","type":"page"},{"name":"page-size","in":"requestBody","type":"limit"}],"outputs":{"results":"/items"}}));
+    op.annotations.insert("x-poolster-pagination".into(),serde_json::json!({"type":"page","inputs":[{"name":"page-number","in":"requestBody","type":"page"},{"name":"page-size","in":"requestBody","type":"limit"}],"outputs":{"results":"/items"}}));
     let root = tempfile::tempdir().unwrap();
     render_sdk_with_async(
         &source,

@@ -25,7 +25,7 @@ fn emits_offset_pagers_and_decoded_sse_iterators() {
         },
     ];
     operation.annotations.insert(
-        "x-kaji-pagination".into(),
+        "x-poolster-pagination".into(),
         serde_json::json!({
             "type": "offsetLimit",
             "inputs": [
@@ -88,7 +88,7 @@ fn emits_body_cursor_paginators_only_for_required_declared_json_fields() {
             }],
         });
         operation.annotations.insert(
-            "x-kaji-pagination".into(),
+            "x-poolster-pagination".into(),
             serde_json::json!({
                 "type": "cursor",
                 "inputs": [{ "name": "cursor-token", "in": "requestBody", "type": "cursor" }],

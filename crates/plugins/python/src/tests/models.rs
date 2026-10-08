@@ -8,7 +8,7 @@ fn open_enum_setting_preserves_known_literals_and_scalar_wire_types() {
     assert!(strict.contains("State = Literal[\"known\"]"));
     value
         .extensions
-        .insert("x-kaji-open-enum".into(), serde_json::json!(true));
+        .insert("x-poolster-open-enum".into(), serde_json::json!(true));
     let open = render_model(&Schema::new("State", value));
     assert!(open.contains("State = Literal[\"known\"] | str"));
     assert!(!open.contains("State = Any"));
