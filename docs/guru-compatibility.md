@@ -1,80 +1,71 @@
-# Public-contract compatibility baseline
+# Public-contract compatibility results
 
-This October 8, 2026 source-build baseline attempts all 205 pinned contracts in
-all ten SDK languages: 2,050 generation/native-check cases. The tested generator
-revision is `d4e884f`. The main CI passed for that revision, while these broader
-checks found additional failures. An unqualified cross-language stability claim
-is premature.
+The October 8, 2026 follow-up records successful generation and native checks for
+all 205 pinned contracts in all ten SDK languages: **2,050 passing cases**.
+No contracts were excluded. These results reconcile full runs with targeted
+confirmations across the fixes; they are not a single frozen-build matrix run.
 
-Inputs, checksums and selection are documented in [large-spec testing](large-specs.md).
-The [machine-readable results](verification-results/guru-2026-10-08.json) retain
-every passing contract, every failing contract, failure phase, exit code and a
-diagnostic. Contracts are not removed because they fail.
+The [follow-up ledger](verification-results/guru-fixed-2026-10-08.json) records
+contract checksums, executable hashes where available, phase exit codes/times,
+output measurements and the report used for each confirmation. The
+[original baseline](verification-results/guru-2026-10-08.json), at `d4e884f`,
+retains 1,462 passes, 119 generation failures and 469 native failures.
+Inputs and selection are documented in [large-spec testing](large-specs.md).
 
 ## Results
 
-| Language | Passed | Generation failed | Native failed | Resource failure | Timeout |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Go | 205 | 0 | 0 | 0 | 0 |
-| Python | 165 | 0 | 40 | 0 | 0 |
-| TypeScript | 164 | 11 | 30 | 0 | 0 |
-| Java | 132 | 23 | 50 | 0 | 0 |
-| C# | 117 | 14 | 74 | 0 | 0 |
-| Rust | 158 | 0 | 47 | 0 | 0 |
-| Swift | 72 | 62 | 71 | 0 | 0 |
-| Ruby | 188 | 0 | 17 | 0 | 0 |
-| PHP | 165 | 9 | 31 | 0 | 0 |
-| Elixir | 96 | 0 | 109 | 0 | 0 |
+| Language | Generation + native passed | Unresolved cases |
+| --- | ---: | ---: |
+| Go | 205 | 0 |
+| Python | 205 | 0 |
+| TypeScript | 205 | 0 |
+| Java | 205 | 0 |
+| C# | 205 | 0 |
+| Rust | 205 | 0 |
+| Swift | 205 | 0 |
+| Ruby | 205 | 0 |
+| PHP | 205 | 0 |
+| Elixir | 205 | 0 |
 
-Each row totals 205. A pass requires generation and a successful native check.
-Generation failures include explicit unsupported-subset rejections and output
-collisions; the diagnostic identifies which occurred. Native failures include
-compiler errors, import/load errors and Elixir warnings denied by the check.
-A timeout or resource failure establishes an incomplete check, rather than a
-generated-code defect.
+Go, Python, Java, C#, Ruby and PHP have full frozen-executable sweeps. Elixir
+uses a frozen prefix and tail covering the same 205 inputs. TypeScript has a
+204-pass frozen sweep plus a successful Snyk retry and ten latest representative
+confirmations. Rust's frozen sweep includes a fresh Zuora retry after a runner
+interruption. Swift combines an iterative 150-case prefix with a frozen 55-case
+tail, frozen confirmations of every failure and latest representative checks.
+Successful Swift prefix cases do not have per-case executable hashes; a new
+single-build full Swift sweep would provide stronger reproducibility.
 
-## Stripe and Azure
+Runner interruptions are incomplete checks, not generated-code failures. Their
+fresh successful retries are identified in the ledger. The final idempotency
+argument fixes also have focused native regressions; most corpus contracts do
+not exercise auto-idempotency annotations.
 
-P = passed; G = generation failed; N = native failed; T = timed out; R = resource failure.
+## What changed
 
-| Language | Stripe | Azure Web Apps | Compute | Virtual WAN | Storage | Key Vault |
-| --- | --- | --- | --- | --- | --- | --- |
-| Go | P | P | P | P | P | P |
-| Python | P | P | P | P | P | N |
-| TypeScript | N | P | P | P | P | P |
-| Java | G | P | P | P | P | P |
-| C# | G | P | P | P | P | P |
-| Rust | P | P | P | P | P | N |
-| Swift | G | P | P | P | P | N |
-| Ruby | P | P | P | P | P | P |
-| PHP | P | P | P | P | P | P |
-| Elixir | N | N | N | N | N | N |
+Identifier allocation now preserves original wire keys through keywords,
+normalized-name collisions, case-insensitive paths, runtime names and references.
+Fixes cover aliases, recursive models, inherited duplicate fields, native codecs,
+nullable values and enum backing values. Java uses typed holders for operations
+and models that would exceed JVM argument limits. Valid multipart schemas now
+compile through ordered builders in Java, C# and Swift.
 
-These Azure fixtures cover five services, not the entire Azure API surface.
-Stripe initially exhausted Node's default 4 GB heap. An 8 GB retry completed
-and exposed generated type/import errors, including a form encoding type that
-excludes `deepObject` and a missing generated model import. The retry is counted
-in the results above. Its generated TypeScript package is about 147 MB, which
-also motivates reducing repeated inline type expansion.
+Shared TypeScript response descriptors avoid repeated schema expansion. Stripe's
+package fell from 147,315,512 to 3,580,589 bytes, about 97.6% smaller. Its latest
+native check took 5.888 seconds with the default Node heap; the earlier 8 GB retry
+took about 135.9 seconds after a default-heap exhaustion. These timings include
+cache/toolchain effects and are measurements, not performance guarantees.
 
-## What needs fixing first
+Ruby, Swift, Go response registries, CLI command trees and auxiliary TypeScript
+outputs now split at declaration boundaries. Chunk byte targets are soft:
+a single atomic model or operation can exceed them. Swift's large-query helper
+fix reduced the Gsmtasks Debug build from about 405 to 16.66 seconds while keeping
+public operation signatures. See the [follow-up layout measurements](verification-results/layout-fixed-2026-10-08.json)
+and [remaining generator backlog](generator-backlog.md).
 
-1. Allocate identifiers consistently across fields, parameters, models and
-   resources. Preserve wire names while distinguishing `+1`/`-1`, reserving
-   runtime/local names and keywords, and avoiding case-only path collisions.
-   Examples include GitHub reaction fields, Python `field` shadowing, C# `query`
-   locals, Swift `default` enum cases and case-only resource names.
-2. Make references, aliases and composed models consistent across emitters.
-   Missing model imports/decoders and repeated inherited fields prevent native
-   compilation even when generation succeeds.
-3. Align TypeScript form serialization types with emitted encoding metadata and
-   reduce large repeated type expansions. Recheck Stripe with an explicit heap
-   budget after the fixes.
-4. Expand the declared multipart subset where intended and give endpoint/schema
-   context for remaining rejections. Java/C#/Swift reject some existing inputs;
-   those limitations must stay explicit.
-5. Minimize these failures into regression fixtures and promote a representative
-   set into normal CI. Keep the full pinned corpus as a larger compatibility gate.
+Stripe and all five Azure fixtures pass in every language. The Azure fixtures
+cover Web Apps, Compute, Virtual WAN, Storage and Key Vault; they do not represent
+the entire Azure API surface.
 
 ## Check boundaries and reproduction
 
@@ -82,13 +73,16 @@ Rust, Go, TypeScript, Java, C# and Swift run native compilation. Python runs
 bytecode compilation plus package import; Ruby runs syntax checks plus package
 load; PHP lints every source file; Elixir compiles with warnings denied. These
 checks do not call production APIs, prove every operation's runtime behavior,
-or test registry publication. See [runtime verification](verification.md).
+or test registry publication. [Runtime verification](verification.md) records
+separate behavior tests for wire values, retry stability, middleware, decoding,
+framework caching/cancellation and split imports.
 
-Toolchain versions and per-phase time limits are recorded in the JSON ledger.
-Ruby/PHP/Elixir use containers with two CPUs and 2 GB memory. Elixir reuses
-verified dependencies and rebuilds the generated application. Rust/Swift use
-two build workers. Standard-library and dependency caches are reused. The
-exploratory Python 3.9 run is excluded; the recorded Python run uses 3.12.
+The follow-up uses Go 1.25, Python 3.12, TypeScript 5.9, Java 17, .NET 8, the
+installed Rust toolchain and Swift 6.4. Ruby/PHP/Elixir use the native corpus
+containers; their baseline toolchain metadata is retained in the original ledger.
+Dependency caches are reused; Rust/Swift use two workers. Peak memory was not
+measured. Full publication and live GitHub synchronization remain separate gated
+exercises.
 
 With the matching native toolchain installed, reproduce a target with:
 
@@ -100,7 +94,7 @@ KAJI_BINARY="$PWD/target/debug/kaji" python3 scripts/guru-corpus.py \
 ```
 
 Use a fresh output directory. `--contracts stripe,azure-compute` selects focused
-cases; `--keep-generated` preserves sources for diagnosis. Set
-`NODE_OPTIONS=--max-old-space-size=8192` for the recorded Stripe retry. The
-manual `APIs.guru large contract corpus` workflow provisions supported toolchains
-and uploads reports and diagnostics for one language or all ten.
+cases; `--keep-generated` preserves sources for diagnosis. Reports separate source
+and metadata bytes, list the largest source files and emit configurable size
+warnings. The manual `APIs.guru large contract corpus` workflow provisions
+supported toolchains and uploads reports and diagnostics for one language or all ten.

@@ -129,14 +129,15 @@ TypeScript multi-client examples are in the [`kaji.json` reference](config-file.
 
 | Package `language` | Built-in plugin names | Relevant plugin options |
 | --- | --- | --- |
-| `typescript` | `sdk`, `zod`, `tanstack-react-query`, `tanstack-vue-query`, `swr`, `faker`, `msw`, `cypress` | SDK: `transport` (`fetch`/`axios`), `surface` (`client`/`raw`), `client_name`, `group_by_tag`, `throw_on_error`. Artifacts: `output`, `clients_import`, `group_by_tag`. |
+| `typescript` | `sdk`, `zod`, `tanstack-react-query`, `tanstack-vue-query`, `swr`, `faker`, `msw`, `cypress` | SDK: `transport` (`fetch`/`axios`), `surface` (`client`/`raw`), `client_name`, `group_by_tag`, `throw_on_error`. Artifacts: `output`, `group_by_tag`; Zod/Faker/MSW/Cypress: `max_file_bytes`; query consumers: `max_operations_per_file`, `uses.operations`. |
 | `rust`, `go`, `python`, `php`, `java`, `csharp`, `elixir`, `ruby`, `swift` | `sdk` | Go SDK: `jobs`. |
 | `symfony` | `sdk` | `sdk_package` to reference the generated PHP SDK Composer package. |
 | `mock` | `server` | `image`, `port`. |
 | `artifacts` | `redoc`, `mcp` | `output`; ReDoc also accepts `openapi_spec`, `title`. |
 
 `output` on an artifact plugin is a directory below that package's `path`.
-`clients_import` defaults to `"./clients"`; set it if hook files must import
+For direct standalone artifact renderers, `clients_import` defaults to
+`"./clients"`; set it if hook files must import
 TypeScript operation functions from elsewhere. Read the [auxiliary generator
 guide](auxiliary-generators.md) for framework dependencies and limits.
 

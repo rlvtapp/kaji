@@ -1,0 +1,159 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-08",
+  "scope": "Measured generated package/source sizes and native checks; no peak memory measurement. Atomic declarations may exceed chunk targets.",
+  "corpus_ledger": "guru-fixed-2026-10-08.json",
+  "baseline": "layout-2026-10-08.json",
+  "measurements": [
+    {
+      "language": "typescript",
+      "contract": "stripe",
+      "source_sha256": "fba83fd7ff9ce87eafa0fbbc15c382b176dac204ca21b72df1a8c361441d9ecf",
+      "report": "typescript-retry",
+      "generation_seconds": 5.754,
+      "native_seconds": 5.888,
+      "generation_exit_code": 0,
+      "native_exit_code": 0,
+      "generated_files": 2062,
+      "generated_bytes": 3580589,
+      "source_files": 2057,
+      "source_bytes": 3527392,
+      "metadata_bytes": 49661,
+      "largest_source_bytes": 129954,
+      "largest_source_files": [
+        {
+          "path": "clients/_kaji_json_refs_0002.ts",
+          "bytes": 129954
+        }
+      ],
+      "file_warning_bytes": 262144,
+      "oversized_file_count": 0
+    },
+    {
+      "language": "go",
+      "contract": "stripe",
+      "source_sha256": "fba83fd7ff9ce87eafa0fbbc15c382b176dac204ca21b72df1a8c361441d9ecf",
+      "report": "go-full",
+      "generation_seconds": 6.195,
+      "native_seconds": 5.339,
+      "generation_exit_code": 0,
+      "native_exit_code": 0,
+      "generated_files": 1301,
+      "generated_bytes": 3394668,
+      "source_files": 1297,
+      "source_bytes": 3388513,
+      "metadata_bytes": 0,
+      "largest_source_bytes": 72786,
+      "largest_source_files": [
+        {
+          "path": "response_shapes_0000.go",
+          "bytes": 72786
+        }
+      ],
+      "file_warning_bytes": 262144,
+      "oversized_file_count": 0
+    },
+    {
+      "language": "ruby",
+      "contract": "stripe",
+      "source_sha256": "fba83fd7ff9ce87eafa0fbbc15c382b176dac204ca21b72df1a8c361441d9ecf",
+      "report": "ruby-layout-confirmation",
+      "generation_seconds": 5.705,
+      "native_seconds": 0.97,
+      "generation_exit_code": 0,
+      "native_exit_code": 0,
+      "generated_files": 40,
+      "generated_bytes": 2994672,
+      "source_files": 36,
+      "source_bytes": 2990442,
+      "metadata_bytes": 0,
+      "largest_source_bytes": 130541,
+      "largest_source_files": [
+        {
+          "path": "lib/public_contract_sdk/models/chunk_0008.rb",
+          "bytes": 130541
+        }
+      ],
+      "file_warning_bytes": 262144,
+      "oversized_file_count": 0
+    },
+    {
+      "language": "ruby",
+      "contract": "aws-ec2",
+      "source_sha256": "4b4da0ce2b0c6ab3d0fe912f4472532c09749481ce4cb2dc03e60660fcefee77",
+      "report": "ruby-layout-confirmation",
+      "generation_seconds": 7.934,
+      "native_seconds": 4.857,
+      "generation_exit_code": 0,
+      "native_exit_code": 0,
+      "generated_files": 675,
+      "generated_bytes": 9315178,
+      "source_files": 671,
+      "source_bytes": 9310948,
+      "metadata_bytes": 0,
+      "largest_source_bytes": 130640,
+      "largest_source_files": [
+        {
+          "path": "lib/public_contract_sdk/models/chunk_0029.rb",
+          "bytes": 130640
+        }
+      ],
+      "file_warning_bytes": 262144,
+      "oversized_file_count": 0
+    },
+    {
+      "language": "ruby",
+      "contract": "docusign",
+      "source_sha256": "2a9e86d5bab61f0466fffcd228a580f9ff07c743d721d5714bfb635595fd356b",
+      "report": "ruby-layout-confirmation",
+      "generation_seconds": 11.647,
+      "native_seconds": 4.946,
+      "generation_exit_code": 0,
+      "native_exit_code": 0,
+      "generated_files": 65,
+      "generated_bytes": 6001871,
+      "source_files": 61,
+      "source_bytes": 5997641,
+      "metadata_bytes": 0,
+      "largest_source_bytes": 390589,
+      "largest_source_files": [
+        {
+          "path": "lib/public_contract_sdk/models/chunk_0006.rb",
+          "bytes": 390589
+        }
+      ],
+      "file_warning_bytes": 262144,
+      "oversized_file_count": 1
+    },
+    {
+      "language": "swift",
+      "contract": "gsmtasks",
+      "source_sha256": "0dcf00c0aa2faec293394c1b8c237748593586a6c639ea3fc59620a79ce9a7ff",
+      "report": "swift-bounded-query",
+      "generation_seconds": 3.591,
+      "native_seconds": 17.848,
+      "generation_exit_code": 0,
+      "native_exit_code": 0,
+      "generated_files": 394,
+      "generated_bytes": 2854129,
+      "source_files": 391,
+      "source_bytes": 2849061,
+      "metadata_bytes": 0,
+      "largest_source_bytes": 174205,
+      "largest_source_files": [
+        {
+          "path": "Sources/PublicContractSdk/KajiOperations007.swift",
+          "bytes": 174205
+        }
+      ],
+      "file_warning_bytes": 262144,
+      "oversized_file_count": 0
+    }
+  ],
+  "typescript_stripe_before": {
+    "generated_bytes": 147315512,
+    "native_seconds": 135.9,
+    "node_heap_bytes": 8589934592,
+    "note": "Earlier default-heap attempt exhausted memory; 8 GB retry exposed type/import failures."
+  }
+}

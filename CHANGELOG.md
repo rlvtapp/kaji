@@ -8,6 +8,22 @@
 
 #### Generation and customization
 
+- Native symbol allocation preserves distinct wire keys across keywords, normalized
+  names, case-insensitive paths, aliases and recursive model graphs.
+- Shared TypeScript response descriptors reduce repeated schema expansion; Stripe's
+  measured package shrank from 147.3 MB to 3.58 MB and compiles with the default heap.
+- Bounded Ruby modules, Go response registries, Swift operation/resource extensions,
+  Rust/TypeScript CLI commands and Zod/Faker/MSW/Cypress modules. Auxiliary consumers
+  accept `max_file_bytes`; query consumers accept `max_operations_per_file`.
+- React/Vue query and mutation option/key factories with typed framework overrides,
+  explicit cache scopes, HTTP cancellation and callback context. Runtime tests cover
+  cache reuse/invalidation, SDK failures, mutation callbacks and abort propagation.
+- Idempotency key generation follows allocated header argument names, preserving
+  explicit keys and stable retries when native names collide.
+- Corpus size reporting separates metadata from source and records largest files
+  and configurable warnings. Additional native regressions and CI checks cover
+  split imports, regeneration cleanup, large models and framework consumers.
+
 - Documented a prioritized generator completion backlog covering native corpus
   failures, output size/splitting, framework APIs and artifact acceptance checks.
 

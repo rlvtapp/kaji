@@ -7,12 +7,13 @@ properties separately and make their release workflow run the same checks.
 
 ## Latest 0.5.0 integration evidence
 
-The integrated workspace passes 469 tests, formatting checks and Clippy with
-warnings denied. Freshly generated SDKs pass 163 shared HTTP scenarios across
-all ten runtimes. Additional native probes cover rebuilding an ejected renderer,
+The integrated workspace passes 483 tests, formatting checks and Clippy with
+warnings denied. The earlier shared HTTP check passed 163 scenarios across all
+ten runtimes. Additional native probes cover rebuilding an ejected renderer,
 local-reference provenance, OpenAPI 3.2 QUERY requests, scoped HTTP controls,
-OAuth refresh and buffered multipart uploads. All 17 previously documented Swift native probes pass. New Swift/PHP/Elixir
-OAuth and scoped-client probes pass, as do Ruby/PHP/Elixir multipart probes and
+OAuth refresh and buffered multipart uploads. The expanded Swift suite passes
+all 20 native probes, including a 600-query-parameter compilation/wire regression.
+New Swift/PHP/Elixir OAuth and scoped-client probes pass, as do Ruby/PHP/Elixir multipart probes and
 custom-method wire probes in Go, Fetch/Axios, Rust and Ruby.
 
 The model and 3.2 expansion adds native nested unknown-enum/property and
@@ -30,10 +31,13 @@ TypeScript, Rust, Python, Go, Java, C# and Ruby. All six pinned public contracts
 compile in Go. The manual public-contract matrix records results for ten language
 targets; this does not establish that every contract works in every target.
 
-The broader [205-contract compatibility baseline](guru-compatibility.md) attempts
-all ten languages and records generation/native failures beyond these curated
-fixtures. Go passes all 205; the other targets have explicit failures. Use that
-matrix when assessing large-contract compatibility and stability.
+The broader [205-contract compatibility results](guru-compatibility.md) record
+2,050 passing generation/native cases across ten languages after the fixes. The
+ledger preserves build provenance and retries; Swift includes an iterative prefix
+with frozen failure confirmations. These checks establish compilation/import coverage,
+with runtime behavior verified separately by native probes. New idempotency
+regressions verify that allocated header arguments preserve caller keys and
+automatic keys through collisions and retries.
 
 These checks use local fixtures and mock HTTP servers. Live GitHub synchronization
 and registry publication remain prepared workflows, without a live delivery trial.

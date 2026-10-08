@@ -1,54 +1,57 @@
 # Generator completion backlog
 
-Audited on 2026-10-08. These are planned tasks, not delivered features. This
-backlog covers SDKs, framework helpers and the other generated artifacts. The
+Audited on 2026-10-08. Checked items are delivered; unchecked items retain
+remaining work. This backlog covers SDKs, framework helpers and generated artifacts. The
 [compatibility results](guru-compatibility.md) remain the source of truth for
 native compilation; the [feature catalog](features.md) describes current support.
 
 ## 1. Get every SDK language green
 
-- [ ] **GREEN-1:** Reduce each public-contract failure to a small regression
-  fixture. Fix normalized symbol collisions, reserved words, case-insensitive
-  paths, local-variable shadowing and bounded filenames without changing wire keys.
-- [ ] **GREEN-2:** Fix referenced aliases, recursive models, inherited duplicate
+- [x] **GREEN-1:** Add small regressions for the corpus failure causes: normalized
+  symbol collisions, reserved words, case-insensitive paths, local-variable
+  shadowing and bounded filenames, while preserving wire keys.
+- [x] **GREEN-2:** Fix referenced aliases, recursive models, inherited duplicate
   fields and missing model imports/decoders. Exercise actual decoded values and
   round trips, beyond syntax checks.
-- [ ] **GREEN-3:** Correct TypeScript form/media encoding types and excessive
+- [x] **GREEN-3:** Correct TypeScript form/media encoding types and excessive
   nested type expansion. Resolve supported multipart failures; retain explicit
   diagnostics for genuinely unsupported forms.
-- [ ] **GREEN-4:** Rerun all 205 pinned contracts across ten languages. Baseline:
-  1,462 passes, 119 generation failures and 469 native failures across 2,050 cases.
+- [x] **GREEN-4:** Rerun all 205 pinned contracts across ten languages. Resolved the
+  baseline of 1,462 passes, 119 generation failures and 469 native failures.
+  The reconciled follow-up covers 2,050 passing cases; reports identify frozen builds
+  and retries, including Swift’s iterative prefix and frozen confirmations.
   Track compiler failures separately from unsupported-feature rejections. Require
   supported cases to pass and document any remaining exclusions individually.
 
 ## 2. Make output scale predictably
 
 File count alone is insufficient: a single operation/model can be enormous,
-while many small files can still repeat the same types. Stripe's recorded
-TypeScript package contains 2,057 files and 147,315,512 bytes. That is package
-size, not the size of one file. Splitting and reducing duplicated declarations
-are separate tasks.
+while many small files can still repeat the same types. Stripe's original
+TypeScript package measured 147,315,512 bytes. The follow-up
+measures 3,580,589 bytes and compiles in 5.888 seconds with the default Node heap.
+These are package sizes, not single-file sizes. Splitting and reducing duplicated
+declarations are separate tasks.
 
-The following layout inventory comes from the current emitters. Count-based
-chunks are internal defaults, not a shared configurable byte budget.
+The following inventory includes the delivered fixes. A shared layout API and
+byte policy across every emitter remain open. Atomic declarations may exceed budgets.
 
 | Output | Current layout | Work to schedule |
 | --- | --- | --- |
-| TypeScript SDK | Per-model and per-operation modules, aggregate facades/exports | Reduce inline type expansion; bound facades, registries and barrels |
-| Go | Per-model/per-operation files; resource methods in groups of 50 | Add byte-aware grouping and oversized declaration diagnostics |
+| TypeScript SDK | Per-model and per-operation modules, aggregate facades/exports | Shared schema descriptors delivered; bound remaining facades and barrels |
+| Go | Per-model/per-operation files; resource groups of 50; bounded response registries | Add byte-aware grouping and oversized declaration diagnostics |
 | Python | Per-model modules; operation/resource groups of 100; grouped exports | Bound aggregate client/import registries and large individual models |
 | Rust | Per-model modules grouped in directories of 100; operation/resource groups of 25 | Byte-aware groups and bounded root exports |
-| Java | Per-model classes; grouped operations and resource groups of 100 | Byte budgets plus JVM method/constructor limits |
+| Java | Per-model classes; grouped operations and resource groups of 100 | Typed holders handle JVM argument limits; broader byte budgets remain |
 | C# | Per-model files; operation/resource partial groups of 100 | Byte-aware partials and bounded facades |
 | PHP | Per-model classes; operation groups of 100, resource groups of 25 | Byte-aware traits and aggregate class limits |
 | Elixir | Per-model modules; grouped operations, errors and resources | Bound delegates/registries and verify split decoder references |
-| Swift | Per-model/per-resource files; aggregate Operations.swift | Split operations and pagination extensions, then large resource files |
-| Ruby | Aggregate models.rb and client.rb; separate validation file | Per-model/per-resource/per-operation modules with compatible loading |
-| React/Vue Query, SWR | Single module per consumer | Per-operation modules, group barrels and configurable output layout |
-| Zod, Faker, MSW, Cypress | Aggregate modules/spec files | Split by model/operation; preserve recursive initialization and test discovery |
+| Swift | Per-model files; bounded operation/resource extensions; large-query helpers | Broader byte policy and large individual declarations |
+| Ruby | Bounded model/operation/resource/factory/descriptor modules; stable loaders | Large atomic models and common layout settings |
+| React/Vue Query, SWR | Bounded operation chunks with stable public aggregate | Additional layout modes and operation selection |
+| Zod, Faker, MSW, Cypress | Bounded modules with max_file_bytes and stable entrypoints | Broader behavioral audits and large atomic declarations |
 | Direct TypeScript models API | Aggregate models.ts | Offer split layout without confusing it with the SDK model provider |
-| TypeScript CLI | Aggregate command index; separate runtime | Split command definitions by group/operation |
-| Rust CLI | Aggregate main.rs plus customer extension modules | Separate runtime, command modules and metadata |
+| TypeScript CLI | Bounded command modules; separate runtime | Command/flag collision and broader behavior audit |
+| Rust CLI | Bounded command metadata; runtime and extension modules | Broader runtime/layout controls |
 | Terraform | Per-resource/data-source Go files; shared provider/runtime | Bound large schemas and provider registries using Go declarations |
 | Postman | One collection JSON plus environment JSON | Optional valid collections by tag/resource; retain a default single collection |
 | MCP tool artifact | One tools.json manifest | Measure manifest size; filtering/grouping without implying a generated server |
@@ -64,8 +67,8 @@ chunks are internal defaults, not a shared configurable byte budget.
   per-resource and bounded chunks. Add configurable warning budgets for bytes
   and declaration counts. Select defaults from measurements; do not present an
   arbitrary byte threshold as a compiler limit.
-- [ ] **SIZE-3:** Implement Ruby/Swift/CLI and auxiliary splitting first, then
-  apply byte-aware grouping to existing chunked emitters. Split at declaration
+- [ ] **SIZE-3:** Ruby/Swift/CLI/auxiliary splitting and Go registries are delivered.
+  Still apply byte-aware grouping to existing chunked emitters. Split at declaration
   boundaries; factor large schemas rather than slicing source text.
 - [ ] **SIZE-4:** Preserve stable public imports, typed provider handles, custom
   transport bindings, bundled middleware, authored overlays and ownership cleanup.
@@ -75,33 +78,37 @@ chunks are internal defaults, not a shared configurable byte budget.
   import graphs and representative memory/time growth. Keep a small fixture in
   normal CI and the pinned large corpus in the gated workflow.
 
-A generation-only Stripe probe also measured Ruby models.rb at 1,994,092 bytes,
+The original generation-only Stripe probe measured Ruby models.rb at 1,994,092 bytes,
 Go client.go at 508,751 bytes and the largest TypeScript operation module at
 375,848 bytes. See the [dated layout measurements](verification-results/layout-2026-10-08.json)
 for revision, source checksum, package totals and largest paths. This is a
-three-target sample; the full auxiliary/language size audit remains SIZE-1.
+three-target historical sample. [Follow-up measurements](verification-results/layout-fixed-2026-10-08.json)
+record compile times and bounded output. Corpus source/metadata totals, largest paths
+and warning budgets are delivered; peak memory and full auxiliary audit remain SIZE-1.
 
 ## 3. Complete framework consumers
 
-Current TanStack output is a basic hook wrapper, not the full configurable
-framework generator surface. One output file is a layout issue; the following
-are independent API/behavior gaps.
+React/Vue output now includes native typed hooks, reusable option/key factories,
+cache scopes, cancellation and bounded modules. Infinite/suspense variants and
+operation selection remain open; these are independent from file layout.
 
-- [ ] **QUERY-1:** Generate reusable queryOptions/mutationOptions and stable key
+- [x] **QUERY-1:** Generate reusable queryOptions/mutationOptions and stable key
   factories for React/Vue, with native typed options, callbacks and overrides.
-- [ ] **QUERY-2:** Forward query-function cancellation signals into the selected
+- [x] **QUERY-2:** Forward query-function cancellation signals into the selected
   HTTP driver. Build keys from operation inputs and explicit cache scope rather
-  than whole client/config objects; test tenant separation and secret exclusion.
+  than whole client/config objects; test tenant separation and credential-header
+  exclusion. Operation inputs remain visible in keys, as documented.
 - [ ] **QUERY-3:** Add infinite-query helpers using resolved pagination metadata,
   suspense variants where supported, prefetch/SSR examples and framework-specific
   signatures. Define page parameters, termination and cancellation explicitly.
 - [ ] **QUERY-4:** Support operation selection, query/mutation classification
   overrides, names and grouped output. Preserve custom operation providers and
   relocated imports; compile against supported React/Vue versions.
-- [ ] **QUERY-5:** Add framework runtime tests for caching, invalidation, callback
-  forwarding, abort, errors and page traversal. Compile tests alone do not establish
-  these behaviors.
-- [ ] **SWR-1:** Add configurable keys/options, cancellation integration and
+- [ ] **QUERY-5:** Delivered cache reuse/invalidation, callback contexts, errors
+  and framework/caller abort runtime tests. Page traversal remains open and
+  depends on infinite-query helpers. Compile tests alone do not establish behavior.
+- [ ] **SWR-1:** Delivered explicit cache scopes, native configuration overrides
+  and cancellation forwarding. Still add
   pagination/mutation helpers where appropriate to SWR's API; document differences.
 
 ## 4. Harden all other generated systems

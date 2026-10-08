@@ -196,13 +196,16 @@ and [Rust API CLI](docs/rust-cli.md) guides.
   and typed metadata for plugins. See [the 3.2 guide](docs/guides/openapi32.md).
 - **Evolving APIs:** open enum policies, unknown-field preservation and explicit
   null presence. See [model compatibility](docs/guides/forward-compatible-models.md).
-- **Large Go APIs:** split model/operation files and bounded rendering workers.
+- **Large APIs:** shared TypeScript decoding descriptors, bounded native modules,
+  query/helper chunks and split CLI command trees.
   A [pinned 205-contract corpus](docs/large-specs.md#apisguru-corpus) covers
   200 OpenAPI providers plus five Azure services, with native-check workflows
   for every SDK language. See the [cross-language results](docs/guru-compatibility.md)
-  for current failures and supported-subset limits.
+  for measured coverage and check boundaries.
 - **Validation and frontend helpers:** add Zod, TanStack React/Vue Query, SWR,
   Faker, MSW, and Cypress beside a TypeScript package through `kaji.json`.
+  React/Vue factories expose typed options, scoped keys, cancellation and callback
+  overrides. See [framework helpers](docs/guides/typescript-helpers.md).
 - **Documentation artifacts:** add ReDoc or an MCP tool manifest through the
   same recipe.
 - **Contract mocks:** add an optional `httpmock` Docker package usable by every

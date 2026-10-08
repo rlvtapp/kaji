@@ -5,8 +5,12 @@
     "name": "Kaji Pets",
     "version": "1.0.0"
   },
-  "output": { "path": "./generated" },
-  "defaults": { "client_style": "namespaced" },
+  "output": {
+    "path": "./generated"
+  },
+  "defaults": {
+    "client_style": "namespaced"
+  },
   "packages": [
     {
       "language": "typescript",
@@ -21,28 +25,39 @@
           "group_by_tag": true,
           "throw_on_error": true
         },
-        { "name": "zod", "output": "validation" },
+        {
+          "name": "zod",
+          "output": "validation"
+        },
         {
           "name": "tanstack-react-query",
           "output": "react-query",
-          "clients_import": "../clients",
-          "group_by_tag": true
+          "group_by_tag": true,
+          "max_operations_per_file": 50
         },
         {
           "name": "tanstack-vue-query",
           "output": "vue-query",
-          "clients_import": "../clients",
-          "group_by_tag": true
+          "group_by_tag": true,
+          "max_operations_per_file": 50
         },
         {
           "name": "swr",
           "output": "swr",
-          "clients_import": "../clients",
-          "group_by_tag": true
+          "group_by_tag": true,
+          "max_operations_per_file": 50
         },
-        { "name": "faker" },
-        { "name": "msw", "output": "mocks" },
-        { "name": "cypress", "output": "cypress" }
+        {
+          "name": "faker"
+        },
+        {
+          "name": "msw",
+          "output": "mocks"
+        },
+        {
+          "name": "cypress",
+          "output": "cypress"
+        }
       ]
     },
     {
@@ -62,7 +77,11 @@
       "language": "mock",
       "path": "mock-server",
       "plugins": [
-        { "name": "server", "image": "httpmock/httpmock:0.8.0", "port": 4010 }
+        {
+          "name": "server",
+          "image": "httpmock/httpmock:0.8.0",
+          "port": 4010
+        }
       ]
     }
   ]

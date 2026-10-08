@@ -16,6 +16,8 @@ The example validates TypeScript wiring only. Mount `App` in your own Vite,
 Next.js, or React application; framework lifecycle, SSR, caching, and error
 policy remain app decisions.
 
-The generated hook imports match this recipe because `clients_import` points
-from `react-query/` back to the generated `clients/` directory. If you change
-the output path or `group_by_tag`, update both together.
+The query plugin resolves actual operation imports from the SDK provider.
+Moving its output keeps those bindings intact. `max_operations_per_file` bounds
+helper modules while preserving the aggregate entrypoint. See the
+[helper guide](../../docs/guides/typescript-helpers.md) for typed overrides,
+option factories, cache scopes and cancellation.

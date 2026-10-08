@@ -155,7 +155,11 @@ Build `target/debug/kaji` and `target/debug/kaji-openapi` first, or set
 `KAJI_BINARY` and `KAJI_OPENAPI_BIN`. The output must be a fresh directory.
 The runner verifies inputs, generates and checks each SDK separately, continues
 after failures and returns a failing exit code if any case fails. Reports include
-source digests, phase exit codes, timeouts, logs and generation metadata.
+source digests, phase exit codes, timeouts, logs and generation metadata. They
+also record source/metadata bytes, largest source paths and total file counts
+before native compilers create build artifacts. `--file-warning-bytes 262144`
+reports outputs above that optional budget without failing generation or treating
+the threshold as a compiler limit.
 Generated sources are temporary unless `--keep-generated` is supplied.
 
 The manual `guru-contracts.yml` workflow selects one language or all ten and

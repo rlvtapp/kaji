@@ -120,11 +120,18 @@ file moves into a subdirectory, adjust `clients_import`, for example to
 `"../clients"`. Hook input is derived from
 `Parameters<typeof generatedOperation>[0]`, including the configured client.
 
-The current hooks are basic wrappers. They do not expose a complete framework
-options API, infinite-query helpers, or automatic SSR/cache policy. Configure
-your framework provider separately. Query keys currently include the full
-operation options object; review cache identity and sensitive configuration
-before adopting these hooks in a production application.
+React/Vue consumers provide typed query/mutation option factories, key
+factories, hook overrides and cancellation forwarding. SWR accepts native
+configuration. Keys omit client/config/headers and include an explicit cache
+scope plus operation inputs; choose distinct scopes for tenants/origins or
+response-affecting headers. Set `throwOnError: true` to reject SDK failures.
+Infinite/suspense helpers and automatic SSR policy remain follow-up work.
+
+The native composition plugins split after 50 operations while preserving the
+configured entrypoint. Set `max_operations_per_file` in recipes, or call
+`.max_operations_per_file(...)` / `.single_file()` on the Rust query builder.
+Direct `ArtifactOptions` renderers above still emit one file. See the
+[helper guide](guides/typescript-helpers.md) for examples and cache semantics.
 
 ## A typed wrapper plugin
 
@@ -197,3 +204,13 @@ typed requirements instead; see [plugin authoring](typed-plugins.md).
   not an offline bundled documentation site.
 - **MCP:** the manifest includes operation metadata and basic inputs. It does
   not start a server, enforce authorization, or provide a transport.
+
+Large Zod, Faker, MSW and Cypress outputs split into adjacent chunk directories
+once their source exceeds 128 KiB. Imports and the aggregate entrypoint remain
+stable, including custom output directories and model provider bindings. Set
+`max_file_bytes` on the plugin in `kaji.json`, or call
+`.max_file_bytes(...)` on the Rust builder. Declarations stay intact, so a single
+large schema or operation may exceed the budget. Recursive Zod schemas use
+explicit model types and lazy references across chunks. Recursive Faker factories
+limit optional branches, arrays and nullable recursion; a required cycle with no
+finite fixture throws a clear error rather than exhausting the call stack.

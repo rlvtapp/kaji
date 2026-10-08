@@ -72,7 +72,6 @@ SDK transport.
         {
           "name": "tanstack-react-query",
           "output": "react-query",
-          "clients_import": "../clients",
           "group_by_tag": true
         },
         { "name": "msw", "output": "mocks" }
@@ -291,6 +290,8 @@ Their shared fields are:
 | --- | --- | --- |
 | `output` | Package root | Subdirectory beneath the package for this artifact. |
 | `clients_import` | `./clients` | Legacy standalone helper imports; native consumers instead use `uses.operations`. |
+| `max_file_bytes` | `131072` | Positive byte budget for Zod, Faker, MSW and Cypress modules; preserves entrypoints and splits at atomic declaration boundaries. A single declaration may exceed the budget. |
+| `max_operations_per_file` | `50` | Positive operation budget for native React Query, Vue Query and SWR helper modules; preserves the aggregate entrypoint. |
 | `id` / `uses` | automatic binding | Select native model/operation providers by instance name. |
 | `group_by_tag` | `true` | Must match the SDK layout when hooks import its operation modules. |
 

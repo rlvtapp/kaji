@@ -93,13 +93,13 @@ Start from [generated SDKs](generated-sdks.md), then follow
 
 | Output | Select | Scope |
 | --- | --- | --- |
-| TanStack React Query | `tanstack-react-query` | Query keys/GET hooks and mutation hooks using generated operations |
-| TanStack Vue Query | `tanstack-vue-query` | Native Vue query/mutation helpers |
-| SWR | `swr` | GET hooks |
-| Zod | `zod` | Component/request/response schemas |
-| Faker | `faker` | Bounded model factories; not business-valid data |
-| MSW | `msw` | Editable MSW v2 handlers |
-| Cypress | `cypress` | Smoke-test scaffolding needing project fixtures/assertions |
+| TanStack React Query | `tanstack-react-query` | Typed query/mutation options and key factories, hooks, scoped caching, cancellation and callback overrides; configurable chunks |
+| TanStack Vue Query | `tanstack-vue-query` | Native Vue query/mutation options, keys, hooks and typed overrides; configurable chunks |
+| SWR | `swr` | GET hooks, native configuration overrides, explicit cache scopes and configurable chunks |
+| Zod | `zod` | Component/request/response schemas, typed recursive references and bounded modules |
+| Faker | `faker` | Bounded recursive model factories and modules; not business-valid data |
+| MSW | `msw` | Editable MSW v2 handlers with bounded modules |
+| Cypress | `cypress` | Split smoke-test scaffolding needing project fixtures/assertions |
 | Contract mock | `mock` server | Deterministic HTTP/Docker mock; conditional `x-kaji-mock` scenarios |
 | API CLIs | `typescript-cli` or `rust-cli` | API-specific command tools; TypeScript CLI has optional OAuth configuration |
 | Symfony integration | `symfony` | Wraps a generated PHP SDK |
@@ -145,7 +145,10 @@ presence is not evidence that registry trust or live delivery works.
 
 ## Tests and confidence
 
-The current verification baseline includes 469 passing workspace tests, 163 native
+The October 8 generator-fix check passed 483 workspace tests. New native probes
+exercise scoped query caching, invalidation, failures, callbacks, cancellation,
+recursive schemas, split CLI commands and Swift resource boundaries. The earlier
+verification baseline includes 163 native
 wire scenarios across all ten runtimes, 37 runner/delivery/sync tests and an
 installed TypeScript package consumer check. Ignored native probes need explicit
 toolchain execution; they are not passes. Counts describe the recorded baseline,
