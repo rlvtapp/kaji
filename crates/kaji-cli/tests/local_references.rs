@@ -9,7 +9,7 @@ fn local_child_edits_change_generation_provenance_and_sdk_types() {
     let output = root.path().join("sdk");
     fs::write(&source, "openapi: 3.2.0\ninfo: {title: Local, version: '1'}\ncomponents:\n  schemas:\n    Item: {$ref: './model.yaml#/Item'}\npaths:\n  /item:\n    get:\n      operationId: getItem\n      responses:\n        '200':\n          description: ok\n          content:\n            application/json:\n              schema: {$ref: '#/components/schemas/Item'}\n").unwrap();
     let generate = || {
-        let result = Command::new(env!("CARGO_BIN_EXE_kaji"))
+        let result = Command::new(env!("CARGO_BIN_EXE_poolster"))
             .arg("generate")
             .arg(&source)
             .arg("--output")

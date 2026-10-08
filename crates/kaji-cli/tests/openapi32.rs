@@ -90,7 +90,7 @@ fn native_openapi32_query_compiles_and_executes_typed_sdk_bytes() {
     )
     .unwrap();
     checked(
-        Command::new(env!("CARGO_BIN_EXE_kaji"))
+        Command::new(env!("CARGO_BIN_EXE_poolster"))
             .args(["generate", "--config"])
             .arg(temp.path().join("poolster.json")),
     );

@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 use std::{fs, path::Path, process::Command};
 
 fn run(root: &Path, args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_kaji"))
+    Command::new(env!("CARGO_BIN_EXE_poolster"))
         .current_dir(root)
         .args(args)
         .output()
@@ -123,10 +123,10 @@ fn direct_vendor_generation_and_automatic_project_detection() {
             "{}",
             String::from_utf8_lossy(&result.stderr)
         );
-        assert!(root.path().join("kaji-generated").is_dir());
+        assert!(root.path().join("poolster-generated").is_dir());
     }
     assert!(!root.path().join("poolster.json").exists());
-    assert!(!root.path().join("kaji-migration").exists());
+    assert!(!root.path().join("poolster-migration").exists());
 }
 #[test]
 #[ignore = "requires bundled Go compiler"]
@@ -178,7 +178,7 @@ fn ambiguous_project_selection_fails_without_writing_files() {
     let result = run(root.path(), &["migrate", "."]);
     assert!(!result.status.success());
     assert!(String::from_utf8_lossy(&result.stderr).contains("found 2"));
-    assert!(!root.path().join("kaji-migration").exists());
+    assert!(!root.path().join("poolster-migration").exists());
 }
 
 #[test]

@@ -2,7 +2,7 @@ use std::fs;
 use std::process::Command;
 
 fn cli() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_kaji"))
+    Command::new(env!("CARGO_BIN_EXE_poolster"))
 }
 
 #[test]
@@ -83,7 +83,7 @@ fn generates_all_languages_from_artifacts_and_preserves_custom_files() {
     )
     .unwrap();
     assert_eq!(lock["version"], 1);
-    assert_eq!(lock["generator"]["name"], "kaji");
+    assert_eq!(lock["generator"]["name"], "poolster");
     assert_eq!(lock["input"]["kind"], "artifacts");
     assert_eq!(
         lock["api"]["operations"],
@@ -818,7 +818,7 @@ fn per_language_repository_setup_and_install_dry_run_are_local() {
             working
                 .path()
                 .join(&setup)
-                .join(".github/workflows/kaji-sdk-release.yml")
+                .join(".github/workflows/poolster-sdk-release.yml")
                 .is_file()
         );
         let output = cli()

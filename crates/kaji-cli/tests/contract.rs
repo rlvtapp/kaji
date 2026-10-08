@@ -4,7 +4,7 @@ use std::{
     process::{Command, Output},
 };
 fn run(arguments: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_kaji"))
+    Command::new(env!("CARGO_BIN_EXE_poolster"))
         .args(arguments)
         .output()
         .unwrap()
