@@ -7,7 +7,7 @@ fn fixture_constraints_seed_lossless_and_recursion_execute() {
     fs::create_dir_all(&directory).unwrap();
     fs::write(
         directory.join("runtime.ts"),
-        include_str!("fixture_runtime.ts.txt"),
+        include_str!("../templates/fixture_runtime.ts.tmpl"),
     )
     .unwrap();
     fs::write(directory.join("package.json"), "{\"type\":\"module\"}").unwrap();

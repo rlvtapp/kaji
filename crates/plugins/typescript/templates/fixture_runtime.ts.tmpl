@@ -51,7 +51,7 @@ export function createFixtureRuntime(schemas: Record<string, FixtureSchema>, opt
   const literal = (input: FixtureLiteral, schema: FixtureSchema): unknown => {
     schema = concrete(schema);
     switch (input.kind) {
-      case 'number': { const text = String(input.value); const representation = schema.extensions?.['x-kaji-integer']; return schema.kind.kind === 'integer' && representation === 'bigint' ? BigInt(text) : schema.kind.kind === 'integer' && representation === 'string' ? text : Number(text); }
+      case 'number': { const text = String(input.value); const representation = schema.extensions?.['x-poolster-integer']; return schema.kind.kind === 'integer' && representation === 'bigint' ? BigInt(text) : schema.kind.kind === 'integer' && representation === 'string' ? text : Number(text); }
       case 'array': return (input.value as FixtureLiteral[]).map(value => literal(value, schema.kind.items ?? {kind:{kind:'any'}}));
       case 'object': return Object.fromEntries(Object.entries(input.value as Record<string, FixtureLiteral>).map(([key, value]) => [key, literal(value, fieldSchema(schema, key))]));
       default: return input.value;
@@ -108,7 +108,7 @@ export function createFixtureRuntime(schemas: Record<string, FixtureSchema>, opt
       case 'reference': valid = matches(value, resolve(schema), depth + 1); break;
       case 'null': valid = false; break;
       case 'boolean': valid = typeof value === 'boolean'; break;
-      case 'integer': { const representation = schema.extensions?.['x-kaji-integer']; valid = representation === 'bigint' ? typeof value === 'bigint' : representation === 'string' ? typeof value === 'string' && /^-?(?:0|[1-9]\d*)$/.test(value) : typeof value === 'number' && Number.isSafeInteger(value); break; }
+      case 'integer': { const representation = schema.extensions?.['x-poolster-integer']; valid = representation === 'bigint' ? typeof value === 'bigint' : representation === 'string' ? typeof value === 'string' && /^-?(?:0|[1-9]\d*)$/.test(value) : typeof value === 'number' && Number.isSafeInteger(value); break; }
       case 'number': valid = typeof value === 'number' && Number.isFinite(value); break;
       case 'string': valid = typeof value === 'string'; break;
       case 'array': valid = Array.isArray(value) && value.every(item => matches(item, schema.kind.items!, depth + 1)); break;
@@ -146,7 +146,7 @@ export function createFixtureRuntime(schemas: Record<string, FixtureSchema>, opt
       case 'null': return null;
       case 'boolean': return random.datatype.boolean();
       case 'integer': case 'number': {
-        const bounds = schema.constraints ?? {}; const representation = schema.extensions?.['x-kaji-integer'];
+        const bounds = schema.constraints ?? {}; const representation = schema.extensions?.['x-poolster-integer'];
         if (representation === 'bigint' || representation === 'string') {
           const read = (key: string, fallback: bigint) => bounds[key] === undefined ? fallback : BigInt(String(bounds[key]));
           const min = bounds.exclusiveMinimum !== undefined ? read('exclusiveMinimum',0n) + 1n : read('minimum',bounds.maximum !== undefined ? read('maximum',0n) - 1000n : bounds.exclusiveMaximum !== undefined ? read('exclusiveMaximum',0n) - 1000n : -1000n);

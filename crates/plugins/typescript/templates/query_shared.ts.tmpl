@@ -1,12 +1,12 @@
 
 /** Set an explicit cache scope for tenants/origins whose responses differ. */
-export type KajiQueryScope = string | readonly unknown[];
-const __kajiInputs = (options: unknown) => {
+export type PoolsterQueryScope = string | readonly unknown[];
+const __poolsterInputs = (options: unknown) => {
   const value = (options ?? {}) as Record<string, unknown>;
   return { path: value.path, query: value.query, querystring: value.querystring, body: value.body };
 };
 
-const __kajiQueryCall = async <T, R>(options: T, signal: AbortSignal, call: (options: T) => Promise<R>): Promise<R> => {
+const __poolsterQueryCall = async <T, R>(options: T, signal: AbortSignal, call: (options: T) => Promise<R>): Promise<R> => {
   const value = (options ?? {}) as Record<string, unknown>;
   const request = (value.requestOptions ?? {}) as { signal?: AbortSignal };
   const controller = new AbortController();

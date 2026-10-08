@@ -1,6 +1,6 @@
 import { QueryClient, InfiniteQueryObserver, dehydrate, hydrate, type InfiniteQueryObserverOptions, type InfiniteData, type QueryKey } from '@tanstack/react-query';
 import { unref } from 'vue';
-import { createClient } from './.kaji/client.js';
+import { createClient } from './.poolster/client.js';
 import { cursorContactsInfiniteOptions, cursorContactsInfiniteKey, pageContactsInfiniteOptions, offsetContactsInfiniteOptions, urlContactsInfiniteOptions, cursorContactsInfinitePrefetch, useCursorContactsSuspenseInfinite, listContactsPrefetch, useListContactsSuspense } from './ui/react.js';
 import { cursorContactsInfiniteOptions as vueInfinite } from './ui/vue.js';
 import { cursorContactsInfiniteOptions as swrInfinite, createContactMutationOptions } from './ui/swr.js';

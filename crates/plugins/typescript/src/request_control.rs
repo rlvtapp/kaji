@@ -28,7 +28,7 @@ mod tests {
             .unwrap();
             fs::write(
                 root.path().join("probe.cjs"),
-                include_str!("request_control_probe.cjs"),
+                include_str!("../tests/fixtures/request_control_probe.cjs"),
             )
             .unwrap();
             let output = Command::new("node")

@@ -35,9 +35,8 @@ pub(crate) fn descriptor(schema: &SchemaValue) -> Value {
                     object.remove(key);
                 }
                 if let Some(Value::Object(extensions)) = object.get_mut("extensions") {
-                    extensions.retain(|key, _| {
-                        key == "x-poolster-integer" || key == "x-kaji-integer"
-                    });
+                    extensions
+                        .retain(|key, _| key == "x-poolster-integer" || key == "x-kaji-integer");
                 }
                 for key in ["const_value", "default"] {
                     if let Some(value) = object.get_mut(key) {
@@ -140,7 +139,7 @@ pub(crate) fn generate(api: &Api, config: &ArtifactOptions) -> Result<Vec<Genera
     } else {
         settings
     };
-    let runtime = include_str!("fixture_runtime.ts.txt");
+    let runtime = include_str!("../templates/fixture_runtime.ts.tmpl");
     let factory = |indices: &[usize], prefix: &str| {
         let mut source = String::new();
         for &index in indices {

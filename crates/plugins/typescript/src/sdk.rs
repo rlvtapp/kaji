@@ -1821,7 +1821,11 @@ export const resolveResponse = <T extends { status: number; data: unknown }, Thr
             )
         }
     };
-    let runtime = format!("{}\n{}", runtime, include_str!("multipart32.ts.txt"));
+    let runtime = format!(
+        "{}\n{}",
+        runtime,
+        include_str!("../templates/multipart32.ts.tmpl")
+    );
     let runtime = runtime.replace("paginationUrl?: string; idempotencyHeader?: string }", "paginationUrl?: string; idempotencyHeader?: string; jsonPlan?: JsonPlan }")
         .replace("validation, paginationUrl, idempotencyHeader, requestOptions })", "validation, paginationUrl, idempotencyHeader, requestOptions, jsonPlan })")
         .replace("formHeaders, config.multipartEncoder, multipartPlan)", "formHeaders, config.multipartEncoder, multipartPlan, jsonPlan)")
@@ -1840,7 +1844,7 @@ export const resolveResponse = <T extends { status: number; data: unknown }, Thr
     format!(
         "{}\n{}\n{}",
         runtime,
-        include_str!("request_control.ts.txt"),
+        include_str!("../templates/request_control.ts.tmpl"),
         crate::json::RUNTIME
     )
 }

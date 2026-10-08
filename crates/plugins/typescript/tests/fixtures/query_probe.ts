@@ -1,5 +1,5 @@
 import { QueryClient, MutationObserver } from '@tanstack/react-query';
-import { createClient } from './.kaji/client.js';
+import { createClient } from './.poolster/client.js';
 import { listContactsQueryKey, listContactsQueryOptions, createContactMutationOptions } from './ui/react.js';
 import { listContactsQueryOptions as vueOptions, useListContacts as useVueContacts } from './ui/vue.js';
 import { useListContacts as useSwrContacts } from './ui/swr.js';

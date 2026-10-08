@@ -78,7 +78,7 @@ pub(crate) fn generate_operations(
                 let auto_generate = rule.get("auto_generate").and_then(Value::as_bool).unwrap_or(false);
                 source = source.replace("  const { client: request = client, ...config } = options", &format!("  const {{ client: request = client, ...config }} = options\n  const idempotencyHeaders = kajiIdempotencyHeaders(config.headers, {header}, {auto_generate})"));
                 source = source.replace("      ...config,", &format!("      ...config,\n      headers: idempotencyHeaders,\n      idempotencyHeader: {header},"));
-                source.push_str(include_str!("idempotency_headers.ts.txt"));
+                source.push_str(include_str!("../templates/idempotency_headers.ts.tmpl"));
             }
 
             if let Some(plan) = config

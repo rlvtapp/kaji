@@ -1171,12 +1171,12 @@ mod tests {
         .unwrap();
         std::fs::write(
             package.join("query_probe.ts"),
-            include_str!("query_probe.ts.txt"),
+            include_str!("../tests/fixtures/query_probe.ts"),
         )
         .unwrap();
         std::fs::write(
             package.join("pagination_probe.ts"),
-            include_str!("query_pagination_probe.ts.txt"),
+            include_str!("../tests/fixtures/query_pagination_probe.ts"),
         )
         .unwrap();
         let compile = std::process::Command::new("node")

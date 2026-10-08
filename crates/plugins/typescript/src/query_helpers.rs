@@ -27,8 +27,8 @@ pub(crate) fn is_read(operation: &Operation) -> bool {
 pub(crate) fn shared_runtime(exports: bool) -> String {
     let source = format!(
         "{}\n{}",
-        include_str!("query_shared.ts.txt"),
-        include_str!("query_pagination.ts.txt")
+        include_str!("../templates/query_shared.ts.tmpl"),
+        include_str!("../templates/query_pagination.ts.tmpl")
     );
     if exports {
         source.replace("\nconst __kaji", "\nexport const __kaji")

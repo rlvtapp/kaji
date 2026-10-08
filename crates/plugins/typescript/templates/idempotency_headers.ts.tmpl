@@ -1,13 +1,13 @@
 
 // Copy caller headers; a fresh secure key belongs to this logical invocation.
-function kajiIdempotencyHeaders(input: unknown, name: string, autoGenerate: boolean): Record<string, unknown> {
+function poolsterIdempotencyHeaders(input: unknown, name: string, autoGenerate: boolean): Record<string, unknown> {
   const headers: Record<string, unknown> = typeof Headers !== 'undefined' && input instanceof Headers
     ? Object.fromEntries(input.entries())
     : Array.isArray(input) ? Object.fromEntries(input as [string, unknown][]) : { ...(input as Record<string, unknown> | undefined) }
   const existing = Object.keys(headers).find((key) => key.toLowerCase() === name.toLowerCase())
   if (autoGenerate && (existing === undefined || headers[existing] === undefined || headers[existing] === null)) {
     const crypto = globalThis.crypto
-    if (!crypto) throw new Error('kaji: secure randomness is unavailable for idempotency keys')
+    if (!crypto) throw new Error('poolster: secure randomness is unavailable for idempotency keys')
     let key: string
     if (typeof crypto.randomUUID === 'function') key = crypto.randomUUID()
     else {

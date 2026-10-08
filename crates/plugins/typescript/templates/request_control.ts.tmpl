@@ -1,6 +1,6 @@
 /** Runtime-only per-call controls; API-declared headers remain separately typed. */
 export interface RequestOptions { headers?: HeadersInit; timeoutMs?: number; signal?: AbortSignal }
-export class KajiRequestTimeoutError extends Error { constructor() { super('Request timed out'); this.name = 'TimeoutError' } }
+export class PoolsterRequestTimeoutError extends Error { constructor() { super('Request timed out'); this.name = 'TimeoutError' } }
 export async function withRequestControl<T>(options: RequestOptions | undefined, defaultTimeoutMs: number | undefined, run: (options: RequestOptions) => Promise<T>): Promise<T> {
   const prepared = { ...options, headers: options?.headers ? new Headers(options.headers) : undefined }
   const timeoutMs = options?.timeoutMs ?? defaultTimeoutMs
@@ -13,7 +13,7 @@ export async function withRequestControl<T>(options: RequestOptions | undefined,
   if (controller && caller) caller.addEventListener('abort', forward, { once: true })
   const combine = (AbortSignal as typeof AbortSignal & { any?: (signals: AbortSignal[]) => AbortSignal }).any
   const signal = controller && caller && combine ? combine.call(AbortSignal, [controller.signal, caller]) : controller?.signal ?? caller!
-  const timer = timeoutMs === undefined ? undefined : setTimeout(() => controller!.abort(new KajiRequestTimeoutError()), timeoutMs)
+  const timer = timeoutMs === undefined ? undefined : setTimeout(() => controller!.abort(new PoolsterRequestTimeoutError()), timeoutMs)
   let rejectAbort!: () => void
   const cancelled = new Promise<never>((_, reject) => {
     rejectAbort = () => reject(signal.reason ?? new DOMException('Request cancelled', 'AbortError'))

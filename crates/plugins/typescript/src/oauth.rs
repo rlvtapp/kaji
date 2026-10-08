@@ -49,7 +49,7 @@ impl Plugin<TypeScript> for OAuth {
         cx.workspace.export("oauth")?;
         cx.files.emit(GeneratedFile::new(
             "oauth.ts",
-            include_str!("oauth.ts.txt"),
+            include_str!("../templates/oauth.ts.tmpl"),
         )?)
     }
 }
@@ -92,7 +92,11 @@ mod tests {
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
-        std::fs::write(cwd.join("probe.mjs"), include_str!("oauth_probe.mjs.txt")).unwrap();
+        std::fs::write(
+            cwd.join("probe.mjs"),
+            include_str!("../tests/fixtures/oauth_probe.mjs"),
+        )
+        .unwrap();
         let output = std::process::Command::new("node")
             .arg("probe.mjs")
             .current_dir(cwd)

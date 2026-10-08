@@ -15,7 +15,7 @@ const { createClient } = require('./runtime.js')
   try {
     const baseUrl = `http://127.0.0.1:${server.address().port}`
     const config = { baseUrl, headers: { 'X-Trace': 'global' }, retry: { maxAttempts: 3, initialDelayMs: 1000 }, timeoutMs: 1000 }
-    if (process.env.KAJI_CONTROL_AXIOS) config.client = require('axios').create({ baseURL: baseUrl, proxy: false })
+    if (process.env.POOLSTER_CONTROL_AXIOS) config.client = require('axios').create({ baseURL: baseUrl, proxy: false })
     const client = createClient(config)
     await assert.rejects(client({ method: 'COPY', url: '/custom' }), error => error.status === 503); assert.equal(customCalls, 1)
     const options = { headers: { 'X-Trace': 'call' }, timeoutMs: 200 }

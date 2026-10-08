@@ -1,4 +1,4 @@
-import { createClient, withRequestControl, type ClientConfig, type ClientInstance } from './.kaji/client'
+import { createClient, withRequestControl, type ClientConfig, type ClientInstance } from './.poolster/client'
 export class OAuthTokenError extends Error { constructor() { super('OAuth token acquisition failed'); this.name = 'OAuthTokenError' } }
 export interface OAuthClientCredentialsOptions { tokenUrl: string; clientId: string; clientSecret: string; scopes?: readonly string[]; refreshLeewaySeconds?: number; timeoutMs?: number; fetch?: typeof globalThis.fetch }
 /** Client credentials only. Concurrent callers share refresh; credentials and issuer bodies never enter errors. */

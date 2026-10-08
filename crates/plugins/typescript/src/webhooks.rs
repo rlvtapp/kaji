@@ -39,7 +39,7 @@ impl Plugin<TypeScript> for Webhooks {
         cx.workspace.export("webhooks")?;
         cx.files.emit(GeneratedFile::new(
             "webhooks.ts",
-            include_str!("webhooks.ts.txt"),
+            include_str!("../templates/webhooks.ts.tmpl"),
         )?)
     }
 }

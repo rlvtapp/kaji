@@ -3,7 +3,7 @@ const { createClient } = require('./runtime.js');
 let seen;
 let media = 'application/x-ndjson';
 let body = '{"value":1}\n{"value":2}\n';
-const client = process.env.KAJI_CONTROL_AXIOS
+const client = process.env.POOLSTER_CONTROL_AXIOS
   ? createClient({ client: { request: async request => { seen = request; return { status: 200, headers: { 'content-type': media }, data: request.responseType === 'arraybuffer' ? Buffer.from(body) : body }; } }, retry: false })
   : createClient({ fetch: async (url, request) => { seen = { url, ...request }; return new Response(body, { headers: { 'content-type': media } }); }, retry: false });
 (async () => {
@@ -30,7 +30,7 @@ const client = process.env.KAJI_CONTROL_AXIOS
   await client({ method: 'GET', url: '/items/{selector}', path: { selector: { id: 0 } }, query: { filter: { enabled: false } }, headers: { condition: { id: 1 } }, cookies: { preferences: { id: 2 } }, styles: { path: { selector: { contentType: 'application/json' } }, query: { filter: { contentType: 'application/json' } }, header: { condition: { contentType: 'application/json' } }, cookie: { preferences: { contentType: 'application/json' } } } });
   const parsed = new URL(seen.url, 'https://api.example');
   assert.equal(decodeURIComponent(parsed.pathname), '/items/{"id":0}');
-  if (process.env.KAJI_CONTROL_AXIOS) assert.equal(seen.params.filter, '{"enabled":false}');
+  if (process.env.POOLSTER_CONTROL_AXIOS) assert.equal(seen.params.filter, '{"enabled":false}');
   else assert.equal(parsed.searchParams.get('filter'), '{"enabled":false}');
   const headers = new Headers(seen.headers);
   assert.equal(headers.get('condition'), '{"id":1}');

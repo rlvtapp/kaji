@@ -28,7 +28,7 @@ mod tests {
             .unwrap();
             fs::write(
                 root.path().join("probe.cjs"),
-                include_str!("openapi32_probe.cjs"),
+                include_str!("../tests/fixtures/openapi32_probe.cjs"),
             )
             .unwrap();
             let output = Command::new("node")

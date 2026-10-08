@@ -8,7 +8,7 @@ const encodePlannedMultipart = (body: unknown, plan: MultipartPlan, values?: For
   if (!ordered && !isRecord(body)) throw new TypeError('Multipart input must be an object or ordered array')
   const fields: Array<[string, unknown]> = ordered ? body.map((item, index) => [String(index), item]) : Object.entries(body as Record<string, unknown>)
   if (fields.length > 1024) throw new TypeError('Multipart body exceeds 1024 parts')
-  const boundary = `kaji-${globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`}`
+  const boundary = `poolster-${globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`}`
   const chunks: BlobPart[] = []
   for (let index = 0; index < fields.length; index++) {
     const [name, value] = fields[index]
