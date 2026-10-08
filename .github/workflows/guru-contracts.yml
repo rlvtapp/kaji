@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       contracts:
-        description: Comma-separated pinned contract names; empty checks all 32
+        description: Comma-separated pinned contract names; empty checks all 205
         type: string
         default: ''
       language:

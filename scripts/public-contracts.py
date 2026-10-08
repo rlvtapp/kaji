@@ -25,6 +25,8 @@ def contracts(manifest):
 def source_path(root, contract):
     if "archive_entry" in contract:
         return root / contract["name"] / contract["archive_entry"]
+    if contract.get("references"):
+        return root / contract["name"] / contract.get("source_path", "source.yml")
     return root / (contract["name"] + ".yml")
 
 
@@ -54,6 +56,51 @@ def fetch(manifest, root, cache):
         destination.write_bytes(data)
         if archive:
             unpack(root / contract["name"], destination, contract["archive_entry"])
+        if contract.get("references"):
+            if archive:
+                raise ValueError("Archive contracts must carry their own reference tree")
+            references = contract["references"]
+            if len(references) > 1000:
+                raise ValueError("Too many supplemental references")
+            staged = []
+            source = PurePosixPath(contract.get("source_path", "source.yml"))
+            if source.is_absolute() or ".." in source.parts or "\\" in str(source) or not source.parts:
+                raise ValueError("Unsafe supplemental source path")
+            seen = {str(source)}
+            for reference in references:
+                path = PurePosixPath(reference["path"])
+                if path.is_absolute() or ".." in path.parts or "\\" in reference["path"] or str(path) in seen or not path.parts:
+                    raise ValueError("Unsafe supplemental reference path")
+                seen.add(str(path))
+                bound = reference.get("max_bytes", 1048576)
+                if not isinstance(bound, int) or not 1 <= bound <= 16777216:
+                    raise ValueError("Invalid supplemental reference size bound")
+                if cache:
+                    cached = Path(cache) / contract["name"] / str(path)
+                    if cached.stat().st_size > bound:
+                        raise ValueError("Supplemental reference exceeds size bound")
+                    payload = cached.read_bytes()
+                else:
+                    if not reference["url"].startswith("https://"):
+                        raise ValueError("Supplemental reference URL must use HTTPS")
+                    with urllib.request.urlopen(reference["url"], timeout=60) as response:
+                        payload = response.read(bound + 1)
+                if len(payload) > bound or hashlib.sha256(payload).hexdigest() != reference["sha256"]:
+                    raise ValueError("Supplemental reference checksum/size mismatch")
+                staged.append((path, payload))
+            if sum(len(payload) for _, payload in staged) > 64 * 1024 * 1024:
+                raise ValueError("Supplemental reference tree exceeds size bound")
+            tree = root / contract["name"]
+            if tree.exists():
+                raise ValueError("Reference output already exists; use a fresh output directory")
+            tree.mkdir()
+            source_file = tree.joinpath(*source.parts)
+            source_file.parent.mkdir(parents=True, exist_ok=True)
+            source_file.write_bytes(data)
+            for path, payload in staged:
+                target = tree.joinpath(*path.parts)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(payload)
         print("Verified pinned contract:", contract["name"])
 
 

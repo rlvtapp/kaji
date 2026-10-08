@@ -1,4 +1,5 @@
 """Offline regression checks for corpus integrity, failure reporting and cleanup."""
+import hashlib
 import importlib.util
 import json
 import os
@@ -18,13 +19,55 @@ class CorpusTests(unittest.TestCase):
     def test_manifest_is_large_diverse_and_immutable(self):
         data = json.loads((corpus.PROJECT / 'scripts/fixtures/guru-contracts.json').read_text())
         values = data['contracts']
-        self.assertEqual(len(values), 32)
-        self.assertEqual(len({v['provider'] for v in values}), len(values))
+        self.assertEqual(len(values), 205)
+        self.assertEqual(len({v['provider'] for v in values}), 201)
+        self.assertEqual(sum(v['provider'] == 'azure.com' for v in values), 5)
+        self.assertTrue(all(value['bytes'] >= 1000000 for value in values[:32]))
         for value in values:
-            self.assertGreaterEqual(value['bytes'], 1000000)
+            self.assertGreaterEqual(value['bytes'], 100000)
             self.assertLessEqual(value['bytes'], value['max_bytes'])
             self.assertRegex(value['sha256'], r'^[0-9a-f]{64}$')
             self.assertIn('/' + data['catalog_revision'] + '/', value['url'])
+
+    def reference_fixture(self, root, path="models/Child.yml", digest=None):
+        cache = root / 'cache'
+        cache.mkdir()
+        data = b"openapi: 3.0.3\ninfo: {title: Test, version: '1'}\npaths: {}\n"
+        (cache / 'sample.yml').write_bytes(data)
+        helper = b"type: string\n"
+        (cache / 'sample/models').mkdir(parents=True)
+        (cache / 'sample/models/Child.yml').write_bytes(helper)
+        contract = {'name': 'sample', 'url': 'https://example.invalid/root',
+                    'sha256': hashlib.sha256(data).hexdigest(),
+                    'references': [{'path': path, 'url': 'https://example.invalid/helper',
+                                    'sha256': digest or hashlib.sha256(helper).hexdigest()}]}
+        manifest = root / 'manifest.json'
+        manifest.write_text(json.dumps({'contracts': [contract]}))
+        return manifest, cache, contract, data, helper
+
+    def test_supplemental_reference_tree_preserves_root_and_helper_bytes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest, cache, contract, data, helper = self.reference_fixture(root)
+            corpus.public.fetch(manifest, root / 'output', cache)
+            self.assertEqual(corpus.public.source_path(root / 'output', contract).read_bytes(), data)
+            self.assertEqual((root / 'output/sample/models/Child.yml').read_bytes(), helper)
+
+    def test_corrupt_reference_fails_before_assembling_contract(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest, cache, contract, _, _ = self.reference_fixture(root, digest='0' * 64)
+            with self.assertRaisesRegex(ValueError, 'checksum'):
+                corpus.public.fetch(manifest, root / 'output', cache)
+            self.assertFalse(corpus.public.source_path(root / 'output', contract).exists())
+
+    def test_reference_path_cannot_escape_contract_tree(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest, cache, _, _, _ = self.reference_fixture(root, path='../escaped.yml')
+            with self.assertRaisesRegex(ValueError, 'Unsafe'):
+                corpus.public.fetch(manifest, root / 'output', cache)
+            self.assertFalse((root / 'output/escaped.yml').exists())
 
     def fixture(self, root):
         (root / 'work').mkdir()
