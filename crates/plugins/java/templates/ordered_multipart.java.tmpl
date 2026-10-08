@@ -16,7 +16,7 @@ public final class OrderedMultipart {
  private static MultipartBody.Encoded encode(List<Part> parts,JsonNode plan,int depth){
   if(depth>16||parts.size()>10000)throw new IllegalArgumentException("Multipart depth/part limit exceeded");
   var media=plan.path("content_type").asText(plan.path("contentType").asText("multipart/form-data"));MultipartBody.mediaType(media);if(!media.startsWith("multipart/"))throw new IllegalArgumentException("Multipart media required");
-  var boundary="kaji-"+UUID.randomUUID();var output=new ByteArrayOutputStream();
+  var boundary="poolster-"+UUID.randomUUID();var output=new ByteArrayOutputStream();
   for(int i=0;i<parts.size();i++){
    var part=parts.get(i);var prefix=plan.has("prefix_encoding")?plan.path("prefix_encoding"):plan.path("prefixEncoding");
    JsonNode encoding=prefix.has(i)?prefix.get(i):(plan.has("item_encoding")?plan.get("item_encoding"):plan.has("itemEncoding")?plan.get("itemEncoding"):plan.path("encoding").path(part.name()));

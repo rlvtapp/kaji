@@ -112,7 +112,7 @@ pub(super) fn render_client_base(api: &Api, package: &str) -> String {
         output.push_str(
             r#"
     /** Conservative JSONPath evaluator for declared pagination outputs. */
-    private static JsonNode kajiJsonPath(JsonNode value, String path) {
+    private static JsonNode poolsterJsonPath(JsonNode value, String path) {
         if (value == null || path == null) return null;
         if (path.startsWith("/")) {
             var current = value;

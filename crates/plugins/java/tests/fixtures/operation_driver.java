@@ -13,7 +13,7 @@ import java.io.ByteArrayOutputStream;
 import javax.net.ssl.*;
 
 /** Generated smoke tests; all HTTP is handled in memory, no sockets are opened. */
-public final class KajiOperationTests {
+public final class PoolsterOperationTests {
     static final ObjectMapper MAPPER = new ObjectMapper().registerModule(new JavaTimeModule());
     static void check(boolean value,String reason) {if(!value)throw new AssertionError(reason);}
     static String scalar(JsonNode value){return value.isTextual()?value.textValue():value.toString();}

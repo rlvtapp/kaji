@@ -1,4 +1,4 @@
-package io.kaji.oauth;
+package io.poolster.oauth;
 import java.net.*;import java.net.http.*;import java.time.Duration;import java.util.*;import java.util.concurrent.*;import java.util.concurrent.atomic.AtomicInteger;import java.nio.ByteBuffer;import javax.net.ssl.*;
 public final class OAuthProbe {
  static void check(boolean value){if(!value)throw new AssertionError("OAuth probe");}

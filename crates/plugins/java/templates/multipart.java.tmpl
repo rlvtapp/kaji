@@ -23,7 +23,7 @@ public interface MultipartBody {
  static String headerParameter(String value){if(value==null||value.isEmpty()||!value.chars().allMatch(c->c>=32&&c<=126&&c!=34&&c!=92))throw new IllegalArgumentException("invalid multipart header parameter");return value;}
  static String quote(String value){return headerParameter(value).replace("\\","\\\\").replace("\"","\\\"");}
  static Encoded encodeParts(List<Part> parts){
-  var boundary="kaji-"+UUID.randomUUID();var output=new ByteArrayOutputStream();
+  var boundary="poolster-"+UUID.randomUUID();var output=new ByteArrayOutputStream();
   for(var part:parts){
    var header="--"+boundary+"\r\nContent-Disposition: form-data; name=\""+quote(part.name())+"\"";
    byte[] data;

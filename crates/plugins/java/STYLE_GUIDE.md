@@ -3,7 +3,7 @@
 Select the style on the SDK plugin:
 
 ```rust
-use kaji::{java, prelude::*};
+use poolster::{java, prelude::*};
 
 let package = java::package("java")
     .with(java::sdk().namespaced()); // Default; use .flat() for direct methods.

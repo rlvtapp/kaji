@@ -439,13 +439,13 @@ pub(crate) fn emit(api: &Api, root: &str, package: &str, tree: &mut GeneratedTre
             }
         }
         if extra_parts(api, op) {
-            components.push("java.util.Map<String,Object> kajiExtraParts".into());
+            components.push("java.util.Map<String,Object> poolsterExtraParts".into());
             let names = fields
                 .iter()
                 .map(|field| format!("{:?}", field.name))
                 .collect::<Vec<_>>()
                 .join(",");
-            encode.push_str(&format!("if(kajiExtraParts!=null)for(var entry:kajiExtraParts.entrySet()){{if(java.util.Set.of({names}).contains(entry.getKey()))throw new IllegalArgumentException(\"Extra multipart part collides with declared field\");MultipartBody.addExtra(parts,entry.getKey(),entry.getValue());}}\n"));
+            encode.push_str(&format!("if(poolsterExtraParts!=null)for(var entry:poolsterExtraParts.entrySet()){{if(java.util.Set.of({names}).contains(entry.getKey()))throw new IllegalArgumentException(\"Extra multipart part collides with declared field\");MultipartBody.addExtra(parts,entry.getKey(),entry.getValue());}}\n"));
         }
         let source = format!(
             "package {package};\nimport {package}.model.*;\nimport java.util.*;\nimport java.time.*;\nimport java.math.*;\nimport com.fasterxml.jackson.databind.JsonNode;\npublic record {name}({}) implements MultipartBody {{\npublic {name} {{ {checks} }}\n@Override public MultipartBody.Encoded encode(){{var parts=new java.util.ArrayList<MultipartBody.Part>();{encode}return MultipartBody.encodeParts(parts);}}\n}}\n",
@@ -456,7 +456,7 @@ pub(crate) fn emit(api: &Api, root: &str, package: &str, tree: &mut GeneratedTre
             source,
         )?)?;
     }
-    tree.insert(GeneratedFile::new(format!("{prefix}MULTIPART.md"), "Multipart/form-data operations accept a generated <Operation>MultipartBody record through their native request record. File fields use MultipartBody.FilePart(filename, contentType, bytes), or MultipartBody.FilePart.bytes(bytes). File bytes are copied; scalars use UTF-8. Multipart/form-data with explicit raw or JSON alternatives and object roots are supported. Open roots expose optional PoolsterExtraParts/kajiExtraParts maps, rejecting collisions with declared parts. Root object unions merge fields and retain only shared required members; branch-specific constraints remain server-validated. Mixed-media calls accept native JSON models or explicit MultipartBody.RawBody/PoolsterRawBody buffered media wrappers. Objects/unions/reference values use JSON parts; arrays repeat parts by default and explode=false joins scalar values. Optional parts with null values are omitted. Base64 byte format, streaming and custom per-part headers require adapters. Part names use ASCII letters/digits/dot/underscore/hyphen; filenames use printable ASCII excluding quotes/backslashes. Files are buffered; no streaming/file-system access is implied. Java JSON model APIs remain separate.")?)?;
+    tree.insert(GeneratedFile::new(format!("{prefix}MULTIPART.md"), "Multipart/form-data operations accept a generated <Operation>MultipartBody record through their native request record. File fields use MultipartBody.FilePart(filename, contentType, bytes), or MultipartBody.FilePart.bytes(bytes). File bytes are copied; scalars use UTF-8. Multipart/form-data with explicit raw or JSON alternatives and object roots are supported. Open roots expose optional PoolsterExtraParts/poolsterExtraParts maps, rejecting collisions with declared parts. Root object unions merge fields and retain only shared required members; branch-specific constraints remain server-validated. Mixed-media calls accept native JSON models or explicit MultipartBody.RawBody/PoolsterRawBody buffered media wrappers. Objects/unions/reference values use JSON parts; arrays repeat parts by default and explode=false joins scalar values. Optional parts with null values are omitted. Base64 byte format, streaming and custom per-part headers require adapters. Part names use ASCII letters/digits/dot/underscore/hyphen; filenames use printable ASCII excluding quotes/backslashes. Files are buffered; no streaming/file-system access is implied. Java JSON model APIs remain separate.")?)?;
     Ok(())
 }
 pub(crate) fn runtime(source: String) -> String {

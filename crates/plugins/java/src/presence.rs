@@ -41,8 +41,8 @@ pub(crate) fn render(
                     "notify",
                     "notifyAll",
                     "finalize",
-                    "kajiIsDeclaredProperty",
-                    "kajiWirePropertyName",
+                    "poolsterIsDeclaredProperty",
+                    "poolsterWirePropertyName",
                 ],
             );
             for (filename, mut source) in render_model_parts(schema, &package, open_enums, index)? {

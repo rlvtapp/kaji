@@ -88,7 +88,7 @@ impl Plugin<Java> for OperationTests {
                         )
                     };
                     code += &format!(
-                        "        {{ var driver=new Driver(MAPPER.readTree({})); var client=new Client(new ClientConfig(\"https://kaji-test.invalid\",null,\"Authorization\",\"Bearer\",Map.of(),driver,Duration.ofSeconds(1),null,null)); var result=client.{}({arg}); assertResult(driver,result); }}\n",
+                        "        {{ var driver=new Driver(MAPPER.readTree({})); var client=new Client(new ClientConfig(\"https://poolster-test.invalid\",null,\"Authorization\",\"Bearer\",Map.of(),driver,Duration.ofSeconds(1),null,null)); var result=client.{}({arg}); assertResult(driver,result); }}\n",
                         serde_json::to_string(&fixture_json)?,
                         method_name(&operation.id)
                     );

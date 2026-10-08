@@ -91,11 +91,11 @@ pub(super) fn render_model_parts(
         let fallback = if part == 0 {
             String::new()
         } else {
-            " || super.poolsterIsDeclaredProperty(kajiWirePropertyName)".into()
+            " || super.poolsterIsDeclaredProperty(poolsterWirePropertyName)".into()
         };
         let _ = writeln!(
             source,
-            "    protected boolean kajiIsDeclaredProperty(String kajiWirePropertyName) {{ return Set.of({known}).contains(kajiWirePropertyName){fallback}; }}\n}}"
+            "    protected boolean poolsterIsDeclaredProperty(String poolsterWirePropertyName) {{ return Set.of({known}).contains(poolsterWirePropertyName){fallback}; }}\n}}"
         );
         files.push((format!("{holder}.java"), source));
     }
@@ -115,7 +115,7 @@ pub(super) fn render_model_parts(
         };
         let _ = writeln!(
             source,
-            "    private final Map<String,{ty}> kajiExtra = new LinkedHashMap<>();\n    @JsonAnyGetter public Map<String,{ty}> kajiAdditionalProperties() {{ return Collections.unmodifiableMap(kajiExtra); }}\n    @JsonAnySetter public void kajiAdditionalProperty(String kajiWirePropertyName, {ty} value) {{ if (kajiIsDeclaredProperty(kajiWirePropertyName)) throw new IllegalArgumentException(\"additional property shadows declared field\"); kajiExtra.put(kajiWirePropertyName,value); }}"
+            "    private final Map<String,{ty}> poolsterExtra = new LinkedHashMap<>();\n    @JsonAnyGetter public Map<String,{ty}> poolsterAdditionalProperties() {{ return Collections.unmodifiableMap(poolsterExtra); }}\n    @JsonAnySetter public void poolsterAdditionalProperty(String poolsterWirePropertyName, {ty} value) {{ if (poolsterIsDeclaredProperty(poolsterWirePropertyName)) throw new IllegalArgumentException(\"additional property shadows declared field\"); poolsterExtra.put(poolsterWirePropertyName,value); }}"
         );
     }
     source.push_str("}\n");
@@ -142,8 +142,8 @@ fn render_object_model(
             "notify",
             "notifyAll",
             "finalize",
-            "kajiIsDeclaredProperty",
-            "kajiWirePropertyName",
+            "poolsterIsDeclaredProperty",
+            "poolsterWirePropertyName",
         ],
     );
     if fields.len() > 200 {
@@ -182,7 +182,7 @@ fn render_object_model(
                 .join(", ");
             let _ = writeln!(
                 source,
-                "    private final Map<String,{ty}> kajiExtra = new LinkedHashMap<>();\n    @JsonAnyGetter public Map<String,{ty}> kajiAdditionalProperties() {{ return Collections.unmodifiableMap(kajiExtra); }}\n    @JsonAnySetter public void kajiAdditionalProperty(String kajiWirePropertyName, {ty} value) {{ if (Set.of({known}).contains(kajiWirePropertyName)) throw new IllegalArgumentException(\"additional property shadows declared field\"); kajiExtra.put(kajiWirePropertyName,value); }}"
+                "    private final Map<String,{ty}> poolsterExtra = new LinkedHashMap<>();\n    @JsonAnyGetter public Map<String,{ty}> poolsterAdditionalProperties() {{ return Collections.unmodifiableMap(poolsterExtra); }}\n    @JsonAnySetter public void poolsterAdditionalProperty(String poolsterWirePropertyName, {ty} value) {{ if (Set.of({known}).contains(poolsterWirePropertyName)) throw new IllegalArgumentException(\"additional property shadows declared field\"); poolsterExtra.put(poolsterWirePropertyName,value); }}"
             );
         }
         source.push_str("}\n");

@@ -131,7 +131,7 @@ fn generated_package_compiles_with_maven() {
     keyed.id = "createKeyedItem".into();
     keyed.method = poolster_core::HttpMethod::Post;
     keyed.annotations.insert(
-        "x-kaji-idempotency".into(),
+        "x-poolster-idempotency".into(),
         serde_json::json!({"header":"X-Request-Key","auto_generate":true}),
     );
     source.operations.push(keyed);

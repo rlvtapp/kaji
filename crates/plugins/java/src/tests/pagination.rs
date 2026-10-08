@@ -15,7 +15,7 @@ fn emits_cursor_pagination_through_the_normal_operation() {
         annotations: BTreeMap::new(),
     }];
     source.operations[0].annotations.insert(
-        "x-kaji-pagination".into(),
+        "x-poolster-pagination".into(),
         serde_json::json!({
             "type": "cursor",
             "inputs": [{ "name": "cursor", "in": "parameters", "type": "cursor" }],
@@ -29,7 +29,7 @@ fn emits_cursor_pagination_through_the_normal_operation() {
     ));
     assert!(client.contains("var page = listContacts(current);"));
     assert!(client.contains("current = ListContactsRequestWithCursor(current, cursor.asText());"));
-    assert!(client.contains("protected static JsonNode kajiJsonPath"));
+    assert!(client.contains("protected static JsonNode poolsterJsonPath"));
     assert!(client.contains("$.data[-1].nextCursor"));
     assert!(client.contains("Integer.parseInt"));
 
@@ -65,7 +65,7 @@ fn declared_page_results_have_defaults_bounds_and_validated_selectors() {
             items: Box::new(SchemaValue::new(SchemaKind::String)),
         }),
     )];
-    operation.annotations.insert("x-kaji-pagination".into(), serde_json::json!({"type":"page", "inputs":[{"name":"page","type":"page"}], "outputs":{"results":"$"}}));
+    operation.annotations.insert("x-poolster-pagination".into(), serde_json::json!({"type":"page", "inputs":[{"name":"page","type":"page"}], "outputs":{"results":"$"}}));
     let rendered = rendered_java(&render_test_sdk(&source, "java", None).unwrap());
     assert!(rendered.contains("input.page() == null ?"));
     assert!(rendered.contains("(input, 1L) : input"));
@@ -74,7 +74,7 @@ fn declared_page_results_have_defaults_bounds_and_validated_selectors() {
     assert!(rendered.contains("++pageCount >= 10000"));
     source.operations[0]
         .annotations
-        .get_mut("x-kaji-pagination")
+        .get_mut("x-poolster-pagination")
         .unwrap()["outputs"]["results"] = serde_json::json!("$.missing");
     assert!(render_test_sdk(&source, "java", None).is_err());
 }
@@ -105,7 +105,9 @@ fn emits_page_and_offset_pagination_only_for_safe_query_parameters() {
     let client = rendered_java(&tree);
     assert!(client.contains("listContactPagesPages(ListContactPagesRequest input)"));
     assert!(
-        client.contains("var numPages = kajiJsonPath(mapper.valueToTree(page), \"$.meta.pages\")")
+        client.contains(
+            "var numPages = poolsterJsonPath(mapper.valueToTree(page), \"$.meta.pages\")"
+        )
     );
     assert!(client.contains("current = ListContactPagesRequestWithPage(current, nextValue);"));
 
@@ -143,7 +145,7 @@ fn emits_page_and_offset_pagination_only_for_safe_query_parameters() {
     let tree = render_test_sdk(&offset, "java", None).unwrap();
     let client = rendered_java(&tree);
     assert!(
-        client.contains("var results = kajiJsonPath(mapper.valueToTree(page), \"$.contacts\")")
+        client.contains("var results = poolsterJsonPath(mapper.valueToTree(page), \"$.contacts\")")
     );
     assert!(client.contains(
         "current = ListContactOffsetsRequestWithOffset(current, currentValue + resultCount);"
@@ -187,7 +189,7 @@ fn supports_safe_header_and_rejects_invalid_path_java_pagination_contracts() {
         annotations: BTreeMap::new(),
     }];
     source.operations[0].annotations.insert(
-        "x-kaji-pagination".into(),
+        "x-poolster-pagination".into(),
         serde_json::json!({
             "type": "cursor",
             "inputs": [{ "name": "cursor", "in": "parameters", "type": "cursor" }],
@@ -207,7 +209,7 @@ fn supports_safe_header_and_rejects_invalid_path_java_pagination_contracts() {
 
     source.operations[0].parameters[0].location = "query".into();
     source.operations[0].annotations.insert(
-        "x-kaji-pagination".into(),
+        "x-poolster-pagination".into(),
         serde_json::json!({
             "type": "offsetLimit",
             "inputs": [{ "name": "cursor", "in": "parameters", "type": "offset" }],

@@ -191,7 +191,7 @@ pub(super) fn render_pagination_operation(
             (
                 field.as_str(),
                 format!(
-                    "                var cursor = kajiJsonPath(mapper.valueToTree(page), {next_cursor_path:?});\n                if (cursor == null || !cursor.isTextual() || cursor.asText().isEmpty() || cursor.asText().equals(current.{field}())) {{ done = true; return page; }}\n                current = {copy}(current, cursor.asText());\n                return page;"
+                    "                var cursor = poolsterJsonPath(mapper.valueToTree(page), {next_cursor_path:?});\n                if (cursor == null || !cursor.isTextual() || cursor.asText().isEmpty() || cursor.asText().equals(current.{field}())) {{ done = true; return page; }}\n                current = {copy}(current, cursor.asText());\n                return page;"
                 ),
             )
         }
@@ -211,14 +211,14 @@ pub(super) fn render_pagination_operation(
                     (
                         field.as_str(),
                         format!(
-                            "                var results = kajiJsonPath(mapper.valueToTree(page), {results:?});\n                Long limit = {limit};\n                if (results == null || !results.isArray() || results.size() == 0 || (limit != null && results.size() < limit) || current.{field}() == Long.MAX_VALUE) {{ done = true; return page; }}\n                current = {copy}(current, current.{field}() + 1L);\n                return page;"
+                            "                var results = poolsterJsonPath(mapper.valueToTree(page), {results:?});\n                Long limit = {limit};\n                if (results == null || !results.isArray() || results.size() == 0 || (limit != null && results.size() < limit) || current.{field}() == Long.MAX_VALUE) {{ done = true; return page; }}\n                current = {copy}(current, current.{field}() + 1L);\n                return page;"
                         ),
                     )
                 } else {
                     (
                         field.as_str(),
                         format!(
-                            "                var currentValue = current.{field}();\n                var numPages = kajiJsonPath(mapper.valueToTree(page), {:?});\n                if (currentValue == null || currentValue == Long.MAX_VALUE || numPages == null || !numPages.isIntegralNumber() || !numPages.canConvertToLong()) {{ done = true; return page; }}\n                var nextValue = currentValue + 1L;\n                if (nextValue > numPages.asLong()) {{ done = true; return page; }}\n                current = {copy}(current, nextValue);\n                return page;",
+                            "                var currentValue = current.{field}();\n                var numPages = poolsterJsonPath(mapper.valueToTree(page), {:?});\n                if (currentValue == null || currentValue == Long.MAX_VALUE || numPages == null || !numPages.isIntegralNumber() || !numPages.canConvertToLong()) {{ done = true; return page; }}\n                var nextValue = currentValue + 1L;\n                if (nextValue > numPages.asLong()) {{ done = true; return page; }}\n                current = {copy}(current, nextValue);\n                return page;",
                             num_pages_path
                                 .as_deref()
                                 .expect("validated page pagination")
@@ -234,7 +234,7 @@ pub(super) fn render_pagination_operation(
                 (
                     field.as_str(),
                     format!(
-                        "                var currentValue = current.{field}();\n                var results = kajiJsonPath(mapper.valueToTree(page), {:?});\n                if (currentValue == null || results == null || !results.isArray()) {{ done = true; return page; }}\n                var resultCount = results.size();\n                Long limit = {limit};\n                if (resultCount == 0 || (limit != null && resultCount < limit)) {{ done = true; return page; }}\n                if (currentValue > Long.MAX_VALUE - resultCount) {{ done = true; return page; }}\n                current = {copy}(current, currentValue + resultCount);\n                return page;",
+                        "                var currentValue = current.{field}();\n                var results = poolsterJsonPath(mapper.valueToTree(page), {:?});\n                if (currentValue == null || results == null || !results.isArray()) {{ done = true; return page; }}\n                var resultCount = results.size();\n                Long limit = {limit};\n                if (resultCount == 0 || (limit != null && resultCount < limit)) {{ done = true; return page; }}\n                if (currentValue > Long.MAX_VALUE - resultCount) {{ done = true; return page; }}\n                current = {copy}(current, currentValue + resultCount);\n                return page;",
                         results_path
                             .as_deref()
                             .expect("validated offset pagination")
@@ -364,7 +364,7 @@ fn render_url_pagination_operation(
     };
     let _ = writeln!(
         output,
-        "    /** Lazily follows same-origin URL pages from this operation's declared contract. */\n    public java.lang.Iterable<{response}> {method}Pages({request_name} input) {{\n        Objects.requireNonNull(input, \"input\");\n        return () -> new java.util.Iterator<>() {{\n            private boolean first = true;\n            private boolean done;\n            private String nextUrl;\n            private int pageCount;\n\n            @Override public boolean hasNext() {{ return !done; }}\n\n            @Override public {response} next() {{\n                if (done) throw new java.util.NoSuchElementException();\n                if (++pageCount >= 10000) done = true;\n                var page = first ? {method}(input) : {continuation}(input, nextUrl);\n                first = false;\n                var next = kajiJsonPath(mapper.valueToTree(page), {next_url_path:?});\n                if (next == null || !next.isTextual() || next.asText().isEmpty() || next.asText().equals(nextUrl)) done = true;\n                else nextUrl = next.asText();\n                return page;\n            }}\n        }};\n    }}\n\n    /** Private URL continuation that retains generated request policy. */\n    private {response} {continuation}({request_name} input, String paginationUrl) {{\n{try_open}        var headers = new java.util.LinkedHashMap<String, String>();\n{headers}        var response = requestPaginationUrlWithRetry({:?}, paginationUrl, headers, {body});\n        return decode(response, {}.class);\n{error_mapping}\n    }}\n",
+        "    /** Lazily follows same-origin URL pages from this operation's declared contract. */\n    public java.lang.Iterable<{response}> {method}Pages({request_name} input) {{\n        Objects.requireNonNull(input, \"input\");\n        return () -> new java.util.Iterator<>() {{\n            private boolean first = true;\n            private boolean done;\n            private String nextUrl;\n            private int pageCount;\n\n            @Override public boolean hasNext() {{ return !done; }}\n\n            @Override public {response} next() {{\n                if (done) throw new java.util.NoSuchElementException();\n                if (++pageCount >= 10000) done = true;\n                var page = first ? {method}(input) : {continuation}(input, nextUrl);\n                first = false;\n                var next = poolsterJsonPath(mapper.valueToTree(page), {next_url_path:?});\n                if (next == null || !next.isTextual() || next.asText().isEmpty() || next.asText().equals(nextUrl)) done = true;\n                else nextUrl = next.asText();\n                return page;\n            }}\n        }};\n    }}\n\n    /** Private URL continuation that retains generated request policy. */\n    private {response} {continuation}({request_name} input, String paginationUrl) {{\n{try_open}        var headers = new java.util.LinkedHashMap<String, String>();\n{headers}        var response = requestPaginationUrlWithRetry({:?}, paginationUrl, headers, {body});\n        return decode(response, {}.class);\n{error_mapping}\n    }}\n",
         operation.method.as_str(),
         response_class(schema),
     );
