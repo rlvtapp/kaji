@@ -3,10 +3,21 @@
   "version": "0.5.0",
   "description": "Kaji command-line SDK generator",
   "license": "MIT",
-  "repository": { "type": "git", "url": "git+https://github.com/rlvtapp/kaji.git" },
-  "bin": { "kaji": "bin/kaji.cjs" },
-  "files": ["bin", "README.md", "LICENSE"],
-  "engines": { "node": ">=18" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rlvtapp/kaji.git"
+  },
+  "bin": {
+    "kaji": "bin/kaji.cjs"
+  },
+  "files": [
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "test": "node --test test/*.test.cjs",
     "build:native": "node scripts/build-platform.mjs"
@@ -17,5 +28,7 @@
     "@relevate/kajicli-linux-x64-gnu": "0.5.0",
     "@relevate/kajicli-win32-x64-msvc": "0.5.0"
   },
-  "publishConfig": { "access": "public" }
+  "publishConfig": {
+    "access": "public"
+  }
 }
