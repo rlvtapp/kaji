@@ -1,10 +1,11 @@
 //! Opt-in execution checks against actual generated transport modules.
 #[test]
-#[ignore = "requires Node, KAJI_TSC_JS and KAJI_AXIOS_NODE_MODULES"]
+#[ignore = "requires Node, POOLSTER_TSC_JS and POOLSTER_AXIOS_NODE_MODULES"]
 fn generated_middleware_fetch_and_axios_execute() {
-    let compiler = std::env::var("KAJI_TSC_JS").unwrap();
-    let modules = std::env::var("KAJI_AXIOS_NODE_MODULES").unwrap();
-    let directory = std::env::temp_dir().join(format!("kaji-middleware-{}", std::process::id()));
+    let compiler = std::env::var("POOLSTER_TSC_JS").unwrap();
+    let modules = std::env::var("POOLSTER_AXIOS_NODE_MODULES").unwrap();
+    let directory =
+        std::env::temp_dir().join(format!("poolster-middleware-{}", std::process::id()));
     std::fs::create_dir_all(&directory).unwrap();
     #[cfg(unix)]
     std::os::unix::fs::symlink(&modules, directory.join("node_modules")).unwrap();
@@ -158,15 +159,15 @@ for (const [index, runtime] of runtimes.entries()) {
 }
 
 #[test]
-#[ignore = "requires Node, KAJI_TSC_JS and KAJI_AXIOS_NODE_MODULES"]
+#[ignore = "requires Node, POOLSTER_TSC_JS and POOLSTER_AXIOS_NODE_MODULES"]
 fn bundled_middleware_is_enabled_without_customer_registration() {
     use poolster_core::{
         Api, HttpMethod, Operation, OperationMediaType, OperationResponse, SchemaKind, SchemaValue,
         customization::BundledMiddleware,
     };
     let root = tempfile::tempdir().unwrap();
-    let compiler = std::env::var("KAJI_TSC_JS").unwrap();
-    let modules = std::env::var("KAJI_AXIOS_NODE_MODULES").unwrap();
+    let compiler = std::env::var("POOLSTER_TSC_JS").unwrap();
+    let modules = std::env::var("POOLSTER_AXIOS_NODE_MODULES").unwrap();
     let api = Api {
         name: "Contacts".into(),
         version: "1.0.0".into(),

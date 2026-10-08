@@ -219,7 +219,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "requires Node and KAJI_TSC_JS"]
+    #[ignore = "requires Node and POOLSTER_TSC_JS"]
     fn collision_heavy_sdk_compiles_with_original_provider_contract_keys() {
         use poolster_core::engine::Packages;
         use poolster_core::{HttpMethod, OperationMediaType, OperationRequestBody};
@@ -315,11 +315,11 @@ mod tests {
             .generate(&api, None)
             .unwrap();
         let temporary =
-            std::env::temp_dir().join(format!("kaji-ts-symbols-{}", std::process::id()));
+            std::env::temp_dir().join(format!("poolster-ts-symbols-{}", std::process::id()));
         tree.write_to(&temporary).unwrap();
         std::fs::write(temporary.join("sdk/consumer.ts"), "import type { UnionArray } from './models/UnionArray';\nconst valid: UnionArray = ['a', 'b'];\n// @ts-expect-error: array item unions must not allow a bare scalar.\nconst invalid: UnionArray = 'a';\nconsole.log(valid, invalid);\n").unwrap();
         let output = std::process::Command::new("node")
-            .arg(std::env::var("KAJI_TSC_JS").unwrap())
+            .arg(std::env::var("POOLSTER_TSC_JS").unwrap())
             .arg("-p")
             .arg(temporary.join("sdk/tsconfig.json"))
             .output()

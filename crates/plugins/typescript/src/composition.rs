@@ -790,7 +790,7 @@ mod tests {
                 .unwrap()
         };
         let directory =
-            std::env::temp_dir().join(format!("kaji-ts-aux-shrink-{}", std::process::id()));
+            std::env::temp_dir().join(format!("poolster-ts-aux-shrink-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&directory);
         build(1).write_to(&directory).unwrap();
         for chunk in [
@@ -1046,7 +1046,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    #[ignore = "requires KAJI_TSC_JS and KAJI_TS_NODE_MODULES with framework dependencies"]
+    #[ignore = "requires POOLSTER_TSC_JS and POOLSTER_TS_NODE_MODULES with framework dependencies"]
     fn query_factories_cache_callbacks_and_abort_execute_natively() {
         let root = tempfile::tempdir().unwrap();
         let mut source = api();
@@ -1106,7 +1106,7 @@ mod tests {
                 _ => serde_json::json!({"results":"$.items"}),
             };
             op.annotations.insert(
-                "x-kaji-pagination".into(),
+                "x-poolster-pagination".into(),
                 serde_json::json!({"type":kind,"inputs":inputs,"outputs":outputs}),
             );
             let mut next = poolster_core::SchemaValue::new(poolster_core::SchemaKind::String);
@@ -1165,7 +1165,7 @@ mod tests {
             .unwrap();
         let package = root.path().join("ts");
         std::os::unix::fs::symlink(
-            std::env::var_os("KAJI_TS_NODE_MODULES").unwrap(),
+            std::env::var_os("POOLSTER_TS_NODE_MODULES").unwrap(),
             package.join("node_modules"),
         )
         .unwrap();
@@ -1180,7 +1180,7 @@ mod tests {
         )
         .unwrap();
         let compile = std::process::Command::new("node")
-            .arg(std::env::var_os("KAJI_TSC_JS").unwrap())
+            .arg(std::env::var_os("POOLSTER_TSC_JS").unwrap())
             .args(["-p", "tsconfig.json"])
             .current_dir(&package)
             .output()
@@ -1216,12 +1216,12 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "requires KAJI_TSC_JS and KAJI_TS_NODE_MODULES"]
+    #[ignore = "requires POOLSTER_TSC_JS and POOLSTER_TS_NODE_MODULES"]
     fn custom_transport_and_relocated_query_consumer_compile() {
-        let compiler = std::env::var("KAJI_TSC_JS").unwrap();
-        let modules = std::env::var("KAJI_TS_NODE_MODULES").unwrap();
+        let compiler = std::env::var("POOLSTER_TSC_JS").unwrap();
+        let modules = std::env::var("POOLSTER_TS_NODE_MODULES").unwrap();
         let directory =
-            std::env::temp_dir().join(format!("kaji-ts-compose-{}", std::process::id()));
+            std::env::temp_dir().join(format!("poolster-ts-compose-{}", std::process::id()));
         let tree = Packages::new()
             .package(
                 crate::package("ts")
@@ -1253,11 +1253,12 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "requires KAJI_TSC_JS and KAJI_TS_NODE_MODULES with auxiliary dependencies"]
+    #[ignore = "requires POOLSTER_TSC_JS and POOLSTER_TS_NODE_MODULES with auxiliary dependencies"]
     fn namespaced_and_auxiliary_consumers_compile_and_validate_selected_models() {
-        let compiler = std::env::var("KAJI_TSC_JS").unwrap();
-        let modules = std::env::var("KAJI_TS_NODE_MODULES").unwrap();
-        let directory = std::env::temp_dir().join(format!("kaji-ts-aux-{}", std::process::id()));
+        let compiler = std::env::var("POOLSTER_TSC_JS").unwrap();
+        let modules = std::env::var("POOLSTER_TS_NODE_MODULES").unwrap();
+        let directory =
+            std::env::temp_dir().join(format!("poolster-ts-aux-{}", std::process::id()));
         let mut api = api();
         let mut id = poolster_core::SchemaValue::new(poolster_core::SchemaKind::Integer);
         id.format = Some("int64".into());

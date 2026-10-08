@@ -47,7 +47,7 @@ impl Plugin<TypeScript> for Webhooks {
 mod tests {
     use super::*;
     #[test]
-    #[ignore = "requires KAJI_TSC_JS and Node"]
+    #[ignore = "requires POOLSTER_TSC_JS and Node"]
     fn native_standard_webhook_vectors_execute() {
         let api = poolster_core::Api {
             name: "Webhook".into(),
@@ -75,7 +75,7 @@ mod tests {
             include_str!("../../python/testdata/webhook-vectors.json"),
         )
         .unwrap();
-        let compiler = std::env::var("KAJI_TSC_JS").unwrap();
+        let compiler = std::env::var("POOLSTER_TSC_JS").unwrap();
         let output = std::process::Command::new("node")
             .args([&compiler, "-p", "tsconfig.json"])
             .current_dir(&cwd)

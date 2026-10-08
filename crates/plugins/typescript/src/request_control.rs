@@ -4,8 +4,8 @@ mod tests {
     #[test]
     #[ignore = "needs Node, TypeScript and Axios; exercises real loopback HTTP drivers"]
     fn native_fetch_and_axios_per_call_controls_bound_retries_and_close_sockets() {
-        let compiler = std::env::var_os("KAJI_TSC_JS").expect("set KAJI_TSC_JS");
-        let dependencies = std::env::var_os("KAJI_TS_AXIOS_NODE_MODULES")
+        let compiler = std::env::var_os("POOLSTER_TSC_JS").expect("set POOLSTER_TSC_JS");
+        let dependencies = std::env::var_os("POOLSTER_TS_AXIOS_NODE_MODULES")
             .map(PathBuf::from)
             .unwrap_or_else(|| {
                 PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
@@ -14,7 +14,7 @@ mod tests {
             });
         assert!(
             dependencies.join("axios").is_dir(),
-            "set KAJI_TS_AXIOS_NODE_MODULES to an installed node_modules directory"
+            "set POOLSTER_TS_AXIOS_NODE_MODULES to an installed node_modules directory"
         );
         for transport in [
             crate::sdk::SdkTransport::Fetch,

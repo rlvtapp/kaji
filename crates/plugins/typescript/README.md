@@ -126,9 +126,9 @@ Structural tests cover provider selection, relocated modules and unsupported
 capabilities. Opt-in compiler/runtime tests use existing local dependencies:
 
 ```sh
-KAJI_TSC_JS=/absolute/path/to/typescript/lib/tsc.js \
-KAJI_TS_NODE_MODULES=/absolute/path/to/consumer/node_modules \
-KAJI_AXIOS_NODE_MODULES=/absolute/path/to/axios-consumer/node_modules \
+POOLSTER_TSC_JS=/absolute/path/to/typescript/lib/tsc.js \
+POOLSTER_TS_NODE_MODULES=/absolute/path/to/consumer/node_modules \
+POOLSTER_AXIOS_NODE_MODULES=/absolute/path/to/axios-consumer/node_modules \
 cargo test -p poolster-plugin-typescript --lib -- --ignored
 ```
 

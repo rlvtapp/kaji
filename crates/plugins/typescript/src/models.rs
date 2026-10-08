@@ -51,7 +51,7 @@ impl ModelRenderer {
             {
                 value
                     .extensions
-                    .insert("x-kaji-type-name".into(), Value::String(name.clone()));
+                    .insert("x-poolster-type-name".into(), Value::String(name.clone()));
             }
         });
         let api = &prepared;
@@ -181,7 +181,7 @@ impl ModelRenderer {
                 {
                     value
                         .extensions
-                        .insert("x-kaji-type-name".into(), Value::String(alias.clone()));
+                        .insert("x-poolster-type-name".into(), Value::String(alias.clone()));
                 }
             });
             GeneratedFile::new(
@@ -1378,7 +1378,7 @@ mod forward_enum_tests {
                 );
             let path = root.path().join(format!("probe{index}.ts"));
             std::fs::write(&path, source).unwrap();
-            let compiler = std::env::var("KAJI_TSC_JS").expect("set KAJI_TSC_JS");
+            let compiler = std::env::var("POOLSTER_TSC_JS").expect("set POOLSTER_TSC_JS");
             let output = std::process::Command::new("node")
                 .arg(&compiler)
                 .args([

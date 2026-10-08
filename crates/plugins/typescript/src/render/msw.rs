@@ -25,7 +25,7 @@ impl TypeScriptMsw {
             );
             let scenarios = poolster_core::extract_operation_mock_scenarios(operation)?;
             if !scenarios.is_empty() {
-                output.push_str("    const url = new URL(request.url);\n    const selected = request.headers.get('x-kaji-mock-scenario');\n");
+                output.push_str("    const url = new URL(request.url);\n    const selected = request.headers.get('x-poolster-mock-scenario');\n");
                 if scenarios
                     .iter()
                     .any(|scenario| scenario.when.body.is_some())

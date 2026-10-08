@@ -637,12 +637,12 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "requires Node and KAJI_TSC_JS pointing to a locally installed TypeScript compiler"]
+    #[ignore = "requires Node and POOLSTER_TSC_JS pointing to a locally installed TypeScript compiler"]
     fn generated_fetch_consumer_compiles_with_strict_typescript() {
         let compiler =
-            std::env::var("KAJI_TSC_JS").expect("set KAJI_TSC_JS to typescript/lib/tsc.js");
+            std::env::var("POOLSTER_TSC_JS").expect("set POOLSTER_TSC_JS to typescript/lib/tsc.js");
         let directory = std::env::temp_dir().join(format!(
-            "kaji-typescript-consumer-{}-{}",
+            "poolster-typescript-consumer-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

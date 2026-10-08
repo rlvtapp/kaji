@@ -57,7 +57,7 @@ impl Plugin<TypeScript> for OAuth {
 mod tests {
     use super::*;
     #[test]
-    #[ignore = "requires KAJI_TSC_JS and Node"]
+    #[ignore = "requires POOLSTER_TSC_JS and Node"]
     fn native_oauth_singleflight_replay_cancellation_and_redaction() {
         let api = poolster_core::Api {
             name: "OAuth".into(),
@@ -80,7 +80,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         tree.write_to(dir.path()).unwrap();
         let cwd = dir.path().join("sdk");
-        let compiler = std::env::var("KAJI_TSC_JS").unwrap();
+        let compiler = std::env::var("POOLSTER_TSC_JS").unwrap();
         let output = std::process::Command::new("node")
             .args([&compiler, "-p", "tsconfig.json"])
             .current_dir(&cwd)

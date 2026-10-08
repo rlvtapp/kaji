@@ -486,7 +486,7 @@ pub(crate) fn artifact_api(api: &Api, options: &ModelOptions) -> Api {
         };
         value
             .extensions
-            .insert("x-kaji-integer".into(), Value::String(name.into()));
+            .insert("x-poolster-integer".into(), Value::String(name.into()));
     });
     if options.remove_optional_properties {
         visit_api(&mut api, &mut |value| {
@@ -639,11 +639,11 @@ mod tests {
         }
     }
     #[test]
-    #[ignore = "requires Node, KAJI_TSC_JS, and KAJI_AXIOS_NODE_MODULES"]
+    #[ignore = "requires Node, POOLSTER_TSC_JS, and POOLSTER_AXIOS_NODE_MODULES"]
     fn generated_lossless_fetch_axios_and_sse_round_trip() {
-        let compiler = std::env::var("KAJI_TSC_JS").unwrap();
-        let modules = std::env::var("KAJI_AXIOS_NODE_MODULES").unwrap();
-        let directory = std::env::temp_dir().join(format!("kaji-json-{}", std::process::id()));
+        let compiler = std::env::var("POOLSTER_TSC_JS").unwrap();
+        let modules = std::env::var("POOLSTER_AXIOS_NODE_MODULES").unwrap();
+        let directory = std::env::temp_dir().join(format!("poolster-json-{}", std::process::id()));
         let mut packages = Packages::new();
         for (name, representation, axios) in [
             ("big", Int64Type::BigInt, false),

@@ -432,10 +432,10 @@ mod tests {
         );
     }
     #[test]
-    #[ignore = "requires Node, KAJI_TSC_JS and KAJI_AXIOS_NODE_MODULES"]
+    #[ignore = "requires Node, POOLSTER_TSC_JS and POOLSTER_AXIOS_NODE_MODULES"]
     fn native_generated_fetch_and_axios_operation_tests_execute() {
-        let compiler = std::env::var("KAJI_TSC_JS").unwrap();
-        let modules = std::env::var("KAJI_AXIOS_NODE_MODULES").unwrap();
+        let compiler = std::env::var("POOLSTER_TSC_JS").unwrap();
+        let modules = std::env::var("POOLSTER_AXIOS_NODE_MODULES").unwrap();
         for axios in [false, true] {
             let temp = tempfile::tempdir().unwrap();
             let sdk = if axios {

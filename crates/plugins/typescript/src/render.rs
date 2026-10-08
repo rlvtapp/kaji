@@ -91,7 +91,7 @@ impl TypeScriptPackage {
         let package_name = config
             .package_name
             .clone()
-            .unwrap_or_else(|| format!("@kaji/{}", package_slug(&api.name)));
+            .unwrap_or_else(|| format!("@poolster/{}", package_slug(&api.name)));
         let package = json!({
             "name": package_name,
             "version": api.version,

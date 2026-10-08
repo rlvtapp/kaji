@@ -1,12 +1,12 @@
 //! Execute actual generated operation functions and both native transports.
 #[test]
-#[ignore = "requires Node, KAJI_TSC_JS and KAJI_AXIOS_NODE_MODULES"]
+#[ignore = "requires Node, POOLSTER_TSC_JS and POOLSTER_AXIOS_NODE_MODULES"]
 fn generated_idempotency_fetch_and_axios_execute() {
     use poolster_core::{
         Api, HttpMethod, Operation, OperationParameter, OperationResponse, SchemaKind, SchemaValue,
     };
-    let compiler = std::env::var("KAJI_TSC_JS").unwrap();
-    let modules = std::env::var("KAJI_AXIOS_NODE_MODULES").unwrap();
+    let compiler = std::env::var("POOLSTER_TSC_JS").unwrap();
+    let modules = std::env::var("POOLSTER_AXIOS_NODE_MODULES").unwrap();
     let mut write = Operation {
         id: "write".into(),
         path: "/write".into(),
@@ -26,7 +26,7 @@ fn generated_idempotency_fetch_and_axios_execute() {
         ..Default::default()
     };
     write.annotations.insert(
-        "x-kaji-idempotency-resolved".into(),
+        "x-poolster-idempotency-resolved".into(),
         serde_json::json!({"header":"X-Key", "parameter_name":"X-Key", "auto_generate":true}),
     );
     let mut patch = write.clone();
@@ -36,7 +36,7 @@ fn generated_idempotency_fetch_and_axios_execute() {
     manual.id = "manual".into();
     manual
         .annotations
-        .get_mut("x-kaji-idempotency-resolved")
+        .get_mut("x-poolster-idempotency-resolved")
         .unwrap()["auto_generate"] = serde_json::json!(false);
     let mut unsafe_write = write.clone();
     unsafe_write.id = "unsafeWrite".into();

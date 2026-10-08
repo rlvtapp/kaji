@@ -1109,7 +1109,7 @@ pub(crate) fn poolster_package(
 
 fn poolster_package_name(api: &Api, transport: SdkTransport) -> String {
     format!(
-        "@kaji/{}-{}",
+        "@poolster/{}-{}",
         package_slug(&api.name),
         match transport {
             SdkTransport::Fetch => "fetch",
@@ -1955,9 +1955,9 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "requires Node and KAJI_TSC_JS"]
+    #[ignore = "requires Node and POOLSTER_TSC_JS"]
     fn generated_page_pagination_executes_defaults_and_selectors() {
-        let compiler = std::env::var("KAJI_TSC_JS").unwrap();
+        let compiler = std::env::var("POOLSTER_TSC_JS").unwrap();
         let directory = tempfile::tempdir().unwrap();
         let iterator = render_pagination_iterator(
             "listItems",
@@ -2079,7 +2079,7 @@ mod tests {
 
         let invalid = Operation {
             annotations: BTreeMap::from([(
-                "x-kaji-pagination".into(),
+                "x-poolster-pagination".into(),
                 serde_json::json!({
                     "type": "cursor",
                     "inputs": [{

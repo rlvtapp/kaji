@@ -1,9 +1,10 @@
 //! Native behavior probes for isolated, bounded fixture generation.
 #[test]
-#[ignore = "requires Node, TypeScript and @faker-js/faker; set KAJI_TSC_JS and KAJI_TS_NODE_MODULES"]
+#[ignore = "requires Node, TypeScript and @faker-js/faker; set POOLSTER_TSC_JS and POOLSTER_TS_NODE_MODULES"]
 fn fixture_constraints_seed_lossless_and_recursion_execute() {
     use std::{fs, process::Command};
-    let directory = std::env::temp_dir().join(format!("kaji-aux-native-{}", std::process::id()));
+    let directory =
+        std::env::temp_dir().join(format!("poolster-aux-native-{}", std::process::id()));
     fs::create_dir_all(&directory).unwrap();
     fs::write(
         directory.join("runtime.ts"),
@@ -11,13 +12,13 @@ fn fixture_constraints_seed_lossless_and_recursion_execute() {
     )
     .unwrap();
     fs::write(directory.join("package.json"), "{\"type\":\"module\"}").unwrap();
-    let modules = std::env::var("KAJI_TS_NODE_MODULES").expect("KAJI_TS_NODE_MODULES");
+    let modules = std::env::var("POOLSTER_TS_NODE_MODULES").expect("POOLSTER_TS_NODE_MODULES");
     #[cfg(unix)]
     {
         let _ = fs::remove_file(directory.join("node_modules"));
         std::os::unix::fs::symlink(modules, directory.join("node_modules")).unwrap();
     }
-    let compiler = std::env::var("KAJI_TSC_JS").expect("KAJI_TSC_JS");
+    let compiler = std::env::var("POOLSTER_TSC_JS").expect("POOLSTER_TSC_JS");
     let output = Command::new("node")
         .arg(compiler)
         .args([
@@ -46,8 +47,8 @@ const integer = (constraints={}, extensions={}) => ({kind:{kind:'integer'},const
 const string = (constraints={}) => ({kind:{kind:'string'},constraints});
 const schemas = {
  Negative:integer({maximum:'-100000',multipleOf:'7'}),
- Wide:integer({minimum:'9007199254740993',maximum:'9007199254741003',multipleOf:'3'},{'x-kaji-integer':'bigint'}),
- WideString:integer({minimum:'9007199254740993',maximum:'9007199254741003'},{'x-kaji-integer':'string'}),
+ Wide:integer({minimum:'9007199254740993',maximum:'9007199254741003',multipleOf:'3'},{'x-poolster-integer':'bigint'}),
+ WideString:integer({minimum:'9007199254740993',maximum:'9007199254741003'},{'x-poolster-integer':'string'}),
  Pattern:string({pattern:'^[A-Z]{4}$',minLength:4,maxLength:4}),
  Unique:{kind:{kind:'array',items:integer({minimum:'0',maximum:'10'})},constraints:{minItems:5,maxItems:5,uniqueItems:true}},
  Nullable:{kind:{kind:'any_of',variants:[string(),{kind:{kind:'null'}}]}},
@@ -85,7 +86,7 @@ console.log('bounded fixtures, constraint validation, exact integers and seed re
 }
 
 #[test]
-#[ignore = "requires Node, TypeScript and MSW; set KAJI_TSC_JS and KAJI_TS_NODE_MODULES"]
+#[ignore = "requires Node, TypeScript and MSW; set POOLSTER_TSC_JS and POOLSTER_TS_NODE_MODULES"]
 fn msw_declared_response_scenarios_and_pagination_execute() {
     use poolster_core::{Api, HttpMethod, Operation, OperationResponse, SchemaValue};
     use std::{fs, process::Command};
@@ -99,7 +100,7 @@ fn msw_declared_response_scenarios_and_pagination_execute() {
         )],
         ..Default::default()
     };
-    operation.annotations.insert("x-kaji-mock".into(),serde_json::json!({"scenarios":[
+    operation.annotations.insert("x-poolster-mock".into(),serde_json::json!({"scenarios":[
         {"name":"page-two","when":{"query":{"cursor":"next"},"path":{"id":"abc"},"headers":{"x-page":"yes"}},"response":{"status":200,"body":{"items":[2],"next":null},"delay_ms":1}},
         {"name":"limited","when":{"query":{"fail":"yes"}},"response":{"status":429,"headers":{"retry-after":"2"},"body":{"message":"slow down"}}},
         {"name":"empty","when":{"query":{"empty":"yes"}},"response":{"status":204}}
@@ -111,7 +112,8 @@ fn msw_declared_response_scenarios_and_pagination_execute() {
     let generated = crate::render::TypeScriptMsw
         .generate(&api, &Default::default())
         .unwrap();
-    let directory = std::env::temp_dir().join(format!("kaji-msw-native-{}", std::process::id()));
+    let directory =
+        std::env::temp_dir().join(format!("poolster-msw-native-{}", std::process::id()));
     fs::create_dir_all(&directory).unwrap();
     fs::write(directory.join("msw.ts"), &generated[0].contents).unwrap();
     fs::write(directory.join("package.json"), "{\"type\":\"module\"}").unwrap();
@@ -119,13 +121,13 @@ fn msw_declared_response_scenarios_and_pagination_execute() {
     {
         let _ = fs::remove_file(directory.join("node_modules"));
         std::os::unix::fs::symlink(
-            std::env::var("KAJI_TS_NODE_MODULES").unwrap(),
+            std::env::var("POOLSTER_TS_NODE_MODULES").unwrap(),
             directory.join("node_modules"),
         )
         .unwrap();
     }
     let output = Command::new("node")
-        .arg(std::env::var("KAJI_TSC_JS").unwrap())
+        .arg(std::env::var("POOLSTER_TSC_JS").unwrap())
         .args([
             "--strict",
             "--skipLibCheck",
@@ -155,9 +157,9 @@ try {
  const page=await fetch('http://poolster.test/items/abc?cursor=next',{headers:{'X-Page':'yes'}});assert.deepEqual(await page.json(),{items:[2],next:null});
  const mismatch=await fetch('http://poolster.test/items/other?cursor=next',{headers:{'x-page':'yes'}});assert.equal(mismatch.status,201);
  const limited=await fetch('http://poolster.test/items/abc?fail=yes');assert.equal(limited.status,429);assert.equal(limited.headers.get('retry-after'),'2');assert.equal((await limited.json()).message,'slow down');
- const named=await fetch('http://poolster.test/items/abc',{headers:{'x-kaji-mock-scenario':'limited'}});assert.equal(named.status,429);
+ const named=await fetch('http://poolster.test/items/abc',{headers:{'x-poolster-mock-scenario':'limited'}});assert.equal(named.status,429);
  const empty=await fetch('http://poolster.test/items/abc?empty=yes');assert.equal(empty.status,204);assert.equal(await empty.text(),'');
- const unknown=await fetch('http://poolster.test/items/abc',{headers:{'x-kaji-mock-scenario':'missing'}});assert.equal(unknown.status,400);
+ const unknown=await fetch('http://poolster.test/items/abc',{headers:{'x-poolster-mock-scenario':'missing'}});assert.equal(unknown.status,400);
 } finally {server.close();}
 "#).unwrap();
     let output = Command::new("node")
@@ -175,7 +177,7 @@ try {
 }
 
 #[test]
-#[ignore = "requires installed Cypress browser; set KAJI_TS_NODE_MODULES and CYPRESS_CACHE_FOLDER"]
+#[ignore = "requires installed Cypress browser; set POOLSTER_TS_NODE_MODULES and CYPRESS_CACHE_FOLDER"]
 fn cypress_generated_smoke_executes_in_browser() {
     use poolster_core::{Api, HttpMethod, Operation, OperationResponse};
     use std::{collections::BTreeMap, fs, process::Command};
@@ -222,7 +224,7 @@ fn cypress_generated_smoke_executes_in_browser() {
         .unwrap();
     assert!(files[0].contents.contains("it.skip"));
     let directory =
-        std::env::temp_dir().join(format!("kaji-cypress-native-{}", std::process::id()));
+        std::env::temp_dir().join(format!("poolster-cypress-native-{}", std::process::id()));
     fs::create_dir_all(directory.join("cypress/e2e")).unwrap();
     fs::write(directory.join("cypress/e2e/api.cy.ts"), &files[0].contents).unwrap();
     fs::write(directory.join("tsconfig.json"),r#"{"compilerOptions":{"target":"es2022","module":"esnext","moduleResolution":"bundler","strict":true,"skipLibCheck":true},"include":["cypress/**/*.ts"]}"#).unwrap();
@@ -231,7 +233,7 @@ fn cypress_generated_smoke_executes_in_browser() {
     {
         let _ = fs::remove_file(directory.join("node_modules"));
         std::os::unix::fs::symlink(
-            std::env::var("KAJI_TS_NODE_MODULES").unwrap(),
+            std::env::var("POOLSTER_TS_NODE_MODULES").unwrap(),
             directory.join("node_modules"),
         )
         .unwrap();
@@ -265,13 +267,13 @@ try {
 }
 
 #[test]
-#[ignore = "requires Node and Zod; set KAJI_TSC_JS and KAJI_TS_NODE_MODULES"]
+#[ignore = "requires Node and Zod; set POOLSTER_TSC_JS and POOLSTER_TS_NODE_MODULES"]
 fn zod_constraints_unions_and_lossless_boundaries_execute() {
     use poolster_core::{Api, Schema, SchemaKind, SchemaValue};
     use std::{fs, process::Command};
     let mut wide = SchemaValue::new(SchemaKind::Integer);
     wide.extensions
-        .insert("x-kaji-integer".into(), serde_json::json!("bigint"));
+        .insert("x-poolster-integer".into(), serde_json::json!("bigint"));
     wide.constraints.extend([
         (
             "minimum".into(),
@@ -332,7 +334,8 @@ fn zod_constraints_unions_and_lossless_boundaries_execute() {
             },
         )
         .unwrap();
-    let directory = std::env::temp_dir().join(format!("kaji-zod-native-{}", std::process::id()));
+    let directory =
+        std::env::temp_dir().join(format!("poolster-zod-native-{}", std::process::id()));
     fs::create_dir_all(&directory).unwrap();
     fs::write(directory.join("zod.ts"), &files[0].contents).unwrap();
     for file in crate::render::TypeScriptModels
@@ -354,13 +357,13 @@ fn zod_constraints_unions_and_lossless_boundaries_execute() {
     {
         let _ = fs::remove_file(directory.join("node_modules"));
         std::os::unix::fs::symlink(
-            std::env::var("KAJI_TS_NODE_MODULES").unwrap(),
+            std::env::var("POOLSTER_TS_NODE_MODULES").unwrap(),
             directory.join("node_modules"),
         )
         .unwrap();
     }
     let output = Command::new("node")
-        .arg(std::env::var("KAJI_TSC_JS").unwrap())
+        .arg(std::env::var("POOLSTER_TSC_JS").unwrap())
         .args([
             "--strict",
             "--skipLibCheck",
@@ -469,7 +472,8 @@ fn common_layout_inherits_and_plugin_override_wins() {
         ],
         ..Default::default()
     };
-    let directory = std::env::temp_dir().join(format!("kaji-layout-common-{}", std::process::id()));
+    let directory =
+        std::env::temp_dir().join(format!("poolster-layout-common-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&directory);
     Packages::new()
         .common(Common::default().layout(crate::SourceLayout::PerOperation))
