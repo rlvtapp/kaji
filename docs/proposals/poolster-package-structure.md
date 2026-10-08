@@ -2,8 +2,8 @@
 
 Status: **selected plan, implemented in source on `poolster-sdk-layout`** ·
 2026-10-08. Publication remains disabled. The GitHub repository is still
-`rlvtapp/kaji`; its URL and source directory paths remain until a separate
-repository move. This document retains the original naming tradeoffs and
+`rlvtapp/kaji`; its URL remains until a separate repository move.
+Source folders follow the layout below. This document retains the original naming tradeoffs and
 release checklist.
 
 ## Selected name: Poolster
@@ -300,7 +300,7 @@ are grouped under `packages/internal`. The shared factory generator lives at
    Exercise JS + Rust input/output plugins together; run emitted SDK builds
    and cross-language runtime probes. Verify no plugin is activated by install.
 4. Decide how the existing published `@relevate/kaji@0.4.x` CLI is migrated.
-   The current worktree already proposes `@relevate/kaji` as an SDK at 0.5;
+   The pre-rename plan proposed `@relevate/kaji` as an SDK at 0.5;
    that is a breaking npm change even without the Poolster rename. Write one
    explicit migration path rather than two successive public renames.
 5. Publish native platform packages before their launchers only after the
