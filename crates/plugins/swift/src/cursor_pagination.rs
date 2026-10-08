@@ -69,7 +69,7 @@ pub(super) fn render(api: &Api) -> Result<String> {
         let parameters = operation_parameters(operation);
         if parameters
             .iter()
-            .any(|parameter| parameter.signature.split(':').next() == Some("kajiCursorValue"))
+            .any(|parameter| parameter.signature.split(':').next() == Some("poolsterCursorValue"))
         {
             bail!(
                 "Swift cursor pagination control name collision for {}",
@@ -89,7 +89,7 @@ pub(super) fn render(api: &Api) -> Result<String> {
                 format!(
                     "{name}: {}",
                     if name == cursor_name {
-                        "kajiCursorValue"
+                        "poolsterCursorValue"
                     } else {
                         name
                     }
@@ -98,7 +98,7 @@ pub(super) fn render(api: &Api) -> Result<String> {
             .collect::<Vec<_>>()
             .join(", ");
         let guard = if cursor.required {
-            "            guard let kajiCursorValue else { throw PoolsterPaginationError.invalidResults }\n"
+            "            guard let poolsterCursorValue else { throw PoolsterPaginationError.invalidResults }\n"
         } else {
             ""
         };
@@ -122,7 +122,7 @@ pub(super) fn render(api: &Api) -> Result<String> {
         let name = function_name(&operation.id);
         writeln!(
             output,
-            "    func {name}Pages({signature}) -> PoolsterCursorSequence<{response}> {{\n        PoolsterCursorSequence(cursor: {cursor_name}) {{ kajiCursorValue in\n{guard}            let response = try await self.{name}({args})\n            return (response, try kajiNextCursor(response, [{selector}]))\n        }}\n    }}"
+            "    func {name}Pages({signature}) -> PoolsterCursorSequence<{response}> {{\n        PoolsterCursorSequence(cursor: {cursor_name}) {{ poolsterCursorValue in\n{guard}            let response = try await self.{name}({args})\n            return (response, try poolsterNextCursor(response, [{selector}]))\n        }}\n    }}"
         )?;
     }
     Ok(output)
@@ -170,7 +170,7 @@ mod tests {
                 additional_properties: Default::default(),
             }),
         )];
-        operation.annotations.insert("x-kaji-pagination".into(),serde_json::json!({"type":"cursor","inputs":[{"name":"cursor","type":"cursor"}],"outputs":{"nextCursor":"/next"}}));
+        operation.annotations.insert("x-poolster-pagination".into(),serde_json::json!({"type":"cursor","inputs":[{"name":"cursor","type":"cursor"}],"outputs":{"nextCursor":"/next"}}));
         Api {
             name: "Cursor".into(),
             version: "1.0.0".into(),
@@ -183,7 +183,7 @@ mod tests {
         let mut api = api();
         let output = render(&api).unwrap();
         assert!(output.contains("PoolsterCursorSequence(cursor: cursor)"));
-        assert!(output.contains("listItems(cursor: kajiCursorValue, xLabel: xLabel)"));
+        assert!(output.contains("listItems(cursor: poolsterCursorValue, xLabel: xLabel)"));
         api.operations[0].parameters[0].schema = Some(SchemaValue::new(SchemaKind::Integer));
         assert!(render(&api).is_err());
     }

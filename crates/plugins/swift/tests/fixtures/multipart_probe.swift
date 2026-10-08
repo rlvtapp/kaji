@@ -33,7 +33,7 @@ func mime(_ request: URLRequest) throws -> [String: [MIMEPart]] {
 }
 func waitSync(_ semaphore: DispatchSemaphore) { semaphore.wait() }
 func uploadBody() -> UploadMultipartBody {
-    UploadMultipartBody(title: "title 雪\nline", enabled: false, count: 0, tags: ["A", "雪"], csv: ["A", "雪"], jsonText: "雪", metadata: Metadata(value: "雪"), metadatas: [Metadata(value: "one"), Metadata(value: "two")], file: KajiMultipartFile(data: Data([0, 255, 13, 10, 65]), filename: "one.bin", headers: ["X-File": "file-value"]), files: [KajiMultipartFile(data: Data([3, 0, 128]), filename: "two.bin"), KajiMultipartFile(data: Data([4, 255]), filename: "three.bin")], partHeaders: ["metadata": ["X-Part": "metadata-value"]])
+    UploadMultipartBody(title: "title 雪\nline", enabled: false, count: 0, tags: ["A", "雪"], csv: ["A", "雪"], jsonText: "雪", metadata: Metadata(value: "雪"), metadatas: [Metadata(value: "one"), Metadata(value: "two")], file: PoolsterMultipartFile(data: Data([0, 255, 13, 10, 65]), filename: "one.bin", headers: ["X-File": "file-value"]), files: [PoolsterMultipartFile(data: Data([3, 0, 128]), filename: "two.bin"), PoolsterMultipartFile(data: Data([4, 255]), filename: "three.bin")], partHeaders: ["metadata": ["X-Part": "metadata-value"]])
 }
 func verify(_ request: URLRequest) throws {
     let parts = try mime(request)
@@ -50,7 +50,7 @@ func verify(_ request: URLRequest) throws {
     try require(parts["files"]!.count == 2 && parts["files"]![0].headers["content-type"] == "image/png", "binary array encoding")
     try require(parts["optional"] == nil, "optional omission")
 }
-actor Driver: KajiTransport {
+actor Driver: PoolsterTransport {
     var requests: [URLRequest] = []
     func execute(_ request: URLRequest) async throws -> (Data, URLResponse) {
         requests.append(request)
@@ -59,8 +59,8 @@ actor Driver: KajiTransport {
     }
     func captured() -> [URLRequest] { requests }
 }
-func middleware(_ inner: any KajiTransport) -> KajiMiddlewareTransport {
-    KajiMiddlewareTransport(inner: inner) { request, following in
+func middleware(_ inner: any PoolsterTransport) -> PoolsterMiddlewareTransport {
+    PoolsterMiddlewareTransport(inner: inner) { request, following in
         var changed = request; changed.setValue("installed", forHTTPHeaderField: "X-Middleware")
         return try await following(changed)
     }
@@ -68,7 +68,7 @@ func middleware(_ inner: any KajiTransport) -> KajiMiddlewareTransport {
 @main struct Probe {
     static func main() async throws {
         let driver = Driver()
-        let client = KajiClient(options: KajiClientOptions(baseURL: URL(string: "https://example.invalid")!, headers: ["Authorization": "Bearer author"]), transport: middleware(driver))
+        let client = PoolsterClient(options: PoolsterClientOptions(baseURL: URL(string: "https://example.invalid")!, headers: ["Authorization": "Bearer author"]), transport: middleware(driver))
         let body = uploadBody()
         try await client.upload(body: body)
         try verify((await driver.captured())[0])
@@ -76,37 +76,37 @@ func middleware(_ inner: any KajiTransport) -> KajiMiddlewareTransport {
         let jsonRequest = (await driver.captured())[1]
         try require(jsonRequest.value(forHTTPHeaderField: "Content-Type") == "application/json", "mixed representation Content-Type")
         try require(try JSONDecoder().decode(Metadata.self, from: jsonRequest.httpBody!).value == "JSON alternative", "mixed representation bytes")
-        let fail = KajiClient(options: KajiClientOptions(baseURL: URL(string: "https://example.invalid/fail")!, headers: ["Authorization": "Bearer author"], retryBaseDelay: 0, retryMaxDelay: 0), transport: middleware(driver))
-        do { try await fail.upload(body: body); throw ProbeFailure(message: "503 accepted") } catch KajiAPIError.status(let code, _) { try require(code == 503, "status") }
+        let fail = PoolsterClient(options: PoolsterClientOptions(baseURL: URL(string: "https://example.invalid/fail")!, headers: ["Authorization": "Bearer author"], retryBaseDelay: 0, retryMaxDelay: 0), transport: middleware(driver))
+        do { try await fail.upload(body: body); throw ProbeFailure(message: "503 accepted") } catch PoolsterAPIError.status(let code, _) { try require(code == 503, "status") }
         try require((await driver.captured()).count == 3, "unsafe POST retried")
-        var invalid = body; invalid.file = KajiMultipartFile(data: Data(), filename: "bad\r\nX-Evil: injected", headers: ["X-File": "file-value"])
-        do { try await client.upload(body: invalid); throw ProbeFailure(message: "filename injection accepted") } catch KajiMultipartError.invalidFilename {}
+        var invalid = body; invalid.file = PoolsterMultipartFile(data: Data(), filename: "bad\r\nX-Evil: injected", headers: ["X-File": "file-value"])
+        do { try await client.upload(body: invalid); throw ProbeFailure(message: "filename injection accepted") } catch PoolsterMultipartError.invalidFilename {}
         invalid = body; invalid.partHeaders["metadata"] = ["X-Part": "bad\r\nX-Evil: injected"]
-        do { try await client.upload(body: invalid); throw ProbeFailure(message: "header injection accepted") } catch KajiMultipartError.invalidHeader {}
+        do { try await client.upload(body: invalid); throw ProbeFailure(message: "header injection accepted") } catch PoolsterMultipartError.invalidHeader {}
         invalid = body; invalid.partHeaders = [:]
-        do { try await client.upload(body: invalid); throw ProbeFailure(message: "missing header accepted") } catch KajiMultipartError.missingHeader(let name) { try require(name == "X-Part", "missing header diagnostic") }
+        do { try await client.upload(body: invalid); throw ProbeFailure(message: "missing header accepted") } catch PoolsterMultipartError.missingHeader(let name) { try require(name == "X-Part", "missing header diagnostic") }
         invalid = body; invalid.maximumBodyBytes = 3
-        do { try await client.upload(body: invalid); throw ProbeFailure(message: "oversize accepted") } catch KajiMultipartError.bodyTooLarge {}
+        do { try await client.upload(body: invalid); throw ProbeFailure(message: "oversize accepted") } catch PoolsterMultipartError.bodyTooLarge {}
         invalid = body; invalid.maximumBodyBytes = 0
-        do { try await client.upload(body: invalid); throw ProbeFailure(message: "invalid limit accepted") } catch KajiMultipartError.invalidLimit {}
+        do { try await client.upload(body: invalid); throw ProbeFailure(message: "invalid limit accepted") } catch PoolsterMultipartError.invalidLimit {}
         invalid = body; invalid.tags = Array(repeating: "x", count: 1025)
-        do { try await client.upload(body: invalid); throw ProbeFailure(message: "part limit accepted") } catch KajiMultipartError.tooManyParts {}
+        do { try await client.upload(body: invalid); throw ProbeFailure(message: "part limit accepted") } catch PoolsterMultipartError.tooManyParts {}
         invalid = body; invalid.partHeaders["unknown"] = [:]
-        do { try await client.upload(body: invalid); throw ProbeFailure(message: "unknown part accepted") } catch KajiMultipartError.unknownPart {}
-        invalid = body; invalid.file = KajiMultipartFile(data: Data(), contentType: "text/plain\r\nX-Evil: injected", headers: ["X-File": "file-value"])
-        do { try await client.upload(body: invalid); throw ProbeFailure(message: "media injection accepted") } catch KajiMultipartError.invalidContentType {}
+        do { try await client.upload(body: invalid); throw ProbeFailure(message: "unknown part accepted") } catch PoolsterMultipartError.unknownPart {}
+        invalid = body; invalid.file = PoolsterMultipartFile(data: Data(), contentType: "text/plain\r\nX-Evil: injected", headers: ["X-File": "file-value"])
+        do { try await client.upload(body: invalid); throw ProbeFailure(message: "media injection accepted") } catch PoolsterMultipartError.invalidContentType {}
         try require((await driver.captured()).count == 3, "invalid body reached transport")
         let entered = DispatchSemaphore(value: 0), gate = DispatchSemaphore(value: 0)
-        let task = Task.detached { entered.signal(); waitSync(gate); return try body.kajiEncoded() }
+        let task = Task.detached { entered.signal(); waitSync(gate); return try body.poolsterEncoded() }
         waitSync(entered); task.cancel(); gate.signal()
         do { _ = try await task.value; throw ProbeFailure(message: "cancelled preparation accepted") } catch is CancellationError {}
-        if let raw = ProcessInfo.processInfo.environment["KAJI_MULTIPART_URL"], let url = URL(string: raw) {
-            let real = KajiClient(options: KajiClientOptions(baseURL: url, headers: ["Authorization": "Bearer author"]), transport: middleware(KajiURLSessionTransport()))
+        if let raw = ProcessInfo.processInfo.environment["POOLSTER_MULTIPART_URL"], let url = URL(string: raw) {
+            let real = PoolsterClient(options: PoolsterClientOptions(baseURL: url, headers: ["Authorization": "Bearer author"]), transport: middleware(PoolsterURLSessionTransport()))
             try await real.upload(body: body)
-            let failing = KajiClient(options: KajiClientOptions(baseURL: url.appendingPathComponent("fail"), headers: ["Authorization": "Bearer author"], retryBaseDelay: 0, retryMaxDelay: 0), transport: middleware(KajiURLSessionTransport()))
-            do { try await failing.upload(body: body); throw ProbeFailure(message: "native 503 accepted") } catch KajiAPIError.status(let code, _) { try require(code == 503, "native status") }
-            let marker = ProcessInfo.processInfo.environment["KAJI_MULTIPART_CANCEL_MARKER"]!
-            let cancelling = KajiClient(options: KajiClientOptions(baseURL: url.appendingPathComponent("cancel"), headers: ["Authorization": "Bearer author"]), transport: middleware(KajiURLSessionTransport()))
+            let failing = PoolsterClient(options: PoolsterClientOptions(baseURL: url.appendingPathComponent("fail"), headers: ["Authorization": "Bearer author"], retryBaseDelay: 0, retryMaxDelay: 0), transport: middleware(PoolsterURLSessionTransport()))
+            do { try await failing.upload(body: body); throw ProbeFailure(message: "native 503 accepted") } catch PoolsterAPIError.status(let code, _) { try require(code == 503, "native status") }
+            let marker = ProcessInfo.processInfo.environment["POOLSTER_MULTIPART_CANCEL_MARKER"]!
+            let cancelling = PoolsterClient(options: PoolsterClientOptions(baseURL: url.appendingPathComponent("cancel"), headers: ["Authorization": "Bearer author"]), transport: middleware(PoolsterURLSessionTransport()))
             let pending = Task { try await cancelling.upload(body: body) }
             for _ in 0..<300 { if FileManager.default.fileExists(atPath: marker) { break }; try await Task.sleep(nanoseconds: 10_000_000) }
             try require(FileManager.default.fileExists(atPath: marker), "native cancellation did not send request")

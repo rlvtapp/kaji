@@ -178,7 +178,7 @@ fn native_probe(directory: &std::path::Path) -> std::path::PathBuf {
         .arg(directory.join("Probe.swift"))
         .arg("-o")
         .arg(&binary);
-    let cache = std::env::temp_dir().join("kaji-swift-cache");
+    let cache = std::env::temp_dir().join("poolster-swift-cache");
     compiler
         .env("CLANG_MODULE_CACHE_PATH", &cache)
         .env("SWIFT_MODULECACHE_PATH", &cache);
@@ -315,8 +315,8 @@ fn native_urlsession_multipart_wire_retry_guard_and_socket_cancellation() {
         assert_eq!(seen, ["/upload", "/fail/upload", "/cancel/upload"]);
     });
     let output = Command::new(binary)
-        .env("KAJI_MULTIPART_URL", format!("http://{address}"))
-        .env("KAJI_MULTIPART_CANCEL_MARKER", &marker)
+        .env("POOLSTER_MULTIPART_URL", format!("http://{address}"))
+        .env("POOLSTER_MULTIPART_CANCEL_MARKER", &marker)
         .output()
         .unwrap();
     server.join().unwrap();
@@ -413,7 +413,7 @@ actor ResponseTransport: PoolsterTransport {
         .arg(directory.path().join("Probe.swift"))
         .arg("-o")
         .arg(&binary);
-    let cache = std::env::temp_dir().join("kaji-swift-cache");
+    let cache = std::env::temp_dir().join("poolster-swift-cache");
     compiler
         .env("CLANG_MODULE_CACHE_PATH", &cache)
         .env("SWIFT_MODULECACHE_PATH", &cache);

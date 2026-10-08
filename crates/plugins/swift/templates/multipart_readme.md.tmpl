@@ -1,6 +1,6 @@
 # Native multipart uploads
 
-Multipart operations use a separate `<Operation>MultipartBody` value. JSON models keep their ordinary Codable types. Binary parts accept `KajiMultipartFile(data:filename:contentType:headers:)`; optional parts are omitted, false/zero/empty strings are preserved, and arrays produce repeated parts. Objects and object-array members use JSON encoding. Explicit `form` scalar-array encoding with `explode: false` uses one comma-separated part.
+Multipart operations use a separate `<Operation>MultipartBody` value. JSON models keep their ordinary Codable types. Binary parts accept `PoolsterMultipartFile(data:filename:contentType:headers:)`; optional parts are omitted, false/zero/empty strings are preserved, and arrays produce repeated parts. Objects and object-array members use JSON encoding. Explicit `form` scalar-array encoding with `explode: false` uses one comma-separated part.
 
 If the operation declares JSON and multipart alternatives, select `<Operation>RequestBody.multipart(...)` or `.json(...)`. Each request selects its matching Content-Type; MIME requests include a fresh checked boundary.
 

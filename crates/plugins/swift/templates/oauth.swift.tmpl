@@ -3,18 +3,18 @@ import Foundation
 import FoundationNetworking
 #endif
 
-public enum KajiOAuthError: Error { case invalidConfiguration, tokenRejected }
+public enum PoolsterOAuthError: Error { case invalidConfiguration, tokenRejected }
 /// Supply a bounded issuer transport with redirects disabled. Serializes refreshes. Secrets and issuer response bodies never appear in errors.
-public actor KajiOAuthClientCredentials {
+public actor PoolsterOAuthClientCredentials {
     private let tokenURL: URL
     private let clientID: String
     private let clientSecret: String
     private let scope: String?
-    private let transport: any KajiTransport
+    private let transport: any PoolsterTransport
     private var cached: (String, Date)?
     private var pending: Task<(String, Date), Error>?
-    public init(tokenURL: URL, clientID: String, clientSecret: String, scope: String? = nil, transport: any KajiTransport) throws {
-        guard tokenURL.scheme == "https", tokenURL.user == nil, tokenURL.password == nil, tokenURL.fragment == nil, !clientID.isEmpty, !clientSecret.isEmpty else { throw KajiOAuthError.invalidConfiguration }
+    public init(tokenURL: URL, clientID: String, clientSecret: String, scope: String? = nil, transport: any PoolsterTransport) throws {
+        guard tokenURL.scheme == "https", tokenURL.user == nil, tokenURL.password == nil, tokenURL.fragment == nil, !clientID.isEmpty, !clientSecret.isEmpty else { throw PoolsterOAuthError.invalidConfiguration }
         self.tokenURL = tokenURL; self.clientID = clientID; self.clientSecret = clientSecret; self.scope = scope; self.transport = transport
     }
     public func invalidate(_ rejected: String) { if cached?.0 == rejected { cached = nil } }
@@ -30,11 +30,11 @@ public actor KajiOAuthClientCredentials {
             request.setValue("Basic " + Data((form(id) + ":" + form(secret)).utf8).base64EncodedString(), forHTTPHeaderField: "Authorization")
             request.httpBody = Data(("grant_type=client_credentials" + (scope.map { "&scope=" + form($0) } ?? "")).utf8)
             let result: (Data, URLResponse)
-            do { result = try await transport.execute(request) } catch is CancellationError { throw CancellationError() } catch { throw KajiOAuthError.tokenRejected }
+            do { result = try await transport.execute(request) } catch is CancellationError { throw CancellationError() } catch { throw PoolsterOAuthError.tokenRejected }
             guard let http = result.1 as? HTTPURLResponse, http.statusCode == 200, result.0.count <= 1_048_576,
                   let object = try? JSONSerialization.jsonObject(with: result.0) as? [String: Any], let token = object["access_token"] as? String, !token.isEmpty, token.utf8.count <= 16384,
                   token.utf8.allSatisfy({ $0 > 32 && $0 < 127 }), (object["token_type"] as? String)?.lowercased() == "bearer",
-                  let expires = object["expires_in"] as? Double, expires.isFinite, expires > 0 else { throw KajiOAuthError.tokenRejected }
+                  let expires = object["expires_in"] as? Double, expires.isFinite, expires > 0 else { throw PoolsterOAuthError.tokenRejected }
             return (token, Date().addingTimeInterval(max(0, min(expires, 86400) - min(30, expires / 10))))
         }
         pending = task
@@ -43,13 +43,13 @@ public actor KajiOAuthClientCredentials {
     }
 }
 /// Applies credentials only to the configured origin. Buffered requests only; one safe buffered 401 replay.
-public struct KajiOAuthTransport: KajiTransport {
-    private let inner: any KajiTransport
-    private let provider: KajiOAuthClientCredentials
+public struct PoolsterOAuthTransport: PoolsterTransport {
+    private let inner: any PoolsterTransport
+    private let provider: PoolsterOAuthClientCredentials
     private let origin: URL
-    public init(inner: any KajiTransport, provider: KajiOAuthClientCredentials, origin: URL) { self.inner = inner; self.provider = provider; self.origin = origin }
+    public init(inner: any PoolsterTransport, provider: PoolsterOAuthClientCredentials, origin: URL) { self.inner = inner; self.provider = provider; self.origin = origin }
     public func execute(_ request: URLRequest) async throws -> (Data, URLResponse) {
-        guard let url = request.url, url.scheme == origin.scheme, url.host == origin.host, (url.port ?? (url.scheme == "https" ? 443 : 80)) == (origin.port ?? (origin.scheme == "https" ? 443 : 80)) else { throw KajiOAuthError.invalidConfiguration }
+        guard let url = request.url, url.scheme == origin.scheme, url.host == origin.host, (url.port ?? (url.scheme == "https" ? 443 : 80)) == (origin.port ?? (origin.scheme == "https" ? 443 : 80)) else { throw PoolsterOAuthError.invalidConfiguration }
         var request = request
         let ownsAuth = request.value(forHTTPHeaderField: "Authorization") == nil
         let token = ownsAuth ? try await provider.token() : nil

@@ -99,7 +99,7 @@ pub(super) fn render(api: &Api) -> Result<String> {
         let name = function_name(&operation.id);
         writeln!(
             output,
-            "    func {name}Pages({signature}) -> PoolsterPageSequence<{response}> {{\n        PoolsterPageSequence(page: {initial}, limit: {limit_expr}, offset: {offset}) {{ current in\n            let response = try await self.{name}({args})\n            return (response, try kajiPageCount(response, [{selectors}]))\n        }}\n    }}"
+            "    func {name}Pages({signature}) -> PoolsterPageSequence<{response}> {{\n        PoolsterPageSequence(page: {initial}, limit: {limit_expr}, offset: {offset}) {{ current in\n            let response = try await self.{name}({args})\n            return (response, try poolsterPageCount(response, [{selectors}]))\n        }}\n    }}"
         )?;
     }
     Ok(output)
@@ -155,7 +155,7 @@ fn render_url(
         .join(", ");
     writeln!(
         output,
-        "    func {name}Pages({signature}) -> PoolsterURLSequence<{response}> {{\n        PoolsterURLSequence {{ nextURL in\n            let response = try await self.{name}PoolsterURL({args}_kajiURL: nextURL)\n            return (response, try kajiNextURL(response, [{selectors}]))\n        }}\n    }}"
+        "    func {name}Pages({signature}) -> PoolsterURLSequence<{response}> {{\n        PoolsterURLSequence {{ nextURL in\n            let response = try await self.{name}PoolsterURL({args}_poolsterURL: nextURL)\n            return (response, try poolsterNextURL(response, [{selectors}]))\n        }}\n    }}"
     )?;
     Ok(())
 }
@@ -206,7 +206,7 @@ mod tests {
             )],
             ..Default::default()
         };
-        offset.annotations.insert("x-kaji-pagination".into(),serde_json::json!({"type":"offsetLimit","inputs":[{"name":"offset","type":"offset"},{"name":"limit","type":"limit"}],"outputs":{"results":"$"}}));
+        offset.annotations.insert("x-poolster-pagination".into(),serde_json::json!({"type":"offsetLimit","inputs":[{"name":"offset","type":"offset"},{"name":"limit","type":"limit"}],"outputs":{"results":"$"}}));
         let mut url = Operation {
             id: "listLinks".into(),
             method: HttpMethod::Get,
@@ -226,7 +226,7 @@ mod tests {
             ..Default::default()
         };
         url.annotations.insert(
-            "x-kaji-pagination".into(),
+            "x-poolster-pagination".into(),
             serde_json::json!({"type":"url","outputs":{"nextUrl":"/next"}}),
         );
         let api = Api {
@@ -328,10 +328,10 @@ actor Calls { var pages: [Int] = []; func record(_ page: Int) { pages.append(pag
   var overflow = PoolsterPageSequence<Int>(page: Int.max, limit: nil) { _ in (1,1) }.makeAsyncIterator()
   _ = try await overflow.next()
   do { _ = try await overflow.next(); fatalError("overflow") } catch PoolsterPaginationError.pageOverflow {}
-  let count = try kajiPageCount(["a/b": [[1],[2,3]]], [.field("a/b"), .index(-1)])
+  let count = try poolsterPageCount(["a/b": [[1],[2,3]]], [.field("a/b"), .index(-1)])
   precondition(count == 2)
   for key in ["01", "+1", "-1", ""] {
-    do { _ = try kajiPageCount([1,2], [.field(key)]); fatalError("invalid pointer index") }
+    do { _ = try poolsterPageCount([1,2], [.field(key)]); fatalError("invalid pointer index") }
     catch PoolsterPaginationError.invalidResults {}
   }
 
@@ -390,7 +390,7 @@ mod generation_tests {
                 items: Box::new(SchemaValue::new(SchemaKind::String)),
             }),
         )];
-        operation.annotations.insert("x-kaji-pagination".into(), serde_json::json!({"type":"page","inputs":[{"name":"page","type":"page","in":"parameters"}],"outputs":{"results":"$"}}));
+        operation.annotations.insert("x-poolster-pagination".into(), serde_json::json!({"type":"page","inputs":[{"name":"page","type":"page","in":"parameters"}],"outputs":{"results":"$"}}));
         let mut api = Api {
             operations: vec![operation],
             ..Default::default()

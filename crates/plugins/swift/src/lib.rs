@@ -333,7 +333,7 @@ fn json_value() -> String {
 
 fn client_runtime() -> String {
     let runtime = format!(
-        "{NOTICE}\nimport Foundation\n#if canImport(FoundationNetworking)\nimport FoundationNetworking\n#endif\n\npublic struct PoolsterClientOptions: Sendable {{\n    public var baseURL: URL\n    public var headers: [String: String]\n    public var timeout: TimeInterval\n\n    public init(baseURL: URL, headers: [String: String] = [:], timeout: TimeInterval = 30) {{\n        self.baseURL = baseURL\n        self.headers = headers\n        self.timeout = timeout\n    }}\n}}\n\npublic enum PoolsterAPIError: Error, Sendable {{\n    case invalidURL(String)\n    case invalidResponse\n    case status(code: Int, body: Data)\n}}\n\n/// Receives lifecycle notifications without requiring a logging framework.\npublic protocol PoolsterClientHook: Sendable {{\n    func willSend(_ request: URLRequest)\n    func didReceive(_ response: HTTPURLResponse, body: Data)\n}}\n\npublic final class PoolsterClient: @unchecked Sendable {{\n    private let options: PoolsterClientOptions\n    private let session: URLSession\n    private let hooks: [any PoolsterClientHook]\n    private let encoder = JSONEncoder()\n    private let decoder = JSONDecoder()\n\n    public init(options: PoolsterClientOptions, session: URLSession = .shared, hooks: [any PoolsterClientHook] = []) {{\n        self.options = options\n        self.session = session\n        self.hooks = hooks\n    }}\n\n    internal func makeRequest(method: String, path: String, query: [URLQueryItem] = []) throws -> URLRequest {{\n        guard var components = URLComponents(url: options.baseURL, resolvingAgainstBaseURL: false), let operationPath = URLComponents(string: path.replacingOccurrences(of: \"?\", with: \"%3F\").replacingOccurrences(of: \"#\", with: \"%23\"))?.percentEncodedPath else {{\n            throw PoolsterAPIError.invalidURL(path)\n        }}\n        let basePath = components.percentEncodedPath.trimmingCharacters(in: CharacterSet(charactersIn: \"/\"))\n        components.percentEncodedPath = (basePath.isEmpty ? \"\" : \"/\" + basePath) + \"/\" + operationPath.trimmingCharacters(in: CharacterSet(charactersIn: \"/\"))\n        components.queryItems = query.isEmpty ? nil : query\n        guard let url = components.url else {{ throw PoolsterAPIError.invalidURL(path) }}\n        var request = URLRequest(url: url, timeoutInterval: options.timeout)\n        request.httpMethod = method\n        request.setValue(\"application/json\", forHTTPHeaderField: \"Accept\")\n        for (name, value) in options.headers {{ request.setValue(value, forHTTPHeaderField: name) }}\n        return request\n    }}\n\n    internal func send<T: Decodable>(_ request: URLRequest, as type: T.Type) async throws -> T {{\n        hooks.forEach {{ $0.willSend(request) }}\n        let (data, response) = try await session.data(for: request)\n        guard let http = response as? HTTPURLResponse else {{ throw PoolsterAPIError.invalidResponse }}\n        hooks.forEach {{ $0.didReceive(http, body: data) }}\n        guard (200..<300).contains(http.statusCode) else {{ throw PoolsterAPIError.status(code: http.statusCode, body: data) }}\n        return try decoder.decode(T.self, from: normalizeSequentialJSON(data, contentType: http.value(forHTTPHeaderField: \"Content-Type\")))\n    }}\n\n    internal func sendVoid(_ request: URLRequest) async throws {{\n        hooks.forEach {{ $0.willSend(request) }}\n        let (data, response) = try await session.data(for: request)\n        guard let http = response as? HTTPURLResponse else {{ throw PoolsterAPIError.invalidResponse }}\n        hooks.forEach {{ $0.didReceive(http, body: data) }}\n        guard (200..<300).contains(http.statusCode) else {{ throw PoolsterAPIError.status(code: http.statusCode, body: data) }}\n    }}\n\n    internal func encode<T: Encodable>(_ body: T) throws -> Data {{ try encoder.encode(body) }}\n}}\n\nextension String {{\n    var kajiPathComponent: String {{ addingPercentEncoding(withAllowedCharacters: CharacterSet(charactersIn: \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~\")) ?? self }}\n}}\n"
+        "{NOTICE}\nimport Foundation\n#if canImport(FoundationNetworking)\nimport FoundationNetworking\n#endif\n\npublic struct PoolsterClientOptions: Sendable {{\n    public var baseURL: URL\n    public var headers: [String: String]\n    public var timeout: TimeInterval\n\n    public init(baseURL: URL, headers: [String: String] = [:], timeout: TimeInterval = 30) {{\n        self.baseURL = baseURL\n        self.headers = headers\n        self.timeout = timeout\n    }}\n}}\n\npublic enum PoolsterAPIError: Error, Sendable {{\n    case invalidURL(String)\n    case invalidResponse\n    case status(code: Int, body: Data)\n}}\n\n/// Receives lifecycle notifications without requiring a logging framework.\npublic protocol PoolsterClientHook: Sendable {{\n    func willSend(_ request: URLRequest)\n    func didReceive(_ response: HTTPURLResponse, body: Data)\n}}\n\npublic final class PoolsterClient: @unchecked Sendable {{\n    private let options: PoolsterClientOptions\n    private let session: URLSession\n    private let hooks: [any PoolsterClientHook]\n    private let encoder = JSONEncoder()\n    private let decoder = JSONDecoder()\n\n    public init(options: PoolsterClientOptions, session: URLSession = .shared, hooks: [any PoolsterClientHook] = []) {{\n        self.options = options\n        self.session = session\n        self.hooks = hooks\n    }}\n\n    internal func makeRequest(method: String, path: String, query: [URLQueryItem] = []) throws -> URLRequest {{\n        guard var components = URLComponents(url: options.baseURL, resolvingAgainstBaseURL: false), let operationPath = URLComponents(string: path.replacingOccurrences(of: \"?\", with: \"%3F\").replacingOccurrences(of: \"#\", with: \"%23\"))?.percentEncodedPath else {{\n            throw PoolsterAPIError.invalidURL(path)\n        }}\n        let basePath = components.percentEncodedPath.trimmingCharacters(in: CharacterSet(charactersIn: \"/\"))\n        components.percentEncodedPath = (basePath.isEmpty ? \"\" : \"/\" + basePath) + \"/\" + operationPath.trimmingCharacters(in: CharacterSet(charactersIn: \"/\"))\n        components.queryItems = query.isEmpty ? nil : query\n        guard let url = components.url else {{ throw PoolsterAPIError.invalidURL(path) }}\n        var request = URLRequest(url: url, timeoutInterval: options.timeout)\n        request.httpMethod = method\n        request.setValue(\"application/json\", forHTTPHeaderField: \"Accept\")\n        for (name, value) in options.headers {{ request.setValue(value, forHTTPHeaderField: name) }}\n        return request\n    }}\n\n    internal func send<T: Decodable>(_ request: URLRequest, as type: T.Type) async throws -> T {{\n        hooks.forEach {{ $0.willSend(request) }}\n        let (data, response) = try await session.data(for: request)\n        guard let http = response as? HTTPURLResponse else {{ throw PoolsterAPIError.invalidResponse }}\n        hooks.forEach {{ $0.didReceive(http, body: data) }}\n        guard (200..<300).contains(http.statusCode) else {{ throw PoolsterAPIError.status(code: http.statusCode, body: data) }}\n        return try decoder.decode(T.self, from: normalizeSequentialJSON(data, contentType: http.value(forHTTPHeaderField: \"Content-Type\")))\n    }}\n\n    internal func sendVoid(_ request: URLRequest) async throws {{\n        hooks.forEach {{ $0.willSend(request) }}\n        let (data, response) = try await session.data(for: request)\n        guard let http = response as? HTTPURLResponse else {{ throw PoolsterAPIError.invalidResponse }}\n        hooks.forEach {{ $0.didReceive(http, body: data) }}\n        guard (200..<300).contains(http.statusCode) else {{ throw PoolsterAPIError.status(code: http.statusCode, body: data) }}\n    }}\n\n    internal func encode<T: Encodable>(_ body: T) throws -> Data {{ try encoder.encode(body) }}\n}}\n\nextension String {{\n    var poolsterPathComponent: String {{ addingPercentEncoding(withAllowedCharacters: CharacterSet(charactersIn: \"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~\")) ?? self }}\n}}\n"
     );
     runtime.replace("public final class PoolsterClient: @unchecked Sendable {", r#"
 /// Replace execution or compose middleware around the Foundation transport.
@@ -380,7 +380,7 @@ public final class PoolsterClient: @unchecked Sendable {"#)
     .replace("    public var timeout: TimeInterval", "    public var timeout: TimeInterval\n    public var maxAttempts: Int\n    public var retryBaseDelay: Double\n    public var retryMaxDelay: Double")
     .replace("timeout: TimeInterval = 30)", "timeout: TimeInterval = 30, maxAttempts: Int = 1, retryBaseDelay: Double = 0.5, retryMaxDelay: Double = 30)")
     .replace("        self.timeout = timeout", "        self.timeout = timeout\n        self.maxAttempts = min(10,max(1,maxAttempts))\n        self.retryBaseDelay = retryBaseDelay.isFinite ? max(0,min(60,retryBaseDelay)) : 0.5\n        self.retryMaxDelay = retryMaxDelay.isFinite ? max(0,min(60,retryMaxDelay)) : 30")
-    .replace("    internal func makeRequest", &(r#"    internal func kajiContinuationURL(_ next: URL?) throws -> URL? {
+    .replace("    internal func makeRequest", &(r#"    internal func poolsterContinuationURL(_ next: URL?) throws -> URL? {
         guard let next else { return nil }
         let baseURL=options.baseURL
         func port(_ url: URL) -> Int? { url.port ?? (url.scheme?.lowercased() == "https" ? 443 : url.scheme?.lowercased() == "http" ? 80 : nil) }
@@ -538,7 +538,7 @@ fn render_object_kind(
     {
         extra.push('_');
     }
-    let mut present = "_kajiPresentFields".to_owned();
+    let mut present = "_poolsterPresentFields".to_owned();
     while fields
         .iter()
         .any(|field| names[&field.name].clone().trim_matches('`') == present)
@@ -633,7 +633,7 @@ fn render_object_kind(
     if open {
         let _ = writeln!(
             output,
-            "        var kajiExtra: [String: {extra_type}] = [:]\n        let known: Set<String> = [{known}]\n        for key in container.allKeys where !known.contains(key.stringValue) {{\n            kajiExtra.updateValue(try container.decode({extra_type}.self, forKey: key), forKey: key.stringValue)\n        }}\n        self.{extra} = kajiExtra"
+            "        var poolsterExtra: [String: {extra_type}] = [:]\n        let known: Set<String> = [{known}]\n        for key in container.allKeys where !known.contains(key.stringValue) {{\n            poolsterExtra.updateValue(try container.decode({extra_type}.self, forKey: key), forKey: key.stringValue)\n        }}\n        self.{extra} = poolsterExtra"
         );
     }
     output.push_str("    }\n\n    public func encode(to encoder: Encoder) throws {\n        var container = encoder.container(keyedBy: PoolsterCodingKey.self)\n");
@@ -737,7 +737,7 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
         } else {
             format!("String(describing: {value})")
         };
-        let path_value = format!("_kajiPath{index}");
+        let path_value = format!("_poolsterPath{index}");
         let _ = writeln!(
             output,
             "{indent}    let {path_value} = ({serialized}).poolsterPathComponent"
@@ -768,7 +768,7 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
     } else {
         "let"
     };
-    let mut query_binding = "__kajiQuery".to_owned();
+    let mut query_binding = "__poolsterQuery".to_owned();
     while operation
         .parameters
         .iter()
@@ -800,7 +800,7 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
     // arguments intact and build their query items in bounded sync functions.
     if query_parameters.len() > 100 {
         for (index, chunk) in query_parameters.chunks(50).enumerate() {
-            let helper = format!("__kajiQuery_{name}_{index}");
+            let helper = format!("__poolsterQuery_{name}_{index}");
             let local = Operation {
                 parameters: chunk.iter().map(|p| (*p).clone()).collect(),
                 ..Default::default()
@@ -1008,7 +1008,7 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
         helper.insert_str(
             signature_end,
             &format!(
-                "{}_kajiURL: URL?",
+                "{}_poolsterURL: URL?",
                 if parameters.is_empty() { "" } else { ", " }
             ),
         );
@@ -1021,7 +1021,7 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
         helper.insert_str(
             brace,
             &format!(
-                "{indent}    let _kajiValidatedURL = try self.poolsterContinuationURL(_kajiURL)\n"
+                "{indent}    let _poolsterValidatedURL = try self.poolsterContinuationURL(_poolsterURL)\n"
             ),
         );
         let send = helper
@@ -1031,7 +1031,7 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
         helper.insert_str(
             send,
             &format!(
-                "{indent}    if let _kajiValidatedURL {{ request.url = _kajiValidatedURL }}\n"
+                "{indent}    if let _poolsterValidatedURL {{ request.url = _poolsterValidatedURL }}\n"
             ),
         );
         let args = parameters
@@ -1048,7 +1048,7 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
             format!("{args}, ")
         };
         output = format!(
-            "{} {{\n{indent}    return try await {name}PoolsterURL({args}_kajiURL: nil)\n{indent}}}\n\n{helper}",
+            "{} {{\n{indent}    return try await {name}PoolsterURL({args}_poolsterURL: nil)\n{indent}}}\n\n{helper}",
             &original[..signature_end + format!(") async throws -> {response}").len()]
         );
     }
@@ -1109,7 +1109,7 @@ fn render_query_parameters(operation: &Operation, query_binding: &str, indent: &
                 .and_then(serde_json::Value::as_bool)
                 == Some(false)
             {
-                let mut joined = "__kajiJoinedValues".to_owned();
+                let mut joined = "__poolsterJoinedValues".to_owned();
                 while operation
                     .parameters
                     .iter()
@@ -1405,7 +1405,7 @@ fn kebab_case(value: &str) -> String {
         .collect::<Vec<_>>()
         .join("-");
     if value.is_empty() {
-        "kaji".to_owned()
+        "poolster".to_owned()
     } else {
         value
     }
@@ -1642,7 +1642,9 @@ struct Mock: PoolsterTransport {
         };
         let source = render_operation(&operation, "    ");
         assert_eq!(
-            source.matches("private func __kajiQuery_massive_").count(),
+            source
+                .matches("private func __poolsterQuery_massive_")
+                .count(),
             12
         );
         assert!(source.contains("q2: String,"));
@@ -1793,7 +1795,7 @@ struct Mock: PoolsterTransport {
                     SchemaValue::new(SchemaKind::Integer),
                 )],
                 annotations: BTreeMap::from([(
-                    "x-kaji-idempotency".into(),
+                    "x-poolster-idempotency".into(),
                     serde_json::json!({"header":"X-Once","auto_generate":true}),
                 )]),
                 ..Default::default()
@@ -1817,7 +1819,7 @@ struct Mock: PoolsterTransport {
                 SchemaValue::new(SchemaKind::Integer),
             )],
             annotations: BTreeMap::from([(
-                "x-kaji-idempotency".into(),
+                "x-poolster-idempotency".into(),
                 serde_json::json!({"header":"Request","auto_generate":true}),
             )]),
             ..Default::default()

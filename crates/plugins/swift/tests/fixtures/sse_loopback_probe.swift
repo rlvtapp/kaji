@@ -6,7 +6,7 @@ import FoundationNetworking
  static func main() async throws {
   let base="http://127.0.0.1:__PORT__"
   let root="__ROOT__"
-  func client(_ suffix:String="")->KajiClient {KajiClient(options:KajiClientOptions(baseURL:URL(string:base+suffix)!,headers:["Authorization":"Bearer test"]))}
+  func client(_ suffix:String="")->PoolsterClient {PoolsterClient(options:PoolsterClientOptions(baseURL:URL(string:base+suffix)!,headers:["Authorization":"Bearer test"]))}
   let events=client().getEvents();let iterator=events.makeAsyncIterator()
   let first=try await iterator.next();precondition(first=="café")
   try "released".write(toFile:root+"/gate",atomically:true,encoding:.utf8)
@@ -24,6 +24,6 @@ import FoundationNetworking
   for _ in 0..<500 {if FileManager.default.fileExists(atPath:root+"/disconnected"){break};try await Task.sleep(nanoseconds:10000000)}
   precondition(FileManager.default.fileExists(atPath:root+"/disconnected"))
   let redirect=client("/redirect").getEvents().makeAsyncIterator()
-  do {_=try await redirect.next();fatalError("Redirect followed")}catch KajiAPIError.status(let code, _) {precondition(code==302)}
+  do {_=try await redirect.next();fatalError("Redirect followed")}catch PoolsterAPIError.status(let code, _) {precondition(code==302)}
  }
 }

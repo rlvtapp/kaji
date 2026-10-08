@@ -207,7 +207,7 @@ impl Plugin<crate::Swift> for OperationTests {
             "test/OperationTests.swift",
             include_str!("../tests/fixtures/operation_tests.swift").replace("__CASES__", &code),
         )?)?;
-        cx.files.emit(GeneratedFile::new("OPERATION_TESTS.md","Compile `swiftc -parse-as-library Sources/*/*.swift test/OperationTests.swift -o /tmp/kaji-operation-tests`, then run `/tmp/kaji-operation-tests`. Public native calls use a fake driver without network. Bounded structural samples assert wire values and decoded responses; explicit unsupported operations are in test/operation-diagnostics.json. Optional webhook dependencies require SwiftPM module search paths when compiling this probe.")?)
+        cx.files.emit(GeneratedFile::new("OPERATION_TESTS.md","Compile `swiftc -parse-as-library Sources/*/*.swift test/OperationTests.swift -o /tmp/poolster-operation-tests`, then run `/tmp/poolster-operation-tests`. Public native calls use a fake driver without network. Bounded structural samples assert wire values and decoded responses; explicit unsupported operations are in test/operation-diagnostics.json. Optional webhook dependencies require SwiftPM module search paths when compiling this probe.")?)
     }
 }
 #[cfg(test)]
@@ -301,7 +301,7 @@ mod tests {
                 media_types: vec![],
             }],
             annotations: std::collections::BTreeMap::from([(
-                "x-kaji-idempotency".into(),
+                "x-poolster-idempotency".into(),
                 serde_json::json!({"header":"X-Once","auto_generate":true}),
             )]),
             ..Default::default()
@@ -339,11 +339,11 @@ let cancelled=Task {try await slow.deleteThing()};try await Task.sleep(nanosecon
             .arg("-parse-as-library")
             .env(
                 "CLANG_MODULE_CACHE_PATH",
-                std::env::temp_dir().join("kaji-swift-cache"),
+                std::env::temp_dir().join("poolster-swift-cache"),
             )
             .env(
                 "SWIFT_MODULECACHE_PATH",
-                std::env::temp_dir().join("kaji-swift-cache"),
+                std::env::temp_dir().join("poolster-swift-cache"),
             );
         for (path, _) in tree.iter() {
             if path.to_string_lossy().ends_with(".swift") && !path.ends_with("Package.swift") {

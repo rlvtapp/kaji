@@ -4,7 +4,7 @@ import FoundationNetworking
 #endif
 enum ProbeError:Error {case mismatch}
 func canonical(_ value:Any)throws->Data {try JSONSerialization.data(withJSONObject:value,options:[.sortedKeys,.fragmentsAllowed])}
-final class ProbeTransport:KajiTransport,@unchecked Sendable {
+final class ProbeTransport:PoolsterTransport,@unchecked Sendable {
  let sample:[String:Any];var calls=0
  init(sample:[String:Any]){self.sample=sample}
  func execute(_ request:URLRequest)async throws->(Data,URLResponse){

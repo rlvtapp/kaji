@@ -3,47 +3,47 @@ import Foundation
 import FoundationNetworking
 #endif
 
-public enum KajiStreamingError: Error, LocalizedError, Sendable {
+public enum PoolsterStreamingError: Error, LocalizedError, Sendable {
     case unsupportedTransport, customSessionDelegate, invalidResponse, invalidContentType, frameLimit, chunkLimit, bufferLimit
     public var errorDescription:String? {
         switch self {
-        case .unsupportedTransport: return "Selected transport/decorator does not implement KajiStreamingTransport. Supply a streaming-capable decorator; buffered middleware cannot be bypassed."
-        case .customSessionDelegate: return "Custom URLSession delegates require an explicit KajiStreamingTransport implementation."
-        default: return "Kaji event stream failed a response or bounded-memory check."
+        case .unsupportedTransport: return "Selected transport/decorator does not implement PoolsterStreamingTransport. Supply a streaming-capable decorator; buffered middleware cannot be bypassed."
+        case .customSessionDelegate: return "Custom URLSession delegates require an explicit PoolsterStreamingTransport implementation."
+        default: return "Poolster event stream failed a response or bounded-memory check."
         }
     }
 }
-public struct KajiByteStream: Sendable {
+public struct PoolsterByteStream: Sendable {
     public let response: HTTPURLResponse
     public let chunks: AsyncThrowingStream<Data, Error>
     public let cancel: @Sendable () -> Void
     public init(response: HTTPURLResponse, chunks: AsyncThrowingStream<Data, Error>, cancel: @escaping @Sendable () -> Void = {}) { self.response=response;self.chunks=chunks;self.cancel=cancel }
 }
 /// Buffered-only decorators fail with unsupportedTransport; implement this capability to preserve streaming policy.
-public protocol KajiStreamingTransport: KajiTransport {
-    func stream(_ request: URLRequest) async throws -> KajiByteStream
+public protocol PoolsterStreamingTransport: PoolsterTransport {
+    func stream(_ request: URLRequest) async throws -> PoolsterByteStream
 }
-public typealias KajiStreamingNext = @Sendable (URLRequest) async throws -> KajiByteStream
-public typealias KajiStreamingMiddleware = @Sendable (URLRequest, KajiStreamingNext) async throws -> KajiByteStream
-public struct KajiStreamingMiddlewareTransport: KajiStreamingTransport {
-    private let inner: any KajiStreamingTransport
-    private let middleware: KajiStreamingMiddleware
-    public init(inner: any KajiStreamingTransport, middleware: @escaping KajiStreamingMiddleware) { self.inner=inner;self.middleware=middleware }
+public typealias PoolsterStreamingNext = @Sendable (URLRequest) async throws -> PoolsterByteStream
+public typealias PoolsterStreamingMiddleware = @Sendable (URLRequest, PoolsterStreamingNext) async throws -> PoolsterByteStream
+public struct PoolsterStreamingMiddlewareTransport: PoolsterStreamingTransport {
+    private let inner: any PoolsterStreamingTransport
+    private let middleware: PoolsterStreamingMiddleware
+    public init(inner: any PoolsterStreamingTransport, middleware: @escaping PoolsterStreamingMiddleware) { self.inner=inner;self.middleware=middleware }
     public func execute(_ request: URLRequest) async throws -> (Data, URLResponse) { try await inner.execute(request) }
-    public func stream(_ request: URLRequest) async throws -> KajiByteStream { try await middleware(request, { try await inner.stream($0) }) }
+    public func stream(_ request: URLRequest) async throws -> PoolsterByteStream { try await middleware(request, { try await inner.stream($0) }) }
 }
-public struct KajiEventSequence: AsyncSequence, Sendable {
+public struct PoolsterEventSequence: AsyncSequence, Sendable {
     public typealias Element=String
-    let fetch: @Sendable () async throws -> KajiByteStream
+    let fetch: @Sendable () async throws -> PoolsterByteStream
     public func makeAsyncIterator() -> Iterator { Iterator(fetch:fetch) }
     public final class Iterator: AsyncIteratorProtocol {
-        let fetch: @Sendable () async throws -> KajiByteStream
+        let fetch: @Sendable () async throws -> PoolsterByteStream
         var iterator: AsyncThrowingStream<Data,Error>.Iterator?
         var cancel: (@Sendable () -> Void)?
-        private var parser=KajiSSEParser()
+        private var parser=PoolsterSSEParser()
         var events:[String]=[]
         var done=false
-        init(fetch:@escaping @Sendable () async throws -> KajiByteStream) {self.fetch=fetch}
+        init(fetch:@escaping @Sendable () async throws -> PoolsterByteStream) {self.fetch=fetch}
         deinit {cancel?()}
         public func next() async throws -> String? {
             do {
@@ -55,7 +55,7 @@ public struct KajiEventSequence: AsyncSequence, Sendable {
                     let packet=try await current.next();iterator=current
                     try Task.checkCancellation()
                     guard let packet else {done=true;cancel?();return nil} // Incomplete final events are discarded at EOF.
-                    guard packet.count<=65536 else {throw KajiStreamingError.chunkLimit}
+                    guard packet.count<=65536 else {throw PoolsterStreamingError.chunkLimit}
                     events=try parser.consume(packet)
                 }
                 return events.removeFirst()
@@ -63,7 +63,7 @@ public struct KajiEventSequence: AsyncSequence, Sendable {
         }
     }
 }
-private struct KajiSSEParser {
+private struct PoolsterSSEParser {
     var line:[UInt8]=[]
     var data:[String]=[]
     var dataBytes=0
@@ -84,14 +84,14 @@ private struct KajiSSEParser {
                         var value=parts.count==2 ? String(parts[1]) : ""
                         if value.first==" " {value.removeFirst()}
                         dataBytes+=value.utf8.count+1
-                        guard dataBytes<=1048576 && data.count<16384 else {throw KajiStreamingError.frameLimit}
+                        guard dataBytes<=1048576 && data.count<16384 else {throw PoolsterStreamingError.frameLimit}
                         data.append(value)
                     }
                 }
                 afterCR=byte==13
             } else {
                 afterCR=false;line.append(byte)
-                guard line.count<=1048576 else {throw KajiStreamingError.frameLimit}
+                guard line.count<=1048576 else {throw PoolsterStreamingError.frameLimit}
             }
         }
         return events
@@ -99,7 +99,7 @@ private struct KajiSSEParser {
 }
 
 /// Dedicated session preserves configuration/cookie storage. Custom session delegates need an explicit streaming transport.
-internal final class KajiURLSessionStream: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+internal final class PoolsterURLSessionStream: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     let lock=NSLock()
     let chunks:AsyncThrowingStream<Data,Error>
     let continuation:AsyncThrowingStream<Data,Error>.Continuation
@@ -114,7 +114,7 @@ internal final class KajiURLSessionStream: NSObject, URLSessionDataDelegate, @un
         session=URLSession(configuration:configuration,delegate:self,delegateQueue:nil)
         continuation.onTermination={ [weak self] _ in self?.stop(CancellationError()) }
     }
-    func open(_ request:URLRequest) async throws -> KajiByteStream {
+    func open(_ request:URLRequest) async throws -> PoolsterByteStream {
         let response:HTTPURLResponse=try await withTaskCancellationHandler(operation: {
             try await withCheckedThrowingContinuation { (waiter:CheckedContinuation<HTTPURLResponse,Error>) in
                 lock.lock()
@@ -124,17 +124,17 @@ internal final class KajiURLSessionStream: NSObject, URLSessionDataDelegate, @un
                 lock.unlock();task.resume()
             }
         }, onCancel:{self.stop(CancellationError())})
-        return KajiByteStream(response:response,chunks:chunks,cancel:{self.stop(CancellationError())})
+        return PoolsterByteStream(response:response,chunks:chunks,cancel:{self.stop(CancellationError())})
     }
     func stop(_ error:Error?) {
         lock.lock();if stopped {lock.unlock();return};stopped=true
         let waiter=responseWaiter;responseWaiter=nil;let task=self.task;let session=self.session;lock.unlock()
-        waiter?.resume(throwing:error ?? KajiStreamingError.invalidResponse)
+        waiter?.resume(throwing:error ?? PoolsterStreamingError.invalidResponse)
         if let error {continuation.finish(throwing:error)} else {continuation.finish()}
         task?.cancel();session?.invalidateAndCancel()
     }
     func urlSession(_ session:URLSession,dataTask:URLSessionDataTask,didReceive response:URLResponse,completionHandler:@escaping @Sendable (URLSession.ResponseDisposition)->Void) {
-        guard let response=response as? HTTPURLResponse else {completionHandler(.cancel);stop(KajiStreamingError.invalidResponse);return}
+        guard let response=response as? HTTPURLResponse else {completionHandler(.cancel);stop(PoolsterStreamingError.invalidResponse);return}
         lock.lock();let waiter=responseWaiter;responseWaiter=nil;let active = !stopped;lock.unlock()
         waiter?.resume(returning:response);completionHandler(active ? .allow : .cancel)
     }
@@ -143,9 +143,9 @@ internal final class KajiURLSessionStream: NSObject, URLSessionDataDelegate, @un
             let packet=data.subdata(in:start..<min(data.count,start+32768))
             switch continuation.yield(packet) {
             case .enqueued: break
-            case .dropped: stop(KajiStreamingError.bufferLimit);return
+            case .dropped: stop(PoolsterStreamingError.bufferLimit);return
             case .terminated: return
-            @unknown default: stop(KajiStreamingError.bufferLimit);return
+            @unknown default: stop(PoolsterStreamingError.bufferLimit);return
             }
         }
     }

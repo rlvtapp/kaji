@@ -32,7 +32,7 @@
 
     internal func sendBytes(_ request: URLRequest, idempotencyHeader: String? = nil) async throws -> Data {
         let (data,response) = try await executeWithRetry(request,idempotencyHeader:idempotencyHeader)
-        guard let http = response as? HTTPURLResponse else {throw KajiAPIError.invalidResponse}
-        guard (200..<300).contains(http.statusCode) else {throw KajiAPIError.status(code:http.statusCode,body:data)}
+        guard let http = response as? HTTPURLResponse else {throw PoolsterAPIError.invalidResponse}
+        guard (200..<300).contains(http.statusCode) else {throw PoolsterAPIError.status(code:http.statusCode,body:data)}
         return data
     }

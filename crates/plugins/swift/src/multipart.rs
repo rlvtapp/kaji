@@ -148,7 +148,7 @@ fn fields<'a>(api: &'a Api, operation: &'a Operation) -> Result<&'a [Field]> {
         ensure!(
             !matches!(
                 native.trim_matches('`'),
-                "kajiEncoded" | "partHeaders" | "maximumBodyBytes"
+                "poolsterEncoded" | "partHeaders" | "maximumBodyBytes"
             ),
             "Swift multipart field {:?} collides with a generated encoding control",
             field.name
@@ -454,7 +454,7 @@ fn render_body(api: &Api, operation: &Operation) -> Result<String> {
         .collect::<Vec<_>>()
         .join(", ");
     let mut source = format!(
-        "{NOTICE}\nimport Foundation\n\npublic struct {name}: Sendable {{\n{declarations}    public var partHeaders: [String: [String: String]]\n    public var maximumBodyBytes: Int\n\n    public init({}) {{\n{assignments}        self.partHeaders = partHeaders\n        self.maximumBodyBytes = maximumBodyBytes\n    }}\n\n    internal func kajiEncoded() throws -> PoolsterEncodedMultipart {{\n        try Task.checkCancellation()\n        guard partHeaders.keys.allSatisfy({{ [{known}].contains($0) }}) else {{ throw PoolsterMultipartError.unknownPart }}\n        var builder = try PoolsterMultipartEncoder(maximumBodyBytes: maximumBodyBytes)\n{parts}        return try builder.finish()\n    }}\n}}\n",
+        "{NOTICE}\nimport Foundation\n\npublic struct {name}: Sendable {{\n{declarations}    public var partHeaders: [String: [String: String]]\n    public var maximumBodyBytes: Int\n\n    public init({}) {{\n{assignments}        self.partHeaders = partHeaders\n        self.maximumBodyBytes = maximumBodyBytes\n    }}\n\n    internal func poolsterEncoded() throws -> PoolsterEncodedMultipart {{\n        try Task.checkCancellation()\n        guard partHeaders.keys.allSatisfy({{ [{known}].contains($0) }}) else {{ throw PoolsterMultipartError.unknownPart }}\n        var builder = try PoolsterMultipartEncoder(maximumBodyBytes: maximumBodyBytes)\n{parts}        return try builder.finish()\n    }}\n}}\n",
         arguments.join(", ")
     );
     if mixed(operation) {
@@ -472,7 +472,7 @@ fn render_body(api: &Api, operation: &Operation) -> Result<String> {
             .map(|schema| swift_type(schema, false))
             .unwrap_or_else(|| "JSONValue".into());
         let wrapper = body_type(operation).unwrap();
-        source.push_str(&format!("\n/// Select the declared wire representation explicitly.\npublic enum {wrapper}: Sendable {{\n    case multipart({name})\n    case json({ty})\n\n    internal func kajiEncoded() throws -> PoolsterEncodedMultipart {{\n        try Task.checkCancellation()\n        switch self {{\n        case .multipart(let value): return try value.poolsterEncoded()\n        case .json(let value):\n            let body = try JSONEncoder().encode(value)\n            guard body.count <= {MAX_BODY_BYTES} else {{ throw PoolsterMultipartError.bodyTooLarge }}\n            return PoolsterEncodedMultipart(body: body, contentType: {:?})\n        }}\n    }}\n}}\n",media.content_type));
+        source.push_str(&format!("\n/// Select the declared wire representation explicitly.\npublic enum {wrapper}: Sendable {{\n    case multipart({name})\n    case json({ty})\n\n    internal func poolsterEncoded() throws -> PoolsterEncodedMultipart {{\n        try Task.checkCancellation()\n        switch self {{\n        case .multipart(let value): return try value.poolsterEncoded()\n        case .json(let value):\n            let body = try JSONEncoder().encode(value)\n            guard body.count <= {MAX_BODY_BYTES} else {{ throw PoolsterMultipartError.bodyTooLarge }}\n            return PoolsterEncodedMultipart(body: body, contentType: {:?})\n        }}\n    }}\n}}\n",media.content_type));
     }
     Ok(source)
 }
@@ -500,7 +500,7 @@ fn render_ordered_body(operation: &Operation) -> Result<String> {
         });
     let definition = serde_json::to_string(&definition)?;
     let mut source = format!(
-        "{NOTICE}\nimport Foundation\n\npublic struct {name}: Sendable {{\n    public var parts: [PoolsterOrderedPart]\n    public var maximumBodyBytes: Int\n    public init(parts: [PoolsterOrderedPart], maximumBodyBytes: Int = {MAX_BODY_BYTES}) {{ self.parts = parts; self.maximumBodyBytes = maximumBodyBytes }}\n    internal func kajiEncoded() throws -> PoolsterEncodedMultipart {{\n        let definition = try JSONDecoder().decode(PoolsterOrderedDefinition.self, from: Data({definition:?}.utf8))\n        return try kajiOrderedEncode(parts: parts, contentType: definition.content_type, named: definition.encoding ?? [:], prefix: definition.prefix_encoding ?? [], item: definition.item_encoding, maximumBodyBytes: maximumBodyBytes)\n    }}\n}}\n"
+        "{NOTICE}\nimport Foundation\n\npublic struct {name}: Sendable {{\n    public var parts: [PoolsterOrderedPart]\n    public var maximumBodyBytes: Int\n    public init(parts: [PoolsterOrderedPart], maximumBodyBytes: Int = {MAX_BODY_BYTES}) {{ self.parts = parts; self.maximumBodyBytes = maximumBodyBytes }}\n    internal func poolsterEncoded() throws -> PoolsterEncodedMultipart {{\n        let definition = try JSONDecoder().decode(PoolsterOrderedDefinition.self, from: Data({definition:?}.utf8))\n        return try poolsterOrderedEncode(parts: parts, contentType: definition.content_type, named: definition.encoding ?? [:], prefix: definition.prefix_encoding ?? [], item: definition.item_encoding, maximumBodyBytes: maximumBodyBytes)\n    }}\n}}\n"
     );
     if mixed(operation) {
         let json = operation
@@ -517,7 +517,7 @@ fn render_ordered_body(operation: &Operation) -> Result<String> {
             .map(|schema| swift_type(schema, false))
             .unwrap_or_else(|| "JSONValue".into());
         let wrapper = body_type(operation).unwrap();
-        source.push_str(&format!("\npublic enum {wrapper}: Sendable {{\n    case multipart({name})\n    case json({ty})\n    internal func kajiEncoded() throws -> PoolsterEncodedMultipart {{\n        switch self {{\n        case .multipart(let value): return try value.poolsterEncoded()\n        case .json(let value):\n            try Task.checkCancellation()\n            let bytes = try JSONEncoder().encode(value)\n            guard bytes.count <= {MAX_BODY_BYTES} else {{ throw PoolsterMultipartError.bodyTooLarge }}\n            return PoolsterEncodedMultipart(body: bytes, contentType: {:?})\n        }}\n    }}\n}}\n",json.content_type));
+        source.push_str(&format!("\npublic enum {wrapper}: Sendable {{\n    case multipart({name})\n    case json({ty})\n    internal func poolsterEncoded() throws -> PoolsterEncodedMultipart {{\n        switch self {{\n        case .multipart(let value): return try value.poolsterEncoded()\n        case .json(let value):\n            try Task.checkCancellation()\n            let bytes = try JSONEncoder().encode(value)\n            guard bytes.count <= {MAX_BODY_BYTES} else {{ throw PoolsterMultipartError.bodyTooLarge }}\n            return PoolsterEncodedMultipart(body: bytes, contentType: {:?})\n        }}\n    }}\n}}\n",json.content_type));
     }
     Ok(source)
 }

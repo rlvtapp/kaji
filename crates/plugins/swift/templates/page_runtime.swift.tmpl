@@ -1,7 +1,7 @@
 import Foundation
 
-public enum KajiPaginationError: Error, Sendable { case invalidOffset, unsafeURL, invalidURL, repeatedURL, invalidPage, invalidLimit, invalidResults, pageOverflow, pageLimit }
-public struct KajiPageSequence<Element: Sendable>: AsyncSequence, Sendable {
+public enum PoolsterPaginationError: Error, Sendable { case invalidOffset, unsafeURL, invalidURL, repeatedURL, invalidPage, invalidLimit, invalidResults, pageOverflow, pageLimit }
+public struct PoolsterPageSequence<Element: Sendable>: AsyncSequence, Sendable {
     public typealias AsyncIterator = Iterator
     let page: Int
     let limit: Int?
@@ -20,12 +20,12 @@ public struct KajiPageSequence<Element: Sendable>: AsyncSequence, Sendable {
         public mutating func next() async throws -> Element? {
             try Task.checkCancellation()
             if done { return nil }
-            if overflow { throw KajiPaginationError.pageOverflow }
-            if page < 0 { throw offset ? KajiPaginationError.invalidOffset : KajiPaginationError.invalidPage }
-            if count >= 10000 { throw KajiPaginationError.pageLimit }
-            if let limit, limit <= 0 { throw KajiPaginationError.invalidLimit }
+            if overflow { throw PoolsterPaginationError.pageOverflow }
+            if page < 0 { throw offset ? PoolsterPaginationError.invalidOffset : PoolsterPaginationError.invalidPage }
+            if count >= 10000 { throw PoolsterPaginationError.pageLimit }
+            if let limit, limit <= 0 { throw PoolsterPaginationError.invalidLimit }
             let (response, size) = try await fetch(page)
-            if size < 0 { throw KajiPaginationError.invalidResults }
+            if size < 0 { throw PoolsterPaginationError.invalidResults }
             count += 1
             if size == 0 || (limit != nil && size < limit!) { done = true }
             else {
@@ -36,28 +36,28 @@ public struct KajiPageSequence<Element: Sendable>: AsyncSequence, Sendable {
         }
     }
 }
-internal enum KajiSelectorSegment: Sendable { case field(String), index(Int) }
-internal func kajiPageCount<T: Encodable>(_ response: T, _ segments: [KajiSelectorSegment]) throws -> Int {
+internal enum PoolsterSelectorSegment: Sendable { case field(String), index(Int) }
+internal func poolsterPageCount<T: Encodable>(_ response: T, _ segments: [PoolsterSelectorSegment]) throws -> Int {
     var value: Any = try JSONSerialization.jsonObject(with: JSONEncoder().encode(response), options: [.fragmentsAllowed])
     for segment in segments {
         switch segment {
         case .field(let key):
             if let map = value as? [String: Any], let next = map[key] { value = next }
             else if let array = value as? [Any], let index = Int(key), index >= 0, String(index) == key, index < array.count { value = array[index] }
-            else { throw KajiPaginationError.invalidResults }
+            else { throw PoolsterPaginationError.invalidResults }
         case .index(let index):
-            guard let array = value as? [Any] else { throw KajiPaginationError.invalidResults }
+            guard let array = value as? [Any] else { throw PoolsterPaginationError.invalidResults }
             let actual = index < 0 ? array.count + index : index
-            guard actual >= 0, actual < array.count else { throw KajiPaginationError.invalidResults }
+            guard actual >= 0, actual < array.count else { throw PoolsterPaginationError.invalidResults }
             value = array[actual]
         }
     }
-    guard let results = value as? [Any] else { throw KajiPaginationError.invalidResults }
+    guard let results = value as? [Any] else { throw PoolsterPaginationError.invalidResults }
     return results.count
 }
 
 /// Lazy string cursor pagination; a repeated token terminates the sequence.
-public struct KajiCursorSequence<Element: Sendable>: AsyncSequence, Sendable {
+public struct PoolsterCursorSequence<Element: Sendable>: AsyncSequence, Sendable {
     public typealias AsyncIterator = Iterator
     let cursor: String?
     let fetch: @Sendable (String?) async throws -> (Element, String?)
@@ -71,7 +71,7 @@ public struct KajiCursorSequence<Element: Sendable>: AsyncSequence, Sendable {
         public mutating func next() async throws -> Element? {
             try Task.checkCancellation()
             if done { return nil }
-            if count >= 10000 { throw KajiPaginationError.pageLimit }
+            if count >= 10000 { throw PoolsterPaginationError.pageLimit }
             let (response, continuation) = try await fetch(cursor)
             count += 1
             if let continuation, !continuation.isEmpty, seen.insert(continuation).inserted { cursor = continuation }
@@ -80,26 +80,26 @@ public struct KajiCursorSequence<Element: Sendable>: AsyncSequence, Sendable {
         }
     }
 }
-internal func kajiNextCursor<T: Encodable>(_ response: T, _ segments: [KajiSelectorSegment]) throws -> String? {
+internal func poolsterNextCursor<T: Encodable>(_ response: T, _ segments: [PoolsterSelectorSegment]) throws -> String? {
     var value: Any = try JSONSerialization.jsonObject(with: JSONEncoder().encode(response), options: [.fragmentsAllowed])
     for segment in segments {
         switch segment {
         case .field(let key):
             if let map = value as? [String: Any] { guard let next = map[key] else { return nil }; value = next }
             else if let array = value as? [Any], let index = Int(key), index >= 0, String(index) == key, index < array.count { value = array[index] }
-            else { throw KajiPaginationError.invalidResults }
+            else { throw PoolsterPaginationError.invalidResults }
         case .index(let index):
-            guard let array = value as? [Any] else { throw KajiPaginationError.invalidResults }
+            guard let array = value as? [Any] else { throw PoolsterPaginationError.invalidResults }
             let actual = index < 0 ? array.count + index : index
             guard actual >= 0, actual < array.count else { return nil }
             value = array[actual]
         }
     }
     if value is NSNull { return nil }
-    guard let cursor = value as? String else { throw KajiPaginationError.invalidResults }
+    guard let cursor = value as? String else { throw PoolsterPaginationError.invalidResults }
     return cursor.isEmpty ? nil : cursor
 }
-public struct KajiURLSequence<Element: Sendable>: AsyncSequence, Sendable {
+public struct PoolsterURLSequence<Element: Sendable>: AsyncSequence, Sendable {
     let fetch: @Sendable (URL?) async throws -> (Element, String?)
     init(fetch: @escaping @Sendable (URL?) async throws -> (Element, String?)) { self.fetch=fetch }
     public func makeAsyncIterator() -> Iterator { Iterator(fetch: fetch) }
@@ -112,11 +112,11 @@ public struct KajiURLSequence<Element: Sendable>: AsyncSequence, Sendable {
         public mutating func next() async throws -> Element? {
             try Task.checkCancellation()
             if done { return nil }
-            if count >= 10000 { throw KajiPaginationError.pageLimit }
+            if count >= 10000 { throw PoolsterPaginationError.pageLimit }
             var url: URL?
             if let nextURL {
-                guard !seen.contains(nextURL) else { throw KajiPaginationError.repeatedURL }
-                guard let parsed=URL(string: nextURL) else { throw KajiPaginationError.invalidURL }
+                guard !seen.contains(nextURL) else { throw PoolsterPaginationError.repeatedURL }
+                guard let parsed=URL(string: nextURL) else { throw PoolsterPaginationError.invalidURL }
                 seen.insert(nextURL); url=parsed
             }
             let (response, next) = try await fetch(url)
@@ -127,22 +127,22 @@ public struct KajiURLSequence<Element: Sendable>: AsyncSequence, Sendable {
         }
     }
 }
-internal func kajiNextURL<T: Encodable>(_ response: T, _ segments: [KajiSelectorSegment]) throws -> String? {
+internal func poolsterNextURL<T: Encodable>(_ response: T, _ segments: [PoolsterSelectorSegment]) throws -> String? {
     var value: Any = try JSONSerialization.jsonObject(with: JSONEncoder().encode(response), options: [.fragmentsAllowed])
     for segment in segments {
         switch segment {
         case .field(let key):
             if let map=value as? [String: Any] { guard let next=map[key] else {return nil}; value=next }
             else if let array=value as? [Any], let index=Int(key), index>=0, String(index)==key, index<array.count {value=array[index]}
-            else {throw KajiPaginationError.invalidURL}
+            else {throw PoolsterPaginationError.invalidURL}
         case .index(let index):
-            guard let array=value as? [Any] else {throw KajiPaginationError.invalidURL}
+            guard let array=value as? [Any] else {throw PoolsterPaginationError.invalidURL}
             let actual=index<0 ? array.count+index : index
-            guard actual>=0,actual<array.count else {throw KajiPaginationError.invalidURL}
+            guard actual>=0,actual<array.count else {throw PoolsterPaginationError.invalidURL}
             value=array[actual]
         }
     }
     if value is NSNull {return nil}
-    guard let next=value as? String else {throw KajiPaginationError.invalidURL}
+    guard let next=value as? String else {throw PoolsterPaginationError.invalidURL}
     return next.isEmpty ? nil : next
 }
