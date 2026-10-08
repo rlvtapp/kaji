@@ -2582,23 +2582,23 @@ mod tests {
                 .contains("<maven.compiler.release>17</maven.compiler.release>")
         );
         let model = tree
-            .get("sdks/java/src/main/java/com/kaji/email/model/Contact.java")
+            .get("sdks/java/src/main/java/com/poolster/email/model/Contact.java")
             .unwrap();
         assert!(model.contains("public record Contact("));
         assert!(model.contains("@JsonProperty(\"display_name\") String displayName"));
         let client = rendered_java(&tree);
         assert!(
-            tree.get("sdks/java/src/main/java/com/kaji/email/ClientBase.java")
+            tree.get("sdks/java/src/main/java/com/poolster/email/ClientBase.java")
                 .is_some()
         );
         assert!(
-            tree.get("sdks/java/src/main/java/com/kaji/email/internal/Operations000.java")
+            tree.get("sdks/java/src/main/java/com/poolster/email/internal/Operations000.java")
                 .unwrap()
                 .contains("public class Operations000 extends com.poolster.email.ClientBase")
         );
         assert!(
             !tree
-                .get("sdks/java/src/main/java/com/kaji/email/Client.java")
+                .get("sdks/java/src/main/java/com/poolster/email/Client.java")
                 .unwrap()
                 .contains("public record GetContactRequest")
         );
@@ -2613,12 +2613,12 @@ mod tests {
         assert!(client.contains("retryAllowed"));
         assert!(client.contains("Retry-After"));
         assert!(
-            tree.get("sdks/java/src/main/java/com/kaji/email/RetryConfig.java")
+            tree.get("sdks/java/src/main/java/com/poolster/email/RetryConfig.java")
                 .unwrap()
                 .contains("maxAttempts")
         );
         assert!(
-            tree.get("sdks/java/src/main/java/com/kaji/email/ClientHooks.java")
+            tree.get("sdks/java/src/main/java/com/poolster/email/ClientHooks.java")
                 .unwrap()
                 .contains("beforeRequest")
         );
@@ -2789,7 +2789,7 @@ mod tests {
         assert!(render_test_sdk(&contact_api(), "../escape", None).is_err());
         let tree = render_test_sdk(&contact_api(), "java", None).unwrap();
         assert!(
-            tree.get("java/src/main/java/io/kaji/kajiemailapi/Client.java")
+            tree.get("java/src/main/java/io/poolster/poolsteremailapi/Client.java")
                 .is_some()
         );
         assert!(
@@ -2886,7 +2886,7 @@ mod tests {
         .unwrap();
         let client = rendered_java(&tree);
         let resource = tree
-            .get("java/src/main/java/com/kaji/email/ContactsResource.java")
+            .get("java/src/main/java/com/poolster/email/ContactsResource.java")
             .unwrap();
         assert!(client.contains("public ContactsResource contacts() { return contactsResource; }"));
         assert!(resource.contains("extends ContactsResourcePart000"));
@@ -2922,7 +2922,7 @@ mod tests {
                 .ends_with("ContactsResourcePart001.java")
         }));
         assert!(
-            tree.get("java/src/main/java/com/kaji/email/ContactsResource.java")
+            tree.get("java/src/main/java/com/poolster/email/ContactsResource.java")
                 .unwrap()
                 .contains("extends ContactsResourcePart001")
         );
@@ -2941,11 +2941,11 @@ mod tests {
             .collect();
         let tree = render_test_sdk(&source, "java", Some("com.poolster.email")).unwrap();
         assert!(
-            tree.get("java/src/main/java/com/kaji/email/internal/Operations001.java")
+            tree.get("java/src/main/java/com/poolster/email/internal/Operations001.java")
                 .is_some()
         );
         assert!(
-            tree.get("java/src/main/java/com/kaji/email/Client.java")
+            tree.get("java/src/main/java/com/poolster/email/Client.java")
                 .unwrap()
                 .contains("extends com.poolster.email.internal.Operations001")
         );
@@ -3010,7 +3010,7 @@ mod tests {
         let namespaced =
             render_sdk(&source, "java-namespaced", None, SdkClientStyle::Namespaced).unwrap();
         let resource = namespaced
-            .get("java-namespaced/src/main/java/io/kaji/kajiemailapi/ContactsResource.java")
+            .get("java-namespaced/src/main/java/io/poolster/poolsteremailapi/ContactsResource.java")
             .unwrap();
         assert!(resource.contains("extends ContactsResourcePart000"));
         let sources = rendered_java(&namespaced);

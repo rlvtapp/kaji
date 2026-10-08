@@ -163,17 +163,17 @@ fn transparent_aliases_and_opt_in_enum_values_keep_wire_representation() {
         .generate(&api(), None)
         .unwrap();
     assert!(
-        tree.get("sdk/src/main/java/io/kaji/compat/model/Count.java")
+        tree.get("sdk/src/main/java/io/poolster/compat/model/Count.java")
             .unwrap()
             .contains("JsonCreator.Mode.DELEGATING")
     );
     assert!(
-        tree.get("sdk/src/main/java/io/kaji/compat/model/Choice.java")
+        tree.get("sdk/src/main/java/io/poolster/compat/model/Choice.java")
             .unwrap()
             .contains("JsonNode value")
     );
     assert!(
-        tree.get("sdk/src/main/java/io/kaji/compat/model/State.java")
+        tree.get("sdk/src/main/java/io/poolster/compat/model/State.java")
             .unwrap()
             .contains("Extensible wire value")
     );
@@ -192,7 +192,7 @@ fn native_models_preserve_alias_union_and_unknown_enum_wire_values() {
         .unwrap();
     let dir = tempfile::tempdir().unwrap();
     tree.write_to(dir.path()).unwrap();
-    std::fs::write(dir.path().join("sdk/src/test/java/io/kaji/compat/ModelsProbe.java"), r#"package io.poolster.compat;
+    std::fs::write(dir.path().join("sdk/src/test/java/io/poolster/compat/ModelsProbe.java"), r#"package io.poolster.compat;
 import io.poolster.compat.model.*;
 import com.fasterxml.jackson.databind.*;
 public final class ModelsProbe extends ClientBase {

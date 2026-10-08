@@ -546,7 +546,7 @@ mod tests {
             .generate(&api(), None)
             .unwrap();
         let client = tree
-            .get("sdk/src/main/java/io/kaji/multipart/ClientBase.java")
+            .get("sdk/src/main/java/io/poolster/multipart/ClientBase.java")
             .unwrap();
         assert_eq!(
             client
@@ -555,7 +555,7 @@ mod tests {
             4
         );
         let dto = tree
-            .get("sdk/src/main/java/io/kaji/multipart/UploadThingMultipartBody.java")
+            .get("sdk/src/main/java/io/poolster/multipart/UploadThingMultipartBody.java")
             .unwrap();
         assert!(dto.contains("MultipartBody.FilePart file"));
         assert!(dto.contains("MultipartBody.scalar(flag)"));
@@ -591,7 +591,7 @@ mod tests {
         source.replace_range(start..end, include_str!("multipart_probe_assert.java.txt"));
         std::fs::write(
             dir.path()
-                .join("sdk/src/test/java/io/kaji/multipart/PoolsterOperationTests.java"),
+                .join("sdk/src/test/java/io/poolster/multipart/PoolsterOperationTests.java"),
             source,
         )
         .unwrap();
@@ -688,7 +688,7 @@ mod tests {
         );
         std::fs::write(
             dir.path()
-                .join("sdk/src/test/java/io/kaji/multipart/PoolsterOperationTests.java"),
+                .join("sdk/src/test/java/io/poolster/multipart/PoolsterOperationTests.java"),
             source,
         )
         .unwrap();

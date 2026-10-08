@@ -60,7 +60,7 @@ fn byte_budget_splits_verbose_single_resource_before_count_limit() {
         .iter()
         .filter(|(path, _)| {
             path.to_string_lossy()
-                .starts_with("sdk/src/main/java/io/kaji/layout/internal/Operations")
+                .starts_with("sdk/src/main/java/io/poolster/layout/internal/Operations")
                 && path.extension().and_then(|extension| extension.to_str()) == Some("java")
         })
         .collect::<Vec<_>>();
@@ -91,7 +91,7 @@ fn byte_budget_splits_verbose_single_resource_before_count_limit() {
         .iter()
         .filter(|(path, _)| {
             path.to_string_lossy()
-                .starts_with("sdk/src/main/java/io/kaji/layout/internal/resources")
+                .starts_with("sdk/src/main/java/io/poolster/layout/internal/resources")
                 && path.extension().and_then(|value| value.to_str()) == Some("java")
         })
         .collect::<Vec<_>>();
@@ -110,7 +110,7 @@ fn byte_budget_splits_verbose_single_resource_before_count_limit() {
         .iter()
         .find(|(path, _)| {
             path.to_string_lossy()
-                .starts_with("sdk/src/main/java/io/kaji/layout/internal/Operations")
+                .starts_with("sdk/src/main/java/io/poolster/layout/internal/Operations")
                 && path.extension().and_then(|extension| extension.to_str()) == Some("java")
         })
         .unwrap()
@@ -139,7 +139,7 @@ fn native_byte_grouped_sdk_compiles() {
     tree.write_to(root.path()).unwrap();
     let probe = root
         .path()
-        .join("sdk/src/test/java/io/kaji/layout/LayoutProbe.java");
+        .join("sdk/src/test/java/io/poolster/layout/LayoutProbe.java");
     std::fs::create_dir_all(probe.parent().unwrap()).unwrap();
     std::fs::write(probe, r#"package io.poolster.layout;
 import io.poolster.layout.model.*;

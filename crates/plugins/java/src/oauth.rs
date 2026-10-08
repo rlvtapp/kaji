@@ -58,9 +58,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         tree.write_to(dir.path()).unwrap();
         let cwd = dir.path().join("sdk");
-        std::fs::create_dir_all(cwd.join("src/test/java/io/kaji/oauth")).unwrap();
+        std::fs::create_dir_all(cwd.join("src/test/java/io/poolster/oauth")).unwrap();
         std::fs::write(
-            cwd.join("src/test/java/io/kaji/oauth/OAuthProbe.java"),
+            cwd.join("src/test/java/io/poolster/oauth/OAuthProbe.java"),
             include_str!("oauth_probe.java.txt"),
         )
         .unwrap();

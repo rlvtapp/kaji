@@ -238,7 +238,7 @@ mod tests {
         assert!(!report_text.contains("DO_NOT_COPY_SOURCE_SECRET"));
         assert!(report_text.contains("encoded_path"));
         let source = tree
-            .get("sdk/src/test/java/io/kaji/operationtest/PoolsterOperationTests.java")
+            .get("sdk/src/test/java/io/poolster/operationtest/PoolsterOperationTests.java")
             .unwrap();
         assert!(source.contains("client.echoContact("));
         assert!(source.contains("request.bodyPublisher()"));

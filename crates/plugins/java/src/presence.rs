@@ -140,13 +140,13 @@ mod tests {
         )
         .unwrap();
         let source = tree
-            .get("src/main/java/io/kaji/presence/model/Event.java")
+            .get("src/main/java/io/poolster/presence/model/Event.java")
             .unwrap();
         assert!(source.contains("Presence<String> note"));
         assert!(source.contains("Presence<Long> count"));
         assert!(source.contains("public Event(Presence<String> note, Presence<Long> count)"));
         assert!(
-            tree.get("src/main/java/io/kaji/presence/model/Presence.java")
+            tree.get("src/main/java/io/poolster/presence/model/Presence.java")
                 .unwrap()
                 .contains("getAbsentValue")
         );
@@ -161,7 +161,7 @@ mod tests {
         .unwrap();
         assert!(
             !default
-                .get("src/main/java/io/kaji/presence/model/Event.java")
+                .get("src/main/java/io/poolster/presence/model/Event.java")
                 .unwrap()
                 .contains("Presence<")
         );
@@ -180,7 +180,7 @@ mod tests {
             .unwrap();
         let dir = tempfile::tempdir().unwrap();
         tree.write_to(dir.path()).unwrap();
-        std::fs::write(dir.path().join("sdk/src/test/java/io/kaji/presence/PresenceProbe.java"),r#"package io.poolster.presence;import io.poolster.presence.model.*;import com.fasterxml.jackson.databind.*;public class PresenceProbe{public static void main(String[]args)throws Exception{var mapper=new ObjectMapper();for(var wire:new String[]{"{}","{\"note\":null}","{\"note\":\"future\",\"count\":0}","{\"note\":null,\"future\":[false,0,null]}"}){var model=mapper.readValue(wire,Event.class);if(!mapper.readTree(wire).equals(mapper.readTree(mapper.writeValueAsString(model))))throw new AssertionError("presence wire");}var absent=mapper.readValue("{}",Event.class);if(absent.note()!=null)throw new AssertionError("omitted");var present=mapper.readValue("{\"note\":null}",Event.class);if(present.note()==null||present.note().value()!=null)throw new AssertionError("null");}}"#).unwrap();
+        std::fs::write(dir.path().join("sdk/src/test/java/io/poolster/presence/PresenceProbe.java"),r#"package io.poolster.presence;import io.poolster.presence.model.*;import com.fasterxml.jackson.databind.*;public class PresenceProbe{public static void main(String[]args)throws Exception{var mapper=new ObjectMapper();for(var wire:new String[]{"{}","{\"note\":null}","{\"note\":\"future\",\"count\":0}","{\"note\":null,\"future\":[false,0,null]}"}){var model=mapper.readValue(wire,Event.class);if(!mapper.readTree(wire).equals(mapper.readTree(mapper.writeValueAsString(model))))throw new AssertionError("presence wire");}var absent=mapper.readValue("{}",Event.class);if(absent.note()!=null)throw new AssertionError("omitted");var present=mapper.readValue("{\"note\":null}",Event.class);if(present.note()==null||present.note().value()!=null)throw new AssertionError("null");}}"#).unwrap();
         let output = std::process::Command::new("mvn")
             .args([
                 "-q",

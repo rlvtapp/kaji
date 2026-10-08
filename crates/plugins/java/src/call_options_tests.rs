@@ -45,7 +45,7 @@ fn native_call_scopes_preserve_headers_timeouts_and_original_client() {
     );
     std::fs::write(
         dir.path()
-            .join("sdk/src/test/java/io/kaji/callscope/PoolsterOperationTests.java"),
+            .join("sdk/src/test/java/io/poolster/callscope/PoolsterOperationTests.java"),
         source,
     )
     .unwrap();
