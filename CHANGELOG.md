@@ -115,6 +115,11 @@
   repeated query arrays, encoded paths, nested model decoding and cancellation.
 - Go request/model naming handles the pinned full OpenAI and GitHub contracts;
   Rust escapes reserved names and pagers avoid saturating-counter loops.
+- Resolve repeated source operation IDs deterministically and lift nested local
+  schema targets into emitted components. Preserve valid YAML block scalar tabs
+  and Unicode line separators, and treat vendor extension references as data.
+- Go allocates model symbols around runtime, service, enum and normalization
+  collisions. Custom JSON methods preserve wire keys that cannot use struct tags.
 - Swift recursive models compile as immutable classes. Java/C# inline response
   imports, Java presence constructors, C# renamed presence properties, Ruby
   `value` fields and unknown-property collisions are corrected.
@@ -137,10 +142,11 @@
   wire corpus, plus OAuth/cancellation, nested-model, installed TypeScript package,
   regeneration-conflict and delivery failure/cleanup checks.
 - Add checksum-pinned Microsoft Graph and six full official contracts, plus a
-  32-provider APIs.guru corpus with per-phase logs, timeout/failure reports,
-  cleanup tests and manual native-language workflows. The initial Guru Go baseline
-  passes 25 of 32 contracts; seven retained failures are documented in
-  [large-spec testing](docs/large-specs.md). Workflow availability does not imply
+  205-contract APIs.guru corpus, including five Azure services, with per-phase
+  logs, timeout/failure reports, cleanup tests, verified companion reference
+  files and manual native-language workflows. See
+  [large-spec testing](docs/large-specs.md). All 205 pass local Go generation and
+  native compilation. Workflow availability does not imply
   every contract passes in every language.
 - Postman collection/environment sync is included; whole-workspace synchronization
   and publication are outside this release's scope.

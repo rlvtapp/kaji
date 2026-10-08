@@ -134,9 +134,13 @@ unsupported constructs fail explicitly rather than silently dropping operations.
 
 ## APIs.guru corpus
 
-`scripts/fixtures/guru-contracts.json` pins 32 specifications from distinct
+`scripts/fixtures/guru-contracts.json` pins 205 specifications from 201
 APIs.guru providers to one immutable repository revision, with byte sizes and
-SHA-256 checksums. The corpus totals about 109 MB; each contract exceeds 1 MB.
+SHA-256 checksums. The root documents total about 181 MB. Every contract
+exceeds 100 KB; the
+original 32 exceed 1 MB. Selection keeps the original fixtures and adds the
+largest qualifying OpenAPI document from each additional provider, plus five
+Azure Swagger 2 contracts: Web Apps, Compute, Virtual WAN, Storage and Key Vault.
 It includes GitHub, Stripe, AWS EC2, Google Compute, Mailchimp, Zoom, DocuSign,
 Jira, Plaid, Box and other large APIs.
 
@@ -160,11 +164,26 @@ checks use the existing public-contract runner: compilation for compiled targets
 Python import/bytecode checks, Ruby syntax/load checks and PHP syntax checks.
 These checks are not complete runtime conformance tests.
 
-The initial local Go baseline passed 25 of 32 contracts. Seven failures remain:
-Google Compute and DocuSign expose normalized model-name collisions; GS MTasks
-has a model named `Client` colliding with the runtime; HERE repeats operation
-identities; Codat and bunq hit YAML parsing failures; the catalog's DigitalOcean
-file references companion files missing from that catalog entry. The separate
-fully bundled official DigitalOcean fixture passes Go compilation. These corpus
-failures are retained and make a full corpus run fail; the workflow is evidence
-gathering infrastructure, not a claim that all contracts or languages pass.
+The October 8, 2026 local Go verification passed all 205 contracts: the complete
+200-provider run plus a separate five-service Azure run. Each pass includes SDK
+generation and `go test ./...`. All original seven failures and the four new
+failures discovered while expanding the corpus are resolved. This verifies Go
+compilation, not every API operation's runtime semantics or all language targets.
+
+The expanded corpus exposed model/runtime/service/enum symbol collisions,
+repeated operation IDs, nested schema references, YAML block scalar compatibility,
+and JSON keys that cannot appear in Go struct tags. Kaji now allocates stable Go
+symbols and operation identities, lifts nested reference targets, preserves
+valid block content, and generates custom JSON encoding for those wire keys.
+References inside vendor extension data remain literal and do not trigger file
+fetches. Focused tests cover these behaviors through independent typed plugins.
+
+The catalog's DigitalOcean root omits discriminator mapping files. Its original
+bytes remain unchanged; the manifest separately pins 14 companion files from
+the official repository, including their complete local reference closure,
+checksums and size limits. The fetcher verifies every file before assembling an
+isolated source tree. No missing schemas are guessed or skipped.
+
+Selecting `all` in the workflow requests 2,050 generation/native-check cases
+across ten language lanes. That is available coverage, not evidence that every
+contract or runtime behavior passes in every language.

@@ -38,7 +38,7 @@ supported. Version 0.5.0 is on the branch; use a source build until published.
 | Safe regeneration | Preflight all packages, ownership manifest, unchanged stale-file removal, edited-file protection | [Regeneration](safe-regeneration.md) |
 | Read-only drift and inspection | `generate --check`, SDK doctor and inspectable compiler/package artifacts | [CLI](cli.md), [verification](verification.md) |
 | Existing generator projects | Stainless/Fern/Speakeasy config import and direct generation; supported annotations normalized; unsupported settings reported for review | [Migration](migration.md) |
-| Large public contract regression | Pinned Graph, six official contracts and 32 APIs.guru providers; checksums and manual native matrices; Guru baseline 25/32 Go passes | [Large specs](large-specs.md) |
+| Large public contract regression | Pinned Graph, six official contracts and 205 APIs.guru contracts (including five Azure services); 205/205 Go generation/native passes, checksums and manual native matrices | [Large specs](large-specs.md) |
 | Arbitrary custom languages | Rust library `Language`/`Plugin` implementations and optional delivery metadata. CLI needs explicit registry integration | [Library plugins](library/plugins.md) |
 | Ejectable generator sources | `kaji eject` exports rebuildable renderers, runtime sources and plugin interfaces, with a SHA-256 manifest | [Own the sources](source-customization.md) |
 
@@ -145,7 +145,7 @@ presence is not evidence that registry trust or live delivery works.
 
 ## Tests and confidence
 
-The current verification baseline includes 418 passing workspace tests, 163 native
+The current verification baseline includes 469 passing workspace tests, 163 native
 wire scenarios across all ten runtimes, 37 runner/delivery/sync tests and an
 installed TypeScript package consumer check. Ignored native probes need explicit
 toolchain execution; they are not passes. Counts describe the recorded baseline,
