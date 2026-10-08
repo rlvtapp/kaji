@@ -9,7 +9,7 @@ test('composite action installs the published launcher without shell-interpolati
   assert.match(metadata, /^runs:\n  using: composite$/m);
   assert.match(metadata, /uses: actions\/setup-node@v4/);
   assert.match(metadata, /node-version: 22/);
-  assert.match(metadata, /KAJI_CONFIG: \$\{\{ inputs\.config \}\}/);
-  assert.match(metadata, /KAJI_VERSION: \$\{\{ inputs\.version \}\}/);
-  assert.match(metadata, /npx --yes "kajicli@\$KAJI_VERSION" generate --config "\$KAJI_CONFIG"/);
+  assert.match(metadata, /POOLSTER_CONFIG: \$\{\{ inputs\.config \}\}/);
+  assert.match(metadata, /POOLSTER_VERSION: \$\{\{ inputs\.version \}\}/);
+  assert.match(metadata, /npx --yes "poolster@\$POOLSTER_VERSION" generate --config "\$POOLSTER_CONFIG"/);
 });

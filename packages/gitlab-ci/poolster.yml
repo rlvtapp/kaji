@@ -1,0 +1,16 @@
+# Include this template from a pinned Poolster release in .gitlab-ci.yml.
+# Override POOLSTER_CONFIG, POOLSTER_VERSION, or POOLSTER_WORKING_DIRECTORY per project.
+
+.poolster:generate:
+  # The published Linux launcher targets glibc; Alpine's musl image is unsupported.
+  image: node:22-bookworm-slim
+  variables:
+    POOLSTER_CONFIG: poolster.json
+    POOLSTER_VERSION: latest
+    POOLSTER_WORKING_DIRECTORY: .
+  script:
+    - cd "$POOLSTER_WORKING_DIRECTORY"
+    - npx --yes "poolster@$POOLSTER_VERSION" generate --config "$POOLSTER_CONFIG"
+
+poolster:generate:
+  extends: .poolster:generate

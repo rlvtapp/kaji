@@ -1,5 +1,5 @@
-name: Kaji generate
-description: Generate Kaji SDKs from an OpenAPI contract in GitHub Actions.
+name: Poolster generate
+description: Generate Poolster SDKs from an OpenAPI contract in GitHub Actions.
 author: Relevate
 branding:
   icon: box
@@ -7,15 +7,15 @@ branding:
 
 inputs:
   config:
-    description: Path to kaji.json relative to working-directory.
+    description: Path to poolster.json relative to working-directory.
     required: false
-    default: kaji.json
+    default: poolster.json
   version:
-    description: npm version or dist-tag for kajicli.
+    description: npm version or dist-tag for poolster.
     required: false
     default: latest
   working-directory:
-    description: Directory in which Kaji runs.
+    description: Directory in which Poolster runs.
     required: false
     default: .
 
@@ -29,6 +29,6 @@ runs:
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       env:
-        KAJI_CONFIG: ${{ inputs.config }}
-        KAJI_VERSION: ${{ inputs.version }}
-      run: npx --yes "kajicli@$KAJI_VERSION" generate --config "$KAJI_CONFIG"
+        POOLSTER_CONFIG: ${{ inputs.config }}
+        POOLSTER_VERSION: ${{ inputs.version }}
+      run: npx --yes "poolster@$POOLSTER_VERSION" generate --config "$POOLSTER_CONFIG"
