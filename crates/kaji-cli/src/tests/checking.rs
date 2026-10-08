@@ -1,4 +1,6 @@
+use super::super::check_command::{load_check_baseline, write_check_baseline};
 use super::*;
+use crate::check_rules::{CheckDiagnostic, CheckSidecarOperation, check_api};
 
 #[test]
 fn check_baselines_use_stable_fingerprints() {
