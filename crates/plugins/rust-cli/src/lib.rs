@@ -614,8 +614,13 @@ mod tests {
             .unwrap();
         let target = std::env::var_os("POOLSTER_CLI_CARGO_TARGET_DIR")
             .unwrap_or_else(|| root.path().join("target").into_os_string());
-        let output = std::process::Command::new("cargo")
-            .args(["run", "--offline", "--quiet", "--", "--help"])
+        let mut cargo = std::process::Command::new("cargo");
+        cargo.arg("run");
+        if std::env::var("POOLSTER_RUNTIME_OFFLINE").as_deref() == Ok("1") {
+            cargo.arg("--offline");
+        }
+        let output = cargo
+            .args(["--quiet", "--", "--help"])
             .env("CARGO_TARGET_DIR", target)
             .current_dir(root.path().join("cli"))
             .output()
