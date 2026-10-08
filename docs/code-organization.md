@@ -1,7 +1,6 @@
 # Code organization guidelines
 
-These rules apply to code written in this repository now, under Kaji, and after
-any future product rename. They guide new work and incremental cleanup; they do
+These rules apply to code written in this repository. They guide new work and incremental cleanup; they do
 not require a mechanical rewrite of every existing file.
 
 ## Put each kind of file where a reader expects it
@@ -40,7 +39,7 @@ replacements spread across several Rust modules.
 - In a language plugin, separate model rendering, operations, runtime code,
   pagination, package metadata, and test support when they grow independently.
   Do not create one-file modules solely to satisfy a line count.
-- Put shared AST and plugin contracts in `kaji-core`; keep target-language
+- Put shared AST and plugin contracts in `poolster-core`; keep target-language
   rendering in its plugin crate. Inputs own parsing and their source-specific
   contracts. The CLI and Node addon compose those crates rather than becoming
   alternate implementations of the engine.
@@ -60,9 +59,12 @@ merging Rust API changes. Keep output ordering deterministic, return actionable
 errors at public boundaries, and use `Result` instead of panicking on invalid
 user input.
 
-The first cleanup candidates are `crates/kaji-cli/src/main.rs` (about 5,700
-lines), `crates/kaji-cli/src/sdk_automation.rs` (about 3,300), and the Python,
-Go, PHP, Java, and Elixir plugin `lib.rs` files (about 3,100–4,700 each).
-Start template moves with one plugin, such as PHP, then apply the proven layout
-to the other plugin crates. Existing upstream corpora already belong under
-`tests/`; keep their original contents and provenance intact.
+The source-size baseline in `scripts/source-size-baseline.json` records the
+remaining legacy files above 400 lines. CI rejects new oversized files and
+growth beyond those reviewed budgets. Lower a baseline entry when a file is
+split; explain any necessary increase in the change that introduces it.
+
+Continue cleanup by feature, including CLI automation and MCP handling and
+language runtime renderers. Apply the template and fixture layout to remaining
+plugin crates. Existing upstream corpora belong under `tests/`; keep their
+original contents and provenance intact.
