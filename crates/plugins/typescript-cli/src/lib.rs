@@ -963,7 +963,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    #[ignore = "requires KAJI_TSC_JS and KAJI_TS_CLI_NODE_MODULES"]
+    #[ignore = "requires POOLSTER_TSC_JS and POOLSTER_TS_CLI_NODE_MODULES"]
     fn split_commands_compile_and_show_last_chunk_in_help() {
         let root = tempfile::tempdir().unwrap();
         Packages::new()
@@ -974,12 +974,12 @@ mod tests {
             .unwrap();
         let package = root.path().join("cli");
         std::os::unix::fs::symlink(
-            std::env::var_os("KAJI_TS_CLI_NODE_MODULES").expect("set CLI dependency directory"),
+            std::env::var_os("POOLSTER_TS_CLI_NODE_MODULES").expect("set CLI dependency directory"),
             package.join("node_modules"),
         )
         .unwrap();
         let compile = std::process::Command::new("node")
-            .arg(std::env::var_os("KAJI_TSC_JS").expect("set TypeScript compiler path"))
+            .arg(std::env::var_os("POOLSTER_TSC_JS").expect("set TypeScript compiler path"))
             .args(["-p", "tsconfig.json"])
             .current_dir(&package)
             .output()
@@ -1110,7 +1110,7 @@ mod tests {
                     true,
                 )),
                 annotations: BTreeMap::from([(
-                    "x-kaji-cli".into(),
+                    "x-poolster-cli".into(),
                     json!({ "command": "messages send" }),
                 )]),
                 ..Operation::default()
