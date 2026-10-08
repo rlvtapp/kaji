@@ -49,7 +49,7 @@ impl Plugin<crate::Php> for OperationTests {
         cx.files.emit(GeneratedFile::new(".kaji/operation-test-diagnostics.json",serde_json::to_string_pretty(&json!({"scope":"bounded buffered JSON success and malformed JSON; native fake transport; not live acceptance", "covered_operations":cases.len(),"diagnostics":diagnostics}))?)?)?;
         cx.files.emit(GeneratedFile::new(
             "tests/operations.php",
-            include_str!("operation_tests.php").replace("__MODULE__", &module),
+            include_str!("../templates/operation_tests.php.tmpl").replace("__MODULE__", &module),
         )?)
     }
 }

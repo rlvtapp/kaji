@@ -99,7 +99,7 @@ fn render_sdk(
         &mut tree,
         root,
         "src/MultipartBody.php",
-        include_str!("multipart.php.txt").replace("__NAMESPACE__", &namespace),
+        include_str!("../templates/multipart.php.tmpl").replace("__NAMESPACE__", &namespace),
     )?;
     for schema in &api.schemas {
         insert(
@@ -1423,7 +1423,7 @@ fn render_url_paginator(
 }
 
 fn render_pagination_helper() -> &'static str {
-    include_str!("pagination_helpers.php")
+    include_str!("../templates/pagination_helpers.php.tmpl")
 }
 
 fn operation_is_binary_response(operation: &Operation) -> bool {
@@ -2305,7 +2305,7 @@ if(json_decode(json_encode(Collision\Models\Probe::fromArray($wire), JSON_THROW_
         let root = tempfile::tempdir().unwrap();
         std::fs::write(
             root.path().join("MultipartBody.php"),
-            include_str!("multipart.php.txt").replace("__NAMESPACE__", "Probe"),
+            include_str!("../templates/multipart.php.tmpl").replace("__NAMESPACE__", "Probe"),
         )
         .unwrap();
         std::fs::write(
@@ -2367,12 +2367,12 @@ foreach (["prefix\x1e{}", "\x1e", "\x1e{}\x1einvalid"] as $raw) { try { $sequenc
         let methods = &client[start..end];
         std::fs::write(
             root.path().join("MultipartBody.php"),
-            include_str!("multipart.php.txt").replace("__NAMESPACE__", "MultipartProbe"),
+            include_str!("../templates/multipart.php.tmpl").replace("__NAMESPACE__", "MultipartProbe"),
         )
         .unwrap();
         std::fs::write(
             root.path().join("probe.php"),
-            include_str!("multipart_probe.php.txt").replace("__REQUEST_METHODS__", methods),
+            include_str!("../tests/fixtures/multipart_probe.php.tmpl").replace("__REQUEST_METHODS__", methods),
         )
         .unwrap();
         let result = std::process::Command::new("php")

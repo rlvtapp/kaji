@@ -24,7 +24,7 @@ impl Plugin<crate::Php> for Webhooks {
         let namespace = namespace_for_package(&package);
         cx.files.emit(GeneratedFile::new(
             "src/Webhooks.php",
-            include_str!("webhooks.php").replace("__NAMESPACE__", &namespace),
+            include_str!("../templates/webhooks.php.tmpl").replace("__NAMESPACE__", &namespace),
         )?)
     }
 }
@@ -61,7 +61,7 @@ mod tests {
     fn generated_webhook_verifier_executes_native_security_cases() {
         let (dir, _) = generate();
         let root = dir.path().join("sdk");
-        std::fs::write(root.join("probe.php"), include_str!("webhooks_probe.php")).unwrap();
+        std::fs::write(root.join("probe.php"), include_str!("../tests/fixtures/webhooks_probe.php")).unwrap();
         let output = std::process::Command::new("php")
             .arg("probe.php")
             .current_dir(root)

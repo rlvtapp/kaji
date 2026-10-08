@@ -23,7 +23,7 @@ impl Plugin<crate::Php> for OAuth {
         let namespace = namespace_for_package(&package);
         cx.files.emit(GeneratedFile::new(
             "src/OAuthClient.php",
-            include_str!("oauth.php.txt").replace("__NAMESPACE__", &namespace),
+            include_str!("../templates/oauth.php.tmpl").replace("__NAMESPACE__", &namespace),
         )?)
     }
 }
@@ -35,7 +35,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(
             dir.path().join("OAuthClient.php"),
-            include_str!("oauth.php.txt").replace("__NAMESPACE__", "ProbeSdk"),
+            include_str!("../templates/oauth.php.tmpl").replace("__NAMESPACE__", "ProbeSdk"),
         )
         .unwrap();
         std::fs::write(
@@ -73,7 +73,7 @@ mod tests {
         .unwrap();
         std::fs::write(
             dir.path().join("probe.php"),
-            include_str!("oauth_probe.php"),
+            include_str!("../tests/fixtures/oauth_probe.php"),
         )
         .unwrap();
         let output = std::process::Command::new("php")
