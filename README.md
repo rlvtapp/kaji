@@ -1,4 +1,4 @@
-<h1><img src="docs/assets/banner.svg" alt="Poolster: change the contract once, every SDK, mock and doc follows" width="100%"></h1>
+<h1><img src="docs/assets/banner.svg" alt="Poolster: one contract, lots of possibilities, your code" width="100%"></h1>
 
 **One contract. Lots of possibilities. Your code.**
 
