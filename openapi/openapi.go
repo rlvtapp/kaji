@@ -442,9 +442,9 @@ func convertExtensions(extensions *orderedmap.Map[string, *yaml.Node]) map[strin
 	out := make(map[string]any)
 	for pair := extensions.First(); pair != nil; pair = pair.Next() {
 		key := pair.Key()
-		// Preserve supported vendor namespaces for explicit Rust compatibility
-		// normalization and diagnostics; arbitrary extensions stay private.
-		if key != "x-mint" && key != "x-rlvt" && !strings.HasPrefix(key, "x-poolster-") && !strings.HasPrefix(key, "x-kaji-") && !strings.HasPrefix(key, "x-fern-") && !strings.HasPrefix(key, "x-stainless-") && !strings.HasPrefix(key, "x-speakeasy-") {
+		// Preserve supported vendor namespaces for Rust normalization and
+		// diagnostics; arbitrary extensions stay private.
+		if key != "x-mint" && key != "x-rlvt" && !strings.HasPrefix(key, "x-poolster-") && !strings.HasPrefix(key, "x-fern-") && !strings.HasPrefix(key, "x-stainless-") && !strings.HasPrefix(key, "x-speakeasy-") {
 			continue
 		}
 		value, err := yamlNodeToInterface(pair.Value())

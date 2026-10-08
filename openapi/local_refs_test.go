@@ -276,7 +276,7 @@ paths:
   /item:
     get:
       operationId: getItem
-      x-kaji-custom: {$ref: '../custom-data.yaml'}
+      x-poolster-custom: {$ref: '../custom-data.yaml'}
       responses:
         '200':
           description: ok
@@ -302,7 +302,7 @@ paths:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), `"$ref": "../missing-data.yaml"`) || strings.Contains(string(data), "x-kaji-opaque-reference") {
+	if !strings.Contains(string(data), `"$ref": "../missing-data.yaml"`) || strings.Contains(string(data), "x-poolster-opaque-reference") {
 		t.Fatal("schema extension data was changed")
 	}
 }

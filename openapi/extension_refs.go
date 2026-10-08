@@ -19,7 +19,7 @@ func shieldExtensionReferences(root *yaml.Node) func() {
 			for i := 0; i+1 < len(node.Content); i += 2 {
 				key, value := node.Content[i], node.Content[i+1]
 				if opaque && key.Value == "$ref" {
-					candidate := fmt.Sprintf("x-kaji-opaque-reference-%d", len(keys))
+					candidate := fmt.Sprintf("x-poolster-opaque-reference-%d", len(keys))
 					for {
 						exists := false
 						for j := 0; j+1 < len(node.Content); j += 2 {

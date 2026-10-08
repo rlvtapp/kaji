@@ -137,7 +137,7 @@ paths:
         content: "Relevate content"
         sections:
           playground: false
-      x-kaji-mock:
+      x-poolster-mock:
         scenarios:
           - name: rate-limited
             when:
@@ -149,7 +149,7 @@ paths:
                 retry-after: "1"
               body:
                 message: Too many requests
-      x-kaji-pagination:
+      x-poolster-pagination:
         type: cursor
         inputs:
           cursor: cursor
@@ -178,13 +178,13 @@ paths:
 	if err := json.Unmarshal(data, &operation); err != nil {
 		t.Fatalf("decode operation: %v", err)
 	}
-	if operation.Extensions["x-mint"] == nil || operation.Extensions["x-rlvt"] == nil || operation.Extensions["x-kaji-mock"] == nil || operation.Extensions["x-kaji-pagination"] == nil || operation.Extensions["x-poolster-custom"] == nil {
+	if operation.Extensions["x-mint"] == nil || operation.Extensions["x-rlvt"] == nil || operation.Extensions["x-poolster-mock"] == nil || operation.Extensions["x-poolster-pagination"] == nil || operation.Extensions["x-poolster-custom"] == nil {
 		t.Fatalf("expected docs and Poolster extensions, got %#v", operation.Extensions)
 	}
-	mock := operation.Extensions["x-kaji-mock"].(map[string]any)
+	mock := operation.Extensions["x-poolster-mock"].(map[string]any)
 	scenarios := mock["scenarios"].([]any)
 	if scenarios[0].(map[string]any)["name"] != "rate-limited" {
-		t.Fatalf("expected x-kaji-mock scenario to survive conversion, got %#v", mock)
+		t.Fatalf("expected x-poolster-mock scenario to survive conversion, got %#v", mock)
 	}
 	if !operation.Deprecated {
 		t.Fatalf("expected deprecated flag to be preserved")

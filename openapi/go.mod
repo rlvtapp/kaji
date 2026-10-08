@@ -1,4 +1,4 @@
-module github.com/rlvtapp/kaji-openapi
+module github.com/rlvtapp/poolster/openapi
 
 go 1.25.7
 
