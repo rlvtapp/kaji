@@ -1,4 +1,4 @@
-import { definePlugin } from '../../../packages/cli/sdk/index.mjs';
+import { definePlugin } from '../../../packages/npm/sdk/index.mjs';
 
 export const pluginCatalog = definePlugin(({ directory = 'catalog' } = {}) => ({
   name: 'catalog',

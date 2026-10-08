@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createPoolster, defineConfig, defineInputPlugin, definePlugin } from '../../packages/cli/sdk/index.mjs';
+import { createPoolster, defineConfig, defineInputPlugin, definePlugin } from '../../packages/npm/sdk/index.mjs';
 import nativeConfig from './poolster.inputs.config.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));

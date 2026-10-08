@@ -1,6 +1,6 @@
 //! Minimal provider/consumer composition without a language SDK dependency.
 use anyhow::Result;
-use kaji_core::{
+use poolster_core::{
     Api, GeneratedFile, GeneratedTree,
     engine::{
         Contract, Handle, Language, Meta, Package, Packages, Plugin, PluginContext, Provision,
@@ -111,7 +111,7 @@ pub fn generate(api: &Api) -> Result<GeneratedTree> {
                 .with(Inventory::new(selected))
                 .with(ordinary)
                 .with(replacement)
-                .with(kaji_core::api_reference::api_reference()),
+                .with(poolster_core::api_reference::api_reference()),
         )
         .generate(api, None)
 }

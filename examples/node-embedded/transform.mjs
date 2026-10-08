@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defineConfig, definePlugin, generate } from '../../packages/cli/sdk/index.mjs';
-import { pluginPython } from '../../packages/node-plugins/all/index.mjs';
+import { defineConfig, definePlugin, generate } from '../../packages/npm/sdk/index.mjs';
+import { pluginPython } from '../../packages/npm/plugins-all/index.mjs';
 import { pluginCatalog } from './plugins/catalog.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));

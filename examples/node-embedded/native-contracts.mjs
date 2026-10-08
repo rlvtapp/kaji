@@ -3,10 +3,10 @@ import { fileURLToPath } from 'node:url';
 import {
   defineConfig, defineContract, definePlugin, generate,
   providerHandle, requireContract,
-} from '../../packages/cli/sdk/index.mjs';
-import { pluginTypeScript } from '../../packages/node-plugins/typescript/index.mjs';
-import { pluginZod } from '../../packages/node-plugins/zod/index.mjs';
-import { pluginReactQuery } from '../../packages/node-plugins/react-query/index.mjs';
+} from '../../packages/npm/sdk/index.mjs';
+import { pluginTypeScript } from '../../packages/npm/plugins/typescript/index.mjs';
+import { pluginZod } from '../../packages/npm/plugins/zod/index.mjs';
+import { pluginReactQuery } from '../../packages/npm/plugins/react-query/index.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const NativeFiles = defineContract('example.native-files');

@@ -2,7 +2,7 @@ fn main() -> anyhow::Result<()> {
     let output = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "generated".into());
-    kaji_custom_plugin_example::generate(&kaji_core::Api {
+    poolster_custom_plugin_example::generate(&poolster_core::Api {
         name: "Example API".into(),
         ..Default::default()
     })?

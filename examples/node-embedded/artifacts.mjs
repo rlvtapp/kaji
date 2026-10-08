@@ -1,6 +1,6 @@
 import path from 'node:path';
-import { defineConfig, generate } from '../../packages/cli/sdk/index.mjs';
-import { pluginRust } from '../../packages/node-plugins/rust/index.mjs';
+import { defineConfig, generate } from '../../packages/npm/sdk/index.mjs';
+import { pluginRust } from '../../packages/npm/plugins/rust/index.mjs';
 
 if (!process.argv[2]) {
   console.error('Usage: node examples/node-embedded/artifacts.mjs <artifact-directory>');

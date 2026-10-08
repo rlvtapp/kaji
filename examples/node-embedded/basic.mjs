@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createPoolster, defineConfig } from '../../packages/cli/sdk/index.mjs';
-import { pluginTypeScript } from '../../packages/node-plugins/typescript/index.mjs';
+import { createPoolster, defineConfig } from '../../packages/npm/sdk/index.mjs';
+import { pluginTypeScript } from '../../packages/npm/plugins/typescript/index.mjs';
 import { pluginCatalog } from './plugins/catalog.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));

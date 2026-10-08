@@ -9,18 +9,18 @@ From the repository root, build the native addon and OpenAPI compiler once:
 
 ```sh
 (cd openapi && go build -o ../target/debug/poolster-openapi .)
-node packages/cli/sdk/scripts/build-native.mjs
+node packages/npm/sdk/scripts/build-native.mjs
 ```
 
 Run the examples:
 
 ```sh
-POOLSTER_SDK_PACKAGE="$PWD/packages/cli/sdk" node packages/cli/bin/poolster.cjs generate --config examples/node-embedded/poolster.config.mjs
+POOLSTER_SDK_PACKAGE="$PWD/packages/npm/sdk" node packages/npm/cli/bin/poolster.cjs generate --config examples/node-embedded/poolster.config.mjs
 node examples/node-embedded/basic.mjs
 node examples/node-embedded/transform.mjs
 node examples/node-embedded/native-contracts.mjs
 node examples/node-embedded/input-plugins.mjs
-POOLSTER_SDK_PACKAGE="$PWD/packages/cli/sdk" node packages/cli/bin/poolster.cjs generate --config examples/node-embedded/poolster.inputs.config.mjs --dry-run
+POOLSTER_SDK_PACKAGE="$PWD/packages/npm/sdk" node packages/npm/cli/bin/poolster.cjs generate --config examples/node-embedded/poolster.inputs.config.mjs --dry-run
 (cd openapi && go run . --out ../examples/node-embedded/.poolster/openapi ../examples/node-embedded/openapi.yaml)
 node examples/node-embedded/artifacts.mjs examples/node-embedded/.poolster/openapi
 ```

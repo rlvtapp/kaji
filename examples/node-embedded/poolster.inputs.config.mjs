@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { defineConfig, definePlugin } from '../../packages/cli/sdk/index.mjs';
-import { inputGraphql } from '../../packages/node-plugins/input-graphql/index.mjs';
+import { defineConfig, definePlugin } from '../../packages/npm/sdk/index.mjs';
+import { inputGraphql } from '../../packages/npm/inputs/graphql/index.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const pluginSchemaReport = definePlugin(() => ({

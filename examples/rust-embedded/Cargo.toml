@@ -1,11 +1,11 @@
 [package]
-name = "kaji-rust-embedded-example"
+name = "poolster-rust-embedded-example"
 version = "0.1.0"
 edition = "2021"
 publish = false
 
 [dependencies]
 anyhow = "1"
-kaji = { path = "../../crates/kaji", features = ["all-plugins"] }
+poolster = { path = "../../crates/facade", features = ["all-plugins"] }
 
 [workspace]

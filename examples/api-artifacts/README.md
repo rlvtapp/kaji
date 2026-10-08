@@ -29,7 +29,7 @@ Check the portable export using the editable checker and jsonschema 4.23.0:
 python3 -m pip install 'jsonschema==4.23.0'
 KAJI_COLLECTION=examples/api-artifacts/generated/postman/widgets.postman_collection.json \
 KAJI_ENVIRONMENT=examples/api-artifacts/generated/postman/widgets.postman_environment.json \
-python3 packages/postman-check/check.py
+python3 packages/internal/postman-check/check.py
 ```
 
 Build and test the provider:
@@ -45,8 +45,8 @@ Terraform. A populated provider talks to your API only when you deliberately run
 Terraform against it.
 
 For CI, generate from the committed recipe first, then copy the editable
-`packages/postman-check` action sources into `.github/actions/postman-check` and
-`packages/sdk-check/{action.yml,check.mjs}` into `.github/actions/poolster-check`:
+`packages/internal/postman-check` action sources into `.github/actions/postman-check` and
+`packages/internal/sdk-check/{action.yml,check.mjs}` into `.github/actions/poolster-check`:
 
 ```yaml
 - uses: ./.github/actions/postman-check
@@ -62,8 +62,8 @@ For CI, generate from the committed recipe first, then copy the editable
 Optional local mock execution:
 
 ```sh
-npm ci --prefix packages/postman-execute --ignore-scripts
-node packages/postman-execute/run.mjs examples/api-artifacts/generated/postman/widgets.postman_collection.json
+npm ci --prefix packages/internal/postman-execute --ignore-scripts
+node packages/internal/postman-execute/run.mjs examples/api-artifacts/generated/postman/widgets.postman_collection.json
 ```
 
 This runner substitutes loopback URLs and authentication; it does not call the

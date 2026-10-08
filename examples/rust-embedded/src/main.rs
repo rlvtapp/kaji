@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use anyhow::Result;
-use kaji::{go, prelude::*, ts};
+use poolster::{go, prelude::*, ts};
 
 fn main() -> Result<()> {
     let packages = ProfileSet::new("sdk")
@@ -12,8 +12,8 @@ fn main() -> Result<()> {
         )
         .package(go::package("go").with(go::sdk()));
 
-    let files = kaji::generate_openapi(
-        Path::new(".kaji/openapi"),
+    let files = poolster::generate_openapi(
+        Path::new(".poolster/openapi"),
         "Notes",
         "1.0.0",
         packages,
