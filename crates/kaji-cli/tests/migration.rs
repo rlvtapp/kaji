@@ -180,3 +180,56 @@ fn ambiguous_project_selection_fails_without_writing_files() {
     assert!(String::from_utf8_lossy(&result.stderr).contains("found 2"));
     assert!(!root.path().join("kaji-migration").exists());
 }
+
+#[test]
+#[ignore = "requires bundled Go compiler"]
+fn multi_target_migrations_report_custom_hooks_without_copying_credentials() {
+    for (filename, config, diagnostic) in [
+        (
+            "stainless.yml",
+            "targets:\n  python: {package_name: migrated_python, hooks: {token: DO-NOT-COPY-SECRET}}\n  go: {package_name: migrated_go}\nresources:\n  users:\n    methods:\n      list: get /users\nhooks: {command: 'touch DO-NOT-EXECUTE'}\n",
+            "hooks",
+        ),
+        (
+            "fern/generators.yml",
+            "api:\n  specs:\n    - openapi: ../openapi.yaml\ngroups:\n  sdk:\n    generators:\n      - name: fern-python-sdk\n        output: {package-name: migrated_python, token: DO-NOT-COPY-SECRET}\n      - name: fern-go-sdk\n      - custom: {token: DO-NOT-COPY-SECRET}\n",
+            "custom generator",
+        ),
+        (
+            ".speakeasy/workflow.yaml",
+            "workflowVersion: 1.0.0\nsources:\n  api:\n    inputs:\n      - location: ./openapi.yaml\ntargets:\n  python:\n    target: python\n    source: api\n    hooks: {token: DO-NOT-COPY-SECRET}\n  go:\n    target: go\n    source: api\n",
+            "hooks",
+        ),
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        fixture(root.path());
+        let path = root.path().join(filename);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, config).unwrap();
+        let before = fs::read(root.path().join("openapi.yaml")).unwrap();
+        let result = run(root.path(), &["migrate", ".", "--output", "converted"]);
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        let recipe = fs::read_to_string(root.path().join("converted/kaji.json")).unwrap();
+        let native: Value = serde_json::from_str(&recipe).unwrap();
+        assert_eq!(native["packages"].as_array().unwrap().len(), 2);
+        let report =
+            fs::read_to_string(root.path().join("converted/migration-report.json")).unwrap();
+        assert!(report.contains(diagnostic));
+        for output in [&report, &recipe] {
+            assert!(!output.contains("DO-NOT-COPY-SECRET"));
+        }
+        assert!(!root.path().join("DO-NOT-EXECUTE").exists());
+        assert_eq!(fs::read_to_string(&path).unwrap(), config);
+        assert_eq!(fs::read(root.path().join("openapi.yaml")).unwrap(), before);
+        let strict = run(
+            root.path(),
+            &["migrate", ".", "--strict", "--output", "strict-output"],
+        );
+        assert!(!strict.status.success());
+        assert!(!root.path().join("strict-output").exists());
+    }
+}

@@ -723,7 +723,7 @@ fn postman_and_typed_terraform_share_a_recipe_and_preserve_environment() {
     )
     .unwrap();
     let config = working.path().join("kaji.json");
-    fs::write(&config, serde_json::to_vec(&json!({"openapi":{"artifacts":"artifacts","name":"Widgets"},"output":{"path":"generated"},"packages":[{"language":"postman","path":"postman","plugins":[{"name":"collection","strict":true},{"name":"environment"}]},{"language":"terraform","path":"terraform","plugins":[{"name":"provider","provider_name":"widgets","infer":false,"resources":[{"name":"widget","create":"createWidget","read":"getWidget","update":"updateWidget","delete":"deleteWidget"}]}]}]})).unwrap()).unwrap();
+    fs::write(&config, serde_json::to_vec(&json!({"openapi":{"artifacts":"artifacts","name":"Widgets"},"output":{"path":"generated"},"packages":[{"language":"postman","path":"postman","plugins":[{"name":"collection","strict":true,"split_by_group":true},{"name":"environment"}]},{"language":"terraform","path":"terraform","plugins":[{"name":"provider","provider_name":"widgets","infer":false,"resources":[{"name":"widget","create":"createWidget","read":"getWidget","update":"updateWidget","delete":"deleteWidget"}]}]}]})).unwrap()).unwrap();
     let run = || {
         cli()
             .args(["generate", "--config"])
@@ -752,6 +752,12 @@ fn postman_and_typed_terraform_share_a_recipe_and_preserve_environment() {
     .unwrap();
     assert_eq!(catalog["resources"][0]["name"], "widget");
     assert!(output.join("terraform/go.mod").is_file());
+    let split: serde_json::Value = serde_json::from_slice(
+        &fs::read(output.join("postman/collections/group-0000.json")).unwrap(),
+    )
+    .unwrap();
+    assert!(split["item"][0]["item"].is_array());
+    assert_eq!(split["variable"], collection["variable"]);
     let environment = output.join("postman/environment.json");
     fs::write(&environment, "customer-owned environment").unwrap();
     assert!(run().status.success());
