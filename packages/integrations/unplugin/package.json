@@ -1,6 +1,6 @@
 {
   "name": "@relevate/unplugin-poolster",
-  "version": "0.1.0",
+  "version": "0.1.0-alpha.1",
   "description": "Run Poolster OpenAPI generation from Vite, Rollup, webpack, esbuild, Rspack, Rolldown, Farm, Nuxt, and Astro builds.",
   "license": "MIT",
   "repository": {

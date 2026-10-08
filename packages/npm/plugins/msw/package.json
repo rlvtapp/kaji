@@ -1,6 +1,6 @@
 {
   "name": "@relevate/poolster-plugin-msw",
-  "version": "0.5.0",
+  "version": "0.5.0-alpha.1",
   "description": "Poolster plugin exports for msw",
   "license": "MIT",
   "repository": {
@@ -27,7 +27,7 @@
     "node": ">=18"
   },
   "peerDependencies": {
-    "@relevate/poolster": "0.5.0"
+    "@relevate/poolster": "0.5.0-alpha.1"
   },
   "publishConfig": {
     "access": "public"

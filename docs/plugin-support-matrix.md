@@ -1,6 +1,6 @@
 # Poolster plugin support matrix
 
-Release candidate scope: **0.5.0-rc.1**. This matrix describes usable generation
+Alpha scope: **0.5.0-alpha.1**. This matrix describes usable generation
 in this branch, rather than parser availability or future plans.
 
 ✅ = implemented for the stated contract; — = no bundled generation support.
@@ -84,14 +84,14 @@ Recorded implementation verification: 688 Rust tests passed, 0 failed and 130 ig
 workspace formatting and Clippy passed. Six native GraphQL tests passed with ignored
 tests explicitly enabled, including generated compilation and local-server runtime
 checks. Ignored tests are not counted as passes. See [verification](verification.md)
-for commands and environment requirements. These results precede final RC packaging;
+for commands and environment requirements. These results precede final alpha packaging;
 registry publication is a separate check.
 
 - [x] Existing OpenAPI golden snapshots and Go tests pass.
 - [x] Provider substitution, downstream typed hooks and regeneration covered.
 - [x] Malformed inputs and unsupported GraphQL features covered.
-- [ ] Final RC versions, package manifests and publication artifacts verified.
-- [ ] RC uploaded and registry versions/installations verified.
+- [ ] Final alpha versions, package manifests and publication artifacts verified.
+- [ ] Alpha uploaded and registry versions/installations verified.
 
 ## Next pipeline checks
 

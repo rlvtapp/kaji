@@ -1,6 +1,6 @@
 {
   "name": "poolster",
-  "version": "0.5.0",
+  "version": "0.5.0-alpha.1",
   "description": "Poolster command-line SDK generator",
   "license": "MIT",
   "repository": { "type": "git", "url": "git+https://github.com/rlvtapp/poolster.git" },
@@ -12,10 +12,10 @@
     "build:native": "node scripts/build-platform.mjs"
   },
   "optionalDependencies": {
-    "@relevate/poolster-cli-darwin-arm64": "0.5.0",
-    "@relevate/poolster-cli-darwin-x64": "0.5.0",
-    "@relevate/poolster-cli-linux-x64-gnu": "0.5.0",
-    "@relevate/poolster-cli-win32-x64-msvc": "0.5.0"
+    "@relevate/poolster-cli-darwin-arm64": "0.5.0-alpha.1",
+    "@relevate/poolster-cli-darwin-x64": "0.5.0-alpha.1",
+    "@relevate/poolster-cli-linux-x64-gnu": "0.5.0-alpha.1",
+    "@relevate/poolster-cli-win32-x64-msvc": "0.5.0-alpha.1"
   },
   "publishConfig": { "access": "public" }
 }

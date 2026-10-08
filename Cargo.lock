@@ -1110,7 +1110,7 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "poolster"
-version = "0.5.0"
+version = "0.5.0-alpha.1"
 dependencies = [
  "anyhow",
  "poolster-core",
@@ -1137,7 +1137,7 @@ dependencies = [
 
 [[package]]
 name = "poolster-cli"
-version = "0.5.0"
+version = "0.5.0-alpha.1"
 dependencies = [
  "anyhow",
  "poolster",
@@ -1152,7 +1152,7 @@ dependencies = [
 
 [[package]]
 name = "poolster-core"
-version = "0.5.0"
+version = "0.5.0-alpha.1"
 dependencies = [
  "anyhow",
  "serde",
@@ -1163,7 +1163,7 @@ dependencies = [
 
 [[package]]
 name = "poolster-input-arazzo"
-version = "0.5.0"
+version = "0.5.0-alpha.1"
 dependencies = [
  "anyhow",
  "enumset",
@@ -1176,7 +1176,7 @@ dependencies = [
 
 [[package]]
 name = "poolster-input-asyncapi"
-version = "0.5.0"
+version = "0.5.0-alpha.1"
 dependencies = [
  "anyhow",
  "poolster-core",
@@ -1188,7 +1188,7 @@ dependencies = [
 
 [[package]]
 name = "poolster-input-capnproto"
-version = "0.5.0"
+version = "0.5.0-alpha.1"
 dependencies = [
  "anyhow",
  "capnp",
@@ -1197,7 +1197,7 @@ dependencies = [
 
 [[package]]
 name = "poolster-input-graphql"
-version = "0.5.0"
+version = "0.5.0-alpha.1"
 dependencies = [
  "anyhow",
  "apollo-compiler",
@@ -1207,7 +1207,7 @@ dependencies = [
 
 [[package]]
 name = "poolster-input-protobuf"
-version = "0.5.0"
+version = "0.5.0-alpha.1"
 dependencies = [
  "anyhow",
  "poolster-core",
@@ -1217,7 +1217,7 @@ dependencies = [
 
 [[package]]
 name = "poolster-inputs"
-version = "0.5.0"
+version = "0.5.0-alpha.1"
 dependencies = [
  "anyhow",
  "poolster-core",
@@ -1231,7 +1231,7 @@ dependencies = [
 
 [[package]]
 name = "poolster-node"
-version = "0.5.0"
+version = "0.5.0-alpha.1"
 dependencies = [
  "anyhow",
  "napi",
@@ -1246,7 +1246,7 @@ dependencies = [
 
 [[package]]
 name = "poolster-plugin-csharp"
-version = "0.5.0"
+version = "0.5.0-alpha.1"
 dependencies = [
  "anyhow",
  "poolster-core",
@@ -1256,7 +1256,7 @@ dependencies = [
 
 [[package]]
 name = "poolster-plugin-dotnet"
-version = "0.5.0"
+version = "0.5.0-alpha.1"
 dependencies = [
  "poolster-core",
  "poolster-plugin-csharp",
@@ -1264,7 +1264,7 @@ dependencies = [
 
 [[package]]
 name = "poolster-plugin-elixir"
-version = "0.5.0"
+version = "0.5.0-alpha.1"
 dependencies = [
  "anyhow",
  "poolster-core",
@@ -1274,7 +1274,7 @@ dependencies = [
 
 [[package]]
 name = "poolster-plugin-go"
-version = "0.5.0"
+version = "0.5.0-alpha.1"
 dependencies = [
  "anyhow",
  "poolster-core",
@@ -1284,7 +1284,7 @@ dependencies = [
 
 [[package]]
 name = "poolster-plugin-java"
-version = "0.5.0"
+version = "0.5.0-alpha.1"
 dependencies = [
  "anyhow",
  "poolster-core",
@@ -1294,7 +1294,7 @@ dependencies = [
 
 [[package]]
 name = "poolster-plugin-php"
-version = "0.5.0"
+version = "0.5.0-alpha.1"
 dependencies = [
  "anyhow",
  "poolster-core",
@@ -1304,7 +1304,7 @@ dependencies = [
 
 [[package]]
 name = "poolster-plugin-postman"
-version = "0.5.0"
+version = "0.5.0-alpha.1"
 dependencies = [
  "anyhow",
  "poolster-core",
@@ -1316,7 +1316,7 @@ dependencies = [
 
 [[package]]
 name = "poolster-plugin-python"
-version = "0.5.0"
+version = "0.5.0-alpha.1"
 dependencies = [
  "anyhow",
  "poolster-core",
@@ -1326,7 +1326,7 @@ dependencies = [
 
 [[package]]
 name = "poolster-plugin-ruby"
-version = "0.5.0"
+version = "0.5.0-alpha.1"
 dependencies = [
  "anyhow",
  "poolster-core",
@@ -1336,7 +1336,7 @@ dependencies = [
 
 [[package]]
 name = "poolster-plugin-rust"
-version = "0.5.0"
+version = "0.5.0-alpha.1"
 dependencies = [
  "anyhow",
  "poolster-core",
@@ -1346,7 +1346,7 @@ dependencies = [
 
 [[package]]
 name = "poolster-plugin-rust-cli"
-version = "0.5.0"
+version = "0.5.0-alpha.1"
 dependencies = [
  "anyhow",
  "poolster-core",
@@ -1356,7 +1356,7 @@ dependencies = [
 
 [[package]]
 name = "poolster-plugin-swift"
-version = "0.5.0"
+version = "0.5.0-alpha.1"
 dependencies = [
  "anyhow",
  "poolster-core",
@@ -1366,7 +1366,7 @@ dependencies = [
 
 [[package]]
 name = "poolster-plugin-symfony"
-version = "0.5.0"
+version = "0.5.0-alpha.1"
 dependencies = [
  "anyhow",
  "poolster-core",
@@ -1374,7 +1374,7 @@ dependencies = [
 
 [[package]]
 name = "poolster-plugin-terraform"
-version = "0.5.0"
+version = "0.5.0-alpha.1"
 dependencies = [
  "anyhow",
  "poolster-core",
@@ -1385,7 +1385,7 @@ dependencies = [
 
 [[package]]
 name = "poolster-plugin-typescript"
-version = "0.5.0"
+version = "0.5.0-alpha.1"
 dependencies = [
  "anyhow",
  "poolster-core",
@@ -1397,7 +1397,7 @@ dependencies = [
 
 [[package]]
 name = "poolster-plugin-typescript-cli"
-version = "0.5.0"
+version = "0.5.0-alpha.1"
 dependencies = [
  "anyhow",
  "poolster-core",

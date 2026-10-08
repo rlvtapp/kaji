@@ -27,6 +27,27 @@ class PublicationTests(unittest.TestCase):
                              package('core'), package('cli', ['poolster'], False))
         self.assertEqual([p['name'] for p in ordered], ['core', 'plugin', 'poolster'])
 
+    def test_versioned_development_dependency_precedes_consumer(self):
+        consumer = package('a-typescript', ['core'])
+        consumer['dependencies'].append({'name': 'graphql', 'path': '/workspace/graphql',
+                                         'kind': 'dev', 'req': '^0.5.0'})
+        ordered = self.order(consumer, package('graphql', ['core']), package('core'))
+        self.assertEqual([p['name'] for p in ordered], ['core', 'graphql', 'a-typescript'])
+
+    def test_path_only_development_dependency_is_omitted(self):
+        consumer = package('consumer')
+        consumer['dependencies'].append({'name': 'private', 'path': '/workspace/private',
+                                         'kind': 'dev', 'req': '*'})
+        ordered = self.order(consumer, package('private', public=False))
+        self.assertEqual([p['name'] for p in ordered], ['consumer'])
+
+    def test_versioned_private_development_dependency_rejected(self):
+        consumer = package('consumer')
+        consumer['dependencies'].append({'name': 'private', 'path': '/workspace/private',
+                                         'kind': 'dev', 'req': '=0.5.0'})
+        with self.assertRaisesRegex(ValueError, 'unpublished'):
+            self.order(consumer, package('private', public=False))
+
     def test_cycle_rejected(self):
         with self.assertRaisesRegex(ValueError, 'cycle'):
             self.order(package('a', ['b']), package('b', ['a']))

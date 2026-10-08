@@ -1,6 +1,6 @@
 {
   "name": "@relevate/poolster",
-  "version": "0.5.0",
+  "version": "0.5.0-alpha.1",
   "description": "Poolster Node SDK for embedded and plugin-based generation",
   "license": "MIT",
   "repository": { "type": "git", "url": "git+https://github.com/rlvtapp/poolster.git" },
@@ -16,10 +16,10 @@
     "build:native": "node scripts/build-native.mjs"
   },
   "optionalDependencies": {
-    "@relevate/poolster-node-darwin-arm64": "0.5.0",
-    "@relevate/poolster-node-darwin-x64": "0.5.0",
-    "@relevate/poolster-node-linux-x64-gnu": "0.5.0",
-    "@relevate/poolster-node-win32-x64-msvc": "0.5.0"
+    "@relevate/poolster-node-darwin-arm64": "0.5.0-alpha.1",
+    "@relevate/poolster-node-darwin-x64": "0.5.0-alpha.1",
+    "@relevate/poolster-node-linux-x64-gnu": "0.5.0-alpha.1",
+    "@relevate/poolster-node-win32-x64-msvc": "0.5.0-alpha.1"
   },
   "publishConfig": { "access": "public" }
 }
