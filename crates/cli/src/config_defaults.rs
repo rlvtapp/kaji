@@ -89,17 +89,15 @@ mod tests {
         .unwrap();
         let tree = poolster::generate(&api, profiles).unwrap();
         assert!(tree.iter().any(|(path, _)| {
-            path.to_string_lossy()
-                .contains("react-query_operations/readItem.ts")
+            path.ends_with(std::path::Path::new("react-query_operations").join("readItem.ts"))
         }));
         assert!(
             tree.iter()
-                .any(|(path, _)| path.to_string_lossy().ends_with("ts/swr.ts"))
+                .any(|(path, _)| path.ends_with(std::path::Path::new("ts").join("swr.ts")))
         );
-        assert!(
-            !tree
-                .iter()
-                .any(|(path, _)| path.to_string_lossy().contains("swr_operations"))
-        );
+        assert!(!tree.iter().any(|(path, _)| {
+            path.components()
+                .any(|part| part.as_os_str() == "swr_operations")
+        }));
     }
 }
