@@ -247,7 +247,7 @@ fn all_first_party_packages_preserve_the_public_sdk_contract() {
         assert!(client.contains("export class PoolsterEmail"));
         assert!(client.contains("readonly contacts"));
         assert!(client.contains("listPages"));
-        assert!(client.contains("kajiJsonPath"));
+        assert!(client.contains("poolsterJsonPath"));
         assert!(barrel.contains("export * from './custom/index.js'"));
         assert!(custom.contains("never overwritten by Poolster"));
         assert!(runtime.contains("export class ApiError"));
