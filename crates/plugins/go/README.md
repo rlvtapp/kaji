@@ -69,7 +69,7 @@ reconnection after events have started is application policy.
 
 ## Cursor pagination
 
-An operation with `x-kaji-pagination` (or `x-speakeasy-pagination`) configured
+An operation with `x-poolster-pagination` (or legacy `x-kaji-pagination`/`x-speakeasy-pagination`) configured
 as a cursor pager gets a typed `{Operation}Pages` constructor. It returns a
 pager whose `Next(ctx)` method yields normal response pages and then `io.EOF`.
 Poolster creates this surface for an optional string cursor parameter and a
