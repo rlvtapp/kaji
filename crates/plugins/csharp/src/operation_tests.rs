@@ -72,7 +72,7 @@ fn render(api: &Api, sdk: &NativeSdk, bound: usize) -> Result<(String, Value)> {
                     ));
                 }
                 code += &format!(
-                    "        {{ var driver=new Driver({}); using var http=new HttpClient(driver); var client=new PoolsterClient(http,new PoolsterClientOptions {{ BaseUrl=\"https://kaji-test.invalid\" }}); var result=await client.{}Async({}); AssertResult(driver,result); }}\n",
+                    "        {{ var driver=new Driver({}); using var http=new HttpClient(driver); var client=new PoolsterClient(http,new PoolsterClientOptions {{ BaseUrl=\"https://poolster-test.invalid\" }}); var result=await client.{}Async({}); AssertResult(driver,result); }}\n",
                     serde_json::to_string(&fixture_json)?,
                     pascal_case(&operation.id),
                     args.join(",")

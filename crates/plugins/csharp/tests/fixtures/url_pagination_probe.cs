@@ -1,7 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using Kaji.Probe;
+using Poolster.Probe;
 sealed class Driver(string? target=null) : HttpMessageHandler {
     public List<string> URLs { get; }=[];
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken token) {
@@ -13,7 +13,7 @@ sealed class Driver(string? target=null) : HttpMessageHandler {
     }
 }
 static class Program {
-    static KajiClient Client(Driver driver)=>new(new HttpClient(driver),new KajiClientOptions{BaseUrl="https://api.example.test",ApiKey="test",Retry=new KajiRetryOptions{MaxAttempts=1}});
+    static PoolsterClient Client(Driver driver)=>new(new HttpClient(driver),new PoolsterClientOptions{BaseUrl="https://api.example.test",ApiKey="test",Retry=new PoolsterRetryOptions{MaxAttempts=1}});
     static async Task Main() {
         var driver=new Driver();var client=Client(driver);var pages=client.ListLinksPagesAsync(tenant:"kept");if(driver.URLs.Count!=0)throw new Exception("Eager");
         var count=0;await foreach(var _ in pages)count++;if(count!=2||!driver.URLs[0].Contains("tenant=kept")||driver.URLs[1]!="https://api.example.test/links?page=2&tenant=server")throw new Exception("Queries changed");

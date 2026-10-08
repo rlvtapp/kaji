@@ -17,7 +17,7 @@ pub(super) fn validate(api: &Api, operation: &Operation) -> Result<()> {
         for parameter in &operation.parameters {
             if matches!(
                 parameter_name(parameter).as_str(),
-                "kajiURL"
+                "poolsterURL"
                     | "paginationURL"
                     | "nextURL"
                     | "seenURLs"
@@ -307,7 +307,7 @@ mod url_tests {
             ..Default::default()
         };
         operation.annotations.insert(
-            "x-kaji-pagination".into(),
+            "x-poolster-pagination".into(),
             serde_json::json!({"type":"url","outputs":{"nextUrl":"/next"}}),
         );
         Api {

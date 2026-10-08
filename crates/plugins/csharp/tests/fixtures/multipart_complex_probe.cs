@@ -1,4 +1,4 @@
-using System.Net;using System.Text;using System.Text.RegularExpressions;using System.Text.Json;using Kaji.KajiMultipart;
+using System.Net;using System.Text;using System.Text.RegularExpressions;using System.Text.Json;using Poolster.PoolsterMultipart;
 class Driver:HttpMessageHandler {
  public int Calls;
  protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken cancellationToken){
@@ -11,4 +11,4 @@ class Driver:HttpMessageHandler {
   return new HttpResponseMessage(HttpStatusCode.NoContent){Content=new ByteArrayContent(Array.Empty<byte>())};
  }
 }
-class Probe {static async Task Main(){var driver=new Driver();var client=new KajiClient(new HttpClient(driver),new KajiClientOptions{BaseUrl="https://unused.example"});var body=new UploadThingMultipartBody{Title="café雪",Flag=false,Count=0,File=new MultipartFile(new byte[]{0,255},"blob.bin"),ChunkingStrategy=JsonSerializer.SerializeToElement(new{type="server_vad",label="café雪",threshold=0.5}),TimestampGranularities=new(){"word","segment"},Files=new(){new MultipartFile(new byte[]{0,255}),new MultipartFile(new byte[]{1,254})},KajiExtraParts=new Dictionary<string,object?>{{"extra",new{snow="雪"}}}};await client.UploadThingAsync(body);if(driver.Calls!=1)throw new Exception("attempts");}}
+class Probe {static async Task Main(){var driver=new Driver();var client=new PoolsterClient(new HttpClient(driver),new PoolsterClientOptions{BaseUrl="https://unused.example"});var body=new UploadThingMultipartBody{Title="café雪",Flag=false,Count=0,File=new MultipartFile(new byte[]{0,255},"blob.bin"),ChunkingStrategy=JsonSerializer.SerializeToElement(new{type="server_vad",label="café雪",threshold=0.5}),TimestampGranularities=new(){"word","segment"},Files=new(){new MultipartFile(new byte[]{0,255}),new MultipartFile(new byte[]{1,254})},PoolsterExtraParts=new Dictionary<string,object?>{{"extra",new{snow="雪"}}}};await client.UploadThingAsync(body);if(driver.Calls!=1)throw new Exception("attempts");}}

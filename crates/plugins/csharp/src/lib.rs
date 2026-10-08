@@ -706,7 +706,7 @@ fn render_operation(output: &mut String, operation: &Operation) {
     );
     let _ = writeln!(
         output,
-        "        var kajiRequestPath = {:?};",
+        "        var poolsterRequestPath = {:?};",
         operation.path
     );
     for parameter in operation
@@ -722,7 +722,7 @@ fn render_operation(output: &mut String, operation: &Operation) {
         };
         let _ = writeln!(
             output,
-            "        kajiRequestPath = kajiRequestPath.Replace({:?}, Uri.EscapeDataString({serialized}), StringComparison.Ordinal);",
+            "        poolsterRequestPath = poolsterRequestPath.Replace({:?}, Uri.EscapeDataString({serialized}), StringComparison.Ordinal);",
             format!("{{{}}}", parameter.name),
         );
     }
@@ -753,7 +753,7 @@ fn render_operation(output: &mut String, operation: &Operation) {
         {
             let _ = writeln!(
                 output,
-                "        if ({name} is not null) foreach (var kajiQueryItem in {name}) query.Add(new KeyValuePair<string, string?>({:?}, ParameterString(kajiQueryItem)));",
+                "        if ({name} is not null) foreach (var poolsterQueryItem in {name}) query.Add(new KeyValuePair<string, string?>({:?}, ParameterString(poolsterQueryItem)));",
                 parameter.name
             );
         } else {
@@ -777,12 +777,12 @@ fn render_operation(output: &mut String, operation: &Operation) {
         let name = parameter_name(parameter);
         let _ = writeln!(
             output,
-            "        if (!string.IsNullOrEmpty({name})) {{ ValidateWholeQuery({name}); kajiRequestPath += \"?\" + {name}; }}"
+            "        if (!string.IsNullOrEmpty({name})) {{ ValidateWholeQuery({name}); poolsterRequestPath += \"?\" + {name}; }}"
         );
     }
     let _ = writeln!(
         output,
-        "        var request = CreateRequest({}, kajiRequestPath, query);",
+        "        var request = CreateRequest({}, poolsterRequestPath, query);",
         http_method_name(operation.method.as_str()),
     );
     for parameter in operation
@@ -941,14 +941,14 @@ fn render_operation(output: &mut String, operation: &Operation) {
         let original = output[operation_start..].to_owned();
         let mut helper = original.clone();
         let end = helper.find("\n    {").unwrap();
-        helper.insert_str(end - 1, ", string? kajiURL = null");
+        helper.insert_str(end - 1, ", string? poolsterURL = null");
         helper = helper.replacen(
             &format!("public async {return_type} {name}Async("),
             &format!("private async {return_type} {name}PoolsterURLAsync("),
             1,
         );
         let request = helper.find("        var request = CreateRequest").unwrap();
-        helper.insert_str(request,&format!("        var paginationURL = kajiURL is null ? null : {name}PoolsterURLTarget(kajiURL);\n"));
+        helper.insert_str(request,&format!("        var paginationURL = poolsterURL is null ? null : {name}PoolsterURLTarget(poolsterURL);\n"));
         let lineend = helper[request..].find(";\n").unwrap() + request + 2;
         // The inserted validation line comes first; locate the actual request line afterwards.
         let request = helper[lineend..]
@@ -1896,7 +1896,7 @@ mod tests {
                 items: Box::new(SchemaValue::new(SchemaKind::String)),
             }),
         )];
-        operation.annotations.insert("x-kaji-pagination".into(), serde_json::json!({"type":"page", "inputs":[{"name":"page","type":"page"}], "outputs":{"results":"$"}}));
+        operation.annotations.insert("x-poolster-pagination".into(), serde_json::json!({"type":"page", "inputs":[{"name":"page","type":"page"}], "outputs":{"results":"$"}}));
         let rendered = render_operation_chunk(&source, &source.operations[..1], "Example");
         assert!(rendered.contains("GetContactPagesAsync("));
         assert!(rendered.contains("long currentValue = page ?? 1"));
@@ -1978,7 +1978,7 @@ mod tests {
             description: None,
             annotations: BTreeMap::new(),
         });
-        source.operations[0].annotations.insert("x-kaji-pagination".into(), serde_json::json!({"type":"offsetLimit", "inputs":[{"name":"offset","type":"offset"},{"name":"limit","type":"limit"}], "outputs":{"results":"$"}}));
+        source.operations[0].annotations.insert("x-poolster-pagination".into(), serde_json::json!({"type":"offsetLimit", "inputs":[{"name":"offset","type":"offset"},{"name":"limit","type":"limit"}], "outputs":{"results":"$"}}));
         let rendered = render_operation_chunk(&source, &source.operations[..1], "Example");
         assert!(rendered.contains("long currentValue = offset ?? 0"));
         assert!(rendered.contains("long? pageLimit = limit"));
@@ -1993,13 +1993,13 @@ mod tests {
         )];
         source.operations[0]
             .annotations
-            .get_mut("x-kaji-pagination")
+            .get_mut("x-poolster-pagination")
             .unwrap()["outputs"]["results"] = serde_json::json!("/0");
         let rendered = render_operation_chunk(&source, &source.operations[..1], "Example");
         assert!(rendered.contains("results = results[0]"));
         source.operations[0]
             .annotations
-            .get_mut("x-kaji-pagination")
+            .get_mut("x-poolster-pagination")
             .unwrap()["outputs"]["results"] = serde_json::json!("$.missing");
         assert!(
             !render_operation_chunk(&source, &source.operations[..1], "Example")
@@ -2111,7 +2111,7 @@ mod tests {
             annotations: BTreeMap::new(),
         });
         operation.annotations.insert(
-            "x-kaji-idempotency".into(),
+            "x-poolster-idempotency".into(),
             serde_json::json!({"header":"Query", "auto_generate":true}),
         );
         let api = Api {
@@ -2509,13 +2509,13 @@ class Probe {{
                 items: Box::new(SchemaValue::new(SchemaKind::String)),
             }),
         )];
-        page.annotations.insert("x-kaji-pagination".into(),serde_json::json!({"type":"page","inputs":[{"name":"page","type":"page"}],"outputs":{"results":"$"}}));
+        page.annotations.insert("x-poolster-pagination".into(),serde_json::json!({"type":"page","inputs":[{"name":"page","type":"page"}],"outputs":{"results":"$"}}));
         source.operations.push(page);
         let mut keyed = source.operations[0].clone();
         keyed.id = "createKeyedItem".into();
         keyed.method = HttpMethod::Post;
         keyed.annotations.insert(
-            "x-kaji-idempotency".into(),
+            "x-poolster-idempotency".into(),
             serde_json::json!({"header":"X-Request-Key","auto_generate":true}),
         );
         source.operations.push(keyed);

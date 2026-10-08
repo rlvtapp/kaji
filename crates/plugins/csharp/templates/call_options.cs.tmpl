@@ -1,12 +1,12 @@
     private Dictionary<string,string>? _callHeaders;
     private TimeSpan? _callTimeout;
     /// <summary>Creates an independent scope sharing the HTTP driver, middleware and hooks.</summary>
-    public KajiClient ForCall(KajiCallOptions options) {
+    public PoolsterClient ForCall(PoolsterCallOptions options) {
         ArgumentNullException.ThrowIfNull(options);
         var timeout=options.Timeout??_callTimeout;
         if(timeout is TimeSpan value&&value<=TimeSpan.Zero)throw new ArgumentOutOfRangeException(nameof(options.Timeout));
         var headers=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
         if(_callHeaders is not null)foreach(var header in _callHeaders)headers[header.Key]=header.Value;
         if(options.Headers is not null)foreach(var header in options.Headers)headers[header.Key]=header.Value;
-        return new KajiClient(_httpClient,new KajiClientOptions{BaseUrl=_baseUri.ToString(),ApiKey=_apiKey,ApiKeyHeader=_apiKeyHeader,ApiKeyPrefix=_apiKeyPrefix,Retry=_retry,Hooks=_hooks}){_callHeaders=headers,_callTimeout=timeout};
+        return new PoolsterClient(_httpClient,new PoolsterClientOptions{BaseUrl=_baseUri.ToString(),ApiKey=_apiKey,ApiKeyHeader=_apiKeyHeader,ApiKeyPrefix=_apiKeyPrefix,Retry=_retry,Hooks=_hooks}){_callHeaders=headers,_callTimeout=timeout};
     }

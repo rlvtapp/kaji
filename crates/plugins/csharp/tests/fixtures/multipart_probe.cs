@@ -3,7 +3,7 @@ using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.RegularExpressions;
-using Kaji.KajiMultipart;
+using Poolster.PoolsterMultipart;
 class Driver:HttpMessageHandler {
  public int Calls;
  protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken cancellationToken){
@@ -15,4 +15,4 @@ class Driver:HttpMessageHandler {
   return new HttpResponseMessage(HttpStatusCode.NoContent){Content=new ByteArrayContent(Array.Empty<byte>())};
  }
 }
-class Probe {static async Task Main(){var driver=new Driver();var client=new KajiClient(new HttpClient(driver),new KajiClientOptions{BaseUrl="https://unused.example"});byte[] data={0,255,13,10,34,92,127};var file=new MultipartFile(data,"blob.bin");data[0]=42;var body=new UploadThingMultipartBody{Title="café雪\r\n",Flag=false,Count=0,File=file};await client.UploadThingAsync(body);if(driver.Calls!=1)throw new Exception("attempts");try{await client.UploadThingAsync(null!);throw new Exception("required body");}catch(ArgumentNullException){}if(driver.Calls!=1)throw new Exception("invalid execution");try{new MultipartFile(data,"bad\r\nname");throw new Exception("injection accepted");}catch(ArgumentException){}}}
+class Probe {static async Task Main(){var driver=new Driver();var client=new PoolsterClient(new HttpClient(driver),new PoolsterClientOptions{BaseUrl="https://unused.example"});byte[] data={0,255,13,10,34,92,127};var file=new MultipartFile(data,"blob.bin");data[0]=42;var body=new UploadThingMultipartBody{Title="café雪\r\n",Flag=false,Count=0,File=file};await client.UploadThingAsync(body);if(driver.Calls!=1)throw new Exception("attempts");try{await client.UploadThingAsync(null!);throw new Exception("required body");}catch(ArgumentNullException){}if(driver.Calls!=1)throw new Exception("invalid execution");try{new MultipartFile(data,"bad\r\nname");throw new Exception("injection accepted");}catch(ArgumentException){}}}

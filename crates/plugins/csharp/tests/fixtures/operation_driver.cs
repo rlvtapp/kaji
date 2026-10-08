@@ -6,7 +6,7 @@ using System.Text.Json.Serialization;
 using __PACKAGE__;
 
 /// Generated smoke tests: every HTTP request is handled in memory.
-static class KajiOperationTests {
+static class PoolsterOperationTests {
     static readonly JsonSerializerOptions Options = new() { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
     static void Check(bool value,string reason){if(!value)throw new Exception(reason);}
     static bool Same(JsonElement value,JsonElement expected)=>JsonNode.DeepEquals(JsonNode.Parse(value.GetRawText()),JsonNode.Parse(expected.GetRawText()));
