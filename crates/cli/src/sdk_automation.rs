@@ -1523,7 +1523,14 @@ fn adopt_release_only_changes(destination: &Path) -> Result<()> {
 const SETUP_INVENTORY: &str = ".poolster/sdk-automation.json";
 
 fn setup_path(root: &Path, relative: &Path) -> Result<PathBuf> {
-    relative_path(relative.to_str().context("non-UTF8 setup path")?)?;
+    // Typed paths may contain native separators after joining scaffold prefixes.
+    // Validate their repository form without weakening string option validation.
+    let portable = if relative == Path::new(".") {
+        ".".to_owned()
+    } else {
+        git_tree_path(relative)?
+    };
+    relative_path(&portable)?;
     let mut current = root.to_path_buf();
     for part in relative.components() {
         current.push(part);
@@ -2519,6 +2526,26 @@ mod tests {
         )
         .unwrap();
         assert!(packages(dir.path()).is_err());
+    }
+
+    #[test]
+    fn setup_paths_accept_native_nested_joins_without_accepting_escape() {
+        let root = tempfile::tempdir().unwrap();
+        let relative = Path::new(".poolster")
+            .join("sdk-repository-setup")
+            .join("acme")
+            .join("api-typescript")
+            .join(".github")
+            .join("workflows")
+            .join("release.yml");
+        assert_eq!(
+            setup_path(root.path(), &relative).unwrap(),
+            root.path().join(&relative)
+        );
+        assert!(setup_path(root.path(), Path::new("../outside")).is_err());
+        assert!(setup_path(root.path(), root.path()).is_err());
+        assert!(relative_path("sdk\\nested").is_err());
+        assert!(setup_path(root.path(), Path::new(".")).is_ok());
     }
 
     #[test]
