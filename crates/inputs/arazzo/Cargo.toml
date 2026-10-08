@@ -6,10 +6,10 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 description = "Native arazzo input provider for Poolster"
-publish = false
+publish = ["crates-io"]
 
 [dependencies]
-poolster-core = { path = "../../core" }
+poolster-core = { version = "0.5.0", path = "../../core" }
 anyhow = "1.0.102"
 roas-arazzo = { version = "=0.3.0", default-features = false, features = ["v1_0", "v1_1"] }
 serde_json = "1.0.138"

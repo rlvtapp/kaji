@@ -6,11 +6,11 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 description = "Native Ruby SDK generator for Poolster"
-publish = false
+publish = ["crates-io"]
 
 [dependencies]
 anyhow = "1.0.102"
-poolster-core = { path = "../../core" }
+poolster-core = { version = "0.5.0", path = "../../core" }
 serde_json = "1.0.138"
 
 [dev-dependencies]

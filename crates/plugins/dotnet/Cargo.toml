@@ -6,8 +6,8 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 description = "Deprecated compatibility facade for Poolster's C# SDK generator"
-publish = false
+publish = ["crates-io"]
 
 [dependencies]
-poolster-core = { path = "../../core" }
-poolster-plugin-csharp = { path = "../csharp" }
+poolster-core = { version = "0.5.0", path = "../../core" }
+poolster-plugin-csharp = { version = "0.5.0", path = "../csharp" }

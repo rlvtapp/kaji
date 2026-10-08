@@ -43,6 +43,16 @@ test('release updates inherited workspace and lock versions without changing dep
     assert.deepEqual(after.package[i], expected);
   }
   assert.equal(changed, names.size);
+  for (const member of manifest.workspace.members) {
+    const beforeManifest = toml.parse(read(`${member}/Cargo.toml`));
+    const dependencies = Object.entries(beforeManifest.dependencies ?? {}).filter(([, dep]) => dep.path);
+    if (!dependencies.length) continue;
+    const afterManifest = toml.parse(updated.get(`${member}/Cargo.toml`));
+    for (const [name, dep] of dependencies) {
+      assert.equal(dep.version, read('version.txt').trim());
+      assert.deepEqual(afterManifest.dependencies[name], { ...dep, version: '0.5.1' });
+    }
+  }
   const launcher = JSON.parse(updated.get('packages/npm/cli/package.json'));
   assert.equal(launcher.version, '0.5.1');
   for (const value of Object.values(launcher.optionalDependencies)) assert.equal(value, '0.5.1');

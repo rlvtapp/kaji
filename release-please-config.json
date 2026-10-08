@@ -301,6 +301,261 @@
           "type": "json",
           "path": "packages/npm/inputs/capnproto/package.json",
           "jsonpath": "$.peerDependencies[\"@relevate/poolster\"]"
+        },
+        {
+          "type": "toml",
+          "path": "crates/cli/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/cli/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-core\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/cli/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-inputs\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/facade/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-core\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/facade/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-plugin-rust\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/facade/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-plugin-typescript\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/facade/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-plugin-typescript-cli\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/facade/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-plugin-rust-cli\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/facade/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-plugin-go\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/facade/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-plugin-python\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/facade/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-plugin-php\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/facade/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-plugin-symfony\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/facade/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-plugin-java\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/facade/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-plugin-csharp\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/facade/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-plugin-dotnet\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/facade/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-plugin-elixir\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/facade/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-plugin-ruby\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/facade/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-plugin-swift\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/facade/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-plugin-terraform\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/facade/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-plugin-postman\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/inputs/arazzo/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-core\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/inputs/asyncapi/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-core\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/inputs/bundle/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-core\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/inputs/bundle/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-input-graphql\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/inputs/bundle/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-input-asyncapi\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/inputs/bundle/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-input-arazzo\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/inputs/bundle/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-input-protobuf\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/inputs/bundle/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-input-capnproto\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/inputs/capnproto/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-core\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/inputs/graphql/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-core\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/inputs/protobuf/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-core\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/node/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/node/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-core\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/node/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-inputs\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/plugins/csharp/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-core\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/plugins/dotnet/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-core\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/plugins/dotnet/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-plugin-csharp\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/plugins/elixir/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-core\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/plugins/go/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-core\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/plugins/java/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-core\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/plugins/php/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-core\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/plugins/postman/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-core\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/plugins/python/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-core\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/plugins/ruby/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-core\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/plugins/rust/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-core\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/plugins/rust-cli/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-core\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/plugins/swift/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-core\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/plugins/symfony/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-core\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/plugins/terraform/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-core\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/plugins/typescript/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-core\"].version"
+        },
+        {
+          "type": "toml",
+          "path": "crates/plugins/typescript-cli/Cargo.toml",
+          "jsonpath": "$.dependencies[\"poolster-core\"].version"
         }
       ],
       "version-file": "version.txt",

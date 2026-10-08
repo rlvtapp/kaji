@@ -45,6 +45,8 @@ jobs:
         run: PYTHONPATH=packages/python/src python -m unittest discover -s packages/python/tests -v
       - name: Test workspace release version updates
         run: |
+          python scripts/test-publish-crates.py
+          python scripts/publish-crates.py --plan --tag "v$(cat version.txt)"
           npm install --prefix "$RUNNER_TEMP/poolster-release-check" --ignore-scripts --no-audit --no-fund release-please@17.6.0
           NODE_PATH="$RUNNER_TEMP/poolster-release-check/node_modules" node --test scripts/release-config.test.cjs
       - name: Build OpenAPI compiler for CLI integration tests

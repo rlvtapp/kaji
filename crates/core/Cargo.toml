@@ -6,7 +6,7 @@ description = "Language-neutral OpenAPI code generation primitives"
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-publish = false
+publish = ["crates-io"]
 
 [dependencies]
 anyhow = "1.0.102"

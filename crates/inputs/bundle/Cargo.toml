@@ -6,7 +6,7 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 description = "Convenience bundle of native input providers for Poolster"
-publish = false
+publish = ["crates-io"]
 
 [features]
 default = ["graphql", "asyncapi", "arazzo", "protobuf", "capnproto"]
@@ -17,13 +17,13 @@ protobuf = ["dep:poolster-input-protobuf"]
 capnproto = ["dep:poolster-input-capnproto"]
 
 [dependencies]
-poolster-core = { path = "../../core" }
+poolster-core = { version = "0.5.0", path = "../../core" }
 anyhow = "1.0.102"
-poolster-input-graphql = { path = "../graphql", optional = true }
-poolster-input-asyncapi = { path = "../asyncapi", optional = true }
-poolster-input-arazzo = { path = "../arazzo", optional = true }
-poolster-input-protobuf = { path = "../protobuf", optional = true }
-poolster-input-capnproto = { path = "../capnproto", optional = true }
+poolster-input-graphql = { version = "0.5.0", path = "../graphql", optional = true }
+poolster-input-asyncapi = { version = "0.5.0", path = "../asyncapi", optional = true }
+poolster-input-arazzo = { version = "0.5.0", path = "../arazzo", optional = true }
+poolster-input-protobuf = { version = "0.5.0", path = "../protobuf", optional = true }
+poolster-input-capnproto = { version = "0.5.0", path = "../capnproto", optional = true }
 
 [dev-dependencies]
 tempfile = "3.27.0"

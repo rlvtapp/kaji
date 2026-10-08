@@ -6,10 +6,10 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 description = "Native graphql input provider for Poolster"
-publish = false
+publish = ["crates-io"]
 
 [dependencies]
-poolster-core = { path = "../../core" }
+poolster-core = { version = "0.5.0", path = "../../core" }
 anyhow = "1.0.102"
 apollo-compiler = "1.32"
 

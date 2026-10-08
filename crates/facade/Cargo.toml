@@ -6,7 +6,7 @@ description = "Multi-language OpenAPI SDK generation profiles"
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-publish = false
+publish = ["crates-io"]
 
 [features]
 default = []
@@ -36,25 +36,25 @@ typescript-cli = ["dep:poolster-plugin-typescript-cli"]
 
 [dependencies]
 anyhow = "1.0.102"
-poolster-core = { path = "../core" }
-poolster-plugin-rust = { path = "../plugins/rust", optional = true }
-poolster-plugin-typescript = { path = "../plugins/typescript", optional = true }
-poolster-plugin-typescript-cli = { path = "../plugins/typescript-cli", optional = true }
-poolster-plugin-rust-cli = { path = "../plugins/rust-cli", optional = true }
+poolster-core = { version = "0.5.0", path = "../core" }
+poolster-plugin-rust = { version = "0.5.0", path = "../plugins/rust", optional = true }
+poolster-plugin-typescript = { version = "0.5.0", path = "../plugins/typescript", optional = true }
+poolster-plugin-typescript-cli = { version = "0.5.0", path = "../plugins/typescript-cli", optional = true }
+poolster-plugin-rust-cli = { version = "0.5.0", path = "../plugins/rust-cli", optional = true }
 serde = { version = "1.0.219", features = ["derive"] }
-poolster-plugin-go = { path = "../plugins/go", optional = true }
-poolster-plugin-python = { path = "../plugins/python", optional = true }
-poolster-plugin-php = { path = "../plugins/php", optional = true }
-poolster-plugin-symfony = { path = "../plugins/symfony", optional = true }
-poolster-plugin-java = { path = "../plugins/java", optional = true }
-poolster-plugin-csharp = { path = "../plugins/csharp", optional = true }
-poolster-plugin-dotnet = { path = "../plugins/dotnet", optional = true }
-poolster-plugin-elixir = { path = "../plugins/elixir", optional = true }
-poolster-plugin-ruby = { path = "../plugins/ruby", optional = true }
-poolster-plugin-swift = { path = "../plugins/swift", optional = true }
+poolster-plugin-go = { version = "0.5.0", path = "../plugins/go", optional = true }
+poolster-plugin-python = { version = "0.5.0", path = "../plugins/python", optional = true }
+poolster-plugin-php = { version = "0.5.0", path = "../plugins/php", optional = true }
+poolster-plugin-symfony = { version = "0.5.0", path = "../plugins/symfony", optional = true }
+poolster-plugin-java = { version = "0.5.0", path = "../plugins/java", optional = true }
+poolster-plugin-csharp = { version = "0.5.0", path = "../plugins/csharp", optional = true }
+poolster-plugin-dotnet = { version = "0.5.0", path = "../plugins/dotnet", optional = true }
+poolster-plugin-elixir = { version = "0.5.0", path = "../plugins/elixir", optional = true }
+poolster-plugin-ruby = { version = "0.5.0", path = "../plugins/ruby", optional = true }
+poolster-plugin-swift = { version = "0.5.0", path = "../plugins/swift", optional = true }
 
-poolster-plugin-terraform = { path = "../plugins/terraform", optional = true }
-poolster-plugin-postman = { path = "../plugins/postman", optional = true }
+poolster-plugin-terraform = { version = "0.5.0", path = "../plugins/terraform", optional = true }
+poolster-plugin-postman = { version = "0.5.0", path = "../plugins/postman", optional = true }
 
 [dev-dependencies]
 serde_json = "1.0.138"

@@ -6,8 +6,8 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 description = "Symfony bundle generator for Poolster PHP SDKs"
-publish = false
+publish = ["crates-io"]
 
 [dependencies]
 anyhow = "1.0.102"
-poolster-core = { path = "../../core" }
+poolster-core = { version = "0.5.0", path = "../../core" }
