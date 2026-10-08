@@ -42,7 +42,7 @@ elif [[ "$mode" == check ]]; then
         swift) swift build --disable-sandbox ;;
         php) find src -name '*.php' -print0 | xargs -0 -n1 php -l ;;
         java) mvn --batch-mode --no-transfer-progress -q -DskipTests compile ;;
-        csharp) dotnet build --configuration Release ;;
+        csharp) dotnet build --configuration Release --disable-build-servers -p:UseSharedCompilation=false ;;
         elixir) mix deps.get && mix compile --warnings-as-errors ;;
         *) printf 'Unsupported language: %s\n' "$language" >&2; exit 1 ;;
       esac

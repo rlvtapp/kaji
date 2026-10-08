@@ -45,10 +45,44 @@ def run_logged(command, environment, log, timeout):
                     'log': str(log), 'timed_out': False}
 
 
-def run_case(contract, language, manifest, root, environment, timeout, keep_generated):
+
+SOURCE_SUFFIXES = frozenset(('.rs', '.ts', '.tsx', '.go', '.py', '.php', '.java', '.cs', '.ex', '.exs', '.rb', '.swift'))
+
+
+def output_statistics(package, warning_bytes=0):
+    """Measure owned output before native checks create build artifacts.
+
+    Metadata is reported separately; JSON collections and other assets remain
+    in total bytes. Budgets are reporting heuristics, never compiler limits.
+    """
+    files = []
+    for path in package.rglob('*'):
+        if path.is_file():
+            relative = path.relative_to(package)
+            files.append((relative.as_posix(), path.stat().st_size,
+                          '.kaji' in relative.parts, path.suffix in SOURCE_SUFFIXES))
+    source = sorted(((name, size) for name, size, metadata, is_source in files
+                     if is_source and not metadata), key=lambda item: (-item[1], item[0]))
+    oversized = sorted(((name, size) for name, size, metadata, _ in files
+                        if not metadata and warning_bytes and size > warning_bytes),
+                       key=lambda item: (-item[1], item[0]))
+    return {
+        'generated_files': len(files),
+        'generated_bytes': sum(size for _, size, _, _ in files),
+        'source_files': len(source),
+        'source_bytes': sum(size for _, size in source),
+        'metadata_bytes': sum(size for _, size, metadata, _ in files if metadata),
+        'largest_source_bytes': source[0][1] if source else 0,
+        'largest_source_files': [{'path': name, 'bytes': size} for name, size in source[:10]],
+        'file_warning_bytes': warning_bytes or None,
+        'oversized_files': [{'path': name, 'bytes': size} for name, size in oversized],
+    }
+
+
+def run_case(contract, language, manifest, root, environment, timeout, keep_generated, warning_bytes=0):
     name = contract['name']
     report = {'contract': name, 'language': language, 'source_url': contract['url'],
-              'source_sha256': contract['sha256'], 'source_bytes': contract.get('bytes'),
+              'source_sha256': contract['sha256'], 'input_bytes': contract.get('bytes'),
               'status': 'failed', 'generation': None, 'native': None}
     with tempfile.TemporaryDirectory(prefix=name + '-', dir=root / 'work') as temporary:
         scratch = Path(temporary)
@@ -62,9 +96,7 @@ def run_case(contract, language, manifest, root, environment, timeout, keep_gene
         sdk_root = scratch / name
         if report['generation']['exit_code'] == 0:
             package = sdk_root / language
-            files = [p for p in package.rglob('*') if p.is_file()]
-            report['generated_files'] = len(files)
-            report['generated_bytes'] = sum(p.stat().st_size for p in files)
+            report.update(output_statistics(package, warning_bytes))
             report['native'] = run_logged(['bash', str(PROJECT / 'scripts/test-public-contracts.sh'),
                                           'check', language], env, logs / 'native.log', timeout)
             if report['native']['exit_code'] == 0:
@@ -101,9 +133,13 @@ def main(arguments=None):
     parser.add_argument('--spec-cache', type=Path)
     parser.add_argument('--timeout', type=int, default=600, help='seconds per generation/native phase')
     parser.add_argument('--keep-generated', action='store_true')
+    parser.add_argument('--file-warning-bytes', type=int, default=0,
+                        help='report generated files above this size; 0 disables warnings')
     args = parser.parse_args(arguments)
     if not 1 <= args.timeout <= 3600:
         parser.error('--timeout must be between 1 and 3600 seconds')
+    if args.file_warning_bytes < 0:
+        parser.error('--file-warning-bytes cannot be negative')
     manifest = args.manifest.resolve()
     if args.contracts:
         os.environ['KAJI_PUBLIC_CONTRACTS'] = args.contracts
@@ -122,7 +158,7 @@ def main(arguments=None):
     cases = []
     for contract in selected:
         case = run_case(contract, args.language, manifest, root, dict(os.environ),
-                        args.timeout, args.keep_generated)
+                        args.timeout, args.keep_generated, args.file_warning_bytes)
         cases.append(case)
         result = save_report(root, manifest, cases)
         print(f"{contract['name']} / {args.language}: {case['status']}", flush=True)

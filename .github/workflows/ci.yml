@@ -75,6 +75,19 @@ jobs:
           cargo test -p kaji-plugin-typescript native_whole_query_and_json_sequences -- --ignored
           cargo test -p kaji-plugin-typescript native_open_enum_types_accept_future_values_and_preserve_wire -- --ignored
           cargo test -p kaji-cli --test openapi32 -- --ignored
+      - name: Verify framework factories and split auxiliary/CLI modules
+        env:
+          CYPRESS_INSTALL_BINARY: '0'
+        run: |
+          npm install --prefix "$RUNNER_TEMP/kaji-ts-framework" --no-audit --no-fund typescript@5.9.3 @types/node@22.20.5 commander@13.1.0 react@19.3.0 @types/react@19.3.0 vue@3.5.43 @tanstack/react-query@5.104.1 @tanstack/vue-query@5.104.1 swr@2.5.1 zod@3.25.76 @faker-js/faker@9.9.0 msw@2.15.0 cypress@15.21.1
+          export KAJI_TSC_JS="$RUNNER_TEMP/kaji-ts-framework/node_modules/typescript/lib/tsc.js"
+          export KAJI_TS_NODE_MODULES="$RUNNER_TEMP/kaji-ts-framework/node_modules"
+          export KAJI_TS_CLI_NODE_MODULES="$KAJI_TS_NODE_MODULES"
+          cargo test -p kaji-plugin-typescript query_factories_cache_callbacks_and_abort_execute_natively -- --ignored
+          cargo test -p kaji-plugin-typescript namespaced_and_auxiliary_consumers_compile_and_validate_selected_models -- --ignored
+          cargo test -p kaji-plugin-typescript custom_transport_and_relocated_query_consumer_compile -- --ignored
+          cargo test -p kaji-plugin-typescript-cli split_commands_compile_and_show_last_chunk_in_help -- --ignored
+          cargo test -p kaji-plugin-rust-cli split_commands_compile_and_show_last_chunk_in_help -- --ignored
       - name: Verify generated Postman exports against the official schema
         run: cargo test -p kaji-plugin-postman validates_actual_official_draft04_schema -- --ignored
       - name: Verify exported collections with Newman against a local mock
@@ -278,7 +291,7 @@ jobs:
             Python) python -m compileall -q src && PYTHONPATH=src python -c 'import ci_pets_sdk' ;;
             PHP) find src -name '*.php' -print0 | xargs -0 -n1 php -l ;;
             Java) mvn --batch-mode --no-transfer-progress -q -DskipTests compile ;;
-            C#) dotnet build --configuration Release ;;
+            C#) dotnet build --configuration Release --disable-build-servers -p:UseSharedCompilation=false ;;
             Elixir) mix deps.get && mix compile --warnings-as-errors ;;
             Ruby) find lib -name '*.rb' -print0 | xargs -0 -n1 ruby -c ;;
             Swift) swift build --disable-sandbox ;;

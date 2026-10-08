@@ -132,6 +132,30 @@ class CorpusTests(unittest.TestCase):
             self.assertIsNone(result['exit_code'])
             self.assertIn('time limit', log.read_text())
 
+    def test_sizes_keep_metadata_and_assets_distinct_with_stable_top_paths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / '.kaji').mkdir()
+            (root / '.kaji/source.ts').write_bytes(b'x' * 40)
+            (root / 'z.ts').write_bytes(b'x' * 12)
+            (root / 'a.ts').write_bytes(b'x' * 12)
+            (root / 'collection.json').write_bytes(b'x' * 15)
+            result = corpus.output_statistics(root, 12)
+            self.assertEqual(result['generated_bytes'], 79)
+            self.assertEqual(result['source_bytes'], 24)
+            self.assertEqual(result['metadata_bytes'], 40)
+            self.assertEqual(result['largest_source_bytes'], 12)
+            self.assertEqual([p['path'] for p in result['largest_source_files']], ['a.ts', 'z.ts'])
+            self.assertEqual(result['oversized_files'], [{'path': 'collection.json', 'bytes': 15}])
+            self.assertEqual(corpus.output_statistics(root)['oversized_files'], [])
+
+    def test_empty_output_has_zero_source_budget(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = corpus.output_statistics(Path(directory))
+            self.assertEqual(result['largest_source_bytes'], 0)
+            self.assertEqual(result['generated_bytes'], 0)
+            self.assertIsNone(result['file_warning_bytes'])
+
     def test_existing_output_is_not_overwritten(self):
         with tempfile.TemporaryDirectory() as directory:
             marker = Path(directory) / 'report.json'
