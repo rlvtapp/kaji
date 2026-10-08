@@ -4,174 +4,156 @@
 
 ## 0.5.0 — 2026-10-08
 
-- Import Stainless, Fern and Speakeasy project settings through `kaji migrate`,
-  generate directly from supported vendor configurations, and normalize supported
-  vendor operation annotations with explicit manual-review diagnostics.
-- Add a pinned 32-provider APIs.guru corpus, per-phase failure reports, cleanup
-  regression tests and a manual native-language CI workflow. Initial Go baseline:
-  25 passing contracts and seven retained failures documented in the large-spec guide.
-
-- Add optional Swift/PHP/Elixir OAuth providers and native call scopes, and
-  buffered Ruby/PHP/Elixir multipart builders with native regression probes.
-- Resolve bounded public-HTTPS reference closures with provenance invalidation,
-  and retain OpenAPI 3.2 custom HTTP methods with unsafe-by-default retries.
-- Add a sourced SDK-generator comparison and Kaji ownership/plugin positioning.
-- Rust generator API: `HttpMethod` now carries `Custom(String)` and is no longer
-  `Copy`; clone stored values when needed, or borrow them for `as_str()`.
-  Manually constructed `OAuthFlow` values now include
-  `device_authorization_url: None` when the flow has no device endpoint.
-
-
 ### Added
 
-- OpenAPI 3.2 whole-query and ordinary parameter content serialization, buffered
-  JSON-sequence/NDJSON/JSONL requests and responses, ordered recursively nested
-  multipart plans, device authorization metadata, tag hierarchy and `$self` identity.
-  Typed content metadata remains available to custom generation plugins.
-- Compiler artifact revision cache invalidation, reusable media definitions and
-  source-node extraction covering fields omitted by the pinned parser models.
-- Opt-in TypeScript/Python/Rust open enum APIs, PHP known enum/scalar fallback,
-  schema-allowed unknown fields and native nested roundtrip probes across targets.
-- Explicit-null construction helpers for Python/Ruby/PHP/Elixir models; fixes for
-  renamed C# presence properties, Ruby `value` fields and unknown-property collisions.
-- Author guides for forward-compatible models and native OpenAPI 3.2 wire formats,
-  with native failure-path tests and CI execution of the new probes.
+#### Generation and customization
+
+- Migration from Stainless, Fern and Speakeasy through `kaji migrate`, direct
+  generation from supported vendor configurations, and automatic normalization
+  of supported OpenAPI annotations. Originals are preserved; unsupported settings
+  receive explicit manual-review diagnostics.
+- Bundled runtime HTTP middleware that registers automatically in generated SDKs,
+  plus package source overlays, explicit replacements and guarded patches.
+- Named typed plugin contracts and independent model, transport, operation and
+  client providers for TypeScript and native Rust/Go composition.
 - Rebuildable `kaji eject` source bundles with SHA-256 manifests, preserving the
-  plugin architecture; an integration test edits a renderer, rebuilds and generates.
-- OpenAPI QUERY/custom methods, local reference closure hashing and recursive schemas,
-  with diagnostics for malformed encodings and unsupported future document versions.
-- Optional TypeScript, Rust, Java and C# OAuth client-credentials providers with
-  coordinated refresh, cancellation and bounded safe unauthorized replay.
-- Bounded multipart upload APIs in Go/Python/Rust/Swift, and richer Java/C# JSON,
-  repeated-array and mixed-media multipart bodies, with native MIME/retry/cancellation probes.
-- Native per-call headers and timeout controls in TypeScript, Ruby, Go, Python,
-  Rust, Java and C#, preserving client defaults and native cancellation.
-- Opt-in Rust unmatched union values retain raw JSON; strict decoding remains the default.
-- Six checksum-pinned full official contracts and a manual ten-language native
-  verification workflow; Go request/model naming now handles full OpenAI and GitHub.
+  plugin architecture and supporting custom generator builds.
+- Ownership-aware regeneration and check mode with stale-file cleanup, customer
+  edit protection, create-once files and npm manifest merging.
+- Optional generated operation tests in all ten SDK languages, with bounded
+  structural fixtures, fake native HTTP drivers and unsupported-case diagnostics.
+- Package-local API references and a standalone custom plugin composition example.
 
+#### OpenAPI and SDK runtimes
 
+- OpenAPI 3.2 whole-query and parameter content serialization, buffered
+  JSON-sequence/NDJSON/JSONL bodies, ordered nested multipart plans, device
+  authorization metadata, tag hierarchy and `$self` identity.
+- QUERY and custom HTTP methods with unsafe-by-default retries, local and bounded
+  public-HTTPS reference closure resolution, and source provenance invalidation.
+  Custom plugins retain typed content and expanded OpenAPI metadata.
+- Opt-in `x-kaji-idempotency` and per-package rules across ten SDK targets, with
+  secure automatic UUIDs, caller overrides, retry-stable keys and API documentation.
+  Custom plugins receive the resolved policy.
+- Shared pagination plans and native page-number helpers across all ten targets,
+  preserving language-specific iteration APIs. Additional cursor, offset and
+  same-origin URL pagination capabilities are documented per target.
+- Consumer runtime middleware and opt-in structural response checks in TypeScript
+  Fetch/Axios, Go, Python sync/async and Ruby.
+- Optional OAuth client-credentials providers across the ten SDK targets, with
+  coordinated refresh and bounded safe unauthorized replay. Native request scopes
+  expose per-call headers, deadlines and cancellation where supported.
+- Opt-in Standard Webhooks HMAC v1 verification across ten targets, with timestamp,
+  key-rotation and canonical-vector checks.
+- Replay-safe Ruby/Swift retries, bounded `Retry-After` and `retry-after-ms` delays,
+  HTTP-date handling and cancellable backoff. The default remains one attempt.
+- Multipart upload builders across native targets, including buffered
+  Ruby/PHP/Elixir bodies and richer Java/C# scalar, binary, JSON and repeated-array
+  parts. Swift adds incremental cancellable SSE.
+- Forward-compatible model options: open enums across supported targets, Rust
+  unmatched union values retaining raw JSON, schema-allowed unknown fields,
+  Java/C# scalar and union wrappers, Java/C# optional-presence wrappers, and
+  Python/Ruby/PHP/Elixir explicit-null helpers. Strict decoding remains the default
+  where applicable; see the feature catalog for target differences.
+
+#### Postman and Terraform
+
+- Postman Collection 2.1 generation with request/response examples, media and
+  parameter mappings, authentication variants, stable IDs, secret redaction and
+  create-once environment templates. Includes official-schema validation and
+  executable collection tests through pinned Newman.
+- Reviewed-hash Postman collection and environment synchronization, preserving
+  remote secrets and manually added variables, with bounded responses and verified
+  read-back.
+- Typed Terraform Plugin Framework providers with explicit or inferred CRUD
+  bindings, authentication, safe HTTP transport, import and lifecycle diagnostics.
+- Terraform nested objects/lists/maps, composite identities with configured parent
+  IDs, single-entity data sources and explicit versioned root-field state renames.
 - Explicit Terraform lifecycle polling through validated read GET operations,
   bounded scalar criteria, attempts/deadlines, cancellation and recoverable state.
+- Optional editable Terraform Registry release scaffolding with an explicit
+  namespace and injected provider version.
 
-- Native-verified Java/C#/PHP/Elixir probes and pinned public contract checks.
-  Fixed Java/C# inline response imports, Java presence constructors, Elixir string
-  enum typespecs and generated Finch request assertions. Rust native tests now
-  allow dependency downloads on fresh runners, with explicit offline mode.
+#### SDK delivery and documentation
 
-- Typed Terraform nested objects/lists/maps, composite identities including configured
-  parent IDs, and explicit versioned root-field state renames, with native Framework tests.
-- Swift incremental cancellable SSE and opt-in open enums; Rust/C#/Swift same-origin
-  URL pagination and Swift offset pagination.
-- Java/C# optional presence wrappers and scalar/binary multipart bodies; opt-in Ruby
-  OAuth client credentials with coordinated refresh and bounded unauthorized replay.
-- Checksum-pinned public OpenAPI compilation across ten CI toolchains, corruption
-  tests and portable native test caches. Speakeasy Terraform comparison documents
-  polling, transformations and general migrations still outside the supported subset.
-
-- Full feature catalog with SDK target differences, configuration entry points and
-  verification limits, linked from the main README and documentation index.
-- Opt-in Standard Webhooks HMAC v1 verifiers across ten SDK targets, with shared
-  canonical vectors, timestamp/rotation checks and native probes. Go gains cached
-  OAuth client credentials with coordinated refresh and bounded safe 401 replay.
-- Optional generated operation tests in all ten SDK language recipes, with bounded
-  structural fixtures, fake native HTTP drivers and explicit unsupported diagnostics.
-- Opt-in Ruby/Swift replay-safe retries, bounded server delay handling and backoff
-  cancellation; the default remains one attempt.
-- Elixir offset and absolute same-origin URL pagination; continuations reject origin
-  changes before authentication. C# gains opt-in forward-compatible open enums.
-- Reviewed Postman environment synchronization preserves remote secrets and manually
-  added variables, with bounded responses, hash review and verified read-back.
-- Java/C# named scalar and union wrappers preserve their underlying JSON value
-  during round-trip serialization. Opt-in presence wrappers distinguish optional null from omission.
-- Swift cursor pagination, checked-in complex-model OpenAPI regressions and a
-  checksum-pinned Microsoft Graph native test with manual read-only CI.
-- Reviewed-hash Postman collection synchronization and optional editable Terraform
-  registry-release scaffolding, explicit namespace and injected provider version.
-
-- Expanded 17-scenario native wire corpus, installed TypeScript ESM package checks,
-  OAuth/cancellation and nested-model probes, atomic regeneration conflict tests,
-  and delivery phase failure/cleanup tests. Native CI runs the additional probes.
-
-- Opt-in `x-kaji-idempotency` and per-package recipe rules across ten SDK targets,
-  secure automatic UUIDs, native caller overrides, retry-stable keys, and generated
-  API reference documentation. Custom plugins receive the resolved policy.
-- Bounded `retry-after-ms` handling and HTTP-date retry delay improvements in native
-  runtimes, with replay safety tests. PATCH now requires an idempotency key.
-
-- A shared executable HTTP runtime contract with ten native harnesses and explicit
-  unsupported-scenario reporting, wired into the language CI matrix.
-- Optional Python and Go generated operation smoke tests, a package-local API
-  reference, and a standalone custom plugin composition example.
-- Python sync/async and Ruby opt-in structural response validation, plus shared
-  page pagination in Python/TypeScript/Go with RFC 6901 selectors.
-- Terraform single-entity data sources and real local Terraform CLI lifecycle
-  tests; executable Postman collection tests through pinned Newman.
-- Read-only SDK doctor/inspection, structured API diff notes carried into Release
-  Please, and a gated disposable delivery workflow prepared without publication.
-- Ownership-aware regeneration and check mode with stale generated-file cleanup,
-  customer edit protection, preserved create-once files, and npm manifest merging.
-- SDK author customization through bundled runtime HTTP middleware across native
-  targets, package source overlays, explicit replacement, and guarded patches.
-  Bundled middleware registers by default without SDK consumer configuration.
-- Named typed plugin contracts and provider composition for TypeScript and native
-  Rust/Go, with independent model, transport, operation, and client providers.
-- Package delivery metadata, independent SDK versions, API diff release sizing,
-  destination-owned version preservation, and safe generated SDK pull requests.
-- SDK automation commands for scaffolding, synchronization, checks, publishing,
-  releases, remote status, spec relay, and reviewable destination setup installation.
-- One repository per language using `--repository-pattern 'OWNER/api-{lang}'`,
-  isolated generation jobs, destination-scoped authentication, and editable action
-  sources for each repository's checks and release workflow.
+- SDK automation for scaffolding, synchronization, checks, publishing, releases,
+  spec relay, remote status and reviewable destination setup installation.
+- Independent SDK package versions, API diff release sizing and notes, preservation
+  of destination-owned versions, and safe generated SDK pull requests.
+- One repository per language through `--repository-pattern 'OWNER/api-{lang}'`,
+  isolated generation jobs, destination-scoped authentication and editable checks,
+  release and publishing actions for each repository.
 - Release Please and immutable-tag publishing workflows, supported registry OIDC
-  integrations, GitHub App manifests, and a self-hosted OIDC token broker.
-- Editable GitHub Actions for SDK checks, publishing, and spec synchronization.
-  Spec relay uses review PRs and protects manual changes and source provenance.
-- Postman Collection 2.1 generation with request/response examples, parameter and
-  media mappings, authentication variants, stable IDs, secret redaction, and
-  create-once environment templates. Includes official-schema validation action.
-- Typed Terraform Plugin Framework provider generation with explicit or inferred
-  CRUD bindings, scalar state/schema mapping, import, authentication, safe HTTP
-  transport, lifecycle handling, diagnostics, and generated native transport tests.
-- Shared pagination plans and SDK fixture infrastructure; native page-number
-  helpers across all ten targets, preserving each language's iteration API.
-  Rust pagers now preserve optional starts and avoid saturating-counter loops.
-- SDK author guides and examples covering generation, customization, publishing,
-  GitHub automation, per-language repositories, Postman, and Terraform.
+  integrations, GitHub App manifests and a self-hosted OIDC token broker.
+- Editable GitHub Actions for SDK checks, publishing and spec synchronization;
+  spec relay uses review PRs and protects manual changes and source provenance.
+- Read-only SDK doctor/inspection and a gated disposable delivery workflow
+  prepared without publication.
+- SDK author guides and examples for generation, customization, forward-compatible
+  models, OpenAPI 3.2, publishing, GitHub delivery, Postman and Terraform.
+- Full feature catalog and sourced generator comparison, linked from the main
+  README and documentation index.
 
 ### Changed
 
-- Unsupported OpenAPI 3.2/future versions fail before modifying compiler artifacts.
-  Swift recursive models compile as immutable classes; Swift/Java/C# report model
-  identifier collisions and reject unsupported multipart requests. Java/C# SSE
-  parsers join multiline data and ignore event metadata.
+- Python SDKs support async/httpx clients. TypeScript supports wide integers through
+  string/bigint representations; model decoding better preserves nullable values
+  and schema-allowed unknown fields.
+- Compiler artifact revisions invalidate caches when the normalized representation
+  changes. Source-node extraction retains fields omitted by parser models.
+- Unsupported future OpenAPI versions and malformed encodings fail explicitly;
+  version checks run before modifying compiler artifacts. Model identifier
+  collisions and unsupported multipart requests receive explicit diagnostics.
+- PATCH replay now requires an idempotency key.
+- Root release metadata stays synchronized across Rust, npm and Python. Workspace
+  version updates are regression-tested; automatic publication requires explicit
+  enablement.
 
-- Generated TypeScript ESM imports resolve in installed Node packages. SDK runtime
-  fixes preserve nullable/omitted fields, repeated query arrays, encoded paths,
-  nested model decoding and cancellation behavior. Rust escapes reserved names.
+### Fixed
 
-- TypeScript Fetch/Axios and Go clients expose opt-in structural response checks.
-  Consumer middleware tests cover rewrites, short circuits, error propagation,
-  retries, and cancellation; TypeScript checks include middleware-produced results.
-- TypeScript preserves wide integers with string/bigint support. Model handling
-  improves unknown fields and nullable values; Java supports open enums.
-- Python SDKs gain async/httpx support, OAuth client credentials, and webhook HMAC.
-- OpenAPI artifacts preserve additional server, tag, parameter, response-example,
-  and encoding metadata for artifact generators.
-- CI validates Postman collections and generated Terraform providers alongside
-  SDK and compiler checks. Root release metadata is synchronized across Rust,
-  npm distribution packages, and Python.
+- TypeScript ESM imports resolve in installed Node packages. Runtime fixes preserve
+  repeated query arrays, encoded paths, nested model decoding and cancellation.
+- Go request/model naming handles the pinned full OpenAI and GitHub contracts;
+  Rust escapes reserved names and pagers avoid saturating-counter loops.
+- Swift recursive models compile as immutable classes. Java/C# inline response
+  imports, Java presence constructors, C# renamed presence properties, Ruby
+  `value` fields and unknown-property collisions are corrected.
+- Java/C# SSE parsers join multiline data and ignore event metadata. Elixir string
+  enum typespecs and generated Finch request assertions are corrected.
+- CI builds the compiler before CLI integration tests, selects Swift 6 with its Go
+  dependency, and loads Elixir probe dependencies. Rust native checks support fresh
+  dependency downloads and explicit offline mode.
 
-### Scope and verification
+### Breaking changes
 
-- Postman workspace synchronization and publication are not included.
-- Typed Terraform supports a bounded typed schema subset; independent collection data
-  sources, arbitrary asynchronous job mappings, general type migrations and registry
-  publishing remain future work. The legacy raw-JSON Terraform API remains.
-- Terraform lifecycle tests run against the native Go Plugin Framework; Terraform
-  CLI lifecycle runs against a local mock. Some native SDK probes require external toolchains.
-- Workflow scaffolding and setup PR support do not create GitHub repositories,
-  install Apps, or configure registry trust automatically.
+- Rust generator API: `HttpMethod` now includes `Custom(String)` and is no longer
+  `Copy`. Clone stored values when needed, or borrow them for `as_str()`.
+- Manually constructed `OAuthFlow` values must include
+  `device_authorization_url: None` when no device endpoint is declared.
+
+### Testing and verification limits
+
+- Add a shared executable HTTP contract with ten native harnesses and a 17-scenario
+  wire corpus, plus OAuth/cancellation, nested-model, installed TypeScript package,
+  regeneration-conflict and delivery failure/cleanup checks.
+- Add checksum-pinned Microsoft Graph and six full official contracts, plus a
+  32-provider APIs.guru corpus with per-phase logs, timeout/failure reports,
+  cleanup tests and manual native-language workflows. The initial Guru Go baseline
+  passes 25 of 32 contracts; seven retained failures are documented in
+  [large-spec testing](docs/large-specs.md). Workflow availability does not imply
+  every contract passes in every language.
+- Postman collection/environment sync is included; whole-workspace synchronization
+  and publication are outside this release's scope.
+- Terraform supports a bounded typed schema subset. Independent collection data
+  sources, arbitrary asynchronous job mappings and general state type migrations
+  remain unsupported. Registry release files are scaffolding; live publication
+  is not verified. The legacy raw-JSON Terraform API remains available.
+- Terraform Framework tests and local-mock Terraform CLI lifecycle tests run
+  alongside SDK and compiler checks. Some native probes require external toolchains.
+- Delivery scaffolding does not create repositories, install Apps or configure
+  registry trust automatically. Live delivery remains a prepared, gated workflow.
+- Migration reuses supported configuration and annotations; proprietary templates,
+  unresolved overlays and unsupported vendor behavior still require review.
 
 ## 0.4.0 — 2026-10-05
 

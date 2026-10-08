@@ -40,7 +40,7 @@ tradeoffs.
 
 **Trying 0.5.0?** This branch contains the new features. Until the release is
 published, follow the [source build guide](docs/source-customization.md).
-See the [changelog](CHANGELOG.md#050--2026-10-07) for scope and limitations.
+See the [changelog](CHANGELOG.md#050--2026-10-08) for scope and limitations.
 
 <details>
 <summary>Explore what Kaji generates</summary>
@@ -248,7 +248,7 @@ available. See the [Rust API guide](docs/getting-started.md) and
 - Extend SDK runtimes and models with Python async/OAuth/webhook support,
   TypeScript wide integer handling, Java open enums, and provider composition.
 
-See the [0.5.0 changelog](CHANGELOG.md#050--2026-10-07) for the complete changes
+See the [0.5.0 changelog](CHANGELOG.md#050--2026-10-08) for the complete changes
 and current limitations.
 
 ## Generate, review, and publish
