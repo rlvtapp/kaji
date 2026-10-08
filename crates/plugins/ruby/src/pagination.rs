@@ -38,7 +38,7 @@ pub(crate) fn render(api: &Api, op: &Operation) -> Option<String> {
         .parameters
         .iter()
         .map(|p| {
-            let id = ruby_identifier(&p.name);
+            let id = ruby_parameter_identifier(op, p);
             if p.required {
                 format!("{id}:")
             } else {
@@ -51,7 +51,7 @@ pub(crate) fn render(api: &Api, op: &Operation) -> Option<String> {
     }
     let options_name = ruby_request_options_name(op);
     args.push(format!("{options_name}: nil"));
-    let page_arg = ruby_identifier(&page.name);
+    let page_arg = ruby_pagination_argument(op, page);
     let state = if page.location == "requestBody" {
         format!(
             "      kaji_page = kaji_json_path(body, {})\n      kaji_page = 1 if kaji_page.nil?\n      kaji_body = kaji_with_body_value(body, {}, kaji_page)\n",
@@ -68,10 +68,13 @@ pub(crate) fn render(api: &Api, op: &Operation) -> Option<String> {
         .parameters
         .iter()
         .map(|p| {
-            let id = ruby_identifier(&p.name);
+            let id = ruby_parameter_identifier(op, p);
             format!(
                 "{id}: {}",
-                if page.location != "requestBody" && p.name == page.name {
+                if page.location != "requestBody"
+                    && p.name == page.name
+                    && p.location == page.location
+                {
                     "kaji_page"
                 } else {
                     &id
@@ -101,7 +104,7 @@ pub(crate) fn render(api: &Api, op: &Operation) -> Option<String> {
                     ))
                 )
             } else {
-                ruby_identifier(&input.name)
+                ruby_pagination_argument(op, input)
             }
         })
         .unwrap_or("nil".into());
@@ -120,7 +123,7 @@ pub(crate) fn render(api: &Api, op: &Operation) -> Option<String> {
             .parameters
             .iter()
             .map(|p| {
-                let id = ruby_identifier(&p.name);
+                let id = ruby_parameter_identifier(op, p);
                 format!("{id}: {id}")
             })
             .chain(op.request_body.as_ref().map(|_| "body: body".into()))

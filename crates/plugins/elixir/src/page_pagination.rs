@@ -36,7 +36,7 @@ pub(super) fn render(api: &Api, operation: &Operation) -> Result<Option<String>>
         .iter()
         .find(|input| input.role == if offset { "offset" } else { "page" })
         .unwrap();
-    let key = elixir_identifier(&page.name);
+    let key = elixir_pagination_argument(operation, page);
     let initial = if page.required {
         format!("Keyword.get(options, :{key})")
     } else {
@@ -49,7 +49,12 @@ pub(super) fn render(api: &Api, operation: &Operation) -> Result<Option<String>>
         .inputs
         .iter()
         .find(|input| input.role == "limit")
-        .map(|input| format!("Keyword.get(options, :{})", elixir_identifier(&input.name)))
+        .map(|input| {
+            format!(
+                "Keyword.get(options, :{})",
+                elixir_pagination_argument(operation, input)
+            )
+        })
         .unwrap_or_else(|| "nil".into());
     let segments = plan
         .results
@@ -67,7 +72,7 @@ pub(super) fn render(api: &Api, operation: &Operation) -> Result<Option<String>>
         })
         .collect::<Vec<_>>()
         .join(", ");
-    let name = snake_case(&operation.id);
+    let name = elixir_identifier(&operation.id);
     let advance = if offset {
         "page + length(items)"
     } else {
@@ -145,7 +150,7 @@ fn render_url(
         })
         .collect::<Vec<_>>()
         .join(", ");
-    let name = snake_case(&operation.id);
+    let name = elixir_identifier(&operation.id);
     Ok(Some(format!(
         r#"
   @doc "Lazy absolute same-origin next-URL responses; relative URLs are rejected."

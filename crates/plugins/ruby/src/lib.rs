@@ -9,6 +9,8 @@ pub use oauth::{OAuth, oauth};
 mod operation_tests;
 pub use operation_tests::{OperationTests, operation_tests};
 
+mod symbols;
+
 use std::collections::BTreeMap;
 use std::fmt::Write;
 
@@ -28,6 +30,8 @@ fn render_sdk(
     package_name: Option<&str>,
     client_style: SdkClientStyle,
 ) -> Result<GeneratedTree> {
+    let prepared = symbols::prepare(api);
+    let api = prepared.as_ref();
     for operation in &api.operations {
         kaji_core::openapi32::request_content(operation)?;
         kaji_core::openapi32::response_content(operation)?;
@@ -91,25 +95,142 @@ fn render_sdk(
             "{NOTICE}require_relative \"{file_module}/models\"\nrequire_relative \"{file_module}/client\"\n\nmodule {module}\nend\n"
         ),
     )?;
+    let model_contents =
+        if api.schemas.len() <= 100 && render_models(api, &module).len() <= 128 * 1024 {
+            render_models(api, &module)
+        } else {
+            let mut empty = api.clone();
+            empty.schemas.clear();
+            let mut loader = render_models(&empty, &module);
+            let models = api
+                .schemas
+                .iter()
+                .map(|schema| render_model(api, schema))
+                .collect::<Vec<_>>();
+            for (index, chunk) in bounded_source_chunks(&models).iter().enumerate() {
+                let contents = format!(
+                    "{NOTICE}module {module}\n  module Models\n{}  end\nend\n",
+                    chunk.concat()
+                );
+                insert(
+                    &mut tree,
+                    root,
+                    &format!("lib/{file_module}/models/chunk_{index:04}.rb"),
+                    contents,
+                )?;
+                let _ = writeln!(loader, "require_relative \"models/chunk_{index:04}\"");
+            }
+            loader
+        };
     insert(
         &mut tree,
         root,
         &format!("lib/{file_module}/models.rb"),
-        render_models(api, &module),
+        model_contents,
     )?;
+    let client_contents = if api.operations.len() <= 100
+        && render_client(api, &module, client_style).len() <= 128 * 1024
+    {
+        render_client(api, &module, client_style)
+    } else {
+        let mut loader = render_client_impl(api, &module, client_style, false);
+        let operations = api
+            .operations
+            .iter()
+            .map(|operation| {
+                let mut content = render_operation(api, operation);
+                if let Some(page) = pagination::render(api, operation) {
+                    content.push_str(&page);
+                }
+                content
+            })
+            .collect::<Vec<_>>();
+        for (index, chunk) in bounded_source_chunks(&operations).iter().enumerate() {
+            let contents = format!(
+                "{NOTICE}module {module}\n  class Client\n{}  end\nend\n",
+                chunk.concat()
+            );
+            insert(
+                &mut tree,
+                root,
+                &format!("lib/{file_module}/operations/chunk_{index:04}.rb"),
+                contents,
+            )?;
+            let _ = writeln!(loader, "require_relative \"operations/chunk_{index:04}\"");
+        }
+        if client_style == SdkClientStyle::Namespaced {
+            let factories = resource_operations(api).keys().map(|resource| {
+                let name = ruby_resource_attribute(api, resource);
+                let class = pascal_case(resource);
+                format!("  ResourceFactories[:{name}] = ->(client) {{ {class}Resource.new(client) }}\n  Client.class_eval {{ attr_reader :{name} }}\n")
+            }).collect::<Vec<_>>();
+            for (index, chunk) in bounded_source_chunks(&factories).iter().enumerate() {
+                let contents = format!("{NOTICE}module {module}\n{}end\n", chunk.concat());
+                insert(
+                    &mut tree,
+                    root,
+                    &format!("lib/{file_module}/resources/factories_{index:04}.rb"),
+                    contents,
+                )?;
+                let _ = writeln!(
+                    loader,
+                    "require_relative \"resources/factories_{index:04}\""
+                );
+            }
+
+            for (resource, operations) in resource_operations(api) {
+                for (index, chunk) in operations.chunks(100).enumerate() {
+                    let name = ruby_file_name(&resource);
+                    let contents = format!(
+                        "{NOTICE}module {module}\n{}end\n",
+                        render_resource(api, &resource, chunk)
+                    );
+                    insert(
+                        &mut tree,
+                        root,
+                        &format!("lib/{file_module}/resources/{name}_{index:04}.rb"),
+                        contents,
+                    )?;
+                    let _ = writeln!(loader, "require_relative \"resources/{name}_{index:04}\"");
+                }
+            }
+        }
+        loader
+    };
     insert(
         &mut tree,
         root,
         &format!("lib/{file_module}/client.rb"),
-        render_client(api, &module, client_style),
+        client_contents,
     )?;
-    insert(
-        &mut tree,
-        root,
-        &format!("lib/{file_module}/response_validation.rb"),
-        response_validation::render(api, module.as_str()),
-    )?;
+    for (path, contents) in response_validation::render_partitioned(api, &module) {
+        insert(
+            &mut tree,
+            root,
+            &format!("lib/{file_module}/{path}"),
+            contents,
+        )?;
+    }
     Ok(tree)
+}
+
+/// Bound complete declarations; one indivisible large declaration is reported by output metrics.
+fn bounded_source_chunks(items: &[String]) -> Vec<&[String]> {
+    let mut chunks = Vec::new();
+    let mut start = 0;
+    let mut bytes = 0;
+    for (index, item) in items.iter().enumerate() {
+        if index > start && (index - start >= 100 || bytes + item.len() > 128 * 1024 - 512) {
+            chunks.push(&items[start..index]);
+            start = index;
+            bytes = 0;
+        }
+        bytes += item.len();
+    }
+    if start < items.len() {
+        chunks.push(&items[start..]);
+    }
+    chunks
 }
 
 fn insert(tree: &mut GeneratedTree, root: &str, path: &str, contents: String) -> Result<()> {
@@ -241,14 +362,14 @@ fn render_model(api: &Api, schema: &Schema) -> String {
             let mut extra_name = "additional_properties".to_owned();
             while fields
                 .iter()
-                .any(|field| ruby_identifier(&field.name) == extra_name)
+                .any(|field| ruby_field_identifier(fields, field) == extra_name)
             {
                 extra_name.insert(0, '_');
             }
             let mut present_name = "__kaji_present_wire_fields".to_owned();
             while fields
                 .iter()
-                .any(|field| ruby_identifier(&field.name) == present_name)
+                .any(|field| ruby_field_identifier(fields, field) == present_name)
                 || present_name == extra_name
             {
                 present_name.insert(0, '_');
@@ -259,7 +380,7 @@ fn render_model(api: &Api, schema: &Schema) -> String {
             } else {
                 let attrs = fields
                     .iter()
-                    .map(|field| format!(":{}", ruby_identifier(&field.name)))
+                    .map(|field| format!(":{}", ruby_field_identifier(fields, field)))
                     .collect::<Vec<_>>()
                     .join(", ");
                 let _ = writeln!(out, "      attr_reader {attrs}");
@@ -267,7 +388,7 @@ fn render_model(api: &Api, schema: &Schema) -> String {
             }
             let args = fields
                 .iter()
-                .map(|field| format!("{}: nil", ruby_identifier(&field.name)))
+                .map(|field| format!("{}: nil", ruby_field_identifier(fields, field)))
                 .collect::<Vec<_>>()
                 .join(", ");
             let extra = if args.is_empty() {
@@ -277,7 +398,7 @@ fn render_model(api: &Api, schema: &Schema) -> String {
             };
             let _ = writeln!(out, "      def initialize({args}{extra})");
             for field in fields {
-                let id = ruby_identifier(&field.name);
+                let id = ruby_field_identifier(fields, field);
                 let _ = writeln!(out, "        @{id} = {id}");
             }
             let _ = writeln!(out, "        @{extra_name} = {extra_name} || {{}}");
@@ -287,7 +408,7 @@ fn render_model(api: &Api, schema: &Schema) -> String {
                 .map(|field| {
                     format!(
                         "{}: Models.decode_model_value(value[{}], {})",
-                        ruby_identifier(&field.name),
+                        ruby_field_identifier(fields, field),
                         ruby_string(&field.name),
                         ruby_decode_shape(&field.value)
                     )
@@ -329,7 +450,7 @@ fn render_model(api: &Api, schema: &Schema) -> String {
             let mut helper = "with_present_fields".to_owned();
             while fields
                 .iter()
-                .any(|field| ruby_identifier(&field.name) == helper)
+                .any(|field| ruby_field_identifier(fields, field) == helper)
             {
                 helper.push('_');
             }
@@ -349,7 +470,7 @@ fn render_model(api: &Api, schema: &Schema) -> String {
                 );
             }
             for field in fields {
-                let id = ruby_identifier(&field.name);
+                let id = ruby_field_identifier(fields, field);
                 let condition = if field.required
                     && !response_validation::write_only(api, &field.value, &mut Default::default())
                 {
@@ -387,6 +508,14 @@ fn render_model(api: &Api, schema: &Schema) -> String {
 }
 
 fn render_client(api: &Api, module: &str, style: SdkClientStyle) -> String {
+    render_client_impl(api, module, style, true)
+}
+fn render_client_impl(
+    api: &Api,
+    module: &str,
+    style: SdkClientStyle,
+    include_operations: bool,
+) -> String {
     let mut out = format!(
         "{NOTICE}require \"net/http\"\nrequire \"uri\"\nrequire \"json\"\nrequire \"cgi\"\n\nmodule {module}\n"
     );
@@ -395,29 +524,41 @@ fn render_client(api: &Api, module: &str, style: SdkClientStyle) -> String {
         &format!("require_relative \"response_validation\"\n\nmodule {module}\n"),
         1,
     );
+    if !include_operations && style == SdkClientStyle::Namespaced {
+        out.push_str("  ResourceFactories = {}\n\n");
+    }
     out.push_str(include_str!("multipart.rb.txt"));
     out.push_str("  class KajiCancellationError < StandardError; end\n  class KajiTimeoutError < Timeout::Error; end\n  class ApiError < StandardError\n    attr_reader :status, :body\n    def initialize(status, body)\n      @status = status\n      @body = body\n      super(\"API request failed with status #{status}\")\n    end\n  end\n\n  class Client\n    def initialize(base_url:, api_key: nil, bearer_token: nil, headers: {}, timeout: 30, transport: nil, middleware: [], validate_responses: false, max_attempts: 1, retry_base_delay: 0.5, retry_max_delay: 30, cancelled: nil, token_provider: nil)\n      @base_url = base_url.sub(%r{/$}, \"\")\n      @api_key = api_key\n      @bearer_token = bearer_token\n      @headers = headers.transform_keys(&:to_s)\n      @timeout = timeout\n      raise ArgumentError, \"invalid retry configuration\" unless max_attempts.is_a?(Integer) && max_attempts.between?(1, 10) && retry_base_delay.is_a?(Numeric) && retry_max_delay.is_a?(Numeric) && retry_base_delay.finite? && retry_max_delay.finite? && retry_base_delay >= 0 && retry_base_delay <= 60 && retry_max_delay >= 0 && retry_max_delay <= 60\n      @max_attempts = max_attempts\n      @retry_base_delay = retry_base_delay.to_f\n      @retry_max_delay = retry_max_delay.to_f\n      @cancelled = cancelled\n      @token_provider = token_provider\n      @transport = transport\n      @validate_responses = validate_responses\n      @middleware = middleware.to_a.dup.freeze\n      raise ArgumentError, \"middleware must be callable\" unless @middleware.all? { |item| item.respond_to?(:call) }\n");
-    if style == SdkClientStyle::Namespaced {
+    if include_operations && style == SdkClientStyle::Namespaced {
         for resource in resource_operations(api).keys() {
             let _ = writeln!(
                 out,
                 "      @{} = {}Resource.new(self)",
-                ruby_identifier(resource),
+                ruby_resource_attribute(api, resource),
                 pascal_case(resource)
             );
         }
     }
+    if !include_operations && style == SdkClientStyle::Namespaced {
+        out.push_str("      ResourceFactories.each { |name, factory| instance_variable_set(\"@#{name}\", factory.call(self)) }\n");
+    }
     out.push_str("    end\n\n");
-    if style == SdkClientStyle::Namespaced {
+    if include_operations && style == SdkClientStyle::Namespaced {
         for resource in resource_operations(api).keys() {
-            let _ = writeln!(out, "    attr_reader :{}", ruby_identifier(resource));
+            let _ = writeln!(
+                out,
+                "    attr_reader :{}",
+                ruby_resource_attribute(api, resource)
+            );
         }
         out.push('\n');
     }
-    for operation in &api.operations {
-        out.push_str(&render_operation(api, operation));
-        if let Some(page) = pagination::render(api, operation) {
-            out.push_str(&page);
+    if include_operations {
+        for operation in &api.operations {
+            out.push_str(&render_operation(api, operation));
+            if let Some(page) = pagination::render(api, operation) {
+                out.push_str(&page);
+            }
         }
     }
     if api
@@ -431,7 +572,7 @@ fn render_client(api: &Api, module: &str, style: SdkClientStyle) -> String {
     out.push_str(include_str!("retry_runtime.rb.txt"));
     out.push_str(&render_runtime());
     out.push_str("  end\n\n");
-    if style == SdkClientStyle::Namespaced {
+    if include_operations && style == SdkClientStyle::Namespaced {
         for (resource, operations) in resource_operations(api) {
             out.push_str(&render_resource(api, &resource, &operations));
         }
@@ -440,12 +581,32 @@ fn render_client(api: &Api, module: &str, style: SdkClientStyle) -> String {
     out
 }
 
+fn ruby_resource_attribute(api: &Api, resource: &str) -> String {
+    let mut name = ruby_identifier(resource);
+    while matches!(
+        name.as_str(),
+        "initialize"
+            | "request"
+            | "retry_delay"
+            | "check_cancellation"
+            | "retry_pause"
+            | "execute_with_retry"
+    ) || api
+        .operations
+        .iter()
+        .any(|operation| ruby_identifier(&operation.id) == name)
+    {
+        name.push_str("_resource");
+    }
+    name
+}
+
 fn ruby_request_options_name(operation: &Operation) -> String {
     let mut name = "request_options".to_owned();
     while operation
         .parameters
         .iter()
-        .any(|parameter| ruby_identifier(&parameter.name) == name)
+        .any(|parameter| ruby_parameter_identifier(operation, parameter) == name)
     {
         name.insert(0, '_');
     }
@@ -479,7 +640,7 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
     let name = ruby_identifier(&snake_case(&operation.id));
     let mut args = Vec::new();
     for parameter in &operation.parameters {
-        let name = ruby_identifier(&parameter.name);
+        let name = ruby_parameter_identifier(operation, parameter);
         args.push(if parameter.required {
             format!("{name}:")
         } else {
@@ -527,7 +688,7 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
             .ok()
             .and_then(|items| items.into_iter().next())
         {
-            let id = ruby_identifier(&parameter.name);
+            let id = ruby_parameter_identifier(operation, parameter);
             let required_json = parameter.required && is_json_parameter_content(parameter);
             if required_json && !json_content_allows_null(parameter) {
                 let _ = writeln!(
@@ -552,7 +713,7 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
         .iter()
         .filter(|parameter| parameter.location == "path")
     {
-        let id = ruby_identifier(&parameter.name);
+        let id = ruby_parameter_identifier(operation, parameter);
         let _ = writeln!(
             out,
             "      path = path.gsub({}, CGI.escape({id}.to_s).gsub(\"+\", \"%20\"))",
@@ -565,7 +726,7 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
         .iter()
         .filter(|parameter| parameter.location == "query")
     {
-        let id = ruby_identifier(&parameter.name);
+        let id = ruby_parameter_identifier(operation, parameter);
         let _ = writeln!(
             out,
             "      query[{}] = {id} unless {id}.nil?",
@@ -577,7 +738,7 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
         .iter()
         .find(|parameter| parameter.location == "querystring")
     {
-        let id = ruby_identifier(&parameter.name);
+        let id = ruby_parameter_identifier(operation, parameter);
         let content = kaji_core::openapi32::parameter_content(parameter)
             .ok()
             .and_then(|items| items.into_iter().next())
@@ -607,7 +768,7 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
         .iter()
         .filter(|parameter| parameter.location == "header")
     {
-        let id = ruby_identifier(&parameter.name);
+        let id = ruby_parameter_identifier(operation, parameter);
         let _ = writeln!(
             out,
             "      headers[{}] = {id}.to_s unless {id}.nil?",
@@ -619,7 +780,7 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
         .iter()
         .filter(|parameter| parameter.location == "cookie")
         .map(|parameter| {
-            let id = ruby_identifier(&parameter.name);
+            let id = ruby_parameter_identifier(operation, parameter);
             format!(
                 "({id}.nil? ? nil : {} + '=' + CGI.escape({id}.to_s).gsub('+', '%20'))",
                 ruby_string(&parameter.name)
@@ -704,7 +865,7 @@ fn render_resource(api: &Api, resource: &str, operations: &[&Operation]) -> Stri
             .parameters
             .iter()
             .map(|parameter| {
-                let name = ruby_identifier(&parameter.name);
+                let name = ruby_parameter_identifier(operation, parameter);
                 if parameter.required {
                     format!("{name}:")
                 } else {
@@ -730,7 +891,7 @@ fn render_resource(api: &Api, resource: &str, operations: &[&Operation]) -> Stri
             .parameters
             .iter()
             .map(|parameter| {
-                let id = ruby_identifier(&parameter.name);
+                let id = ruby_parameter_identifier(operation, parameter);
                 format!("{id}: {id}")
             })
             .chain(
@@ -828,6 +989,54 @@ fn ruby_file_name(value: &str) -> String {
     snake_case(value)
 }
 
+fn ruby_field_identifier(fields: &[kaji_core::Field], field: &kaji_core::Field) -> String {
+    let mut used = std::collections::BTreeSet::from(
+        ["to_h", "from_hash", "initialize", "with_present_fields"].map(str::to_owned),
+    );
+    for item in fields {
+        let mut name = ruby_identifier(&item.name);
+        while !used.insert(name.clone()) {
+            name.push('_');
+        }
+        if std::ptr::eq(item, field) {
+            return name;
+        }
+    }
+    ruby_identifier(&field.name)
+}
+
+fn ruby_parameter_identifier(
+    operation: &Operation,
+    parameter: &kaji_core::OperationParameter,
+) -> String {
+    let mut used = std::collections::BTreeSet::from(["self".to_owned()]);
+    if operation.request_body.is_some() {
+        used.insert("body".to_owned());
+    }
+    for item in &operation.parameters {
+        let mut name = ruby_identifier(&item.name);
+        while !used.insert(name.clone()) {
+            name.push('_');
+        }
+        if std::ptr::eq(item, parameter) {
+            return name;
+        }
+    }
+    ruby_identifier(&parameter.name)
+}
+
+fn ruby_pagination_argument(
+    operation: &Operation,
+    input: &kaji_core::pagination::PaginationInput,
+) -> String {
+    operation
+        .parameters
+        .iter()
+        .find(|parameter| parameter.name == input.name && parameter.location == input.location)
+        .map(|parameter| ruby_parameter_identifier(operation, parameter))
+        .unwrap_or_else(|| ruby_identifier(&input.name))
+}
+
 fn ruby_identifier(value: &str) -> String {
     let value = snake_case(value);
     let value = if value.is_empty() {
@@ -911,6 +1120,171 @@ mod tests {
     use kaji_core::{Field, HttpMethod, OperationParameter, OperationResponse};
     use std::process::Command;
 
+    #[test]
+    fn native_large_packages_load_partitioned_models_and_operations() {
+        let mut source = Api {
+            name: "Split".into(),
+            ..Default::default()
+        };
+        for index in 0..205 {
+            source.schemas.push(Schema::new(
+                format!("Record{index}"),
+                SchemaValue::new(SchemaKind::Object {
+                    fields: (0..20)
+                        .map(|field| kaji_core::Field {
+                            name: format!("optional_wire_field_{field}"),
+                            value: SchemaValue::new(SchemaKind::String),
+                            required: false,
+                            annotations: Default::default(),
+                        })
+                        .collect(),
+                    additional_properties: AdditionalProperties::Any,
+                }),
+            ));
+            source.operations.push(Operation {
+                id: format!("probe{index}"),
+                method: kaji_core::HttpMethod::Get,
+                path: format!("/resource{index}/probe"),
+                parameters: vec![],
+                request_body: None,
+                responses: vec![],
+                security: vec![],
+                annotations: Default::default(),
+            });
+        }
+        let root = tempfile::tempdir().unwrap();
+        let tree = render_sdk(
+            &source,
+            "sdk",
+            Some("split-sdk"),
+            SdkClientStyle::Namespaced,
+        )
+        .unwrap();
+        assert!(tree.get("sdk/lib/split_sdk/models/chunk_0002.rb").is_some());
+        assert!(
+            tree.get("sdk/lib/split_sdk/operations/chunk_0002.rb")
+                .is_some()
+        );
+        assert!(
+            tree.get("sdk/lib/split_sdk/response_shapes/refs_0001.rb")
+                .is_some()
+        );
+        for (path, contents) in tree.iter() {
+            if path.extension().is_some_and(|extension| extension == "rb") {
+                assert!(
+                    contents.len() <= 128 * 1024,
+                    "{} exceeds chunk budget",
+                    path.display()
+                );
+            }
+        }
+        tree.write_to(root.path()).unwrap();
+        let output = std::process::Command::new("ruby").args(["-Ilib", "-e", "require 'split_sdk'; raise unless SplitSdk::Models::Record204.from_hash({'extra'=>1}).to_h=={'extra'=>1}; raise unless SplitSdk::Client.instance_methods.include?(:probe204); raise unless SplitSdk::ResponseShapes['refs'].length==205; raise unless SplitSdk::Client.new(base_url: 'https://example.invalid').resource204.is_a?(SplitSdk::Resource204Resource)"]).current_dir(root.path().join("sdk")).output().unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    #[test]
+    fn native_normalized_names_preserve_distinct_wire_fields_and_arguments() {
+        let mut source = Api {
+            name: "Collision".into(),
+            ..Default::default()
+        };
+        source.schemas.push(Schema::new(
+            "Probe",
+            SchemaValue::new(SchemaKind::Object {
+                fields: ["+1", "-1", "field", "x-axis", "x_axis"]
+                    .iter()
+                    .map(|name| kaji_core::Field {
+                        name: (*name).into(),
+                        value: SchemaValue::new(SchemaKind::String),
+                        required: false,
+                        annotations: Default::default(),
+                    })
+                    .collect(),
+                additional_properties: AdditionalProperties::Forbidden,
+            }),
+        ));
+        source.schemas.push(Schema::new(
+            "Nested/Model",
+            SchemaValue::new(SchemaKind::Object {
+                fields: vec![kaji_core::Field {
+                    name: "name".into(),
+                    value: SchemaValue::new(SchemaKind::String),
+                    required: true,
+                    annotations: Default::default(),
+                }],
+                additional_properties: AdditionalProperties::Forbidden,
+            }),
+        ));
+        source.schemas.push(Schema::new(
+            "Holder",
+            SchemaValue::new(SchemaKind::Object {
+                fields: vec![kaji_core::Field {
+                    name: "nested".into(),
+                    value: SchemaValue::reference("#/components/schemas/Nested~1Model"),
+                    required: true,
+                    annotations: Default::default(),
+                }],
+                additional_properties: AdditionalProperties::Forbidden,
+            }),
+        ));
+        source.operations.push(Operation {
+            id: "probe".into(),
+            method: kaji_core::HttpMethod::Get,
+            path: "/{id}".into(),
+            parameters: ["path", "query", "header"]
+                .iter()
+                .map(|location| kaji_core::OperationParameter {
+                    name: "id".into(),
+                    location: (*location).into(),
+                    required: true,
+                    schema: Some(SchemaValue::new(SchemaKind::String)),
+                    description: None,
+                    annotations: Default::default(),
+                })
+                .collect(),
+            request_body: None,
+            responses: vec![],
+            security: vec![],
+            annotations: Default::default(),
+        });
+        let root = tempfile::tempdir().unwrap();
+        render_sdk(
+            &source,
+            "sdk",
+            Some("collision-sdk"),
+            SdkClientStyle::Namespaced,
+        )
+        .unwrap()
+        .write_to(root.path())
+        .unwrap();
+        let script = r#"require 'collision_sdk'
+wire={'+1'=>'positive','-1'=>'negative','field'=>'safe','x-axis'=>'dash','x_axis'=>'underscore'}
+raise unless CollisionSdk::Models::Probe.from_hash(wire).to_h == wire
+holder=CollisionSdk::Models::Holder.from_hash({'nested'=>{'name'=>'value'}})
+raise unless holder.nested.is_a?(CollisionSdk::Models::NestedModel) && holder.to_h=={'nested'=>{'name'=>'value'}}
+names=CollisionSdk::Client.instance_method(:probe).parameters.map{|kind, name| name}
+raise unless names.include?(:id) && names.include?(:id_)
+seen=[]
+client=CollisionSdk::Client.new(base_url: 'https://example.invalid')
+client.define_singleton_method(:request){|*args, **kwargs| seen << [args, kwargs]; nil}
+client.probe(id: 'path value', id_: 'query value', id__: 'header value')
+raise unless seen[0][0][1]=='/path%20value' && seen[0][1][:query]=={'id'=>'query value'} && seen[0][1][:headers]=={'id'=>'header value'}
+"#;
+        let output = std::process::Command::new("ruby")
+            .args(["-Ilib", "-e", script])
+            .current_dir(root.path().join("sdk"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
     #[test]
     fn required_json_content_nullability_controls_omission_guards() {
         let mut parameter = kaji_core::OperationParameter {

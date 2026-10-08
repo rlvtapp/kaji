@@ -63,7 +63,7 @@ fn shape(api: &Api, value: &SchemaValue) -> Value {
     result["nullable"] = json!(value.nullable || value.nullish);
     result
 }
-pub(super) fn render(api: &Api, module: &str) -> String {
+fn catalog(api: &Api) -> Value {
     let refs = api
         .schemas
         .iter()
@@ -92,10 +92,74 @@ pub(super) fn render(api: &Api, module: &str) -> String {
             (op.id.clone(), Value::Object(responses))
         })
         .collect::<serde_json::Map<_, _>>();
-    let catalog = serde_json::to_string(&json!({"refs":refs,"operations":operations})).unwrap();
+    json!({"refs":refs,"operations":operations})
+}
+pub(super) fn render(api: &Api, module: &str) -> String {
+    let catalog = serde_json::to_string(&catalog(api)).unwrap();
     format!(
         "{NOTICE}require \"json\"\nmodule {module}\n{}\n  ResponseShapes = JSON.parse({})\nend\n",
         include_str!("response_validation.rb"),
         ruby_string(&catalog)
     )
+}
+
+pub(super) fn render_partitioned(api: &Api, module: &str) -> Vec<(String, String)> {
+    let inline = render(api, module);
+    if inline.len() <= 128 * 1024 {
+        return vec![("response_validation.rb".into(), inline)];
+    }
+    let mut files = Vec::new();
+    let mut loader = format!(
+        "{NOTICE}require \"json\"\nmodule {module}\n{}\n  ResponseShapes = {{\"refs\" => {{}}, \"operations\" => {{}}}}\nend\n",
+        include_str!("response_validation.rb")
+    );
+    let catalog = catalog(api);
+    for group in ["refs", "operations"] {
+        let mut pending = serde_json::Map::new();
+        let mut bytes = 0;
+        let mut index = 0;
+        for (key, value) in catalog[group].as_object().unwrap() {
+            let size = ruby_string(&serde_json::to_string(&json!({key: value})).unwrap()).len();
+            if !pending.is_empty() && bytes + size > 128 * 1024 - 512 {
+                append_chunk(
+                    &mut files,
+                    &mut loader,
+                    module,
+                    group,
+                    index,
+                    std::mem::take(&mut pending),
+                );
+                bytes = 0;
+                index += 1;
+            }
+            pending.insert(key.clone(), value.clone());
+            bytes += size;
+        }
+        if !pending.is_empty() {
+            append_chunk(&mut files, &mut loader, module, group, index, pending);
+        }
+    }
+    files.push(("response_validation.rb".into(), loader));
+    files
+}
+fn append_chunk(
+    files: &mut Vec<(String, String)>,
+    loader: &mut String,
+    module: &str,
+    group: &str,
+    index: usize,
+    rows: serde_json::Map<String, Value>,
+) {
+    let path = format!("response_shapes/{group}_{index:04}.rb");
+    let catalog = serde_json::to_string(&rows).unwrap();
+    let contents = format!(
+        "{NOTICE}require \"json\"\nmodule {module}\n  ResponseShapes[\"{group}\"].merge!(JSON.parse({}))\nend\n",
+        ruby_string(&catalog)
+    );
+    let _ = writeln!(
+        loader,
+        "require_relative {}",
+        ruby_string(path.trim_end_matches(".rb"))
+    );
+    files.push((path, contents));
 }

@@ -26,7 +26,7 @@ impl Plugin<crate::Elixir> for OperationTests {
             .filter(|name| !name.is_empty())
             .unwrap_or_else(|| format!("{}-sdk", package_slug(&cx.api.name)));
         let module = pascal_case(&package);
-        let mut api = cx.api.clone();
+        let mut api = crate::symbols::prepare(cx.api).into_owned();
         for schema in &mut api.schemas {
             sanitize(&mut schema.value)
         }
@@ -249,7 +249,7 @@ fn case(api: &Api, operation: &Operation) -> Result<Value> {
             ) && !schema.write_only,
             "sensitive parameter requires explicit fixture"
         );
-        let argument = elixir_identifier(&parameter.name);
+        let argument = elixir_parameter_identifier(operation, parameter);
         ensure!(
             !(matches!(argument.as_str(), "path" | "query" | "headers" | "response")
                 || argument == "body" && operation.request_body.is_some()),
@@ -301,7 +301,7 @@ fn case(api: &Api, operation: &Operation) -> Result<Value> {
         .position(|parameter| !parameter.required)
         .unwrap_or(ordered.len());
     Ok(
-        json!({"operation":operation.id,"method_name":snake_case(&operation.id),"method":operation.method.as_str(),"path":operation.path,"status":status,"content_type":media.content_type,"parameters":parameters,"result":result,"result_json":serde_json::to_string(&result)?,"body":body,"body_model":body_model,"body_required":body_required,"first_optional":first_optional}),
+        json!({"operation":operation.id,"method_name":elixir_identifier(&operation.id),"method":operation.method.as_str(),"path":operation.path,"status":status,"content_type":media.content_type,"parameters":parameters,"result":result,"result_json":serde_json::to_string(&result)?,"body":body,"body_model":body_model,"body_required":body_required,"first_optional":first_optional}),
     )
 }
 

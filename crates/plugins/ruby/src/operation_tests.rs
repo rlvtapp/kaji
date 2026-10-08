@@ -95,7 +95,7 @@ fn fixture(
             }
             _ => return Err("parameter location requires an adapter".into()),
         }
-        args.insert(p.name.clone(), value);
+        args.insert(crate::ruby_parameter_identifier(op, p), value);
     }
     let body = if let Some(body) = &op.request_body {
         let media = body
@@ -163,12 +163,13 @@ impl Plugin<crate::Ruby> for OperationTests {
             };
             match result {
                 Ok(mut value) => {
-                    value["operation"] = Value::String(ruby_identifier(&op.id));
+                    value["operation"] =
+                        Value::String(crate::symbols::operation_symbols(cx.api)[&op.id].clone());
                     let args = value["args"]
                         .as_object()
                         .unwrap()
                         .iter()
-                        .map(|(k, v)| (ruby_identifier(k), v.clone()))
+                        .map(|(k, v)| (k.clone(), v.clone()))
                         .collect::<serde_json::Map<_, _>>();
                     value["args"] = Value::Object(args);
                     if op.request_body.is_some() {

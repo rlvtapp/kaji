@@ -4,6 +4,8 @@
 //! creation. This keeps HTTP implementation choice in the consuming PHP
 //! application instead of coupling every SDK to one framework.
 
+mod symbols;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
@@ -44,6 +46,8 @@ fn render_sdk(
     package_name: Option<&str>,
     style: SdkClientStyle,
 ) -> Result<GeneratedTree> {
+    let prepared = symbols::prepare(api);
+    let api = prepared.as_ref();
     for operation in &api.operations {
         kaji_core::openapi32::request_content(operation)?;
         kaji_core::openapi32::response_content(operation)?;
@@ -290,14 +294,14 @@ fn render_object_model(
     let mut extra_name = "additionalProperties".to_owned();
     while fields
         .iter()
-        .any(|field| property_name(&field.name) == extra_name)
+        .any(|field| php_field_identifier(fields, field) == extra_name)
     {
         extra_name.push('_');
     }
     let mut presence_name = "kajiPresentFields".to_owned();
     while fields
         .iter()
-        .any(|field| property_name(&field.name) == presence_name)
+        .any(|field| php_field_identifier(fields, field) == presence_name)
         || presence_name == extra_name
     {
         presence_name.push('_');
@@ -306,7 +310,7 @@ fn render_object_model(
         "<?php\n\ndeclare(strict_types=1);\n\nnamespace {namespace}\\Models;\n\nuse JsonSerializable;\n\n{NOTICE}\nfinal class {name} implements JsonSerializable\n{{\n    private ?array ${presence_name} = null;\n\n    public function __construct(\n"
     );
     for field in fields {
-        let field_name = property_name(&field.name);
+        let field_name = php_field_identifier(fields, field);
         let type_name = nullable_type(
             &php_type(&field.value, named_types),
             field.value.nullable || !field.required,
@@ -329,7 +333,7 @@ fn render_object_model(
     }
     output.push_str("    ) {\n    }\n\n    /** @param array<string, mixed> $data */\n    public static function fromArray(array $data): self\n    {\n        $instance = new self(\n");
     for field in fields {
-        let field_name = property_name(&field.name);
+        let field_name = php_field_identifier(fields, field);
         let source = format!("$data[{}]", php_string(&field.name));
         let value = from_value(&source, &field.value, named_types);
         if field.required {
@@ -376,7 +380,7 @@ fn render_object_model(
         );
     }
     for field in fields {
-        let generated = property_name(&field.name);
+        let generated = php_field_identifier(fields, field);
         let key = php_string(&field.name);
         if field.required {
             let _ = writeln!(output, "        $value[{key}] = $this->{generated};");
@@ -404,14 +408,18 @@ fn render_enum(name: &str, value: &SchemaValue, namespace: &str) -> String {
     let mut output = format!(
         "<?php\n\ndeclare(strict_types=1);\n\nnamespace {namespace}\\Models;\n\n{NOTICE}\nenum {name}: {kind}\n{{\n"
     );
+    let mut used = BTreeSet::new();
+    let mut backing_values = BTreeSet::new();
     for (index, value) in value.enum_values.iter().enumerate() {
-        let case = enum_case(value, index);
+        let case = unique_name(enum_case(value, index), &mut used);
         let backing = if kind == "int" {
             value.as_i64().unwrap_or_default().to_string()
         } else {
             php_string(value.as_str().unwrap_or_default())
         };
-        let _ = writeln!(output, "    case {case} = {backing};");
+        if backing_values.insert(backing.clone()) {
+            let _ = writeln!(output, "    case {case} = {backing};");
+        }
     }
     output.push_str("}\n");
     output
@@ -737,6 +745,9 @@ fn render_operation(operation: &Operation, namespace: &str, named_types: &NamedT
     parameters.sort_by_key(|parameter| !parameter.required);
     let mut arguments = Vec::new();
     let mut used = BTreeSet::new();
+    if operation.request_body.is_some() {
+        used.insert("body".to_owned());
+    }
     for parameter in &parameters {
         let variable = unique_name(property_name(&parameter.name), &mut used);
         let type_name = parameter
@@ -1389,18 +1400,28 @@ fn operation_body_kind(operation: &Operation) -> &'static str {
 fn resource_operations(api: &Api) -> BTreeMap<String, Vec<(&Operation, String)>> {
     let mut groups = BTreeMap::<String, Vec<(&Operation, String)>>::new();
     for operation in &api.operations {
-        let resource = resource_name(operation);
+        let mut resource = resource_name(operation);
+        if let Some(existing) = groups
+            .keys()
+            .find(|name| name.eq_ignore_ascii_case(&resource))
+        {
+            resource = existing.clone();
+        }
         let candidate = resource_method_name(operation, &resource);
         let operations = groups.entry(resource).or_default();
         let used = operations
             .iter()
-            .map(|(_, method)| method.clone())
+            .map(|(_, method)| method.to_ascii_lowercase())
             .collect::<BTreeSet<_>>();
-        let method = if used.contains(&candidate) {
+        let method = if used.contains(&candidate.to_ascii_lowercase()) {
             method_name(&operation.id)
         } else {
             candidate
         };
+        let mut method = method;
+        while used.contains(&method.to_ascii_lowercase()) {
+            method.push('_');
+        }
         operations.push((operation, method));
     }
     groups
@@ -1547,10 +1568,13 @@ fn resource_method_name(operation: &Operation, resource: &str) -> String {
 /// unambiguous and preserves both exports.
 fn resource_accessor_name(api: &Api, resource: &str) -> String {
     let candidate = property_name(resource);
-    if api
-        .operations
+    if symbols::OPERATION_RESERVED
         .iter()
-        .any(|operation| method_name(&operation.id) == candidate)
+        .any(|name| name.eq_ignore_ascii_case(&candidate))
+        || api
+            .operations
+            .iter()
+            .any(|operation| method_name(&operation.id).eq_ignore_ascii_case(&candidate))
     {
         format!("{candidate}Resource")
     } else {
@@ -1666,6 +1690,9 @@ fn facade_arguments(operation: &Operation, named_types: &NamedTypes) -> Vec<(Str
     parameters.sort_by_key(|parameter| !parameter.required);
     let mut arguments = Vec::new();
     let mut used = BTreeSet::new();
+    if operation.request_body.is_some() {
+        used.insert("body".to_owned());
+    }
     for parameter in &parameters {
         let variable = unique_name(property_name(&parameter.name), &mut used);
         let type_name = parameter
@@ -1750,7 +1777,12 @@ fn php_type(value: &SchemaValue, named_types: &NamedTypes) -> String {
 }
 
 fn nullable_type(type_name: &str, nullable: bool) -> String {
-    if nullable && type_name != "mixed" && type_name != "null" && !type_name.starts_with('?') {
+    if nullable
+        && type_name != "mixed"
+        && type_name != "null"
+        && !type_name.starts_with('?')
+        && !type_name.split('|').any(|part| part == "null")
+    {
         if type_name.contains('|') {
             format!("{type_name}|null")
         } else {
@@ -1811,6 +1843,9 @@ fn enum_case(value: &serde_json::Value, index: usize) -> String {
         .map(type_name)
         .filter(|name| !name.is_empty())
         .unwrap_or_else(|| format!("Value{index}"));
+    if candidate.eq_ignore_ascii_case("class") {
+        return format!("{candidate}Value");
+    }
     if candidate
         .chars()
         .next()
@@ -1825,7 +1860,14 @@ fn enum_case(value: &serde_json::Value, index: usize) -> String {
 fn method_name(name: &str) -> String {
     let name = property_name(name);
     match name.as_str() {
-        "list" | "clone" | "match" | "new" | "self" | "parent" => format!("{name}Operation"),
+        "case" | "switch" | "return" | "if" | "else" | "elseif" | "for" | "foreach" | "while"
+        | "do" | "break" | "continue" | "goto" | "try" | "catch" | "finally" | "throw"
+        | "declare" | "instanceof" | "insteadof" | "abstract" | "final" | "public"
+        | "protected" | "private" | "const" | "extends" | "implements" | "interface" | "enum"
+        | "readonly" | "fn" | "as" | "and" | "or" | "xor" | "list" | "clone" | "match" | "new"
+        | "self" | "parent" | "function" | "namespace" | "trait" | "class" | "use" | "static"
+        | "default" | "global" | "empty" | "isset" | "unset" | "echo" | "print" | "include"
+        | "require" | "eval" | "exit" | "die" | "yield" => format!("{name}Operation"),
         _ => name,
     }
 }
@@ -1858,6 +1900,17 @@ fn type_name(value: &str) -> String {
         Some(character) if character.is_ascii_digit() => format!("Value{output}"),
         _ => output,
     }
+}
+
+fn php_field_identifier(fields: &[kaji_core::Field], field: &kaji_core::Field) -> String {
+    let mut used = BTreeSet::new();
+    for item in fields {
+        let name = unique_name(property_name(&item.name), &mut used);
+        if std::ptr::eq(item, field) {
+            return name;
+        }
+    }
+    property_name(&field.name)
 }
 
 fn property_name(value: &str) -> String {
@@ -1949,6 +2002,131 @@ mod tests {
         OperationResponse,
     };
 
+    #[test]
+    #[ignore = "requires PHP8.2+; generated reserved models and resource methods syntax probe"]
+    fn native_reserved_model_and_resource_names_compile() {
+        let mut source = Api {
+            name: "Keywords".into(),
+            ..Default::default()
+        };
+        for name in [
+            "String",
+            "Object",
+            "List",
+            "Enum",
+            "Client",
+            "Client-ID",
+            "Client_ID",
+        ] {
+            source.schemas.push(Schema::new(
+                name,
+                SchemaValue::new(SchemaKind::Object {
+                    fields: vec![],
+                    additional_properties: AdditionalProperties::Forbidden,
+                }),
+            ));
+        }
+        for name in [
+            "case",
+            "function",
+            "namespace",
+            "trait",
+            "list",
+            "request",
+            "forCall",
+        ] {
+            source.operations.push(Operation {
+                id: name.into(),
+                method: kaji_core::HttpMethod::Get,
+                path: format!("/{name}"),
+                parameters: vec![],
+                request_body: None,
+                responses: vec![],
+                security: vec![],
+                annotations: Default::default(),
+            });
+        }
+        let tree = render_sdk(
+            &source,
+            "sdk",
+            Some("kaji/keywords"),
+            SdkClientStyle::Namespaced,
+        )
+        .unwrap();
+        let root = tempfile::tempdir().unwrap();
+        tree.write_to(root.path()).unwrap();
+        for (path, _) in tree
+            .iter()
+            .filter(|(path, _)| path.extension().is_some_and(|extension| extension == "php"))
+        {
+            let result = std::process::Command::new("php")
+                .arg("-l")
+                .arg(root.path().join(path))
+                .output()
+                .unwrap();
+            assert!(
+                result.status.success(),
+                "{}: {}",
+                path.display(),
+                String::from_utf8_lossy(&result.stdout)
+            );
+        }
+    }
+    #[test]
+    #[ignore = "requires php toolchain; dependency-free collision and alias wire probe"]
+    fn native_collision_models_preserve_wire_and_alias_decoding() {
+        let schema = Schema::new(
+            "Probe",
+            SchemaValue::new(SchemaKind::Object {
+                fields: ["+1", "-1", "x-axis", "x_axis"]
+                    .iter()
+                    .map(|name| kaji_core::Field {
+                        name: (*name).into(),
+                        value: SchemaValue::new(SchemaKind::String),
+                        required: true,
+                        annotations: Default::default(),
+                    })
+                    .collect(),
+                additional_properties: AdditionalProperties::Forbidden,
+            }),
+        );
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(
+            root.path().join("model.php"),
+            render_model(&schema, "Collision", &Default::default()),
+        )
+        .unwrap();
+        let mut choices = SchemaValue::new(SchemaKind::String);
+        choices.enum_values = vec![
+            serde_json::json!("+1"),
+            serde_json::json!("-1"),
+            serde_json::json!("+1"),
+            serde_json::json!("class"),
+        ];
+        std::fs::write(
+            root.path().join("choices.php"),
+            render_enum("Choices", &choices, "Collision"),
+        )
+        .unwrap();
+        let script = r#"<?php
+require __DIR__.'/model.php';
+require __DIR__.'/choices.php';
+foreach(['+1','-1','class'] as $value) if(Collision\Models\Choices::tryFrom($value)?->value!==$value) throw new Exception('enum collision/backing wire');
+if(count(Collision\Models\Choices::cases())!==3) throw new Exception('duplicate enum literal');
+$wire=['+1'=>'positive','-1'=>'negative','x-axis'=>'dash','x_axis'=>'underscore'];
+if(json_decode(json_encode(Collision\Models\Probe::fromArray($wire), JSON_THROW_ON_ERROR), true)!==$wire) throw new Exception('collision wire roundtrip');
+"#;
+        std::fs::write(root.path().join("probe.php"), script).unwrap();
+        let result = std::process::Command::new("php")
+            .arg(root.path().join("probe.php"))
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
     #[test]
     fn required_json_content_nullability_controls_omission_guards() {
         let mut parameter = kaji_core::OperationParameter {

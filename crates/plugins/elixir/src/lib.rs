@@ -7,6 +7,8 @@
 
 mod bundled;
 mod page_pagination;
+mod symbols;
+
 use std::{collections::BTreeMap, fmt::Write};
 
 use anyhow::{Result, bail};
@@ -49,6 +51,8 @@ fn render_sdk(
     package_name: Option<&str>,
     client_style: SdkClientStyle,
 ) -> Result<GeneratedTree> {
+    let prepared = symbols::prepare(api);
+    let api = prepared.as_ref();
     for operation in &api.operations {
         kaji_core::openapi32::request_content(operation)?;
         kaji_core::openapi32::response_content(operation)?;
@@ -693,7 +697,7 @@ fn render_model(module: &str, schema: &Schema) -> String {
             let mut presence = "kaji_present_fields".to_owned();
             while fields
                 .iter()
-                .any(|field| elixir_identifier(&field.name) == presence)
+                .any(|field| elixir_field_identifier(fields, field) == presence)
             {
                 presence.push('_');
             }
@@ -701,7 +705,7 @@ fn render_model(module: &str, schema: &Schema) -> String {
             while extras == presence
                 || fields
                     .iter()
-                    .any(|field| elixir_identifier(&field.name) == extras)
+                    .any(|field| elixir_field_identifier(fields, field) == extras)
             {
                 extras.push('_');
             }
@@ -713,13 +717,13 @@ fn render_model(module: &str, schema: &Schema) -> String {
                 let required = fields
                     .iter()
                     .filter(|field| field.required)
-                    .map(|field| format!(":{}", elixir_identifier(&field.name)))
+                    .map(|field| format!(":{}", elixir_field_identifier(fields, field)))
                     .collect::<Vec<_>>();
                 let _ = writeln!(output, "  @enforce_keys [{}]", required.join(", "));
             }
             let mut names = fields
                 .iter()
-                .map(|field| format!(":{}", elixir_identifier(&field.name)))
+                .map(|field| format!(":{}", elixir_field_identifier(fields, field)))
                 .collect::<Vec<_>>();
             names.push(format!("{presence}: nil"));
             if open {
@@ -733,7 +737,7 @@ fn render_model(module: &str, schema: &Schema) -> String {
                 let _ = writeln!(
                     output,
                     "    {}: {}{},",
-                    elixir_identifier(&field.name),
+                    elixir_field_identifier(fields, field),
                     elixir_type(&field.value, module),
                     if optional { " | nil" } else { "" }
                 );
@@ -748,7 +752,7 @@ fn render_model(module: &str, schema: &Schema) -> String {
                     output,
                     "      {{\"{}\", model.{}}},",
                     escape_elixir_string(&field.name),
-                    elixir_identifier(&field.name)
+                    elixir_field_identifier(fields, field)
                 );
             }
             let known_keys = fields
@@ -771,14 +775,14 @@ fn render_model(module: &str, schema: &Schema) -> String {
             }
             let _ = writeln!(
                 output,
-                "  end\n\n  @doc \"Return a copy with explicit nulls present at the given wire keys.\"\n  @spec with_present_fields(t(), [String.t() | atom()]) :: t()\n  def with_present_fields(model, fields) when is_list(fields) do\n    keys = Enum.map(fields, &to_string/1)\n    if Enum.any?(keys, &(&1 not in [{known_keys}])), do: raise(ArgumentError, \"unknown model wire field\")\n    %{{model | {presence}: Enum.uniq((model.{presence} || []) ++ keys)}}\n  end\n\n  @spec from_map(map()) :: t()\n  def from_map(map) do\n    %__MODULE__{{"
+                "  end\n\n  @doc \"Return a copy with explicit nulls present at the given wire keys.\"\n  @spec with_present_fields(t(), [String.t() | atom()]) :: t()\n  def with_present_fields(model, fields) when is_list(fields) do\n    keys = Enum.map(fields, &to_string/1)\n    if Enum.any?(keys, &(&1 not in [{known_keys}])), do: raise(ArgumentError, \"unknown model wire field\")\n    %{{model | {presence}: Enum.uniq((model.{presence} || []) ++ keys)}}\n  end\n\n  @spec from_map(map()) :: t()\n  def from_map(map) when is_map(map) do\n    %__MODULE__{{"
             );
             for field in fields {
                 let access = format!("Map.get(map, \"{}\")", escape_elixir_string(&field.name));
                 let _ = writeln!(
                     output,
                     "      {}: {},",
-                    elixir_identifier(&field.name),
+                    elixir_field_identifier(fields, field),
                     decode_value(&access, &field.value, module)
                 );
             }
@@ -798,13 +802,14 @@ fn render_model(module: &str, schema: &Schema) -> String {
                 };
                 let _ = writeln!(output, "      {extras}: {extra_value},");
             }
-            output.push_str("    }\n  end\nend\n");
+            output.push_str("    }\n  end\n  def from_map(value), do: value\nend\n");
             output
         }
         _ => format!(
-            "{NOTICE}\ndefmodule {model} do\n  @moduledoc \"Generated type for {}.\"\n  @type t :: {}\nend\n",
+            "{NOTICE}\ndefmodule {model} do\n  @moduledoc \"Generated type for {}.\"\n  @type t :: {}\n  def from_map(value) do\n    {}\n  end\nend\n",
             escape_elixir_string(&schema.name),
-            elixir_type(&schema.value, module)
+            elixir_type(&schema.value, module),
+            decode_value("value", &schema.value, module)
         ),
     }
 }
@@ -817,7 +822,7 @@ fn render_api_facade(module: &str, api: &Api) -> String {
     for (index, operations) in api.operations.chunks(OPERATIONS_PER_FILE).enumerate() {
         let _ = writeln!(output, "  alias {module}.API.Operations{index:04}");
         for operation in operations {
-            let name = snake_case(&operation.id);
+            let name = elixir_identifier(&operation.id);
             let _ = writeln!(
                 output,
                 "\n  def {name}(client, options \\\\ []), do: Operations{index:04}.{name}(client, options)"
@@ -870,7 +875,7 @@ fn render_resource_facade(
             "\n  alias {module}.Resources.{resource}.Chunk{index:04}"
         );
         for operation in chunk {
-            let name = snake_case(&operation.id);
+            let name = elixir_identifier(&operation.id);
             let _ = writeln!(
                 output,
                 "  def {name}(client, options \\\\ []), do: Chunk{index:04}.{name}(client, options)"
@@ -903,7 +908,7 @@ fn render_resource_chunk(
         "{NOTICE}\ndefmodule {module}.Resources.{resource}.Chunk{index:04} do\n  @moduledoc false\n\n  alias {module}.{{API, Client}}\n"
     );
     for operation in operations {
-        let name = snake_case(&operation.id);
+        let name = elixir_identifier(&operation.id);
         let _ = writeln!(
             output,
             "\n  @spec {name}(Client.t(), keyword()) :: {{:ok, term()}} | {{:error, term()}}\n  def {name}(client, options \\\\ []), do: API.{name}(client, options)"
@@ -1004,7 +1009,7 @@ fn cursor_pagination(operation: &Operation) -> Option<CursorPagination> {
             && (parameter.location != "path" || parameter.required)
     })?;
     Some(CursorPagination {
-        parameter_name: elixir_identifier(&parameter.name),
+        parameter_name: elixir_parameter_identifier(operation, parameter),
         next_cursor_path: extension
             .get("outputs")?
             .get("nextCursor")?
@@ -1014,7 +1019,7 @@ fn cursor_pagination(operation: &Operation) -> Option<CursorPagination> {
 }
 
 fn render_cursor_paginator(operation: &Operation, pagination: &CursorPagination) -> String {
-    let name = snake_case(&operation.id);
+    let name = elixir_identifier(&operation.id);
     format!(
         "  @doc \"Lazily yields declared cursor pages.\"\n  @spec {name}_pages(Client.t(), keyword()) :: Enumerable.t()\n  def {name}_pages(client, options \\\\ []) when is_list(options) do\n    Stream.resource(\n      fn -> {{:next, options}} end,\n      fn\n        :halt -> {{:halt, :halt}}\n        {{:next, current}} ->\n          case {name}(client, current) do\n            {{:ok, response}} ->\n              case Client.json_path(response, {:?}) do\n                cursor when is_binary(cursor) and cursor != \"\" -> {{[{{:ok, response}}], {{:next, Keyword.put(current, :{}, cursor)}}}}\n                _ -> {{[{{:ok, response}}], :halt}}\n              end\n            {{:error, reason}} -> {{[{{:error, reason}}], :halt}}\n          end\n      end,\n      fn _ -> :ok end\n    )\n  end\n\n",
         pagination.next_cursor_path, pagination.parameter_name,
@@ -1055,7 +1060,7 @@ fn is_json_parameter_content(parameter: &kaji_core::OperationParameter) -> bool 
 }
 
 fn render_operation(module: &str, api: &Api, operation: &Operation) -> String {
-    let name = snake_case(&operation.id);
+    let name = elixir_identifier(&operation.id);
     let return_type = if operation_is_sse(operation) {
         "Enumerable.t()".into()
     } else {
@@ -1088,7 +1093,7 @@ fn render_operation(module: &str, api: &Api, operation: &Operation) -> String {
         let mut checks = required
             .iter()
             .map(|parameter| {
-                let variable = elixir_identifier(&parameter.name);
+                let variable = elixir_parameter_identifier(operation, parameter);
                 let helper = if is_json_parameter_content(parameter)
                     && json_content_allows_null(parameter)
                 {
@@ -1152,7 +1157,7 @@ fn render_operation_body(
         .iter()
         .filter(|parameter| parameter.location == "path")
     {
-        let value = elixir_identifier(&parameter.name);
+        let value = elixir_parameter_identifier(operation, parameter);
         let value = if parameter.required {
             value
         } else {
@@ -1183,7 +1188,7 @@ fn render_operation_body(
         .iter()
         .filter(|parameter| parameter.location == "query")
         .map(|parameter| {
-            let variable = elixir_identifier(&parameter.name);
+            let variable = elixir_parameter_identifier(operation, parameter);
             let value = if parameter.required {
                 variable
             } else {
@@ -1199,7 +1204,7 @@ fn render_operation_body(
         .iter()
         .find(|parameter| parameter.location == "querystring")
     {
-        let name = elixir_identifier(&parameter.name);
+        let name = elixir_parameter_identifier(operation, parameter);
         let value = if parameter.required {
             name.clone()
         } else {
@@ -1224,7 +1229,7 @@ fn render_operation_body(
         .iter()
         .filter(|parameter| parameter.location == "header")
         .map(|parameter| {
-            let variable = elixir_identifier(&parameter.name);
+            let variable = elixir_parameter_identifier(operation, parameter);
             let value = if parameter.required {
                 variable
             } else {
@@ -1253,7 +1258,7 @@ fn render_operation_body(
         .collect::<Vec<_>>();
     let _ = writeln!(output, "{pad}headers = [{}]", headers.join(", "));
     let cookies = operation.parameters.iter().filter(|parameter| parameter.location == "cookie").map(|parameter| {
-        let id = elixir_identifier(&parameter.name);
+        let id = elixir_parameter_identifier(operation, parameter);
         let value = if parameter.required { id } else { format!("Keyword.get(options, :{id})") };
         let value = parameter_content_value(parameter, &value);
         format!("case {value} do nil -> nil; value -> \"{}=\" <> URI.encode(to_string(value), &URI.char_unreserved?/1) end", escape_elixir_string(&parameter.name))
@@ -1366,7 +1371,10 @@ fn operation_option_types(operation: &Operation, module: &str) -> String {
                 .as_ref()
                 .map(|schema| elixir_type(schema, module))
                 .unwrap_or_else(|| "term()".into());
-            format!("{{:{}, {value}}}", elixir_identifier(&parameter.name))
+            format!(
+                "{{:{}, {value}}}",
+                elixir_parameter_identifier(operation, parameter)
+            )
         })
         .collect::<Vec<_>>();
     if let Some(body) = &operation.request_body {
@@ -1521,11 +1529,11 @@ fn response_decode(_api: &Api, operation: &Operation, module: &str, value: &str)
 fn decode_value(value: &str, schema: &SchemaValue, module: &str) -> String {
     match &schema.kind {
         SchemaKind::Reference { reference } => format!(
-            "case {value} do nil -> nil; map when is_map(map) -> {module}.Models.{}.from_map(map); other -> other end",
+            "case {value} do nil -> nil; map when is_map(map) or is_list(map) -> {module}.Models.{}.from_map(map); other -> other end",
             pascal_case(reference.rsplit('/').next().unwrap_or(reference))
         ),
         SchemaKind::Array { items } => format!(
-            "Enum.map({value} || [], fn item -> {} end)",
+            "case {value} do nil -> nil; items when is_list(items) -> Enum.map(items, fn item -> {} end); other -> other end",
             decode_value("item", items, module)
         ),
         _ => value.into(),
@@ -1573,7 +1581,7 @@ fn render_readme(api: &Api, package: &str, module: &str, client_style: SdkClient
     let operation = api
         .operations
         .first()
-        .map(|operation| snake_case(&operation.id))
+        .map(|operation| elixir_identifier(&operation.id))
         .unwrap_or_else(|| "operation".into());
     let resource = operation_groups(api)
         .first()
@@ -1613,7 +1621,7 @@ fn render_style_guide(api: &Api, module: &str, client_style: SdkClientStyle) -> 
     let operation = api
         .operations
         .first()
-        .map(|operation| snake_case(&operation.id))
+        .map(|operation| elixir_identifier(&operation.id))
         .unwrap_or_else(|| "operation".into());
     let resource = operation_groups(api)
         .first()
@@ -1670,6 +1678,57 @@ fn stable_path_hash(value: &str) -> u32 {
     value.bytes().fold(0x811c_9dc5_u32, |hash, byte| {
         hash.wrapping_mul(0x0100_0193) ^ u32::from(byte)
     })
+}
+
+fn elixir_field_identifier(fields: &[kaji_core::Field], field: &kaji_core::Field) -> String {
+    let mut used = std::collections::BTreeSet::new();
+    for item in fields {
+        let mut name = elixir_identifier(&item.name);
+        while !used.insert(name.clone()) {
+            name.push('_');
+        }
+        if std::ptr::eq(item, field) {
+            return name;
+        }
+    }
+    elixir_identifier(&field.name)
+}
+
+fn elixir_parameter_identifier(
+    operation: &Operation,
+    parameter: &kaji_core::OperationParameter,
+) -> String {
+    let mut used = std::collections::BTreeSet::from([
+        "client".to_owned(),
+        "options".to_owned(),
+        "path".to_owned(),
+        "query".to_owned(),
+        "headers".to_owned(),
+        "body".to_owned(),
+        "response".to_owned(),
+    ]);
+    for item in &operation.parameters {
+        let mut name = elixir_identifier(&item.name);
+        while !used.insert(name.clone()) {
+            name.push('_');
+        }
+        if std::ptr::eq(item, parameter) {
+            return name;
+        }
+    }
+    elixir_identifier(&parameter.name)
+}
+
+fn elixir_pagination_argument(
+    operation: &Operation,
+    input: &kaji_core::pagination::PaginationInput,
+) -> String {
+    operation
+        .parameters
+        .iter()
+        .find(|parameter| parameter.name == input.name && parameter.location == input.location)
+        .map(|parameter| elixir_parameter_identifier(operation, parameter))
+        .unwrap_or_else(|| elixir_identifier(&input.name))
 }
 
 fn elixir_identifier(value: &str) -> String {
@@ -1820,6 +1879,61 @@ mod tests {
         }
     }
 
+    #[test]
+    #[ignore = "requires elixir toolchain; dependency-free collision and alias wire probe"]
+    fn native_collision_models_preserve_wire_and_alias_decoding() {
+        let schema = Schema::new(
+            "Probe",
+            SchemaValue::new(SchemaKind::Object {
+                fields: ["+1", "-1", "x-axis", "x_axis"]
+                    .iter()
+                    .map(|name| kaji_core::Field {
+                        name: (*name).into(),
+                        value: SchemaValue::new(SchemaKind::String),
+                        required: true,
+                        annotations: Default::default(),
+                    })
+                    .collect(),
+                additional_properties: AdditionalProperties::Forbidden,
+            }),
+        );
+        let alias = Schema::new(
+            "Alias",
+            SchemaValue::reference("#/components/schemas/Probe"),
+        );
+        let mut script =
+            "defmodule Collision.JSON do\n def to_wire(value), do: value\nend\n".to_owned();
+        script.push_str(&render_model("Collision", &schema));
+        script.push_str(&render_model("Collision", &alias));
+        let page = Schema::new(
+            "Page",
+            SchemaValue::new(SchemaKind::Array {
+                items: Box::new(SchemaValue::reference("#/components/schemas/Probe")),
+            }),
+        );
+        script.push_str(&render_model("Collision", &page));
+        script.push_str(
+            r#"
+wire=%{"+1"=>"positive","-1"=>"negative","x-axis"=>"dash","x_axis"=>"underscore"}
+model=Collision.Models.Alias.from_map(wire)
+if Collision.Models.Probe.to_map(model)!=wire, do: raise("collision alias wire roundtrip")
+page=Collision.Models.Page.from_map([wire])
+if Collision.Models.Probe.to_map(hd(page))!=wire, do: raise("array alias decoder")
+if Collision.Models.Page.from_map(nil)!=nil, do: raise("nullable array alias")
+"#,
+        );
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("probe.exs"), script).unwrap();
+        let result = std::process::Command::new("elixir")
+            .arg(root.path().join("probe.exs"))
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
     #[test]
     fn required_json_content_nullability_controls_omission_guards() {
         let mut parameter = kaji_core::OperationParameter {

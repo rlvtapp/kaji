@@ -93,6 +93,7 @@ impl Plugin<Ruby> for Sdk {
             .package_name
             .clone()
             .unwrap_or_else(|| format!("{}-sdk", crate::kebab_case(&cx.api.name)));
+        let symbols = crate::symbols::model_symbols(cx.api);
         cx.publish(RubyModels {
             module: crate::pascal_case(&gem),
             import: crate::ruby_file_name(&gem),
@@ -101,7 +102,7 @@ impl Plugin<Ruby> for Sdk {
                 .schemas
                 .iter()
                 .filter(|schema| matches!(schema.value.kind, kaji_core::SchemaKind::Object { .. }))
-                .map(|schema| (schema.name.clone(), crate::pascal_case(&schema.name)))
+                .map(|schema| (schema.name.clone(), symbols[&schema.name].clone()))
                 .collect(),
         })
     }

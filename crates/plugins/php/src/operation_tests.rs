@@ -24,7 +24,7 @@ impl Plugin<crate::Php> for OperationTests {
             .filter(|name| !name.trim().is_empty())
             .unwrap_or_else(|| format!("kaji/{}-sdk", package_slug(&cx.api.name)));
         let module = namespace_for_package(&package);
-        let mut api = cx.api.clone();
+        let mut api = crate::symbols::prepare(cx.api).into_owned();
         for schema in &mut api.schemas {
             sanitize(&mut schema.value)
         }

@@ -4,6 +4,8 @@
 //! model rather than OpenAPI directly. It therefore composes with the same
 //! sidecar and profile pipeline as every other Kaji language target.
 
+mod symbols;
+
 use std::{collections::BTreeMap, fmt::Write};
 
 use anyhow::{Result, bail};
@@ -39,6 +41,8 @@ fn render_sdk(
     package_name: Option<&str>,
     client_style: SdkClientStyle,
 ) -> Result<GeneratedTree> {
+    let prepared = symbols::prepare(api);
+    let api = prepared.as_ref();
     for operation in &api.operations {
         if operation
             .annotations
@@ -346,7 +350,7 @@ fn render_resource_exports(resources: &[String]) -> String {
 
 fn render_model(schema: &Schema) -> String {
     let mut output = format!(
-        "{NOTICE}from __future__ import annotations\n\nfrom dataclasses import dataclass, field\nfrom typing import Any, Literal, TYPE_CHECKING\nfrom ._model_codec import decode_model_value\n\nif TYPE_CHECKING:\n    from typing import TypeAlias\n\n"
+        "{NOTICE}from __future__ import annotations\n\nfrom dataclasses import dataclass, field as _kaji_field\nfrom typing import Any, Literal, TYPE_CHECKING\nfrom ._model_codec import decode_model_value\n\nif TYPE_CHECKING:\n    from typing import TypeAlias\n\n"
     );
     let mut references = std::collections::BTreeSet::new();
     python_references(&schema.value, &mut references);
@@ -422,14 +426,14 @@ fn render_schema(output: &mut String, schema: &Schema) {
             let mut additional_field = "additional_properties".to_owned();
             while fields
                 .iter()
-                .any(|item| python_identifier(&item.name) == additional_field)
+                .any(|item| python_field_identifier(fields, item) == additional_field)
             {
                 additional_field.insert(0, '_');
             }
             let mut present_field = "_kaji_present_fields".to_owned();
             while fields
                 .iter()
-                .any(|item| python_identifier(&item.name) == present_field)
+                .any(|item| python_field_identifier(fields, item) == present_field)
                 || present_field == additional_field
             {
                 present_field.insert(0, '_');
@@ -439,7 +443,7 @@ fn render_schema(output: &mut String, schema: &Schema) {
             // Required fields must precede fields with defaults in a dataclass.
             for required in [true, false] {
                 for item in fields.iter().filter(|item| item.required == required) {
-                    let field_name = python_identifier(&item.name);
+                    let field_name = python_field_identifier(fields, item);
                     let field_type = python_type(&item.value);
                     if item.required {
                         if field_name == item.name {
@@ -447,7 +451,7 @@ fn render_schema(output: &mut String, schema: &Schema) {
                         } else {
                             let _ = writeln!(
                                 output,
-                                "    {field_name}: {field_type} = field(metadata={{\"wire_name\": {:?}}})",
+                                "    {field_name}: {field_type} = _kaji_field(metadata={{\"wire_name\": {:?}}})",
                                 item.name
                             );
                         }
@@ -456,7 +460,7 @@ fn render_schema(output: &mut String, schema: &Schema) {
                     } else {
                         let _ = writeln!(
                             output,
-                            "    {field_name}: {field_type} | None = field(default=None, metadata={{\"wire_name\": {:?}}})",
+                            "    {field_name}: {field_type} | None = _kaji_field(default=None, metadata={{\"wire_name\": {:?}}})",
                             item.name
                         );
                     }
@@ -469,13 +473,13 @@ fn render_schema(output: &mut String, schema: &Schema) {
                 };
                 let _ = writeln!(
                     output,
-                    "    {additional_field}: dict[str, {}] = field(default_factory=dict, metadata={{\"additional_properties\": True}})",
+                    "    {additional_field}: dict[str, {}] = _kaji_field(default_factory=dict, metadata={{\"additional_properties\": True}})",
                     additional_type
                 );
             }
             let _ = writeln!(
                 output,
-                "    {present_field}: frozenset[str] | None = field(default=None, init=False, repr=False, compare=False, metadata={{\"internal\": True, \"present_fields\": True}})"
+                "    {present_field}: frozenset[str] | None = _kaji_field(default=None, init=False, repr=False, compare=False, metadata={{\"internal\": True, \"present_fields\": True}})"
             );
             output.push_str("\n    @classmethod\n");
             let _ = writeln!(
@@ -488,7 +492,7 @@ fn render_schema(output: &mut String, schema: &Schema) {
             } else {
                 output.push_str("        instance = cls(\n");
                 for item in fields {
-                    let field_name = python_identifier(&item.name);
+                    let field_name = python_field_identifier(fields, item);
                     let accessor = if item.required {
                         format!("value[{key:?}]", key = item.name)
                     } else {
@@ -1133,7 +1137,7 @@ fn pagination_parameter(operation: &Operation, inputs: &[Value], kind: &str) -> 
                 Some(SchemaKind::Integer)
             )
     })?;
-    Some(python_identifier(&parameter.name))
+    Some(python_parameter_identifier(operation, parameter))
 }
 
 fn offset_pagination(operation: &Operation) -> Option<OffsetPagination> {
@@ -1209,7 +1213,9 @@ fn cursor_pagination(api: &Api, operation: &Operation) -> Option<CursorPaginatio
                     // not bless an invalid AST by generating a pager for it.
                     && (parameter.location != "path" || parameter.required)
             })
-            .map(|parameter| CursorInput::Parameter(python_identifier(&parameter.name)))?,
+            .map(|parameter| {
+                CursorInput::Parameter(python_parameter_identifier(operation, parameter))
+            })?,
         Some("requestBody") if request_body_has_json_field(api, operation, parameter_name) => {
             CursorInput::Body(parameter_name.to_owned())
         }
@@ -1337,7 +1343,7 @@ fn render_page_paginator(api: &Api, operation: &Operation) -> Option<String> {
     let limit = plan.inputs.iter().find(|input| input.role == "limit");
     let (signature, arguments) = operation_signature(operation);
     let name = python_identifier(&snake_case(&operation.id));
-    let page_argument = python_identifier(&page.name);
+    let page_argument = python_pagination_argument(operation, page);
     let state = if page.location == "requestBody" {
         "        kaji_page = _kaji_json_path(body, PAGE_POINTER)\n        kaji_page = 1 if kaji_page is None else kaji_page\n        kaji_body = _kaji_with_body_value(body, PAGE_WIRE, kaji_page)\n".replace("PAGE_WIRE",&format!("{:?}",page.name)).replace("PAGE_POINTER", &format!("{:?}", format!("/{}", page.name.replace('~',"~0").replace('/',"~1"))))
     } else {
@@ -1372,7 +1378,7 @@ fn render_page_paginator(api: &Api, operation: &Operation) -> Option<String> {
                     format!("/{}", input.name.replace('~', "~0").replace('/', "~1"))
                 )
             } else {
-                python_identifier(&input.name)
+                python_pagination_argument(operation, input)
             }
         })
         .unwrap_or("None".into());
@@ -1434,8 +1440,11 @@ fn render_url_paginator(operation: &Operation, pagination: &UrlPagination) -> St
     )
 }
 
-fn python_parameter_value_name(parameter: &kaji_core::OperationParameter) -> String {
-    let name = python_identifier(&parameter.name);
+fn python_parameter_value_name(
+    operation: &Operation,
+    parameter: &kaji_core::OperationParameter,
+) -> String {
+    let name = python_parameter_identifier(operation, parameter);
     if parameter.location != "querystring"
         && kaji_core::openapi32::parameter_content(parameter)
             .ok()
@@ -1462,7 +1471,7 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
                 .map(python_type)
                 .unwrap_or_else(|| "Any".into())
         };
-        let parameter_name = python_identifier(&parameter.name);
+        let parameter_name = python_parameter_identifier(operation, parameter);
         if parameter.required {
             args.push(format!("{parameter_name}: {field_type}"));
         } else {
@@ -1515,7 +1524,7 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
     {
         if let Ok(content) = kaji_core::openapi32::parameter_content(parameter) {
             if let Some(media) = content.first() {
-                let name = python_identifier(&parameter.name);
+                let name = python_parameter_identifier(operation, parameter);
                 let value = if media
                     .content_type
                     .split(';')
@@ -1547,7 +1556,7 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
         .iter()
         .filter(|parameter| parameter.location == "path")
     {
-        let value = python_parameter_value_name(parameter);
+        let value = python_parameter_value_name(operation, parameter);
         let _ = writeln!(
             output,
             "        _kaji_path = _kaji_path.replace({:?}, quote(str({value}), safe=\"\"))",
@@ -1564,7 +1573,7 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
     } else {
         output.push_str("        _kaji_query: dict[str, Any] | None = {}\n");
         for parameter in query {
-            let value = python_parameter_value_name(parameter);
+            let value = python_parameter_value_name(operation, parameter);
             let _ = writeln!(
                 output,
                 "        if {value} is not None:\n            _kaji_query[{name:?}] = {value}",
@@ -1577,7 +1586,7 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
         .iter()
         .filter(|p| p.location == "querystring")
     {
-        let value = python_parameter_value_name(parameter);
+        let value = python_parameter_value_name(operation, parameter);
         let _ = writeln!(
             output,
             "        if {value} is not None:\n            if any(character in {value} for character in (\"#\", \"?\", \"\\r\", \"\\n\")):\n                raise ValueError(\"Whole-query value must be serialized without a URL fragment or query delimiter\")\n            _kaji_path += (\"&\" if \"?\" in _kaji_path else \"?\") + {value}"
@@ -1593,7 +1602,7 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
     } else {
         output.push_str("        _kaji_headers: dict[str, str] | None = {}\n");
         for parameter in headers {
-            let value = python_parameter_value_name(parameter);
+            let value = python_parameter_value_name(operation, parameter);
             let _ = writeln!(
                 output,
                 "        if {value} is not None:\n            _kaji_headers[{name:?}] = str({value})",
@@ -1606,7 +1615,7 @@ fn render_operation(api: &Api, operation: &Operation) -> String {
         .iter()
         .filter(|p| p.location == "cookie")
     {
-        let value = python_parameter_value_name(parameter);
+        let value = python_parameter_value_name(operation, parameter);
         let _ = writeln!(
             output,
             "        if {value} is not None:\n            _kaji_headers = _kaji_headers or {{}}\n            _kaji_cookie = {:?} + \"=\" + quote(str({value}), safe=\"\")\n            _kaji_headers[\"Cookie\"] = (_kaji_headers[\"Cookie\"] + \"; \" if _kaji_headers.get(\"Cookie\") else \"\") + _kaji_cookie",
@@ -1698,7 +1707,7 @@ fn operation_signature(operation: &Operation) -> (String, Vec<String>) {
             .as_ref()
             .map(python_type)
             .unwrap_or_else(|| "Any".into());
-        let name = python_identifier(&parameter.name);
+        let name = python_parameter_identifier(operation, parameter);
         names.push(name.clone());
         if parameter.required {
             args.push(format!("{name}: {field_type}"));
@@ -2137,7 +2146,7 @@ fn resource_method_name(operation: &str, resource: &str) -> String {
     if method.is_empty() {
         operation.into()
     } else {
-        method.into()
+        python_identifier(method)
     }
 }
 
@@ -2151,7 +2160,8 @@ fn resource_attribute(resource: &str, operations: &[&Operation]) -> String {
         .map(|operation| python_identifier(&snake_case(&operation.id)))
         .collect::<std::collections::BTreeSet<_>>();
     let mut attribute = python_identifier(resource);
-    while direct_methods.contains(&attribute) {
+    while direct_methods.contains(&attribute) || matches!(attribute.as_str(), "for_call" | "aclose")
+    {
         attribute.push_str("_resource");
     }
     attribute
@@ -2325,6 +2335,53 @@ fn schema_file_name(name: &str) -> String {
             (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3)
         });
     format!("{prefix}_{hash:016x}")
+}
+
+fn python_field_identifier(fields: &[kaji_core::Field], field: &kaji_core::Field) -> String {
+    let mut used =
+        std::collections::BTreeSet::from(["from_dict", "classmethod"].map(str::to_owned));
+    for item in fields {
+        let mut name = python_identifier(&item.name);
+        while !used.insert(name.clone()) {
+            name.push('_');
+        }
+        if std::ptr::eq(item, field) {
+            return name;
+        }
+    }
+    python_identifier(&field.name)
+}
+
+fn python_parameter_identifier(
+    operation: &Operation,
+    parameter: &kaji_core::OperationParameter,
+) -> String {
+    let mut used = std::collections::BTreeSet::from(["self".to_owned()]);
+    if operation.request_body.is_some() {
+        used.insert("body".to_owned());
+    }
+    for item in &operation.parameters {
+        let mut name = python_identifier(&item.name);
+        while !used.insert(name.clone()) {
+            name.push('_');
+        }
+        if std::ptr::eq(item, parameter) {
+            return name;
+        }
+    }
+    python_identifier(&parameter.name)
+}
+
+fn python_pagination_argument(
+    operation: &Operation,
+    input: &kaji_core::pagination::PaginationInput,
+) -> String {
+    operation
+        .parameters
+        .iter()
+        .find(|parameter| parameter.name == input.name && parameter.location == input.location)
+        .map(|parameter| python_parameter_identifier(operation, parameter))
+        .unwrap_or_else(|| python_identifier(&input.name))
 }
 
 fn python_identifier(value: &str) -> String {
@@ -2530,6 +2587,108 @@ mod tests {
             .join("\n")
     }
 
+    #[test]
+    fn native_normalized_names_preserve_distinct_wire_fields_and_arguments() {
+        let mut source = Api {
+            name: "Collision".into(),
+            ..Default::default()
+        };
+        source.schemas.push(Schema::new(
+            "Probe",
+            SchemaValue::new(SchemaKind::Object {
+                fields: ["+1", "-1", "field", "x-axis", "x_axis"]
+                    .iter()
+                    .map(|name| kaji_core::Field {
+                        name: (*name).into(),
+                        value: SchemaValue::new(SchemaKind::String),
+                        required: false,
+                        annotations: Default::default(),
+                    })
+                    .collect(),
+                additional_properties: AdditionalProperties::Forbidden,
+            }),
+        ));
+        source.schemas.push(Schema::new(
+            "Nested/Model",
+            SchemaValue::new(SchemaKind::Object {
+                fields: vec![kaji_core::Field {
+                    name: "name".into(),
+                    value: SchemaValue::new(SchemaKind::String),
+                    required: true,
+                    annotations: Default::default(),
+                }],
+                additional_properties: AdditionalProperties::Forbidden,
+            }),
+        ));
+        source.schemas.push(Schema::new(
+            "Holder",
+            SchemaValue::new(SchemaKind::Object {
+                fields: vec![kaji_core::Field {
+                    name: "nested".into(),
+                    value: SchemaValue::reference("#/components/schemas/Nested~1Model"),
+                    required: true,
+                    annotations: Default::default(),
+                }],
+                additional_properties: AdditionalProperties::Forbidden,
+            }),
+        ));
+        source.operations.push(Operation {
+            id: "probe".into(),
+            method: kaji_core::HttpMethod::Get,
+            path: "/{id}".into(),
+            parameters: ["path", "query", "header"]
+                .iter()
+                .map(|location| kaji_core::OperationParameter {
+                    name: "id".into(),
+                    location: (*location).into(),
+                    required: true,
+                    schema: Some(SchemaValue::new(SchemaKind::String)),
+                    description: None,
+                    annotations: Default::default(),
+                })
+                .collect(),
+            request_body: None,
+            responses: vec![],
+            security: vec![],
+            annotations: Default::default(),
+        });
+        let root = tempfile::tempdir().unwrap();
+        render_sdk(
+            &source,
+            "sdk",
+            Some("collision-sdk"),
+            SdkClientStyle::Namespaced,
+        )
+        .unwrap()
+        .write_to(root.path())
+        .unwrap();
+        let script = r#"import inspect
+from collision_sdk.models import Probe, Holder, NestedModel
+from collision_sdk.models import _to_wire
+from collision_sdk import Client
+wire={'+1':'positive','-1':'negative','field':'safe','x-axis':'dash','x_axis':'underscore'}
+model=Probe.from_dict(wire)
+assert _to_wire(model)==wire
+holder=Holder.from_dict({'nested': {'name': 'value'}})
+assert isinstance(holder.nested, NestedModel) and _to_wire(holder)=={'nested': {'name': 'value'}}
+assert {'id', 'id_'} <= set(inspect.signature(Client.probe).parameters)
+seen=[]
+client=Client('https://example.invalid')
+client._request=lambda *args, **kwargs: seen.append((args, kwargs))
+client.probe(id='path value', id_='query value', id__='header value')
+assert seen[0][0][1]=='/path%20value' and seen[0][1]['query']=={'id':'query value'} and seen[0][1]['headers']=={'id':'header value'}
+"#;
+        let output = std::process::Command::new("python3")
+            .args(["-c", script])
+            .env("PYTHONPATH", root.path().join("sdk/src"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
     #[test]
     fn consumer_plugins_execute_roundtrip_fixtures_and_webhook_vectors() {
         use kaji_core::engine::Packages;

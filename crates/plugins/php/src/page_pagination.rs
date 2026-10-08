@@ -36,13 +36,16 @@ pub(crate) fn plan(api: &Api, operation: &Operation) -> anyhow::Result<Option<Pa
     }
     Ok(plan)
 }
-fn variable(operation: &Operation, name: &str) -> String {
+fn variable(operation: &Operation, name: &str, location: &str) -> String {
     let mut parameters = operation.parameters.clone();
     parameters.sort_by_key(|p| !p.required);
     let mut used = BTreeSet::new();
+    if operation.request_body.is_some() {
+        used.insert("body".to_owned());
+    }
     for parameter in &parameters {
         let variable = unique_name(property_name(&parameter.name), &mut used);
-        if parameter.name == name {
+        if parameter.name == name && parameter.location == location {
             return variable;
         }
     }
@@ -59,7 +62,7 @@ pub(crate) fn render(api: &Api, operation: &Operation, named: &NamedTypes) -> Op
         .map(|(_, declaration)| declaration.as_str())
         .collect::<Vec<_>>()
         .join(", ");
-    let page_var = variable(operation, &page.name);
+    let page_var = variable(operation, &page.name, &page.location);
     let state = if page.location == "requestBody" {
         format!(
             "        $_kajiPage = self::kajiJsonPath($body, {}) ?? 1;\n        $_kajiBody = self::kajiWithBodyValue($body, {}, $_kajiPage);\n",
@@ -96,7 +99,7 @@ pub(crate) fn render(api: &Api, operation: &Operation, named: &NamedTypes) -> Op
                     ))
                 )
             } else {
-                format!("${}", variable(operation, &input.name))
+                format!("${}", variable(operation, &input.name, &input.location))
             }
         })
         .unwrap_or("null".into());
