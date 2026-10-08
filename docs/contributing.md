@@ -2,7 +2,7 @@
 
 [Docs home](README.md) · [Plugin authoring](typed-plugins.md) · [Maintainer checks](verification.md#maintainer-checks)
 
-This guide is for developing Kaji itself. To use it on an API, start with the
+This guide is for developing Poolster itself. To use it on an API, start with the
 [CLI](cli.md) or [Rust getting-started guide](getting-started.md).
 
 ## Workspace
@@ -35,7 +35,7 @@ go test ./...
 From the repository root, run optional broader checks:
 
 ```sh
-cargo test -p kaji --test sdk_to_mock_contract -- --ignored
+cargo test -p poolster --test sdk_to_mock_contract -- --ignored
 bash scripts/test-large-graph.sh
 node --test packages/cli/test/*.test.cjs
 ```
@@ -45,7 +45,7 @@ Check generated Fetch SDK consumers with a locally installed TypeScript compiler
 
 ```sh
 KAJI_TSC_JS=/path/to/typescript/lib/tsc.js \
-  cargo test -p kaji-plugin-typescript generated_fetch_consumer_compiles_with_strict_typescript -- --ignored
+  cargo test -p poolster-plugin-typescript generated_fetch_consumer_compiles_with_strict_typescript -- --ignored
 ```
 
 This compiles both raw operations and a full namespaced client with strict
@@ -68,7 +68,7 @@ changes, review the all-target golden diff and update it alongside behavioral
 tests. A snapshot alone is not proof that the generated code compiles.
 
 User-facing configuration changes need corresponding examples and reference
-updates. Kaji is pre-1.0; avoid retaining unused compatibility layers.
+updates. Poolster is pre-1.0; avoid retaining unused compatibility layers.
 
 See [code organization](code-organization.md), [architecture](architecture.md),
 [plugin authoring](typed-plugins.md), and [verification](verification.md) before

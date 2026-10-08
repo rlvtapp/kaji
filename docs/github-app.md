@@ -1,6 +1,6 @@
 # GitHub App authentication and SDK sync
 
-Kaji can use a repository-scoped GitHub App installation token for generated SDK
+Poolster can use a repository-scoped GitHub App installation token for generated SDK
 pull requests and Release Please. The App authenticates automation; generation,
 checks and release planning still run in the repositories' readable workflows.
 Registry publishing is a separate trusted identity or custom publisher command.
@@ -10,10 +10,10 @@ Registry publishing is a separate trusted identity or custom publisher command.
 ## Private App
 
 ```sh
-kaji sdk app --name "Acme SDK Sync" --dry-run
-kaji sdk app --name "Acme SDK Sync"
-kaji sdk init --root generated --config kaji.json --auth app --dry-run
-kaji sdk sync --root generated --config kaji.json --auth app
+poolster sdk app --name "Acme SDK Sync" --dry-run
+poolster sdk app --name "Acme SDK Sync"
+poolster sdk init --root generated --config poolster.json --auth app --dry-run
+poolster sdk sync --root generated --config poolster.json --auth app
 ```
 
 1. Review the manifest written by `sdk app`.
@@ -35,7 +35,7 @@ its temporary code server-side. The CLI supplies neither registration nor a port
 in each workflow and revokes it after the job. App pushes/PRs trigger downstream
 CI, unlike the default `GITHUB_TOKEN` behavior. The private App path stores the
 App key in Actions secrets; workflows obtain fresh installation tokens per run.
-App permission changes require approval in GitHub. Kaji does not ask for workflow
+App permission changes require approval in GitHub. Poolster does not ask for workflow
 write permission or mutate installations, repository secrets or branch rules.
 
 `sync` refreshes **local** editable workflow/action files, ready to commit. SDK
@@ -44,7 +44,7 @@ command. Initial workflow installation is a normal owner-reviewed commit.
 
 For a separate SDK repository, add `--repository owner/sdk-repo`. Generation stays
 in the API repository, and destination checks/release configuration/actions go
-under `.kaji/sdk-repository-setup/`. Copy that directory's contents to the SDK
+under `.poolster/sdk-repository-setup/`. Copy that directory's contents to the SDK
 repository root and commit them there before enabling generation. Paths match
 `output.path` in the source recipe. Do not install the destination release workflow
 in the API repository. Routine App tokens cannot replace workflow definitions.
@@ -52,10 +52,10 @@ in the API repository. Routine App tokens cannot replace workflow definitions.
 ## Hosted App with OIDC broker
 
 A hosted App can exchange a workflow OIDC identity for an installation token.
-Kaji includes editable broker sources so you can host this architecture yourself:
+Poolster includes editable broker sources so you can host this architecture yourself:
 
 ```sh
-kaji sdk sync --root generated --config kaji.json \
+poolster sdk sync --root generated --config poolster.json \
   --auth broker --broker-url https://your-broker.example \
   --repository acme/sdks --dry-run
 ```
@@ -64,7 +64,7 @@ The broker holds the App key; repository workflows store no App key or long-live
 PAT. Each source workflow must be explicitly mapped to its approved destination
 repositories/installations in the broker's policy. See
 [broker deployment and policy](github-app-broker.md). Register/install your App and
-host the broker before enabling this mode. There is no publicly hosted Kaji App
+host the broker before enabling this mode. There is no publicly hosted Poolster App
 or broker created by these commands.
 
 The broker token action can be vendored into each repository. Composite actions

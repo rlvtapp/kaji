@@ -9,7 +9,7 @@ Status: typed scalar CRUD and opt-in resource-read data sources are available; a
 
 ## 1. Current architecture and gaps
 
-Kaji already has a workspace Terraform crate, `crates/plugins/terraform`.
+Poolster already has a workspace Terraform crate, `crates/plugins/terraform`.
 Its `sdk().resource(...)` API requires explicit create/read/update/delete operation IDs and an identity path parameter.
 It renders a Go Plugin Framework provider with an `id` and a raw JSON `body`, a base URL, and a hard-coded bearer API key.
 
@@ -84,22 +84,22 @@ Use small hints for common cases and structured configuration for complex lifecy
 components:
   schemas:
     Project:
-      x-kaji-entity: Project
+      x-poolster-entity: Project
       properties:
         region:
           type: string
-          x-kaji-terraform:
+          x-poolster-terraform:
             name: location
             replacement: always
         token:
           type: string
           writeOnly: true
-          x-kaji-terraform:
+          x-poolster-terraform:
             sensitive: true
 paths:
   /projects:
     post:
-      x-kaji-entity-operation: Project#create
+      x-poolster-entity-operation: Project#create
 ```
 
 Proposed target configuration, illustrated without claiming current CLI support:
@@ -132,7 +132,7 @@ terraform:
   exclude_operations: [deleteAllProjects]
 ```
 
-Precedence: explicit exclusions; target configuration; Kaji extensions; opt-in Speakeasy compatibility translation; conservative inference.
+Precedence: explicit exclusions; target configuration; Poolster extensions; opt-in Speakeasy compatibility translation; conservative inference.
 Conflicting explicit directives are errors rather than silently ordered guesses.
 Include an `explain` report with the effective source of each decision.
 
@@ -212,22 +212,22 @@ internal/provider/*_test.go
 examples/{provider,resources,data-sources}/
 docs/{index,resources,data-sources}/
 go.mod
-.kaji/{ownership.json,terraform-plan.json}
+.poolster/{ownership.json,terraform-plan.json}
 ```
 
 Generate models using Framework value types, not Go pointers as a proxy for unknown/null. Share request/response codecs where useful, but Terraform state reconciliation is its own implementation. Custom files remain create-once and ownership-aware. Registry metadata/release integration is optional and separate from generation; this plan does not authorize publishing.
 
 ## 10. Speakeasy capabilities to account for
 
-Speakeasy maps entities and lifecycle operations explicitly, supports one operation in multiple entities, ordered lifecycle steps, response projections, pagination, polling, PATCH changed-field requests, and nonstandard delete flows. Kaji should translate these into typed bindings/steps rather than duplicate their extension architecture. Complex workflows remain explicit; conventional REST inference is Kaji's additional convenience. [Speakeasy entity mapping](https://www.speakeasy.com/docs/terraform/customize-terraform/entity-mapping).
+Speakeasy maps entities and lifecycle operations explicitly, supports one operation in multiple entities, ordered lifecycle steps, response projections, pagination, polling, PATCH changed-field requests, and nonstandard delete flows. Poolster should translate these into typed bindings/steps rather than duplicate their extension architecture. Complex workflows remain explicit; conventional REST inference is Poolster's additional convenience. [Speakeasy entity mapping](https://www.speakeasy.com/docs/terraform/customize-terraform/entity-mapping).
 
-Its resource customization includes naming, import guidance, state schema versions/upgrades, and preserved custom boilerplate. These belong in Kaji's plan and create-once customization boundaries. [Speakeasy resource configuration](https://www.speakeasy.com/docs/terraform/customize-terraform/resource-configuration).
+Its resource customization includes naming, import guidance, state schema versions/upgrades, and preserved custom boilerplate. These belong in Poolster's plan and create-once customization boundaries. [Speakeasy resource configuration](https://www.speakeasy.com/docs/terraform/customize-terraform/resource-configuration).
 
 Property controls include sensitive/write-only fields, ignored properties, semantic/custom types, JSON-string handling, and response filtering. Add explicit projections and semantic type contracts; computed-diff suppression must require a refresh correctness justification. [Speakeasy property customization](https://www.speakeasy.com/docs/terraform/customize-terraform/property-customization).
 
 Dependencies and custom validators/modifiers need typed references, diagnostics, and preserved user implementations. [Speakeasy validation dependencies](https://www.speakeasy.com/docs/terraform/customize-terraform/validation-dependencies), [plan modification](https://www.speakeasy.com/docs/terraform/customize/plan-modification).
 
-Advanced controls include forced optional/read-only/replacement behavior, plan-only update input behavior, and structural Terraform type deduplication. Kaji can model these policies explicitly; deduplication is a renderer optimization and must not erase field-specific validators or documentation. [Speakeasy advanced features](https://www.speakeasy.com/docs/terraform/customize-terraform/advanced-features).
+Advanced controls include forced optional/read-only/replacement behavior, plan-only update input behavior, and structural Terraform type deduplication. Poolster can model these policies explicitly; deduplication is a renderer optimization and must not erase field-specific validators or documentation. [Speakeasy advanced features](https://www.speakeasy.com/docs/terraform/customize-terraform/advanced-features).
 
 Provider settings require a configurable authentication/server surface beyond an API-key shortcut. [Speakeasy provider configuration](https://www.speakeasy.com/docs/terraform/customize-terraform/provider-configuration).
 
@@ -244,7 +244,7 @@ Inferred resource project (proven-conventional)
   update PATCH /projects/{id}    configured fields: name
   delete DELETE /projects/{id}
 Blocked resource workspace: two read endpoints match identity
-  choose entities.Workspace.lifecycle.read, or x-kaji-entity-operation
+  choose entities.Workspace.lifecycle.read, or x-poolster-entity-operation
 Excluded operation deleteAllProjects: bulk destructive operation
 ```
 
@@ -283,7 +283,7 @@ Existing files to change when implementation is approved:
 | `crates/kaji-core/src/adapter/openapi_sidecar.rs`, `crates/kaji-core/src/ast.rs` | Generic metadata conversion only, backward-compatible/defaulted fields; no Terraform entity types. |
 | `crates/kaji/Cargo.toml`, `crates/kaji/src/lib.rs` | Optional native Terraform plugin dependency/reexports following existing target conventions. |
 | `crates/kaji-cli/src/main.rs` | Terraform config decoding/target selection and explain command integration through plugin APIs. |
-| `schemas/v1/kaji.schema.json`, `schemas/kaji.schema.json` | Versioned Terraform target config and extension documentation pointers. |
+| `schemas/v1/poolster.schema.json`, `schemas/poolster.schema.json` | Versioned Terraform target config and extension documentation pointers. |
 | Existing workspace manifests/tests | Add dependencies/features only as required; Terraform crate is already a workspace member. |
 
 New Terraform-local modules: `plan.rs`, `extensions.rs`, `inference.rs`, `bindings.rs`, `schema.rs`, `auth.rs`, `diagnostics.rs`, `providers.rs`, `render/{mod,provider,resource,data_source,transport,tests}.rs`, and `tests/{inference,generated_provider,lifecycle}.rs` with fixture directories. Add `docs/terraform-provider.md`, extension reference, migration guide, and examples only during implementation. Core `semantics.rs` changes are justified only for genuinely reusable generic behavior; existing pagination/samples contracts can be consumed unchanged where appropriate.

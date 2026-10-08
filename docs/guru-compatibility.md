@@ -87,10 +87,10 @@ exercises.
 With the matching native toolchain installed, reproduce a target with:
 
 ```sh
-(cd openapi && go build -o ../target/debug/kaji-openapi .)
-cargo build --locked -p kaji-cli
-KAJI_BINARY="$PWD/target/debug/kaji" python3 scripts/guru-corpus.py \
-  --language typescript --output /tmp/kaji-guru-typescript-new
+(cd openapi && go build -o ../target/debug/poolster-openapi .)
+cargo build --locked -p poolster-cli
+POOLSTER_BINARY="$PWD/target/debug/poolster" python3 scripts/guru-corpus.py \
+  --language typescript --output /tmp/poolster-guru-typescript-new
 ```
 
 Use a fresh output directory. `--contracts stripe,azure-compute` selects focused

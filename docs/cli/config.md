@@ -1,6 +1,6 @@
-# `kaji.json` recipes
+# `poolster.json` recipes
 
-`kaji.json` is a committed generation recipe. It records the OpenAPI source,
+`poolster.json` is a committed generation recipe. It records the OpenAPI source,
 the output root, and every SDK or artifact package to emit. Paths are resolved
 from the recipe directory, not the shell's current directory.
 
@@ -8,7 +8,7 @@ from the recipe directory, not the shell's current directory.
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/v1/kaji.schema.json",
+  "$schema": "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/v1/poolster.schema.json",
   "openapi": { "input": "./openapi.yaml", "name": "Pet Store", "version": "1.0.0" },
   "output": { "path": "./generated" },
   "packages": [
@@ -29,7 +29,7 @@ The schema provides completion and inline validation in schema-aware editors.
 
 ## Focus a large contract
 
-`openapi.paths` slices the contract before Kaji renders any package, mock, or
+`openapi.paths` slices the contract before Poolster renders any package, mock, or
 artifact. `include` is an OR-set; `exclude` always wins. Patterns start with
 `/`; `*` matches any sequence (including `/`) and `?` matches one character.
 
@@ -45,8 +45,8 @@ artifact. `include` is an OR-set; `exclude` always wins. Patterns start with
 }
 ```
 
-Kaji fails rather than writing an empty surface when the selection matches no
-operation. The output's `.kaji/generation.lock.json` records the selected
+Poolster fails rather than writing an empty surface when the selection matches no
+operation. The output's `.poolster/generation.lock.json` records the selected
 paths and final operation inventory, so a generated API slice is reviewable.
 
 ## Package design
@@ -74,7 +74,7 @@ the standard library.
 `URLSession` and `Codable`, without third-party runtime dependencies.
 
 For private remote contracts, use environment references rather than committed
-tokens. The full [`kaji.json` reference](../config-file.md) covers every field,
+tokens. The full [`poolster.json` reference](../config-file.md) covers every field,
 remote inputs, download limits, and plugin-specific options.
 
 ## Bundle idempotency keys

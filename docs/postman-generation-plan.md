@@ -13,7 +13,7 @@ remain follow-up work.
 
 ## Scope and architecture
 
-Add an independent `kaji-plugin-postman` consumer of Kaji's normalized `Api`,
+Add an independent `poolster-plugin-postman` consumer of Poolster's normalized `Api`,
 security catalog, request/response media types, parameter serialization metadata,
 and bounded request samples.
 Produce portable Collection 2.1 JSON, an optional
@@ -21,12 +21,12 @@ empty-credential environment template, response examples, and diagnostics.
 Keep
 collection execution and remote workspace publication separate and opt-in.
 
-Speakeasy exports collections from OpenAPI; Kaji can fit that capability into its
+Speakeasy exports collections from OpenAPI; Poolster can fit that capability into its
 existing plugin graph rather than requiring its SDK or Terraform models.
 [Speakeasy's Postman generator](https://www.speakeasy.com/blog/release-postman-generator).
 
 ```text
-OpenAPI -> sidecar -> neutral Kaji API
+OpenAPI -> sidecar -> neutral Poolster API
                          |-- SDK providers
                          |-- Terraform semantic providers -> provider/state
                          `-- request examples -> Postman collection/environment
@@ -142,7 +142,7 @@ create/delete requests against a real service merely because a collection was
 generated.
 
 Run ordered multi-operation scenarios only from explicit fixtures;
-reuse Kaji's mock/scenario layer where possible.
+reuse Poolster's mock/scenario layer where possible.
 Export files first; remote
 Postman API synchronization would need separately authorized workspace access
 and credential handling.
@@ -163,7 +163,7 @@ can accept those commands once the collection plugin exists.
    `diagnostics.rs`. Unit-test bindings before rendering files.
 3. Add a versioned optional recipe plugin through `crates/kaji-cli/src/main.rs`,
    facade reexports/dependency in `crates/kaji`, workspace membership and
-   `schemas/v1/kaji.schema.json`. Keep standalone consumers compatible with
+   `schemas/v1/poolster.schema.json`. Keep standalone consumers compatible with
    existing artifact packages.
 4. Validate generated Collection JSON and mock-server execution fixtures for
    scalar/list/object parameters, media variants, security combinations,

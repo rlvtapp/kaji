@@ -19,7 +19,7 @@ paths:
   /orders:
     post:
       operationId: createOrder
-      x-kaji-idempotency:
+      x-poolster-idempotency:
         header: Idempotency-Key
         auto_generate: true
       responses:
@@ -35,7 +35,7 @@ with a diagnostic.
 
 Transport/authentication header names cannot be used as idempotency headers.
 
-## Configure it in kaji.json
+## Configure it in poolster.json
 
 Policies belong to individual packages. Add this field to the package containing your
 SDK plugin:
@@ -63,14 +63,14 @@ replace the whole lower-priority rule. Unknown operation IDs fail generation. Av
 enabling a package-wide default unless every selected operation supports it. Different
 packages can choose different policies without mutating the input API.
 
-The Rust package builder exposes `.idempotency(IdempotencyConfig { ... })` from `kaji`
-(also exported by `kaji::prelude`):
+The Rust package builder exposes `.idempotency(IdempotencyConfig { ... })` from `poolster`
+(also exported by `poolster::prelude`):
 
 ```rust
-use kaji::prelude::*;
+use poolster::prelude::*;
 use std::collections::BTreeMap;
 
-let sdk = kaji::rust::package("rust")
+let sdk = poolster_plugin_rust::package("rust")
     .idempotency(IdempotencyConfig {
         defaults: None,
         operations: BTreeMap::from([(
@@ -78,7 +78,7 @@ let sdk = kaji::rust::package("rust")
             IdempotencyRule { auto_generate: true, ..Default::default() },
         )]),
     })
-    .with(kaji::rust::sdk());
+    .with(poolster_plugin_rust::sdk());
 ```
 
 ## Customer behavior
@@ -106,7 +106,7 @@ but middleware that replaces it independently on each attempt defeats retry
 deduplication.
 
 Provider plugins receive the prepared optional parameter and
-`x-kaji-idempotency-resolved` metadata; custom operation providers must honor the policy
+`x-poolster-idempotency-resolved` metadata; custom operation providers must honor the policy
 when substituting the maintained renderer.
 
 ## Retries and target limits

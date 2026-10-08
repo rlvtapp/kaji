@@ -2,7 +2,7 @@
 
 [Compiler](openapi-compiler.md) · [Compatibility results](guru-compatibility.md) · [Verification](verification.md)
 
-Kaji always splits Go output: one model per file, one operation (with
+Poolster always splits Go output: one model per file, one operation (with
 request/errors/pagers) per file, and service files capped at 50 methods.
 The files share one Go package, so splitting does not introduce import cycles
 or change the public client API. There is no layout toggle.
@@ -14,19 +14,19 @@ standard-library packages it uses. Large single type declarations cannot be
 divided between Go source files.
 
 ```rust
-use kaji::{go, prelude::*};
+use poolster::{go, prelude::*};
 
 let release = ProfileSet::new("sdk")
     .package(go::package("go")
         .name("graph")
         .with(go::sdk().namespaced().jobs(4)));
-// kaji::generate(&api, release)?.write_to(output)?;
+// poolster::generate(&api, release)?.write_to(output)?;
 ```
 
 Equivalent CLI selection:
 
 ```sh
-npx kajicli generate graph.yaml --output ./generated --language go \
+npx poolster generate graph.yaml --output ./generated --language go \
   --name "Microsoft Graph" --jobs 4
 ```
 
@@ -64,7 +64,7 @@ Run the full opt-in check with Rust, Go, curl, and Bash installed:
 bash scripts/test-large-graph.sh
 ```
 
-It downloads a pinned Microsoft Graph v1.0 document, compiles it using Kaji's bundled Go
+It downloads a pinned Microsoft Graph v1.0 document, compiles it using Poolster's bundled Go
 compiler source, generates the complete Go SDK with one and four workers,
 compares every output file, and runs a generated-SDK test.
 
@@ -89,8 +89,8 @@ The September 27, 2026 input used during development had SHA-256
 The test now pins upstream revision `fd42f0e5bcd96b0c5edd5e62e2956a1dc1c5d17a`
 and SHA-256 `533f6d86985584327109ba2c52c0e51454ce1ba2153c11f4d841e898b88c5b1b`.
 A changed checksum fails before compilation.
-`KAJI_GRAPH_SPEC` can supply those
-exact bytes from a local cache; `KAJI_BINARY` can use an already built generator.
+`POOLSTER_GRAPH_SPEC` can supply those
+exact bytes from a local cache; `POOLSTER_BINARY` can use an already built generator.
 The historical counts above describe the earlier recorded input.
 A new pin needs
 intentional review and a new native run.
@@ -122,12 +122,12 @@ before extraction and rejects traversal, symlinks and oversized inputs.
 KAJI_PUBLIC_CONTRACT_MANIFEST="$PWD/scripts/fixtures/large-contracts.json" \
 KAJI_PUBLIC_CONTRACTS=openai \
 KAJI_PUBLIC_LANGUAGES=go \
-KAJI_PUBLIC_CONTRACT_ROOT=/tmp/kaji-public-check \
+KAJI_PUBLIC_CONTRACT_ROOT=/tmp/poolster-public-check \
 bash scripts/test-public-contracts.sh generate
 
 KAJI_PUBLIC_CONTRACT_MANIFEST="$PWD/scripts/fixtures/large-contracts.json" \
 KAJI_PUBLIC_CONTRACTS=openai \
-KAJI_PUBLIC_CONTRACT_ROOT=/tmp/kaji-public-check \
+KAJI_PUBLIC_CONTRACT_ROOT=/tmp/poolster-public-check \
 bash scripts/test-public-contracts.sh check go
 ```
 
@@ -167,14 +167,14 @@ It includes GitHub, Stripe, AWS EC2, Google Compute, Mailchimp, Zoom, DocuSign,
 Jira, Plaid, Box and other large APIs.
 
 ```sh
-python3 scripts/guru-corpus.py --language go --output /tmp/kaji-guru-check
+python3 scripts/guru-corpus.py --language go --output /tmp/poolster-guru-check
 # A smaller selection, or retain generated sources for debugging:
 python3 scripts/guru-corpus.py --language python --contracts github,stripe \
-  --output /tmp/kaji-guru-python --keep-generated
+  --output /tmp/poolster-guru-python --keep-generated
 ```
 
-Build `target/debug/kaji` and `target/debug/kaji-openapi` first, or set
-`KAJI_BINARY` and `KAJI_OPENAPI_BIN`. The output must be a fresh directory.
+Build `target/debug/poolster` and `target/debug/poolster-openapi` first, or set
+`POOLSTER_BINARY` and `POOLSTER_OPENAPI_BIN`. The output must be a fresh directory.
 The runner verifies inputs, generates and checks each SDK separately, continues
 after failures and returns a failing exit code if any case fails. Reports include
 source digests, phase exit codes, timeouts, logs and generation metadata. They
@@ -199,7 +199,7 @@ compilation, not every API operation's runtime semantics or all language targets
 The expanded corpus exposed model/runtime/service/enum symbol collisions,
 repeated operation IDs, nested schema references, YAML block scalar compatibility,
 and JSON keys that cannot appear in Go struct tags.
-Kaji now allocates stable Go
+Poolster now allocates stable Go
 symbols and operation identities, lifts nested reference targets, preserves
 valid block content, and generates custom JSON encoding for those wire keys.
 

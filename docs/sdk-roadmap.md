@@ -1,6 +1,6 @@
 # SDK roadmap
 
-Kaji keeps its Kubb-like plugin graph: providers publish typed capabilities,
+Poolster keeps its Kubb-like plugin graph: providers publish typed capabilities,
 consumers select compatible instances, and package finalization owns manifests.
 Runtime and delivery improvements extend this architecture while preserving
 independent plugins and native language APIs.
@@ -174,7 +174,7 @@ Remaining work includes custom-format codecs, authenticated/private remote refer
 fetching, broader unknown-union/model preservation,
 additional automatic DTO-to-MIME mappings and broader public-contract coverage. The live delivery trial remains
 prepared-only at the user's request. These boundaries are tracked separately from
-implemented features; Kaji keeps its plugin architecture.
+implemented features; Poolster keeps its plugin architecture.
 
 Per-call controls now cover the TypeScript, Rust, Python, Go, Java and C# targets plus Ruby, using native scoped
 clients or request/context options.

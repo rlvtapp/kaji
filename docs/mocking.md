@@ -4,7 +4,7 @@
 | --- | --- |
 | Run immediately without Docker | [Native mock](#native-mock-inspector-no-docker) |
 | Share a reproducible service across SDK tests | [Generated Docker package](#generate-and-run) |
-| Return a conditional error or fixture | [`x-kaji-mock`](#full-x-kaji-mock-reference) |
+| Return a conditional error or fixture | [`x-poolster-mock`](#full-x-poolster-mock-reference) |
 | Configure page continuation | [Pagination declarations](#pagination-declarations) |
 
 > Need help choosing between Faker, MSW, Cypress, and the Docker mock? Start
@@ -17,19 +17,23 @@ base URL to `http://localhost:5000` during a test.
 
 ## Native mock inspector (no Docker)
 
-For local development, Kaji can run the contract directly:
+For local development, Poolster can run the contract directly:
 
 ```sh
-kaji mock serve openapi.yaml --port 4010
+poolster mock serve openapi.yaml --port 4010
 ```
 
-The mock API is available at `http://127.0.0.1:4010`. `GET /_kaji/health` returns `{
-"ok": true }`. Its machine-readable `GET /_kaji/requests` log returns up to the 200 most
+The mock API is available at `http://127.0.0.1:4010`. `GET /_poolster/health` returns `{
+"ok": true }`. Its machine-readable `GET /_poolster/requests` log returns up to the 200 most
 recent calls, including the matched operation ID, scenario name, status code, and
 request body. This keeps diagnosis useful for people and agents without shipping a
 separate dashboard.
 
-Unless an `x-kaji-mock` scenario matches, unconstrained schema fields vary for every
+The earlier `/_kaji/health` and `/_kaji/requests` routes remain available for
+existing integrations. New contracts should use `x-poolster-mock`; the compiler
+also accepts `x-kaji-mock` as a compatibility key.
+
+Unless an `x-poolster-mock` scenario matches, unconstrained schema fields vary for every
 request: strings, IDs, emails, numbers, dates, arrays, and objects are generated from
 the response schema. Explicit examples, defaults, constants, and enum values remain
 stable.
@@ -37,9 +41,9 @@ stable.
 This gives local apps realistic changing data while retaining contract-owned values
 where the API specifies them.
 
-The native server also evaluates declared `x-kaji-mock` scenarios. The first matching
+The native server also evaluates declared `x-poolster-mock` scenarios. The first matching
 scenario in OpenAPI order wins and returns its exact status, headers, body, and optional
-delay; its name is recorded in `/_kaji/requests`.
+delay; its name is recorded in `/_poolster/requests`.
 
 This gives local development and Docker fixtures the same conditional contract cases,
 while only the native server generates a fresh fallback body.
@@ -47,7 +51,7 @@ while only the native server generates a fresh fallback body.
 ## Generate and run
 
 ```rust
-use kaji::{mock, prelude::*, python, ts, generate};
+use poolster::{mock, prelude::*, python, ts, generate};
 
 let artifacts = generate(
     &api,
@@ -73,14 +77,14 @@ docker compose up --build
 
 The default happy path chooses the lowest declared numeric `2xx` response, then
 `default`, then the first declared response, then `200`. Bodies prefer OpenAPI defaults,
-constants, enum values, and examples; otherwise Kaji emits a conservative schema-shaped
+constants, enum values, and examples; otherwise Poolster emits a conservative schema-shaped
 value. Change the OpenAPI source and regenerate instead of hand-editing generated
 fixtures.
 
-Use `x-kaji-mock` only for named conditional behaviour:
+Use `x-poolster-mock` only for named conditional behaviour:
 
 ```yaml
-x-kaji-mock:
+x-poolster-mock:
   scenarios:
     - name: rate-limited
       when:
@@ -107,10 +111,10 @@ For a runnable contract with dynamic fallback responses, a conditional error, an
 request-log inspection, use the [mock scenarios
 example](../examples/mock-scenarios/README.md).
 
-## Full `x-kaji-mock` reference
+## Full `x-poolster-mock` reference
 
 ```yaml
-x-kaji-mock:
+x-poolster-mock:
   scenarios:
     - name: string                 # required; unique in this operation
       when:                        # optional; every supplied predicate matches
@@ -137,19 +141,19 @@ request to the operation.
 ## Pagination declarations
 
 The generated mock and generated pager both come from the same operation. Add
-`x-kaji-pagination` when the SDK should offer a pager:
+`x-poolster-pagination` when the SDK should offer a pager:
 
 ```yaml
 # Cursor in a query or request body field.
-x-kaji-pagination:
+x-poolster-pagination:
   type: cursor
   inputs:
     - { name: cursor, in: parameters, type: cursor }
   outputs:
     nextCursor: $.next_cursor
 
-# For a nested request-body cursor, Kaji needs an explicit RFC 6901 pointer.
-x-kaji-pagination:
+# For a nested request-body cursor, Poolster needs an explicit RFC 6901 pointer.
+x-poolster-pagination:
   type: cursor
   inputs:
     - { name: cursor, in: requestBody, type: cursor, bodyPath: /page/cursor }
@@ -157,7 +161,7 @@ x-kaji-pagination:
     nextCursor: $.next_cursor
 
 # Offset pagination; `limit` is optional. Page stepping may use numPages.
-x-kaji-pagination:
+x-poolster-pagination:
   type: offsetLimit
   inputs:
     - { name: offset, in: parameters, type: offset }
@@ -165,15 +169,15 @@ x-kaji-pagination:
   outputs:
     results: $.items
 
-# A server-returned URL continuation. Kaji only follows same-origin URLs.
-x-kaji-pagination:
+# A server-returned URL continuation. Poolster only follows same-origin URLs.
+x-poolster-pagination:
   type: url
   outputs:
     nextUrl: $.links.next
 ```
 
-Kaji also accepts `x-speakeasy-pagination` for existing specifications. Use
-`x-kaji-pagination` in new documents.
+Poolster also accepts `x-speakeasy-pagination` for existing specifications. Use
+`x-poolster-pagination` in new documents.
 
 ## Scope
 

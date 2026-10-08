@@ -2,7 +2,7 @@
 
 [Input plugins](input-plugins.md) · [Architecture](architecture.md) · [OpenAPI 3.2](guides/openapi32.md)
 
-Kaji owns its OpenAPI compiler under `openapi/`. It is Go source checked into
+Poolster owns its OpenAPI compiler under `openapi/`. It is Go source checked into
 this repository, built with the Go toolchain, and does not call Relevate Docs,
 an external sidecar service, or Node.
 
@@ -10,16 +10,16 @@ an external sidecar service, or Node.
 
 ```sh
 cd openapi
-go run . --out ../.kaji/openapi ../openapi.yaml
+go run . --out ../.poolster/openapi ../openapi.yaml
 ```
 
 The final argument can be a Swagger 2.0 or OpenAPI 3.0/3.1/3.2 JSON or YAML file. `--out` is the
-artifact directory consumed by `kaji::generate_openapi`.
+artifact directory consumed by `poolster::generate_openapi`.
 
 ```sh
 go test ./...
-go build -o ../bin/kaji-openapi .
-../bin/kaji-openapi --out ../.kaji/openapi ../openapi.json
+go build -o ../bin/poolster-openapi .
+../bin/poolster-openapi --out ../.poolster/openapi ../openapi.json
 ```
 
 ## Artifacts
@@ -28,7 +28,7 @@ The compiler emits stable JSON artifacts rather than language-specific SDK
 code:
 
 ```text
-.kaji/openapi/
+.poolster/openapi/
   operations.json
   operations-order.json
   operations/
@@ -37,14 +37,14 @@ code:
   api-metadata.json
 ```
 
-Kaji's Rust generators load these files into a target-neutral AST. That keeps
+Poolster's Rust generators load these files into a target-neutral AST. That keeps
 OpenAPI complexity in one proven parser while every SDK generator remains pure
 Rust.
 
 The artifact directory is an internal, versioned-together compiler/generator
 boundary, not a stable interchange format.
 Regenerate it with this repository's
-compiler when updating Kaji.
+compiler when updating Poolster.
 `schemas.json` and `security-schemes.json` are
 required even when their catalogs are empty.
 Operation `security_requirements` preserve the full
@@ -82,10 +82,10 @@ The compiler retains whole-query `querystring` parameters and their `content`,
 sequential media `itemSchema`, positional multipart `prefixEncoding`/`itemEncoding`,
 recursive Encoding Objects, device authorization URLs, tag hierarchy and `$self`.
 Reusable `components.mediaTypes` references and XML `nodeType` metadata are retained.
-The Rust boundary exposes typed content metadata in `kaji_core::openapi32`; sequential
+The Rust boundary exposes typed content metadata in `poolster_core::openapi32`; sequential
 item schemas become array model schemas for buffered request/response APIs.
 
-The bundled libopenapi parser advertises 3.2 support. Kaji also reads resolved source
+The bundled libopenapi parser advertises 3.2 support. Poolster also reads resolved source
 nodes for positional encodings and the official `deviceAuthorization` flow where
 version 0.38.7's high-level models omit or misname fields. Compiler and native runtime
 tests cover these paths rather than inferring support from a version number.
@@ -96,7 +96,7 @@ native or explicit ordered builders; custom media formats and multipart response
 interpretation still require a native codec or application decoding.
 Preserving an
 XML Schema annotation does not install an XML codec.
-Kaji is not a complete JSON
+Poolster is not a complete JSON
 Schema validator.
 
 Future OpenAPI minor versions and malformed conflicting encodings

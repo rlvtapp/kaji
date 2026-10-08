@@ -1,17 +1,17 @@
 # Declare pagination and use a native pager
 
-Kaji already generates pagination through each language's normal iteration API. A Rust
+Poolster already generates pagination through each language's normal iteration API. A Rust
 stream, a PHP generator and a C# async enumerable can implement the same contract
 without sharing a runtime or public interface. A helper yields whole response pages; it
 does not automatically flatten the results into individual items.
 
 ## Declare the continuation explicitly
 
-Annotate an operation using `x-kaji-pagination` or its compatible
+Annotate an operation using `x-poolster-pagination` or its compatible
 `x-speakeasy-pagination` spelling. A page-number declaration looks like:
 
 ```yaml
-x-kaji-pagination:
+x-poolster-pagination:
   type: page
   inputs:
     - name: page

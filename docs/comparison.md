@@ -1,23 +1,23 @@
-# Why choose Kaji?
+# Why choose Poolster?
 
-[Why Kaji](why-kaji.md) · [Feature catalog](features.md) · [Try it](cli/quickstart.md)
+[Why Poolster](why-poolster.md) · [Feature catalog](features.md) · [Try it](cli/quickstart.md)
 
-Kaji is the best fit for SDK authors who want to own and extend their entire
+Poolster is the best fit for SDK authors who want to own and extend their entire
 OpenAPI generation workflow: native SDKs, bundled HTTP policies, API artifacts,
 checks and releases, composed through one typed plugin graph.
 
 You can replace a provider, add a consumer, ship your own source per language,
 eject and rebuild the generator, and keep delivery in readable GitHub workflows.
-That combination is Kaji's main advantage.
+That combination is Poolster's main advantage.
 The choice is about control and scope;
 it is not a claim that every generated language or OpenAPI construct has the same
 coverage.
 
 See the [feature catalog](features.md) and [verification](verification.md).
 
-## What makes Kaji a strong choice
+## What makes Poolster a strong choice
 
-| What you need | What Kaji gives you | Evidence and entry point |
+| What you need | What Poolster gives you | Evidence and entry point |
 | --- | --- | --- |
 | Generation you can extend | Typed Rust capabilities, named providers and consumers, dependency checks | [Plugin development](typed-plugins.md) |
 | Policies customers get automatically | Authored modules bundled and registered during generation, plus customer-side middleware or native driver injection | [SDK customization](sdk-customization.md) |
@@ -29,7 +29,7 @@ See the [feature catalog](features.md) and [verification](verification.md).
 
 These are implemented capabilities, with the target-specific limits described in
 the linked guides. A plugin API, runtime middleware and editable generator sources
-serve different purposes; Kaji provides all three rather than treating them as
+serve different purposes; Poolster provides all three rather than treating them as
 interchangeable customization settings.
 
 ## Compare the main alternatives
@@ -37,26 +37,26 @@ interchangeable customization settings.
 Reviewed against official documentation on **8 October 2026**. This is a broad
 selection of established tools, not an exhaustive census. The rows describe each
 project's documented focus; they are not performance benchmarks or universal
-support judgments. “Choose Kaji when” is our assessment of fit.
+support judgments. “Choose Poolster when” is our assessment of fit.
 
 ### SDK platforms and broad generators
 
-| Tool | Documented focus and customization | Choose Kaji when |
+| Tool | Documented focus and customization | Choose Poolster when |
 | --- | --- | --- |
-| **Kaji** | Local CLI and Rust library; native SDKs and API artifacts; typed generation plugins; authored source, runtime policies and editable delivery | You want this entire workflow in an extensible source toolchain you own. |
-| **Speakeasy** | SDKs, Terraform, MCP and Postman generation; annotated contracts and workflow configuration; published generator sources | You prefer Kaji's typed provider/consumer composition and package-scoped customization as the core abstraction. [Official generator](https://github.com/speakeasy-api/openapi-generation), [workflow concepts](https://www.speakeasy.com/docs/sdks/core-concepts). |
+| **Poolster** | Local CLI and Rust library; native SDKs and API artifacts; typed generation plugins; authored source, runtime policies and editable delivery | You want this entire workflow in an extensible source toolchain you own. |
+| **Speakeasy** | SDKs, Terraform, MCP and Postman generation; annotated contracts and workflow configuration; published generator sources | You prefer Poolster's typed provider/consumer composition and package-scoped customization as the core abstraction. [Official generator](https://github.com/speakeasy-api/openapi-generation), [workflow concepts](https://www.speakeasy.com/docs/sdks/core-concepts). |
 | **Fern** | Multi-language SDKs and documentation; generator configuration and custom code; managed generation and a self-hosted option | You want local source builds and a plugin graph without configuring a managed generation service. [Generation](https://buildwithfern.com/learn/sdks/overview/how-it-works), [self-hosting](https://buildwithfern.com/learn/sdks/deep-dives/self-hosted). |
 | **Stainless** | Configured resources/models, SDK generation, publishing and docs; configuration also includes Terraform and CLI targets | You want to compose or implement generator providers directly and own the generation sources. [Configuration](https://www.stainless.com/docs/reference/config/), [SDK configuration](https://www.stainless.com/docs/sdks/configure/). |
-| **OpenAPI Generator** | Broad client/server/documentation generator catalog; custom templates, supporting files and custom generators | You want typed cross-plugin contracts and SDK delivery tooling integrated with API artifacts. It remains a strong option when you need a target outside Kaji's maintained set. [Project](https://github.com/OpenAPITools/openapi-generator), [customization](https://openapi-generator.tech/docs/customization/). |
-| **Swagger Codegen** | Template-driven API clients, server stubs and documentation across languages; custom templates and generators | You want Kaji's native plugin composition, owned-output regeneration and delivery workflow. [Project](https://github.com/swagger-api/swagger-codegen), [generator customization](https://github.com/swagger-api/swagger-codegen/blob/master/docs/generators.md). |
+| **OpenAPI Generator** | Broad client/server/documentation generator catalog; custom templates, supporting files and custom generators | You want typed cross-plugin contracts and SDK delivery tooling integrated with API artifacts. It remains a strong option when you need a target outside Poolster's maintained set. [Project](https://github.com/OpenAPITools/openapi-generator), [customization](https://openapi-generator.tech/docs/customization/). |
+| **Swagger Codegen** | Template-driven API clients, server stubs and documentation across languages; custom templates and generators | You want Poolster's native plugin composition, owned-output regeneration and delivery workflow. [Project](https://github.com/swagger-api/swagger-codegen), [generator customization](https://github.com/swagger-api/swagger-codegen/blob/master/docs/generators.md). |
 | **APIMatic** | SDK generation, developer portals, publishing and preserved custom code | You want generation behavior implemented through local typed plugins and rebuildable source ownership. [SDK overview](https://docs.apimatic.io/v4/generate-sdks/apimatic-sdks/), [portals](https://docs.apimatic.io/v4/generate-developer-portals/generate-build/). |
-| **AutoRest** | OpenAPI generation across languages through its generator ecosystem and configuration | You want Kaji's typed artifact composition and integrated SDK/artifact delivery workflow. [Project](https://github.com/Azure/autorest), [configuration](https://github.com/Azure/autorest/blob/main/docs/user/literate-file-formats/configuration.md). |
+| **AutoRest** | OpenAPI generation across languages through its generator ecosystem and configuration | You want Poolster's typed artifact composition and integrated SDK/artifact delivery workflow. [Project](https://github.com/Azure/autorest), [configuration](https://github.com/Azure/autorest/blob/main/docs/user/literate-file-formats/configuration.md). |
 | **Microsoft Kiota** | Multi-language clients using request adapters, authentication, serialization and middleware abstractions | You want native packages plus non-SDK artifacts and generator composition; Kiota is worth evaluating if a shared adapter ecosystem is your priority. [Official documentation](https://learn.microsoft.com/en-us/openapi/kiota/). |
 | **NSwag** | C#/TypeScript clients and ASP.NET OpenAPI generation, CLI and build integration | You need more languages and artifacts from the same contract. NSwag is worth evaluating for an ASP.NET-centered workflow. [Project and features](https://github.com/RicoSuter/NSwag). |
 
 ### TypeScript and frontend tools
 
-| Tool | Documented focus and customization | Choose Kaji when |
+| Tool | Documented focus and customization | Choose Poolster when |
 | --- | --- | --- |
 | **Kubb** | Generation built around plugins, generators, resolvers and hooks | You want plugin composition together with maintained native SDKs beyond TypeScript and API delivery artifacts. [Plugin architecture](https://www.kubb.dev/docs/5.x/guide/concepts/plugins). |
 | **Hey API** | TypeScript SDKs/types/schemas, multiple clients and an integration plugin ecosystem | Your API must also ship native SDKs in other languages and owned publishing workflows. [Getting started](https://heyapi.dev/docs/openapi/typescript/get-started). |
@@ -66,7 +66,7 @@ support judgments. “Choose Kaji when” is our assessment of fit.
 
 ### Language-specific generators
 
-| Tool | Documented focus | Choose Kaji when |
+| Tool | Documented focus | Choose Poolster when |
 | --- | --- | --- |
 | **oapi-codegen** | Go client, server and model generation with configuration and an ecosystem of integrations | You want a shared generation/delivery configuration across several SDK languages. [Project](https://github.com/oapi-codegen/oapi-codegen). |
 | **ogen** | Go API code generation, including clients and servers | You want other SDK languages and artifacts alongside Go. Evaluate its generated codecs and server support separately for a Go-only service. [Getting started](https://ogen.dev/docs/intro/). |
@@ -76,14 +76,14 @@ support judgments. “Choose Kaji when” is our assessment of fit.
 
 **TypeSpec** describes APIs and emits client code through language-specific
 emitters. Choose it when a model-first authoring language is central to your
-workflow; choose Kaji when an existing OpenAPI contract is the input to your
+workflow; choose Poolster when an existing OpenAPI contract is the input to your
 SDK and artifact pipeline. [Client emitters](https://typespec.io/docs/emitters/clients/introduction/),
 [custom emitters](https://typespec.io/docs/extending-typespec/emitters-basics/).
 
 **Smithy** is a model and code-generation ecosystem, not simply another OpenAPI
 SDK command. Its generator architecture is worth evaluating if you want to design
-around Smithy models and protocols. Kaji is a fit when OpenAPI is your existing
-contract and you want its outputs composed through Kaji plugins.
+around Smithy models and protocols. Poolster is a fit when OpenAPI is your existing
+contract and you want its outputs composed through Poolster plugins.
 [Code generation](https://smithy.io/2.0/guides/using-code-generation/index.html),
 [generator concepts](https://smithy.io/2.0/guides/building-codegen/overview-and-concepts.html).
 
@@ -92,9 +92,9 @@ contract and you want its outputs composed through Kaji plugins.
 A managed SDK platform can be a better fit when you want a service and support
 team to operate generation and delivery. A language-specific generator can be a
 better fit when its particular runtime, framework or server generator matches
-your application. OpenAPI Generator has a broader target catalog than Kaji.
+your application. OpenAPI Generator has a broader target catalog than Poolster.
 
-Kaji's advantage is the combination of ownership, typed composition and breadth
+Poolster's advantage is the combination of ownership, typed composition and breadth
 of deliverables. Validate your contract in the languages you ship before deciding:
 run native compilation, exercise your middleware, and check the workflows against
 your actual repository and registry setup. The public-contract matrix exposes

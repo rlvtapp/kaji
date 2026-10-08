@@ -21,13 +21,14 @@ input-to-output hook. The steps below use the bundled Go OpenAPI compiler.
 
 ## Add dependencies
 
-Until the crates are published, use paths to a Kaji clone:
+Until the crates are published, use paths to a Poolster clone:
 
 ```toml
 [dependencies]
 anyhow = "1"
-kaji = { path = "../kaji/crates/kaji" }
-kaji-core = { path = "../kaji/crates/kaji-core" }
+poolster = { path = "../kaji/crates/kaji" }
+poolster-core = { path = "../kaji/crates/kaji-core" }
+poolster-plugin-typescript = { path = "../kaji/crates/plugins/typescript" }
 ```
 
 Use the Rust version declared by the workspace (currently Rust 1.85 or newer).
@@ -35,11 +36,11 @@ Go is required to build/run the source compiler, not to use a generated SDK.
 
 ## Compile the document
 
-From the Kaji repository:
+From the Poolster repository:
 
 ```sh
 cd openapi
-go run . --out ../.kaji/openapi ../openapi.yaml
+go run . --out ../.poolster/openapi ../openapi.yaml
 ```
 
 The output includes normalized operations, schemas, and `security-schemes.json`.
@@ -53,20 +54,16 @@ In your Rust application, use an artifact path relative to its working directory
 ```rust
 use std::path::Path;
 use anyhow::Result;
-use kaji::{go, mock, prelude::*, python, rust, ts};
+use poolster::prelude::*;
+use poolster_plugin_typescript as ts;
 
 fn main() -> Result<()> {
     let release = ProfileSet::new("sdk")
-        .package(ts::package("typescript/fetch")
-            .name("@acme/email").with(ts::sdk().fetch().client_name("Email")))
-        .package(ts::package("typescript/axios").with(ts::sdk().axios()))
-        .package(rust::package("rust").with(rust::sdk()))
-        .package(go::package("go").with(go::sdk()))
-        .package(python::package("python").with(python::sdk()))
-        .package(mock::package("mock-server").with(mock::server()));
+        .package(ts::package("typescript")
+            .name("@acme/email").with(ts::sdk().fetch().client_name("Email")));
 
-    let tree = kaji::generate_openapi(
-        Path::new("../kaji/.kaji/openapi"),
+    let tree = poolster::generate_openapi(
+        Path::new("../kaji/.poolster/openapi"),
         "Email",
         "1.0.0",
         release,
@@ -76,21 +73,16 @@ fn main() -> Result<()> {
 }
 ```
 
-This produces isolated packages below `generated/sdk`:
+This produces a TypeScript package below `generated/sdk`:
 
 ```text
 sdk/
   typescript/
-    fetch/
-    axios/
-  rust/
-  go/
-  python/
-  mock-server/
 ```
 
-Add `php::package(...).with(php::sdk())`, `java`, `csharp`, `elixir`, `ruby`, or `swift` in the
-same way. Directory names and package names are separate choices.
+Add each language's `poolster-plugin-*` crate explicitly, then compose its
+`package()` and `sdk()` in the same way. Directory names and package names are
+separate choices.
 
 Each SDK has its own README, manifest, and generated client. Install its
 dependencies and build it using the target ecosystem's tooling. Generation
@@ -98,23 +90,24 @@ does not install those dependencies or publish anything.
 
 ## Generate from a Rust API model
 
-If an integration already has a `kaji_core::Api`:
+If an integration already has a `poolster_core::Api`:
 
 ```rust
 use anyhow::Result;
-use kaji::{prelude::*, ts};
-use kaji_core::{Api, SecuritySchemeCatalog};
+use poolster::prelude::*;
+use poolster_plugin_typescript as ts;
+use poolster_core::{Api, SecuritySchemeCatalog};
 
 fn generate_packages(api: &Api, catalog: &SecuritySchemeCatalog) -> Result<()> {
     let release = ProfileSet::new("sdk")
         .package(ts::package("typescript").with(ts::sdk()));
-    let tree = kaji::generate_with_security_catalog(api, release, Some(catalog))?;
+    let tree = poolster::generate_with_security_catalog(api, release, Some(catalog))?;
     tree.write_to("generated")?;
     Ok(())
 }
 ```
 
-For APIs without named security requirements, `kaji::generate(api, release)`
+For APIs without named security requirements, `poolster::generate(api, release)`
 is sufficient. Do not infer credential behavior from a security scheme's name;
 pass its catalog or load compiler artifacts.
 

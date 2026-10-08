@@ -5,7 +5,7 @@ This page covers repository handoffs, specification relay and scheduled fetching
 For the full SDK PR → release PR → exact-tag publication flow, see
 [SDK automation](sdk-automation.md).
 
-> Use a Kaji launcher containing the commands/options shown here. The current
+> Use a Poolster launcher containing the commands/options shown here. The current
 > source checkout and a previously published launcher/action can differ; verify
 > the version you install in CI before committing its scaffold.
 
@@ -29,13 +29,13 @@ generation and release remain in the destination.
 First generate and verify your packages locally:
 
 ```sh
-kaji generate --config kaji.json
-kaji generate --config kaji.json --check --format json
-kaji sdk list --root generated --json
-kaji sdk init --root generated --config kaji.json --auth app --dry-run
+poolster generate --config poolster.json
+poolster generate --config poolster.json --check --format json
+poolster sdk list --root generated --json
+poolster sdk init --root generated --config poolster.json --auth app --dry-run
 ```
 
-Inspect the planned files, then rerun without `--dry-run` and with a Kaji launcher
+Inspect the planned files, then rerun without `--dry-run` and with a Poolster launcher
 version that actually contains these commands.
 Review and commit the generated
 workflows/actions along with the recipe and author sources.
@@ -52,13 +52,13 @@ file's role.
 
 For generation in an API repository and output in another repository, add
 `--repository OWNER/SDK`. Destination actions/check/release files are staged under
-`.kaji/sdk-repository-setup/`; its contents must be copied and committed in the
+`.poolster/sdk-repository-setup/`; its contents must be copied and committed in the
 SDK repository first. This is a different arrangement from specification relay.
 
 ## Deliver each language to its own repository
 
 ```sh
-kaji sdk init --root generated --config kaji.json \
+poolster sdk init --root generated --config poolster.json \
   --repository-pattern 'acme/api-{lang}' --auth app --base main --dry-run
 ```
 
@@ -72,7 +72,7 @@ Packages sharing a language share a repository; output paths stay intact.
 Commit the recipe, author sources and source workflow in the API repository.
 
 Each destination has staged setup under
-`.kaji/sdk-repository-setup/OWNER/REPO/`: CI/release workflows, check/publish
+`.poolster/sdk-repository-setup/OWNER/REPO/`: CI/release workflows, check/publish
 helpers and Release Please configuration.
 
 1. Copy that directory's **contents** into the matching repository root.
@@ -86,7 +86,7 @@ service or App installation.
 To preview a bootstrap PR instead of copying manually:
 
 ```sh
-kaji sdk install --setup .kaji/sdk-repository-setup/acme/api-typescript \
+poolster sdk install --setup .poolster/sdk-repository-setup/acme/api-typescript \
   --repository acme/api-typescript --dry-run
 ```
 
@@ -117,7 +117,7 @@ PR does not publish a package or automatically approve a new API contract.
 
 ### Prepare the destination first
 
-In `OWNER/SDK`, create and commit a normal Kaji recipe whose input is the chosen
+In `OWNER/SDK`, create and commit a normal Poolster recipe whose input is the chosen
 relay target. For example, if `--target specs/acme.yaml` will be used:
 
 ```json
@@ -144,7 +144,7 @@ SDK repository's release workflow.
 From the API repository root, preview the source workflow:
 
 ```sh
-kaji sdk connect --repository acme/sdk-repo \
+poolster sdk connect --repository acme/sdk-repo \
   --spec api/openapi.yaml --target specs/acme.yaml \
   --auth app --dry-run
 ```
@@ -156,13 +156,13 @@ spec-sync action sources. Commit those files through your normal process.
 The destination target must match `openapi.input` in its recipe; the relay does
 not update that recipe for you.
 
-Local bootstrap writes `.github/workflows/kaji-spec-sync.yml` and
-`.github/actions/kaji-spec-sync/{action.yml,sync.mjs}`; broker mode also includes
+Local bootstrap writes `.github/workflows/poolster-spec-sync.yml` and
+`.github/actions/poolster-spec-sync/{action.yml,sync.mjs}`; broker mode also includes
 its token helper.
 The relay workflow watches source pushes to `--base` (default
 `main`) and allows manual dispatch.
 The same `--base` selects the destination PR
-base; its review branch defaults to `codex/kaji-spec-sync`.
+base; its review branch defaults to `codex/poolster-spec-sync`.
 
 For example, add
 `--base develop` when both repositories use `develop`.
@@ -186,11 +186,11 @@ Internal `#/components/...` references remain supported.
 | `--auth broker --broker-url https://broker.example` | Deploy your broker with an approved source workflow/ref and explicit destination installation mapping. |
 | `--auth token` | Configure `SDK_GITHUB_TOKEN` yourself with the needed destination permissions. |
 | `--actions local` | Review and commit vendored spec-sync/token helper source. This is the default. |
-| `--actions remote --action-ref OWNER/kaji@REF` | Use a published/pinned action implementation containing spec-sync support. |
+| `--actions remote --action-ref OWNER/poolster@REF` | Use a published/pinned action implementation containing spec-sync support. |
 
 Contents: write and Pull requests: write permit routine destination PR updates.
 Installing workflow files remains an owner-controlled bootstrap commit. No
-hosted Kaji App, broker endpoint, repository, installation or secret is created
+hosted Poolster App, broker endpoint, repository, installation or secret is created
 by `connect`. See [App setup](github-app.md) and
 [broker policy](github-app-broker.md) for the two App authentication arrangements.
 
@@ -203,12 +203,12 @@ or distribute a reviewed source build/fork as described in
 
 ## Fetch a remote specification periodically
 
-A scheduled generation workflow is useful when `kaji.json` fetches a remote
+A scheduled generation workflow is useful when `poolster.json` fetches a remote
 OpenAPI source whose changes do not produce repository push events. Preview the
 schedule explicitly:
 
 ```sh
-kaji sdk init --root generated --config kaji.json --auth app \
+poolster sdk init --root generated --config poolster.json --auth app \
   --schedule '17 3 * * *' --bump minor --dry-run
 ```
 
@@ -241,13 +241,13 @@ not a delivery deadline. Current platform behavior is described in
 Local inspection does not contact GitHub:
 
 ```sh
-kaji sdk status --root generated --json
+poolster sdk status --root generated --json
 ```
 
 Read-only remote inspection selects a repository explicitly:
 
 ```sh
-kaji sdk status --remote --repository acme/sdk-repo --json
+poolster sdk status --remote --repository acme/sdk-repo --json
 ```
 
 Remote status uses your authenticated GitHub identity to inspect:

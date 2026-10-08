@@ -1,6 +1,6 @@
 # Upload files and structured multipart parts
 
-Declare `multipart/form-data` on the operation's request body. Kaji generates native
+Declare `multipart/form-data` on the operation's request body. Poolster generates native
 upload APIs for all ten SDK languages; the exact input shape differs. Generate your
 contract and inspect the operation signature and emitted multipart guide before wiring
 the upload.
@@ -8,7 +8,7 @@ the upload.
 | Target | Upload input |
 | --- | --- |
 | TypeScript | Generated operation input and native FormData/file values through the selected Fetch/Axios transport |
-| Go | `KajiMultipartBody` with `AddText`, `AddFile`, `AddJSON` and explicit parts |
+| Go | `PoolsterMultipartBody` with `AddText`, `AddFile`, `AddJSON` and explicit parts |
 | Python | `MultipartBody`, `FilePart`, `JsonPart`, and `RawJsonPart` |
 | Rust | `MultipartBody::new()` with `add_text`, `add_file`, `add_json` and `add_part`; mixed JSON operations retain a multipart companion method |
 | Java | Generated multipart DTOs and file-part wrappers |

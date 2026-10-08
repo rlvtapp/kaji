@@ -9,22 +9,22 @@ repositories and create release tags.
 
 **On this page:** [Publisher](#decide-which-publisher-owns-the-release) · [Trust](#configure-trust-before-the-first-publication) · [Exact tag](#publish-exactly-what-passed-checks) · [Verification](#what-a-standard-publisher-verifies) · [Custom registry](#custom-commands-and-editable-sources) · [Retry](#retry-without-changing-release-identity)
 
-## Kaji's own repository releases
+## Poolster's own repository releases
 
 <details>
-<summary>Maintainer reference: releasing Kaji itself</summary>
+<summary>Maintainer reference: releasing Poolster itself</summary>
 
-Kaji's root release workflow prepares and updates Release Please pull requests
+Poolster's root release workflow prepares and updates Release Please pull requests
 when commits reach `main`. The PR can remain open while development continues.
 It uses the simple strategy and explicit TOML updates because member crates inherit
 `workspace.package.version`. `version.txt` tracks the source version; the release
 manifest tracks the last published version, currently `0.4.0`. Minor features bump
 the minor version before 1.0, so the pending feature release is `0.5.0`.
 
-`KAJI_RELEASE_ENABLED` must be set to `true` in repository variables before this
+`POOLSTER_RELEASE_ENABLED` must be set to `true` in repository variables before this
 workflow can create a GitHub release/tag. Leave it unset while release preparation
-is paused. Tag-triggered publication and manual publication remain deliberate
-release actions. The version-update regression test runs the pinned Release Please
+is paused. Tag-triggered and manual publication also require that variable.
+The version-update regression test runs the pinned Release Please
 updaters against manifests and lockfiles without calling GitHub or publishing.
 
 The lockfile selector addresses Release Please's tagged TOML name values. When
@@ -35,7 +35,7 @@ member to change and every external dependency to remain unchanged.
 
 ## Decide which publisher owns the release
 
-The package's `.kaji/package.json` selects the publisher:
+The package's `.poolster/package.json` selects the publisher:
 
 | Configuration | Path |
 | --- | --- |
@@ -99,7 +99,7 @@ handling, bundled middleware or compatibility with an API. See
 
 ## Configure trust before the first publication
 
-Use the **destination SDK repository**, `.github/workflows/kaji-sdk-release.yml`
+Use the **destination SDK repository**, `.github/workflows/poolster-sdk-release.yml`
 and the `release` environment from the generated workflow when configuring trust.
 If you rename these files or change the environment, update registry trust too.
 GitHub App credentials used to create SDK/release PRs do not grant registry access.
@@ -120,11 +120,11 @@ installation token is not a registry credential.
 
 1. Own the package/scope and open the package's Trusted Publisher settings on npm.
 2. Choose GitHub Actions; enter the owner, repository and workflow **filename**
-   `kaji-sdk-release.yml`, plus `release` when restricting trust to that environment.
+   `poolster-sdk-release.yml`, plus `release` when restricting trust to that environment.
 3. Allow `npm publish` for this helper. A trust configuration permitting only
    staged publication does not authorize its direct publish operation.
 4. Use GitHub-hosted runners and a compatible npm CLI (at least 11.5.1) / Node
-   (at least 22.14.0). The Kaji action selects Node 24; confirm its npm version
+   (at least 22.14.0). The Poolster action selects Node 24; confirm its npm version
    when changing the toolchain.
 
 The registry's current setup and allowed-action controls are documented in
@@ -137,7 +137,7 @@ remain operator tasks; scaffolding does not perform them.
 Open the project's Publishing settings and add a GitHub publisher matching owner,
 repository, workflow filename and environment. For a new project, use PyPI's
 pending-publisher flow. Configure a protected GitHub environment with the same
-name. The Kaji helper uses the official PyPA upload action with OIDC on Linux;
+name. The Poolster helper uses the official PyPA upload action with OIDC on Linux;
 it does not select TestPyPI or an alternate index. Follow
 [PyPI publisher setup](https://docs.pypi.org/trusted-publishers/adding-a-publisher/)
 and [using a publisher](https://docs.pypi.org/trusted-publishers/using-a-publisher/).
@@ -186,7 +186,7 @@ permissions:
   id-token: write
 environment: release
 steps:
-  - uses: ./.github/actions/kaji-publish
+  - uses: ./.github/actions/poolster-publish
     with:
       registry: pypi
       path: generated/python
@@ -250,7 +250,7 @@ For Maven, NuGet or another registry, configure executable/argument vectors:
 Provide that script through an author source overlay. This fragment supplies a
 custom publication entry point; it does not implement upload, authentication,
 manifest updates or artifact verification for your registry. Run it locally with
-`kaji sdk run --root generated --package web --phase publish` **only when you
+`poolster sdk run --root generated --package web --phase publish` **only when you
 intend a live publication**. Build/test phases are separate commands.
 
 Custom publishers must implement:
@@ -266,7 +266,7 @@ does not export secrets automatically. Argument vectors do not expand `$TOKEN`.
 Keep credentials out of source, metadata, arguments and logs.
 
 By default, `sdk init`/`sync` vendor readable helpers under
-`.github/actions/kaji-publish/`. Review and edit `action.yml` and `publish.mjs` as
+`.github/actions/poolster-publish/`. Review and edit `action.yml` and `publish.mjs` as
 normal repository source. Subsequent scaffold refreshes require manual merges
 for edited files. Remote-action mode can point at your pinned fork instead.
 Standard helper command failures omit captured subprocess output to avoid
@@ -275,11 +275,11 @@ when more diagnostics are needed.
 
 ## Retry without changing release identity
 
-Dispatch `kaji-sdk-release.yml` with the exact existing `path` and `tag`. Preview
+Dispatch `poolster-sdk-release.yml` with the exact existing `path` and `tag`. Preview
 its one-package matrix from the destination checkout:
 
 ```sh
-kaji sdk releases --path generated/python --tag python-sdk-v1.0.0
+poolster sdk releases --path generated/python --tag python-sdk-v1.0.0
 ```
 
 Use the tag your release configuration actually created. Correct registry trust
@@ -292,7 +292,7 @@ commands must implement their own safe retry rules.
 
 `node --test packages/sdk-publish/test/*.test.mjs` exercises argument handling,
 digest comparisons, duplicate races, path boundaries, canonical Go tags and failed
-registry requests using mocked registries/publishers. Set `KAJI_TEST_PYTHON` to a
+registry requests using mocked registries/publishers. Set `POOLSTER_TEST_PYTHON` to a
 Python 3.11+ interpreter for the archive fixture when the default Python is older.
 These tests do not configure live registry trust or prove a live upload.
 

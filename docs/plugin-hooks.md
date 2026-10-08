@@ -13,7 +13,7 @@ Choose the layer you want to extend. Follow the linked guide for a working examp
 | `InputContract::{publish, get, take}` | Store, borrow or remove a native capability; duplicate publication fails | [Input graph](input-plugins.md#feed-an-input-into-the-output-graph) |
 | `InputProvider<C>::new(...).using(...).handle()` | Publish one selected input capability into a package graph | [Input bridge](input-plugins.md#feed-an-input-into-the-output-graph) |
 | `Adapter::adapt() -> Result<AdaptedApi>` | Normalize a source directly to the existing HTTP API and security catalog | [Adapter source](../crates/kaji-core/src/adapter/mod.rs) |
-| `kaji::generate_with_adapter` / `kaji::generate_with_input` | Generate HTTP packages from an adapter or published `AdaptedApi` | [HTTP capability](input-plugins.md#supply-a-normalized-http-input-later) |
+| `poolster::generate_with_adapter` / `poolster::generate_with_input` | Generate HTTP packages from an adapter or published `AdaptedApi` | [HTTP capability](input-plugins.md#supply-a-normalized-http-input-later) |
 
 `InputContract::summary` and `diagnostics` support inspection. Native GraphQL,
 event, workflow and RPC data needs consumers for its own contract types.

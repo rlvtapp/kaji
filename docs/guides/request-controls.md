@@ -32,7 +32,7 @@ stops subsequent attempts.
 OAuth clients also apply the same controls to token waiting and the bounded
 authentication replay.
 
-Timeouts must be finite positive milliseconds. `KajiRequestTimeoutError` has `name:
+Timeouts must be finite positive milliseconds. `PoolsterRequestTimeoutError` has `name:
 'TimeoutError'`; caller cancellation preserves the signal's reason. Streaming timeouts
 cover establishing the response.
 
@@ -58,7 +58,7 @@ client.contacts.get(
 Timeouts are finite positive seconds. The client `timeout:` is the default; per-call
 values override it. The logical timeout covers token waiting, middleware, native HTTP
 execution and retry backoff. Native Net::HTTP also receives the selected open/read
-timeout. `KajiTimeoutError` derives from Ruby's `Timeout::Error`.
+timeout. `PoolsterTimeoutError` derives from Ruby's `Timeout::Error`.
 
 The cancellation callback supplements the client callback and is checked before
 execution and during retries/token waits. Active synchronous cancellation remains
@@ -75,7 +75,7 @@ gains leading underscores to keep the API parameter accessible.
 Carry controls in the operation's ordinary context:
 
 ```go
-ctx, cancel, err := sdk.WithRequestOptions(context.Background(), sdk.KajiCallOptions{
+ctx, cancel, err := sdk.WithRequestOptions(context.Background(), sdk.PoolsterCallOptions{
     Headers: http.Header{"X-Trace-ID": []string{"trace_123"}},
     Timeout: 5 * time.Second,
 })
@@ -103,7 +103,7 @@ several operations with the same controls:
 | Python | `client.for_call(headers={'X-Trace-ID': 'trace_123'}, timeout=5)` | Seconds; urllib/httpx transport timeout for each attempt |
 | Rust | `client.for_call(CallOptions { headers, timeout: Some(Duration::from_secs(5)) })` | Native reqwest timeout for each attempt; custom transports must honor the request timeout |
 | Java | `client.forCall(new ClientCallOptions(Map.of("X-Trace-ID", "trace_123"), Duration.ofSeconds(5)))` | JDK HTTP request timeout for each attempt |
-| C# | `client.ForCall(new KajiCallOptions { Headers = headers, Timeout = TimeSpan.FromSeconds(5) })` | Linked cancellation deadline across a buffered call, retries and SSE; a new paginated call starts a new deadline |
+| C# | `client.ForCall(new PoolsterCallOptions { Headers = headers, Timeout = TimeSpan.FromSeconds(5) })` | Linked cancellation deadline across a buffered call, retries and SSE; a new paginated call starts a new deadline |
 
 The original client remains unchanged. In Python/Rust/Java, generated declared header
 arguments can override scoped defaults. C# scoped headers override generated headers.

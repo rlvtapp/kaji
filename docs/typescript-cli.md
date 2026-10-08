@@ -92,20 +92,20 @@ terminal mode prompts for `--data` JSON rather than guessing nested object struc
 
 Each generated package includes factual OpenAPI-derived command references at
 `references/<command-group>.md`. They list operations, parameters, and simple
-request-body fields. Kaji deliberately does not generate `SKILL.md`: real agent
+request-body fields. Poolster deliberately does not generate `SKILL.md`: real agent
 workflow, safety, and product guidance belongs to the API provider.
 
 ### Override command names
 
 Nested, polymorphic, or otherwise complex request bodies retain `--data` and
-`--data-file` as the explicit JSON escape hatch. Kaji automatically groups known
+`--data-file` as the explicit JSON escape hatch. Poolster automatically groups known
 verb-style operation IDs by literal path segments: `sendMessage` on `/messages` becomes
 `messages send`, while `getUser` on `/admin/users/{id}` becomes `admin users get`.
 
 Override either part when necessary with an operation extension:
 
 ```yaml
-x-kaji-cli:
+x-poolster-cli:
   group: messages
   command: deliver
 ```
@@ -134,14 +134,14 @@ saved profiles; `auth use <name>` selects the default for future commands, and
 
 ## Extensions
 
-Every generated CLI includes `src/kaji.extension.ts`, a create-once file Kaji will never
+Every generated CLI includes `src/poolster.extension.ts`, a create-once file Poolster will never
 overwrite. Its `extension` object can provide `authenticate`, `login`, `beforeRequest`,
 and `afterResponse` hooks.
 
-`authenticate` runs before Kaji looks up credentials and receives mutable headers/query
+`authenticate` runs before Poolster looks up credentials and receives mutable headers/query
 values; return `"handled"` after supplying custom SSO, keychain, client-assertion, or
 request-signing credentials. It also receives `defaultAuthenticate()` to delegate to
-Kaji's OAuth and token flow. `login` similarly receives a `defaultLogin` function.
+Poolster's OAuth and token flow. `login` similarly receives a `defaultLogin` function.
 
 The request and response hooks are intended for logging, tracing, custom headers, and
 audit events.
@@ -164,5 +164,5 @@ only accepts loopback callback URLs.
 
 Credentials are written to a user-private configuration file (`0700` directory, `0600`
 file on Unix). For environments requiring hardware-backed or enterprise keychain
-storage, provide a project runtime wrapper before distribution; Kaji does not silently
+storage, provide a project runtime wrapper before distribution; Poolster does not silently
 add a native credential dependency to every generated CLI.

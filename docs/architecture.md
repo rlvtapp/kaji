@@ -1,6 +1,6 @@
 # Architecture
 
-Kaji connects source contracts to generated files through typed plugins.
+Poolster connects source contracts to generated files through typed plugins.
 
 ```text
 Source -> input plugin -> typed contract -> output plugins -> owned files

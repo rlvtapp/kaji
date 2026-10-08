@@ -3,12 +3,12 @@
 [CLI workflow](cli/README.md) · [Everyday commands](cli/commands.md) · [Contract checks](cli/checks.md)
 
 > Prefer the task-focused [CLI documentation](cli/README.md) for a first
-> project: [quickstart](cli/quickstart.md), [`kaji.json` recipes](cli/config.md),
+> project: [quickstart](cli/quickstart.md), [`poolster.json` recipes](cli/config.md),
 > [commands](cli/commands.md), and [common recipes](cli/recipes.md). This page
 > remains the exhaustive reference and source-build guide.
 
-The CLI runs Kaji's Rust plugins. The `kajicli` npm launcher selects the
-platform package containing `kaji` and the Go `kaji-openapi` compiler.
+The CLI runs Poolster's Rust plugins. The `poolster` npm launcher selects the
+platform package containing `poolster` and the Go `poolster-openapi` compiler.
 
 Installed users do not need Rust or Go. Source builds do.
 
@@ -17,34 +17,34 @@ Installed users do not need Rust or Go. Source builds do.
 Run from the repository root (Rust and Go are required only for this source build):
 
 ```sh
-cargo build -p kaji-cli
+cargo build -p poolster-cli
 cd openapi
-go build -o ../target/debug/kaji-openapi .
+go build -o ../target/debug/poolster-openapi .
 cd ..
-./target/debug/kaji generate ./openapi.yaml --output ./generated --language go,typescript
+./target/debug/poolster generate ./openapi.yaml --output ./generated --language go,typescript
 ```
 
 On Windows, give the Go helper the `.exe` suffix. The CLI locates the helper next
 to its own executable. Override that location with `--openapi-compiler <file>` or
-`KAJI_OPENAPI_BIN`; an explicit flag takes precedence over the environment.
+`POOLSTER_OPENAPI_BIN`; an explicit flag takes precedence over the environment.
 
 ## Commands and options
 
 ```sh
-npx kajicli init [--config <file>] [--input <openapi-file>] [--output <directory>]
-npx kajicli generate                         # reads ./kaji.json
-npx kajicli generate --config <file>
-npx kajicli generate <openapi-file> --output <directory> --language <target>...
-npx kajicli generate --artifacts <directory> --output <directory> --language <target>...
-npx kajicli mock serve <openapi-file> [--port <port>]
-npx kajicli check <openapi-file> [--format human|json]
-npx kajicli show <openapi-file> [--include-path <pattern>] [--exclude-path <pattern>]
-npx kajicli update [--output <directory>] [--force]
-npx kajicli auth <login|logout|status> ...
-npx kajicli eject --language ruby --out ./my-kaji
-npx kajicli languages
-npx kajicli --version
-npx kajicli --help
+npx poolster init [--config <file>] [--input <openapi-file>] [--output <directory>]
+npx poolster generate                         # reads ./poolster.json
+npx poolster generate --config <file>
+npx poolster generate <openapi-file> --output <directory> --language <target>...
+npx poolster generate --artifacts <directory> --output <directory> --language <target>...
+npx poolster mock serve <openapi-file> [--port <port>]
+npx poolster check <openapi-file> [--format human|json]
+npx poolster show <openapi-file> [--include-path <pattern>] [--exclude-path <pattern>]
+npx poolster update [--output <directory>] [--force]
+npx poolster auth <login|logout|status> ...
+npx poolster eject --language ruby --out ./my-poolster
+npx poolster languages
+npx poolster --version
+npx poolster --help
 ```
 
 `eject` exports a rebuildable generator workspace into a new directory. Edit the
@@ -52,7 +52,7 @@ renderers or add plugins, then rebuild your CLI; see [source customization](sour
 
 | Option | Meaning | Default |
 | --- | --- | --- |
-| `--config` | JSON recipe to read; cannot be mixed with direct flags | `./kaji.json` when no direct flags are supplied |
+| `--config` | JSON recipe to read; cannot be mixed with direct flags | `./poolster.json` when no direct flags are supplied |
 | `--color` | Terminal color mode: `auto`, `always`, or `never` | `auto` (interactive terminals only; respects `NO_COLOR`) |
 | `--output`, `-o` | Output root; target packages are placed beneath it | Required in direct mode |
 | `--language`, `-l` | Comma-separated or repeated targets; `all` selects every SDK | Required |
@@ -63,7 +63,7 @@ renderers or add plugins, then rebuild your CLI; see [source customization](sour
 | `--typescript-surface` | `client` (full SDK) or `raw` (operation functions) | `client` |
 | `--typescript-client-name` | Explicit TypeScript client class name | Generator default |
 | `--jobs` | Positive Go emission worker count; currently affects Go only | Bounded automatic selection |
-| `--artifacts` | Already compiled Kaji OpenAPI artifact directory, instead of source | Unset |
+| `--artifacts` | Already compiled Poolster OpenAPI artifact directory, instead of source | Unset |
 | `--openapi-compiler` | Explicit Go compiler executable for source input | Bundled sibling executable |
 | `--include-path` | Repeatable OpenAPI path glob to include | Every path |
 | `--exclude-path` | Repeatable OpenAPI path glob to omit after inclusion | None |
@@ -72,7 +72,7 @@ Targets: `rust`, `rust-cli`, `typescript`, `typescript-cli`, `go`, `python`, `ph
 `java`, `csharp`, `elixir`, `ruby`, `swift`. Each becomes a matching subdirectory, including when
 only one target is selected. Advanced/custom plugin composition remains available
 through the [Rust API](typed-plugins.md). The CLI does not load JavaScript
-plugins; JSON names only select plugins built into the installed Kaji binary.
+plugins; JSON names only select plugins built into the installed Poolster binary.
 
 `csharp` emits a .NET 8 C# SDK. `dotnet` is a backwards-compatible selector
 for existing commands and recipes.
@@ -80,18 +80,18 @@ for existing commands and recipes.
 Path globs must start with `/`; `*` matches any sequence (including `/`) and
 `?` one character. Includes are ORed and excludes take precedence. The same
 selection is available as `openapi.paths.include` / `openapi.paths.exclude` in
-`kaji.json`. A selection with no remaining operations fails before output is
+`poolster.json`. A selection with no remaining operations fails before output is
 written.
 
-Every successful generation emits `.kaji/generation.lock.json` below the
-output root. Commit it with generated files: it records Kaji's version,
+Every successful generation emits `.poolster/generation.lock.json` below the
+output root. Commit it with generated files: it records Poolster's version,
 secret-free input/config/artifact hashes, selected paths, targets, and
 operations so a regeneration is reviewable and repeatable.
 
 ### JSON recipes and built-in plugins
 
-`npx kajicli init` writes a non-destructive starter `kaji.json`; it never replaces an
-existing file. Use `npx kajicli generate` to load that recipe. Paths inside the recipe
+`npx poolster init` writes a non-destructive starter `poolster.json`; it never replaces an
+existing file. Use `npx poolster generate` to load that recipe. Paths inside the recipe
 are relative to the config file, not the current terminal directory.
 
 ```json
@@ -118,12 +118,12 @@ are relative to the config file, not the current terminal directory.
 ```
 
 `openapi` must provide exactly one of `input` (a YAML/JSON file) or `artifacts`
-(a previous Kaji compiler artifact directory). `output.path` is required. Each
+(a previous Poolster compiler artifact directory). `output.path` is required. Each
 package has a safe relative `path`, a `language`, and a plugin array. `name` and
 `client_style` are optional package overrides.
 
 The full field-by-field schema, mode behavior, remote URL handling, and
-TypeScript multi-client examples are in the [`kaji.json` reference](config-file.md).
+TypeScript multi-client examples are in the [`poolster.json` reference](config-file.md).
 
 | Package `language` | Built-in plugin names | Relevant plugin options |
 | --- | --- | --- |
@@ -139,7 +139,7 @@ For direct standalone artifact renderers, `clients_import` defaults to
 TypeScript operation functions from elsewhere. Read the [auxiliary generator
 guide](auxiliary-generators.md) for framework dependencies and limits.
 
-When Kaji also owns that TypeScript package through its `sdk` plugin, selecting
+When Poolster also owns that TypeScript package through its `sdk` plugin, selecting
 Zod, TanStack, SWR, Faker, or MSW adds the matching runtime dependency to its
 `package.json`; selecting Cypress adds it as a development dependency. Cypress
 project setup and framework peer dependencies remain the application's responsibility. Artifact-only TypeScript output intentionally
@@ -157,7 +157,7 @@ are downloaded with a 120-second timeout and a 128 MiB size limit before the
 bundled compiler runs. For example:
 
 ```sh
-npx kajicli generate https://aka.ms/graph/v1.0/openapi.yaml \
+npx poolster generate https://aka.ms/graph/v1.0/openapi.yaml \
   --output graph-sdk --language go --name "Microsoft Graph" --jobs 4
 ```
 
@@ -182,7 +182,7 @@ Validate operation IDs, success responses and path bindings before generation.
 [Check rules, severity and baselines →](cli/checks.md)
 
 Use [safe regeneration](safe-regeneration.md) when applying output changes.
-Kaji protects edited owned files and removes unchanged stale owned files.
+Poolster protects edited owned files and removes unchanged stale owned files.
 Writing can still be interrupted by a filesystem error.
 
 ## npm layout and release preparation

@@ -5,11 +5,11 @@
 ## Contract checks
 
 ```sh
-kaji check openapi.yaml
-kaji check openapi.yaml --format json
+poolster check openapi.yaml
+poolster check openapi.yaml --format json
 ```
 
-Kaji compiles the contract and checks the details that shape generated clients.
+Poolster compiles the contract and checks the details that shape generated clients.
 Source builds can use `--openapi-compiler <file>`.
 
 | Finding | Why it matters |
@@ -29,14 +29,14 @@ Checks default to error severity and fail on errors.
 
 ```sh
 # Keep a finding visible while you clean up the contract.
-kaji check openapi.yaml --severity missing-operation-id=warning --fail-on error
+poolster check openapi.yaml --severity missing-operation-id=warning --fail-on error
 
 # Record known findings, then fail on new ones.
-kaji check openapi.yaml --write-baseline .kaji/check-baseline.json --fail-on none
-kaji check openapi.yaml --baseline .kaji/check-baseline.json
+poolster check openapi.yaml --write-baseline .poolster/check-baseline.json --fail-on none
+poolster check openapi.yaml --baseline .poolster/check-baseline.json
 
 # Suppress a rule for a temporary migration.
-kaji check openapi.yaml --ignore missing-operation-id
+poolster check openapi.yaml --ignore missing-operation-id
 ```
 
 | Option | Effect |

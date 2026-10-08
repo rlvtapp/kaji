@@ -47,14 +47,16 @@ barrels. A TypeScript workspace tracks `Symbol`s, dependencies and exports;
 other maintained languages may use a unit workspace or language-specific state.
 Community languages can choose their own workspace without changing core.
 
-C# is the canonical `kaji-plugin-csharp` crate and target. `dotnet` remains a
+C# is the canonical `poolster-plugin-csharp` crate and target. `dotnet` remains a
 compatibility facade over that implementation, preserving existing Rust profiles
 and the legacy CLI alias.
 
 ## Build a package recipe first
 
 ```rust
-use kaji::{prelude::*, rust, ts};
+use poolster::prelude::*;
+use poolster_plugin_rust as rust;
+use poolster_plugin_typescript as ts;
 
 let release = ProfileSet::new("sdk")
     .common(Common::default().client_style(SdkClientStyle::Namespaced))
@@ -66,7 +68,7 @@ let release = ProfileSet::new("sdk")
         .with(ts::sdk().axios().raw()))
     .package(rust::package("rust").with(rust::sdk()));
 
-// kaji::generate(&api, release)?.write_to(output_directory)?;
+// poolster::generate(&api, release)?.write_to(output_directory)?;
 ```
 
 The prelude imports package extension traits. Package settings own identity and
@@ -112,7 +114,8 @@ diagnostics only.
 The maintained providers reuse the complete SDK's renderers:
 
 ```rust
-use kaji::{prelude::*, ts};
+use poolster::prelude::*;
+use poolster_plugin_typescript as ts;
 use ts::composition;
 
 let models = composition::models().output("domain/types");
@@ -209,7 +212,7 @@ through a generated public method and its real consumer compiler.
 ## Start with a compiled minimal plugin
 
 The standalone [custom plugin example](../examples/custom-plugin/README.md)
-depends only on `kaji-core`, declares a documentation language, publishes a typed
+depends only on `poolster-core`, declares a documentation language, publishes a typed
 `Names` contract from two providers and binds a consumer to the replacement’s
 handle. Its test verifies the actual emitted value, not just registration:
 
@@ -224,9 +227,9 @@ Use this example before introducing a model or transport ABI.
 Any native package can include the generic consumer:
 
 ```rust
-let package = kaji::ts::package("typescript")
-    .with(kaji::ts::sdk())
-    .with(kaji_core::api_reference().output("docs/API_REFERENCE.md"));
+let package = poolster_plugin_typescript::package("typescript")
+    .with(poolster_plugin_typescript::sdk())
+    .with(poolster_core::api_reference().output("docs/API_REFERENCE.md"));
 ```
 
 `api_reference::<L>()` defaults to `API_REFERENCE.md` and publishes the typed
@@ -255,8 +258,8 @@ of generator authoring; the generated SDK itself does not depend on Rust:
 
 ```rust
 use anyhow::Result;
-use kaji::prelude::{GeneratedFile, Meta, Plugin, PluginContext, Requirement};
-use kaji::ts::{TypeScript, composition::Models};
+use poolster::prelude::{GeneratedFile, Meta, Plugin, PluginContext, Requirement};
+use poolster_plugin_typescript::{TypeScript, composition::Models};
 
 struct ModelInventory { meta: Meta }
 impl Plugin<TypeScript> for ModelInventory {
@@ -274,8 +277,8 @@ impl Plugin<TypeScript> for ModelInventory {
 ```
 
 Construct it with `ModelInventory { meta: Meta::new() }` and add `.with(...)` to
-a package containing the SDK or model provider. The `kaji` prelude re-exports the core plugin types; a generator can also depend
-on `kaji_core` directly.
+a package containing the SDK or model provider. The `poolster` prelude re-exports the core plugin types; a generator can also depend
+on `poolster_core` directly.
 Check imports against the pinned crate version.
 
 ## Generation phases and file ownership

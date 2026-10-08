@@ -1,4 +1,4 @@
-# Embed Kaji in Rust
+# Embed Poolster in Rust
 
 Use the library to compose generators in your own tool or link custom Rust
 plugins. Generation returns a virtual file tree; your application checks or
@@ -25,7 +25,7 @@ For recipes and releases through the bundled CLI, start with the
 ## Requirements
 
 Use a workspace-compatible Rust toolchain and local Cargo path dependencies from
-a Kaji checkout. The API is pre-1.0; pin compatible revisions and review
+a Poolster checkout. The API is pre-1.0; pin compatible revisions and review
 [release notes](../releases/0.4.0.md) when updating.
 
 The OpenAPI artifact compiler requires Go. Native input providers have their own
@@ -46,7 +46,7 @@ bindings and execution order; each language owns its syntax and workspace.
 See [architecture](../architecture.md) for layer ownership.
 
 A plugin is compiled into your application. Naming a community crate in
-`kaji.json` does not load it dynamically.
+`poolster.json` does not load it dynamically.
 
 <a id="sdk-authors-compose-customize-and-verify"></a>
 <a id="choose-checks-that-prove-the-intended-behavior"></a>

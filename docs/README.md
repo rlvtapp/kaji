@@ -1,9 +1,9 @@
-# Kaji docs
+# Poolster docs
 
 **Read a contract. Compose plugins. Ship something useful.**
 
 ```text
-Input plugins → Kaji → Output plugins → Your packages
+Input plugins → Poolster → Output plugins → Your packages
 ```
 
 <a id="sdk-authors-from-a-contract-to-a-released-package"></a>
@@ -16,7 +16,7 @@ Input plugins → Kaji → Output plugins → Your packages
 | Configure a repeatable build | [Recipes](cli/config.md) |
 | Use an SDK someone gave you | [Generated SDKs](generated-sdks.md) and its package README |
 | Add a format or generator | [Plugin development](library/README.md) |
-| Embed Kaji in your own tool | [Rust quickstart](library/quickstart.md) |
+| Embed Poolster in your own tool | [Rust quickstart](library/quickstart.md) |
 | Use JavaScript or TypeScript plugins | [Node API](../packages/cli/sdk/README.md) |
 | Move an existing SDK project | [Migration](migration.md) |
 
@@ -33,7 +33,7 @@ Read and validate source documents, then publish typed data.
 Outputs must support the published contract. Native parsing does not make every
 SDK generator compatible with every format.
 
-### Kaji
+### Poolster
 
 Compose packages, resolve dependencies and manage generated files.
 
@@ -76,7 +76,7 @@ Plugins are Rust crates linked into a generator application. The shipped CLI
 exposes its compiled-in plugins. [Full authoring reference →](typed-plugins.md)
 
 In Node.js, install the input or output packages you want and select their
-exports in `kaji.config.mjs`. You can also write JavaScript input and output
+exports in `poolster.config.mjs`. You can also write JavaScript input and output
 plugins. [Node authoring guide →](../packages/cli/sdk/README.md)
 
 ## Generate, review, release
@@ -114,13 +114,13 @@ Use these guides when you need a specific behavior:
 
 <a id="find-a-focused-guide"></a>
 
-## Ask AI about Kaji
+## Ask AI about Poolster
 
 Use the [AI context and copyable prompts](ai.md), or start from the
-[README’s quick prompt](../README.md#ask-ai-about-kaji).
-Give your assistant your goal, Kaji version and target language.
+[README’s quick prompt](../README.md#ask-ai-about-poolster).
+Give your assistant your goal, Poolster version and target language.
 
-[Kaji tools through MCP →](mcp-server.md)
+[Poolster tools through MCP →](mcp-server.md)
 
 ## Reference shelf
 
@@ -135,7 +135,7 @@ For source builds and forks, see [source customization](source-customization.md)
 <summary>Benchmarks, background and plans</summary>
 
 - [Compatibility results](guru-compatibility.md) and [shared fixtures](shared-sdk-fixtures.md)
-- [Why Kaji](why-kaji.md) and [comparison](comparison.md)
+- [Why Poolster](why-poolster.md) and [comparison](comparison.md)
 - [Roadmap](sdk-roadmap.md) and [generator backlog](generator-backlog.md)
 - [Postman plan](postman-generation-plan.md) and [Terraform plan](terraform-provider-plan.md)
 - [0.4.0](releases/0.4.0.md) and [0.3.0](releases/0.3.0.md) release notes

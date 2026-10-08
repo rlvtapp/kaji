@@ -1,42 +1,42 @@
-# `kaji.json` reference
+# `poolster.json` reference
 
 [Recipe introduction](cli/config.md) · [Copyable recipes](cli/recipes.md) · [CLI reference](cli.md)
 
-> New to configuration? Start with the shorter [`kaji.json` recipe guide](cli/config.md)
+> New to configuration? Start with the shorter [`poolster.json` recipe guide](cli/config.md)
 > and [copyable CLI recipes](cli/recipes.md). This page is the complete field
 > reference.
 
-`kaji.json` is Kaji's recommended, reproducible generation recipe. It records
+`poolster.json` is Poolster's recommended, reproducible generation recipe. It records
 the OpenAPI input, output root, SDK packages, client choices, helper artifacts,
 and mock/documentation output in source control.
 
 ## Editor autocomplete
 
-Kaji's [JSON Schema](https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/v1/kaji.schema.json)
+Poolster's [JSON Schema](https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/v1/poolster.schema.json)
 gives VS Code, JetBrains IDEs, and other JSON Schema-aware editors completion,
-descriptions, enum choices, and inline validation. `kaji init` adds it for you.
+descriptions, enum choices, and inline validation. `poolster init` adds it for you.
 For an existing file, add this as the first property:
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/v1/kaji.schema.json"
+  "$schema": "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/v1/poolster.schema.json"
 }
 ```
 
-Run `npx kajicli init` to create a safe starter file, then run `npx kajicli generate`. Kaji
-never overwrites an existing config file. Use `npx kajicli generate --config path.json`
-when the recipe is not named `kaji.json` or is not in the current directory.
+Run `npx poolster init` to create a safe starter file, then run `npx poolster generate`. Poolster
+never overwrites an existing config file. Use `npx poolster generate --config path.json`
+when the recipe is not named `poolster.json` or is not in the current directory.
 
 ## Config mode versus direct mode
 
-Kaji has two intentionally separate ways to generate:
+Poolster has two intentionally separate ways to generate:
 
 | Mode | Command | Use it when |
 | --- | --- | --- |
-| Config-first | `npx kajicli generate` or `npx kajicli generate --config kaji.json` | The project has multiple packages, helper artifacts, a mock server, or a generation recipe worth reviewing and committing. |
-| Direct | `npx kajicli generate openapi.yaml --output generated --language go` | You need one quick package, an experiment, or a compact CI command. |
+| Config-first | `npx poolster generate` or `npx poolster generate --config poolster.json` | The project has multiple packages, helper artifacts, a mock server, or a generation recipe worth reviewing and committing. |
+| Direct | `npx poolster generate openapi.yaml --output generated --language go` | You need one quick package, an experiment, or a compact CI command. |
 
-They cannot be combined. For example, `npx kajicli generate --config kaji.json
+They cannot be combined. For example, `npx poolster generate --config poolster.json
 --language go` fails rather than silently overriding part of the recipe. This
 keeps generated releases deterministic and easy to review.
 
@@ -133,17 +133,17 @@ Set exactly one source field:
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `input` | One of `input`/`artifacts` | A local Swagger 2.0 or OpenAPI 3.0/3.1 YAML/JSON file, or an `https://`/`http://` URL. Remote documents are downloaded into Kaji's private compiler workspace, then handled exactly like local input. |
-| `artifacts` | One of `input`/`artifacts` | Existing Kaji compiler artifact directory for a faster repeat generation. |
+| `input` | One of `input`/`artifacts` | A local Swagger 2.0 or OpenAPI 3.0/3.1 YAML/JSON file, or an `https://`/`http://` URL. Remote documents are downloaded into Poolster's private compiler workspace, then handled exactly like local input. |
+| `artifacts` | One of `input`/`artifacts` | Existing Poolster compiler artifact directory for a faster repeat generation. |
 | `name` | No | API display name; defaults to `API`. |
 | `version` | No | Generated package version; defaults to `0.1.0`. |
-| `compiler` | No | Local path to a replacement `kaji-openapi` executable. Only applies with `input`. |
+| `compiler` | No | Local path to a replacement `poolster-openapi` executable. Only applies with `input`. |
 | `paths.include` | No | OpenAPI path glob patterns to include. Empty includes every path. `*` crosses `/`; includes are ORed. |
 | `paths.exclude` | No | OpenAPI path glob patterns to omit after inclusion. Exclusions always win. |
 
 Path selectors apply once to the normalized contract, before every SDK, API
 CLI, mock, and helper artifact is rendered. Each pattern must begin with `/`.
-Kaji stops when they would produce zero operations—this catches a renamed
+Poolster stops when they would produce zero operations—this catches a renamed
 endpoint or a typo before it becomes an empty release.
 
 ```json
@@ -157,14 +157,14 @@ endpoint or a typo before it becomes an empty release.
 
 ## Generation metadata and review
 
-Every generation writes `.kaji/generation.lock.json` below the output root.
-Commit it alongside generated code. It has no credentials: it records Kaji's
+Every generation writes `.poolster/generation.lock.json` below the output root.
+Commit it alongside generated code. It has no credentials: it records Poolster's
 version, source locator, hashes of the input/config/compiler artifacts, the
 path selection, target package labels, and selected operation inventory.
 
 That makes a generated change explainable in review and makes CI drift checks
 reproducible. It is generated metadata, not a hand-edited configuration file:
-run `kaji generate` to refresh it. A remote input's URL is recorded, but its
+run `poolster generate` to refresh it. A remote input's URL is recorded, but its
 authorization headers/tokens are never written to the lock.
 
 ### Remote URL object, headers, and authentication
@@ -179,7 +179,7 @@ For a private document, make `input` an object. It accepts `url`, optional
 `headers`, and one optional `auth` object. Header values and auth values can be
 literal strings, `{ "env": "VARIABLE_NAME" }`, or
 `{ "profile": "PROFILE_NAME" }`, which resolves only while
-Kaji runs. Prefer environment values and never commit API tokens/passwords.
+Poolster runs. Prefer environment values and never commit API tokens/passwords.
 
 ```json
 {
@@ -218,7 +218,7 @@ only its variable name:
 
 ```sh
 export GITHUB_TOKEN=…
-kaji auth login github --token-env GITHUB_TOKEN
+poolster auth login github --token-env GITHUB_TOKEN
 ```
 
 Then use `{ "profile": "github" }` wherever a secret value is accepted:
@@ -227,7 +227,7 @@ Then use `{ "profile": "github" }` wherever a secret value is accepted:
 { "auth": { "type": "bearer", "token": { "profile": "github" } } }
 ```
 
-`kaji auth status` never exposes token values; `kaji auth logout github`
+`poolster auth status` never exposes token values; `poolster auth logout github`
 removes the mapping. Set `KAJI_CONFIG_HOME` to relocate this local profile
 store, for example in a sandboxed agent workspace.
 
@@ -235,7 +235,7 @@ Use `headers` for API-key schemes or nonstandard authentication, for example
 `"X-API-Key": { "env": "PARTNER_OPENAPI_KEY" }`.
 Header names and values are
 validated by the HTTP client.
-Kaji applies custom headers first, then Basic or
+Poolster applies custom headers first, then Basic or
 Bearer auth, so the `auth` object deliberately wins if both try to set
 `Authorization`.
 
@@ -268,8 +268,8 @@ Rust/Go library APIs also expose [independent providers](native-sdk-providers.md
 their CLI recipes still use the complete SDK.
 
 `symfony` requires one `sdk` plugin. It produces a Symfony bundle that wraps the
-portable PHP SDK; set `sdk_package` when its Composer name differs from Kaji's
-default `kaji/<api>-sdk`.
+portable PHP SDK; set `sdk_package` when its Composer name differs from Poolster's
+default `poolster/<api>-sdk`.
 
 ### TypeScript
 
@@ -336,7 +336,7 @@ using it for integration tests.
 
 SDK packages can also declare `middleware` entries with `source`, `path`, and
 `symbol`; Python async output additionally needs `async_symbol`.
-Kaji copies each
+Poolster copies each
 native source module and enables it in the generated HTTP runtime by default.
 SDK customers need no registration.
 Supported source layouts and factory ABIs
@@ -369,7 +369,7 @@ plain in the default `auto` mode.
 
 Argument/configuration errors exit with status `2`; compiler, generation, and
 filesystem errors exit with status `1`. Generated files are overwritten, while
-explicit custom starter files and unrelated output files remain. Kaji does not
+explicit custom starter files and unrelated output files remain. Poolster does not
 prune stale generated files, so use a fresh output directory after removing or
 renaming packages, schemas, or operations.
 
@@ -380,7 +380,7 @@ its generated source. The reference lists normalized operations, parameter
 locations and types, response media/status mappings, and component schemas.
 It is an optional language-neutral plugin; it does not replace generated
 language symbols or include authentication secrets and specification examples.
-The library equivalent is `kaji::api_reference::<Language>()`, with an optional
+The library equivalent is `poolster::api_reference::<Language>()`, with an optional
 `.output("relative/path.md")`.
 
 Python packages accept the optional `operation-tests` consumer. Terraform's

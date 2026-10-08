@@ -1,31 +1,31 @@
-# Move an existing SDK project to Kaji
+# Move an existing SDK project to Poolster
 
 [Quickstart](cli/quickstart.md) · [Configure packages](cli/config.md) · [Feature catalog](features.md)
 
 Use the configuration and OpenAPI files you already maintain for Stainless, Fern
-or Speakeasy. You do not need to start with a blank Kaji recipe. Kaji imports
+or Speakeasy. You do not need to start with a blank Poolster recipe. Poolster imports
 supported settings and reports the rest for review. Generated SDK interfaces and
-runtime behavior follow Kaji's native generators; this is not a promise of
+runtime behavior follow Poolster's native generators; this is not a promise of
 source-compatible replacement for an existing SDK.
 
 ## Try generation from your existing project
 
-Build the current Kaji sources as described in [source customization](source-customization.md).
+Build the current Poolster sources as described in [source customization](source-customization.md).
 From the existing project directory:
 
 ```sh
-kaji generate --config stainless.yml
-kaji generate --config fern/generators.yml
-kaji generate --config .speakeasy/workflow.yaml
+poolster generate --config stainless.yml
+poolster generate --config fern/generators.yml
+poolster generate --config .speakeasy/workflow.yaml
 ```
 
-Each command creates SDKs under `kaji-generated` in the project root.
+Each command creates SDKs under `poolster-generated` in the project root.
 It reads
 and bundles the source contract into temporary storage, prints settings that
 need review, and preserves your existing configuration and SDK output.
 It does
 not execute vendor hooks or publish packages.
-With no `kaji.json`, `kaji generate`
+With no `poolster.json`, `poolster generate`
 can detect a single vendor configuration automatically.
 
 If several tools are
@@ -36,15 +36,15 @@ precedence over its companion `gen.yaml` during detection.
 ## Save an editable migration
 
 ```sh
-kaji migrate . --output ./kaji-project
+poolster migrate . --output ./poolster-project
 # Select the input explicitly if the vendor configuration does not identify it:
-kaji migrate stainless.yml --input ./specs/api.yaml --output ./kaji-project
-kaji generate --config ./kaji-project/kaji.json
+poolster migrate stainless.yml --input ./specs/api.yaml --output ./poolster-project
+poolster generate --config ./poolster-project/poolster.json
 ```
 
 The output must be a new directory. Migration writes:
 
-- `kaji.json`: native language packages and supported package names.
+- `poolster.json`: native language packages and supported package names.
 - `openapi.json`: the contract with bundled references and translated annotations.
 - `migration-report.json`: converted settings and items requiring manual review.
 
@@ -65,7 +65,7 @@ Use `--strict` to reject migrations with any manual-review items before creating
 the output directory. The default produces a reviewable partial conversion.
 Remote inputs, multiple merged specs, source graphs and overlays must first be
 exported to one resolved OpenAPI file and supplied with `--input`. Fern Definition
-files and custom vendor generators need an OpenAPI export or a Kaji plugin.
+files and custom vendor generators need an OpenAPI export or a Poolster plugin.
 
 ## What is imported
 
@@ -77,12 +77,12 @@ files and custom vendor generators need an OpenAPI export or a Kaji plugin.
 
 Supported SDK languages are TypeScript, Python, Go, Rust, Ruby, PHP, Java, C#,
 Swift and Elixir. Unsupported target types are listed for review. Imported
-packages include the native SDK plugin; add other Kaji plugins or bundled runtime
+packages include the native SDK plugin; add other Poolster plugins or bundled runtime
 middleware through [configuration](configuration.md).
 
-Kaji also recognizes these operation annotations during ordinary generation from
+Poolster also recognizes these operation annotations during ordinary generation from
 an OpenAPI file. You can keep supported vendor annotations while moving your
-workflow incrementally. Explicit `x-kaji-pagination` and `x-kaji-idempotency`
+workflow incrementally. Explicit `x-poolster-pagination` and `x-poolster-idempotency`
 settings take precedence over their translated equivalents. Wire parameter names
 and paths remain unchanged. Conflicting names and unsupported behavior are
 reported; duplicate SDK operation names fail generation.

@@ -12,7 +12,7 @@ sign a native request, recover a transport failure, rewrite a response or return
 data. Use lifecycle hooks to observe calls. Use a custom driver when you need to replace
 the HTTP implementation itself.
 
-For SDK authors, supply the middleware source during generation. Kaji bundles it as a
+For SDK authors, supply the middleware source during generation. Poolster bundles it as a
 separate readable SDK module and registers it by default. Customers instantiate the
 client normally; they do not import a policy or populate a middleware array to activate
 the behavior you distribute.
@@ -31,7 +31,7 @@ This example uses the flat `Notes` client generated in [Use a generated
 SDK](../generated-sdks.md):
 
 ```ts
-import { Notes, type ClientMiddleware } from '@kaji/notes-fetch'
+import { Notes, type ClientMiddleware } from '@poolster/notes-fetch'
 
 const tenantHeader: ClientMiddleware = async (request, next) => {
   const headers = new Headers(request.headers as HeadersInit | undefined)
@@ -184,8 +184,8 @@ import (
     sdk "notes"
 )
 
-func tenantHeader(next sdk.KajiHTTPClient) sdk.KajiHTTPClient {
-    return sdk.KajiHTTPClientFunc(func(request *http.Request) (*http.Response, error) {
+func tenantHeader(next sdk.PoolsterHTTPClient) sdk.PoolsterHTTPClient {
+    return sdk.PoolsterHTTPClientFunc(func(request *http.Request) (*http.Response, error) {
         rewritten := request.Clone(request.Context())
         rewritten.Header.Set("X-Tenant", "acme")
         return next.Do(rewritten)
@@ -195,12 +195,12 @@ func tenantHeader(next sdk.KajiHTTPClient) sdk.KajiHTTPClient {
 // In your application initialization:
 client, err := sdk.NewClient(sdk.ClientConfig{
     BaseURL: "http://localhost:4010",
-    Middleware: []sdk.KajiMiddleware{tenantHeader},
+    Middleware: []sdk.PoolsterMiddleware{tenantHeader},
 })
 ```
 
-`KajiMiddleware` wraps `KajiHTTPClient`, whose native ABI is `Do(*http.Request)
-(*http.Response, error)`. `KajiHTTPClientFunc` adapts a function to that interface.
+`PoolsterMiddleware` wraps `PoolsterHTTPClient`, whose native ABI is `Do(*http.Request)
+(*http.Response, error)`. `PoolsterHTTPClientFunc` adapts a function to that interface.
 Wrappers run for each attempt and may rewrite requests/responses, recover errors or
 short circuit. Keep the request context: it carries cancellation/deadlines.
 
@@ -260,13 +260,13 @@ defaults:
 | TypeScript Fetch / Axios | `ClientConfig.middleware: ClientMiddleware[]`; `fetch` or Axios `client` replaces the driver | Operation request data and continuation; response envelope or native stream response |
 | Python sync | `middleware=(...)` | urllib `Request`, synchronous continuation; urllib response/exception |
 | Python async | `async_middleware=(...)`; `http_client` replaces the driver | httpx request, awaitable continuation; httpx response/exception |
-| Go | `ClientConfig.Middleware []KajiMiddleware`; `HTTPClient KajiHTTPClient` | Native `*http.Request`, response and error |
+| Go | `ClientConfig.Middleware []PoolsterMiddleware`; `HTTPClient PoolsterHTTPClient` | Native `*http.Request`, response and error |
 | Rust | `Middleware::handle`; compose `MiddlewareTransport::new(policy, inner)`; client `with_transport(Arc<dyn Transport>)` | Owned reqwest request, `TransportFuture`, reqwest response/error |
 | PHP | Inject `Psr\Http\Client\ClientInterface` decorator into generated client | PSR-7 messages and PSR-18 exceptions |
 | Java | Supply `java.net.http.HttpClient` in `ClientConfig`; decorate that client | Native request, body handler, response, async futures/interruption |
 | C# | Supply `HttpClient` built with a `DelegatingHandler` chain | Native request/response and CancellationToken |
 | Ruby | `middleware: [callable]`; `transport: callable` replaces execution | Net::HTTP request and continuation; response exposing `code`/`body` |
-| Swift | `KajiMiddlewareTransport(inner:middleware:)`; client `transport:` | URLRequest and async continuation returning `(Data, URLResponse)` |
+| Swift | `PoolsterMiddlewareTransport(inner:middleware:)`; client `transport:` | URLRequest and async continuation returning `(Data, URLResponse)` |
 | Elixir | `middleware: [fn request, next -> ... end]`; `transport:` replaces buffered execution | Finch.Request and `{:ok, Finch.Response}` / `{:error, reason}` |
 
 PHP, Java and C# build on native decorator patterns rather than an identical SDK
@@ -284,9 +284,9 @@ There is no generated automatic retry or SSE surface in this runtime.
 
 ### Swift execution
 
-Swift middleware runs around buffered async execution. `KajiNext` is an async throwing
-`(URLRequest) -> (Data, URLResponse)` continuation; `KajiMiddleware` adds the initial
-request argument. Compose wrappers by nesting `KajiMiddlewareTransport`. Existing
+Swift middleware runs around buffered async execution. `PoolsterNext` is an async throwing
+`(URLRequest) -> (Data, URLResponse)` continuation; `PoolsterMiddleware` adds the initial
+request argument. Compose wrappers by nesting `PoolsterMiddlewareTransport`. Existing
 `session:` injection remains available.
 
 Swift status validation and decoding happen afterwards; middleware adds neither

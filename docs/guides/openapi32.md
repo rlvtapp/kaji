@@ -1,6 +1,6 @@
 # Generate SDKs from OpenAPI 3.2
 
-Use the normal `kaji generate --config kaji.json` workflow with an OpenAPI 3.2 contract.
+Use the normal `poolster generate --config poolster.json` workflow with an OpenAPI 3.2 contract.
 No alternate parser or plugin registration is required. Custom generation plugins can
 read the same typed transport metadata as the bundled SDKs.
 
@@ -77,11 +77,11 @@ explicit builders, add parts in their intended wire order:
 | --- | --- |
 | TypeScript | An array with the generated operation's multipart plan; Blob/File values retain buffered binary data. |
 | Python | `MultipartBody.positional(values)`; nest another body and use `with_headers(part, headers)` for supplied part headers. |
-| Go | `KajiMultipartBody` parts; `Nested` holds a child body. |
+| Go | `PoolsterMultipartBody` parts; `Nested` holds a child body. |
 | Rust | `MultipartBody` with `add_part_with_headers` and `add_nested`. |
 | Java | Ordered multipart parts supplied to the generated operation. |
 | C# | `OrderedMultipartPart` values with optional `Nested`. |
-| Swift | The operation's generated ordered upload body and `KajiOrderedPart` values. |
+| Swift | The operation's generated ordered upload body and `PoolsterOrderedPart` values. |
 | Ruby / PHP / Elixir | The native `MultipartBody` builder, including a child body as a part. |
 
 The generated operation applies media types and encoding plans. Supply required MIME
@@ -96,7 +96,7 @@ arbitrary MIME parts into typed JSON model arrays.
 
 ## Metadata and reference identity
 
-`kaji_core::openapi32` exposes typed request, response and parameter content, recursive
+`poolster_core::openapi32` exposes typed request, response and parameter content, recursive
 encodings and API metadata for custom plugins. The security catalog retains the device
 authorization endpoint and OAuth metadata URL. Tag summaries, parents and kinds remain
 available without changing your package's plugin graph.

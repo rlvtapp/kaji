@@ -1,10 +1,10 @@
 # GitHub App token broker
 
-Kaji can use your GitHub App directly with Actions secrets, or use this optional
+Poolster can use your GitHub App directly with Actions secrets, or use this optional
 broker to keep the App private key outside workflows. The broker exchanges a
 signed GitHub Actions OIDC identity for a token restricted to configured SDK
 repositories. Source repositories can also be configured as destinations when
-Kaji needs to open a source update PR.
+Poolster needs to open a source update PR.
 
 The code is self-hostable. This repository does not supply a running endpoint,
 registered App, account onboarding service, or deployed infrastructure.
@@ -72,7 +72,7 @@ its useful lifetime.
    an environment has a different subject. Custom subject templates must be
    configured explicitly. Never log full bearer tokens to inspect claims.
 
-The default audience is `kaji`. A deployment-specific audience, such as your
+The default audience is `poolster`. A deployment-specific audience, such as your
 broker's HTTPS URL, is preferable when operating multiple independent brokers;
 configure that exact value in the policy and the action input.
 
@@ -137,7 +137,7 @@ Preserve replay storage across restarts and keep it separate from untrusted file
 
 ## Use the composite action
 
-Vendor `action.yml` and `client.mjs` into `.github/actions/kaji-token`, or reference
+Vendor `action.yml` and `client.mjs` into `.github/actions/poolster-token`, or reference
 a reviewed commit/tag of a published repository containing this package. The local
 vendored action works before this code is released publicly.
 
@@ -155,17 +155,17 @@ jobs:
         with:
           node-version: '22'
       - id: sdk-token
-        uses: ./.github/actions/kaji-token
+        uses: ./.github/actions/poolster-token
         with:
           broker-url: https://broker.example
-          audience: kaji
+          audience: poolster
           repositories: '["example/typescript-sdk"]'
       # Pass steps.sdk-token.outputs.token only to the SDK sync operation.
       - name: Revoke SDK token
         if: ${{ always() && steps.sdk-token.outputs.token != '' }}
         env:
           KAJI_INSTALLATION_TOKEN: ${{ steps.sdk-token.outputs.token }}
-        run: node .github/actions/kaji-token/client.mjs --revoke
+        run: node .github/actions/poolster-token/client.mjs --revoke
 ```
 
 The action requests OIDC from the official GitHub Actions request URL, sends the

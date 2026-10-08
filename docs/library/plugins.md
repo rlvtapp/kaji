@@ -3,7 +3,8 @@
 Packages choose a language, directory and identity. Plugins choose what to render.
 
 ```rust
-use kaji::{prelude::*, ts};
+use poolster::prelude::*;
+use poolster_plugin_typescript as ts;
 
 let package = ts::package("typescript")
     .name("@acme/pet-store")

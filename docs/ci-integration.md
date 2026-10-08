@@ -1,9 +1,9 @@
 # CI integration
 
-Kaji ships repository-owned integrations for GitHub Actions and GitLab CI. Both
+Poolster ships repository-owned integrations for GitHub Actions and GitLab CI. Both
 install the published npm launcher, so CI needs Node but not Rust or Go.
 
-**On this page:** [GitHub](#github-actions) · [GitLab](#gitlab-ci) · [Marketplace](#github-marketplace) · [Kaji release](#publishing-kajis-npm-packages) · [SDK repos](#generated-sdk-repositories)
+**On this page:** [GitHub](#github-actions) · [GitLab](#gitlab-ci) · [Marketplace](#github-marketplace) · [Poolster release](#publishing-poolsters-npm-packages) · [SDK repos](#generated-sdk-repositories)
 
 ## GitHub Actions
 
@@ -12,7 +12,7 @@ steps:
   - uses: actions/checkout@v4
   - uses: rlvtapp/kaji/packages/github-action@main
     with:
-      config: api/kaji.json
+      config: api/poolster.json
 ```
 
 The action accepts `config`, `version`, and `working-directory`. Pin the action
@@ -23,19 +23,19 @@ and npm `version` to a release in production. See the
 
 ```yaml
 include:
-  - remote: 'https://raw.githubusercontent.com/rlvtapp/kaji/<kaji-release-tag>/packages/gitlab-ci/kaji.yml'
+  - remote: 'https://raw.githubusercontent.com/rlvtapp/kaji/<poolster-release-tag>/packages/gitlab-ci/poolster.yml'
 
 generate-sdk:
-  extends: .kaji:generate
+  extends: .poolster:generate
   variables:
-    KAJI_CONFIG: api/kaji.json
+    POOLSTER_CONFIG: api/poolster.json
 ```
 
 | Variable | Controls |
 | --- | --- |
-| `KAJI_CONFIG` | Recipe path |
-| `KAJI_VERSION` | Launcher version |
-| `KAJI_WORKING_DIRECTORY` | Working directory |
+| `POOLSTER_CONFIG` | Recipe path |
+| `POOLSTER_VERSION` | Launcher version |
+| `POOLSTER_WORKING_DIRECTORY` | Working directory |
 
 **Linux requires glibc.** The template uses Debian-based Node; Alpine/musl is
 unsupported by the published launcher. See the
@@ -47,26 +47,27 @@ The repository-local action can be used directly, but it cannot be listed in
 GitHub Marketplace: Marketplace actions require one `action.yml` at the root of
 a public action repository.
 
-When Kaji is ready to publish a Marketplace action,
+When Poolster is ready to publish a Marketplace action,
 create a small dedicated public repository (for example `rlvtapp/kaji-action`)
 whose root contains this action, release it under a stable tag, and publish that
 release from GitHub.
 Do not add a root action metadata file to this monorepo
 solely for Marketplace discovery.
 
-## Publishing Kaji's npm packages
+## Publishing Poolster's npm packages
 
 `.github/workflows/npm-publish.yml` is the release workflow. Pushing a version
-tag such as `v0.2.0` builds each native package on its target platform, then
-publishes CLI and SDK native packages before `kajicli` and `@relevate/kaji`.
-The SDK addon is only installed with `@relevate/kaji`; CLI-only installs use
-`kajicli` and do not download it.
+tag such as `v0.5.0` builds each native package on its target platform, then
+publishes CLI and SDK native packages before `poolster` and `@relevate/poolster`
+only when `POOLSTER_RELEASE_ENABLED` is set to `true`.
+The SDK addon is only installed with `@relevate/poolster`; CLI-only installs use
+`poolster` and do not download it.
 
 The workflow uses npm trusted publishing via GitHub Actions OIDC. Configure the
 same `npm-publish.yml` workflow name as a trusted publisher for every npm
 package it publishes. It needs no `NPM_TOKEN`; only its final publish job has
 `id-token: write`. Keep that permission out of normal CI and build jobs.
-The new `kajicli` and `@relevate/kajicli-<platform>` names need an initial
+The new `poolster` and `@relevate/poolster-node-<platform>` names need an initial
 publication by an authorized maintainer before npm trusted publishing can be
 configured for them.
 
@@ -77,7 +78,7 @@ has been configured in npm.
 
 ## Generated SDK repositories
 
-Optional `kaji sdk init` scaffolds build/test and release workflows from
+Optional `poolster sdk init` scaffolds build/test and release workflows from
 plugin-emitted package metadata. See [SDK automation](sdk-automation.md) for
 independent versions, diff sizing, custom registries, repository synchronization,
 and required repository setup. Review with `--dry-run` before writing the files.

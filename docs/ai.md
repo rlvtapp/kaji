@@ -1,6 +1,6 @@
-# Help an AI help you with Kaji
+# Help an AI help you with Poolster
 
-Kaji generates SDKs and API artifacts from Swagger 2.0 and OpenAPI 3.0/3.1.
+Poolster generates SDKs and API artifacts from Swagger 2.0 and OpenAPI 3.0/3.1.
 This context belongs to the 0.5.0 branch. A branch version does not mean that
 version is already published. Match instructions to the user's installed version.
 
@@ -23,7 +23,7 @@ version is already published. Match instructions to the user's installed version
 
 ## Information to give your assistant
 
-State your goal, installed Kaji version, target language, and whether you are an
+State your goal, installed Poolster version, target language, and whether you are an
 SDK author or an SDK consumer. Include your recipe and a minimal contract when
 relevant. Say whether you want a shared SDK repository or one per language.
 Give actual command output when troubleshooting; remove secrets first.
@@ -38,7 +38,7 @@ locally generated workflows from configured external services.
 Give the smallest working recipe or code change, explain where files belong,
 and include a command to verify the result. SDK authors can bundle middleware
 that registers by default; SDK consumers can also configure runtime middleware.
-Preserve Kaji's typed plugin architecture when proposing extensions.
+Preserve Poolster's typed plugin architecture when proposing extensions.
 
 Postman currently exports collections and environment templates. Typed Terraform
 currently covers validated flat scalar CRUD resources; advanced lifecycle and
@@ -48,9 +48,9 @@ install an App, or configure registry trust automatically.
 ## A prompt you can adapt
 
 ```text
-I want to [goal] using Kaji [version], targeting [language].
+I want to [goal] using Poolster [version], targeting [language].
 I am an [SDK author / SDK consumer / plugin author].
-Read the matching Kaji docs and source. Show a minimal working configuration,
+Read the matching Poolster docs and source. Show a minimal working configuration,
 where to put custom code, and how to verify it. Identify unsupported behavior.
 My current recipe and error output are: [paste here].
 ```

@@ -1,6 +1,6 @@
 # TypeScript helpers
 
-Kaji can emit a TypeScript SDK plus Zod validation, TanStack React/Vue Query, SWR,
+Poolster can emit a TypeScript SDK plus Zod validation, TanStack React/Vue Query, SWR,
 Faker, MSW, and Cypress scaffolding. Select only the helpers your app uses.
 
 ## Select helpers
@@ -27,7 +27,7 @@ operation symbols are resolved automatically.
 ## Validation
 
 `zod` targets Zod 4 and emits component schemas, request/response schema maps, and a
-`kajiSchemas` registry. Validate untrusted values at application boundaries; generated
+`poolsterSchemas` registry. Validate untrusted values at application boundaries; generated
 clients do not silently validate every request/response.
 
 ```ts
@@ -76,7 +76,7 @@ as the second argument and a scope as the third.
 
 Native React/Vue/SWR consumers split after 50 operations per module by default,
 retaining the configured entrypoint as a barrel. Set
-`max_operations_per_file` on the query plugin in `kaji.json`, or use
+`max_operations_per_file` on the query plugin in `poolster.json`, or use
 `.max_operations_per_file(...)` / `.single_file()` in the Rust composition API.
 Standalone artifact renderers retain their single-file layout. Infinite-query
 and suspense helpers are still tracked in the backlog.

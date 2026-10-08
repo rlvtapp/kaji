@@ -13,15 +13,15 @@
 > [generated artifacts](guides/artifacts.md). This page is the detailed
 > renderer and Rust API reference.
 
-Kaji has Rust renderers for Zod, TanStack React/Vue Query, SWR, Faker, MSW, Cypress,
+Poolster has Rust renderers for Zod, TanStack React/Vue Query, SWR, Faker, MSW, Cypress,
 ReDoc, and MCP tool manifests.
 
-These renderers are available from `kaji.json` as built-in config plugins and also
-expose a direct Rust API. `kaji generate --language all` remains a direct-mode shortcut
+These renderers are available from `poolster.json` as built-in config plugins and also
+expose a direct Rust API. `poolster generate --language all` remains a direct-mode shortcut
 for SDK packages only; it does not guess which optional artifacts your project wants.
 
 Use the [JSON recipe](cli.md#json-recipes-and-built-in-plugins) to select them, or use
-the Rust API below when embedding Kaji.
+the Rust API below when embedding Poolster.
 
 For a TypeScript package, use `zod`, `tanstack-react-query`, `tanstack-vue-query`,
 `swr`, `faker`, `msw`, or `cypress`. Use an `artifacts` package for `redoc` and `mcp`.
@@ -34,17 +34,17 @@ package's `path`.
 Every renderer exposes the same inherent method:
 
 ```rust
-generate(&self, api: &kaji_core::Api, options: &ArtifactOptions)
-    -> anyhow::Result<Vec<kaji_core::GeneratedFile>>
+generate(&self, api: &poolster_core::Api, options: &ArtifactOptions)
+    -> anyhow::Result<Vec<poolster_core::GeneratedFile>>
 ```
 
 For example, write a Zod module beside a full TypeScript SDK:
 
 ```rust
-use kaji::{prelude::*, ts};
-use kaji::ts::artifacts::{ArtifactOptions, TypeScriptZod};
+use poolster::{prelude::*, ts};
+use poolster_plugin_typescript::artifacts::{ArtifactOptions, TypeScriptZod};
 
-let mut tree = kaji::generate(
+let mut tree = poolster::generate(
     &api,
     ProfileSet::new("sdk")
         .package(ts::package("typescript").with(ts::sdk().fetch())),
@@ -66,7 +66,7 @@ register dependencies through the workspace.
 
 ## Available renderers
 
-All names below are exported from `kaji::ts::artifacts`.
+All names below are exported from `poolster_plugin_typescript::artifacts`.
 
 | Renderer | Default output | Purpose / required consumer dependency |
 | --- | --- | --- |
@@ -76,7 +76,7 @@ All names below are exported from `kaji::ts::artifacts`.
 | `TypeScriptSwr` | `typescript/swr.ts` | GET hooks only; `swr` and its peers. |
 | `TypeScriptFaker` | `typescript/faker.ts` | Component factories; `@faker-js/faker` plus generated model exports. |
 | `TypeScriptMsw` | `typescript/msw.ts` | MSW v2 route-handler scaffolding; `msw`. |
-| `TypeScriptCypress` | `cypress/e2e/api.cy.ts` | Routing smoke-test scaffolding; a configured Cypress project. Config mode adds Cypress as a development dependency when Kaji owns the package manifest. |
+| `TypeScriptCypress` | `cypress/e2e/api.cy.ts` | Routing smoke-test scaffolding; a configured Cypress project. Config mode adds Cypress as a development dependency when Poolster owns the package manifest. |
 | `ReDoc` | `redoc/redoc.html`, `redoc/redocly.yaml` | Documentation entry point loading ReDoc from its CDN. |
 | `McpToolManifest` | `mcp/tools.json` | Tool metadata for your own MCP integration, not an executable server. |
 
@@ -110,7 +110,7 @@ its Fetch or Axios SDK, or explicitly point their imports at the desired operati
 modules.
 
 ```rust
-use kaji::ts::artifacts::{ArtifactOptions, TypeScriptReactQuery};
+use poolster_plugin_typescript::artifacts::{ArtifactOptions, TypeScriptReactQuery};
 
 let options = ArtifactOptions {
     output_dir: Some("sdk/typescript".into()),
@@ -151,8 +151,8 @@ A wrapper can participate in package file ownership and dependency collection:
 
 ```rust
 use anyhow::Result;
-use kaji::{prelude::*, ts};
-use kaji::ts::artifacts::{ArtifactOptions, TypeScriptZod};
+use poolster::{prelude::*, ts};
+use poolster_plugin_typescript::artifacts::{ArtifactOptions, TypeScriptZod};
 
 struct Zod {
     meta: Meta,
@@ -189,15 +189,15 @@ instead; see [plugin authoring](typed-plugins.md).
 
 ## Important boundaries
 
-- **Zod:** Kaji targets Zod 4. The module exports one `<Name>Schema` per
-component plus a stable `kajiSchemas` registry and `getKajiSchema(name)`. It also
+- **Zod:** Poolster targets Zod 4. The module exports one `<Name>Schema` per
+component plus a stable `poolsterSchemas` registry and `getPoolsterSchema(name)`. It also
 exports `<Operation>RequestBodySchemas` and `<Operation>ResponseSchemas`, indexed by
-declared media type and response status, with the combined `kajiOperationSchemas`
+declared media type and response status, with the combined `poolsterOperationSchemas`
 registry keyed by operation id.
 
 Zod 4 schemas implement Standard Schema V1, so the registries can be consumed by either
 Zod or Standard Schema-aware validation wrappers. Request-body and response entries are
-emitted only when the source declares a schema; Kaji does not guess a media type or
+emitted only when the source declares a schema; Poolster does not guess a media type or
 synthesize validators for undeclared parameter bundles.
 
 This is not a complete JSON Schema validator; unsupported constraints may be
@@ -230,7 +230,7 @@ and conditional cases, use [the HTTP mock package](mocking.md).
 Large Zod, Faker, MSW and Cypress outputs split into adjacent chunk directories
 once their source exceeds 128 KiB. Imports and the aggregate entrypoint remain
 stable, including custom output directories and model provider bindings. Set
-`max_file_bytes` on the plugin in `kaji.json`, or call
+`max_file_bytes` on the plugin in `poolster.json`, or call
 `.max_file_bytes(...)` on the Rust builder. Declarations stay intact, so a single
 large schema or operation may exceed the budget. Recursive Zod schemas use
 explicit model types and lazy references across chunks. Recursive Faker factories

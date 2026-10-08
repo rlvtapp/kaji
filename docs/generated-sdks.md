@@ -30,21 +30,21 @@ declares:
 Generate flat clients so all three examples use the direct operation method:
 
 ```sh
-kaji generate examples/cli-basic/openapi.yaml \
+poolster generate examples/cli-basic/openapi.yaml \
   --output generated --language typescript,python,go \
   --name Notes --client-style flat --typescript-client-name Notes
 ```
 
-This produces the TypeScript package `@kaji/notes-fetch`, the Python import package
+This produces the TypeScript package `@poolster/notes-fetch`, the Python import package
 `notes_sdk`, and the Go module `notes`. The package names here are from this command,
 not names you should assume for a different SDK. Inspect your generated manifest and
 public entry point when adapting the examples.
 
-Run a Notes API at `http://localhost:4010`, or use Kaji's contract mock in another
+Run a Notes API at `http://localhost:4010`, or use Poolster's contract mock in another
 terminal:
 
 ```sh
-kaji mock serve examples/cli-basic/openapi.yaml --port 4010
+poolster mock serve examples/cli-basic/openapi.yaml --port 4010
 ```
 
 The Notes contract does not require credentials. The configuration sections below
@@ -54,7 +54,7 @@ explain how to add them for APIs that do.
 
 ### Build and install
 
-Generated TypeScript packages use ESM. Kaji resolves generated relative imports to
+Generated TypeScript packages use ESM. Poolster resolves generated relative imports to
 emitted `.js` files, including directory entry points. The installed-package check
 verifies native Node root/subpath imports and NodeNext consumer types; see
 [verification](verification.md). Authored source overlays should also use `.js` relative
@@ -74,7 +74,7 @@ The package root exports `Notes`, the raw `getNote` function, models and `create
 Here is a complete application module:
 
 ```ts
-import { Notes } from '@kaji/notes-fetch'
+import { Notes } from '@poolster/notes-fetch'
 
 const client = new Notes({ baseUrl: 'http://localhost:4010' })
 const result = await client.getNote({
@@ -103,7 +103,7 @@ with your application's usual `try/catch`.
 The raw function uses the same request shape:
 
 ```ts
-import { createClient, getNote } from '@kaji/notes-fetch'
+import { createClient, getNote } from '@poolster/notes-fetch'
 
 const transport = createClient({ baseUrl: 'http://localhost:4010' })
 const note = await getNote({ client: transport, path: { noteId: 'note_123' } })
@@ -126,7 +126,7 @@ See [request controls](guides/request-controls.md) for logical deadlines and nat
 cancellation. Injected drivers can also add their own timeout policy. For example:
 
 ```ts
-import { Notes } from '@kaji/notes-fetch'
+import { Notes } from '@poolster/notes-fetch'
 
 const client = new Notes({
   baseUrl: 'http://localhost:4010',
@@ -258,7 +258,7 @@ The context bounds the logical call, including retry waits; `http.Client.Timeout
 a native request. Configure static credentials with `APIKey`, `APIKeyHeader` and
 `APIKeyPrefix`—set `APIKeyPrefix: "Bearer"` when your service expects a bearer prefix.
 
-`HTTPClient` accepts the generated `KajiHTTPClient` interface, so a native client or
+`HTTPClient` accepts the generated `PoolsterHTTPClient` interface, so a native client or
 decorator can replace execution without changing operation signatures.
 
 Declared non-success responses become operation-specific errors; inspect the generated
@@ -279,9 +279,9 @@ package's exact name. Common entry points are:
 | Rust | Cargo dependency with version or `path` | Crate `Client`, generated operation/model modules; `with_transport` for execution |
 | PHP | Composer path/released package dependency | Generated namespace `Client`, PSR-18 client passed to its constructor |
 | Java | Generated Maven or Gradle package | Generated package `Client`, `ClientConfig`, model package |
-| C# | Project/package reference | Generated namespace `KajiClient(HttpClient, KajiClientOptions)` |
+| C# | Project/package reference | Generated namespace `PoolsterClient(HttpClient, PoolsterClientOptions)` |
 | Ruby | `gem build`, local/released gem installation | Generated require name and module `Client.new(...)` |
-| Swift | Swift Package Manager dependency | `KajiClient(options: KajiClientOptions(...))` |
+| Swift | Swift Package Manager dependency | `PoolsterClient(options: PoolsterClientOptions(...))` |
 | Elixir | Local/released Mix dependency | Generated namespace `Client.new(...)` and API/resource modules |
 
 Flat and namespaced clients use the same underlying operation implementation. Namespaces
@@ -291,8 +291,8 @@ spelling is native: the Notes fixture uses TypeScript `noteId`, Python `note_id`
 
 ## Pagination and streaming depend on the contract
 
-A list response alone does not create a pager. Kaji needs declared pagination inputs and
-response selectors, through `x-kaji-pagination` or compatible `x-speakeasy-pagination`
+A list response alone does not create a pager. Poolster needs declared pagination inputs and
+response selectors, through `x-poolster-pagination` or compatible `x-speakeasy-pagination`
 metadata. Pagination helpers keep using the generated operation's authentication,
 serialization and error handling.
 
@@ -324,11 +324,11 @@ examples.
 | --- | --- | --- |
 | TypeScript Fetch/Axios | Conservative retries; declared pagination and SSE | Logical-call middleware, hooks, native driver injection, optional codecs/validation and opt-in `validateResponses` structural buffered-success checks |
 | Python | Conservative retries; declared cursor/offset/URL pages and SSE; async is opt-in | Per-attempt sync/async middleware and native async driver; lifecycle callbacks; managed OAuth |
-| Go | Conservative retries; declared cursor/offset/URL pages and SSE | Per-attempt `KajiMiddleware`, injectable `KajiHTTPClient`, lifecycle hooks |
+| Go | Conservative retries; declared cursor/offset/URL pages and SSE | Per-attempt `PoolsterMiddleware`, injectable `PoolsterHTTPClient`, lifecycle hooks |
 | Rust | Conservative retries; declared pagination/SSE supported by generated operation surface | Per-attempt `MiddlewareTransport`, native `Transport`, lifecycle hooks |
 | PHP / Java / C# | Native retry and contract-dependent paging/streaming surfaces | Native HTTP client/decorator injection; target-specific hooks where emitted |
 | Elixir | Native retries; contract-dependent paging/SSE | Buffered request middleware; separate streaming driver; lifecycle callbacks |
-| Swift | Buffered async calls; no generated automatic retry/SSE middleware surface | `KajiTransport`, `KajiMiddlewareTransport`, URLSession, lifecycle hooks |
+| Swift | Buffered async calls; no generated automatic retry/SSE middleware surface | `PoolsterTransport`, `PoolsterMiddlewareTransport`, URLSession, lifecycle hooks |
 | Ruby | Buffered calls; no generated automatic retry/SSE surface | Callable transport and middleware |
 
 This table identifies usable boundaries rather than asserting identical capabilities.

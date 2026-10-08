@@ -4,35 +4,35 @@
 
 | Task | Surface |
 | --- | --- |
-| Select bundled HTTP SDKs and artifacts | [`kaji.json`](config-file.md) |
+| Select bundled HTTP SDKs and artifacts | [`poolster.json`](config-file.md) |
 | Inspect a native source format | [Contract CLI and input providers](input-plugins.md#inspect-the-built-in-inputs) |
 | Register an input or output plugin | Rust application linked to its provider crate |
 | Compose typed provider/consumer contracts | [Typed Rust plugins](typed-plugins.md) |
 
 ## CLI JSON configuration
 
-For normal CLI use, `kaji.json` is the source of truth. Create it with
-`npx kajicli init`, then run `npx kajicli generate`. The complete config format and the
+For normal CLI use, `poolster.json` is the source of truth. Create it with
+`npx poolster init`, then run `npx poolster generate`. The complete config format and the
 built-in SDK, TypeScript artifact, documentation, and mock plugin names are in
-the dedicated [`kaji.json` reference](config-file.md).
+the dedicated [`poolster.json` reference](config-file.md).
 
 The config is deliberately explicit: every package has a language, a directory,
-and a list of selected plugins. Kaji does not run Node/JavaScript plugin code
+and a list of selected plugins. Poolster does not run Node/JavaScript plugin code
 from this file. Custom input and output plugins are linked into a Rust application.
 
-The rest of this page is the equivalent typed Rust API for embedding Kaji,
+The rest of this page is the equivalent typed Rust API for embedding Poolster,
 building custom plugins, or using options that are not yet represented in the
 CLI config.
 
 Options belong to the plugin that uses them. Package identity belongs to the
 language package. `Common` provides optional defaults across a release.
 
-Import `kaji::prelude::*` to bring the package extension traits into scope.
+Import `poolster::prelude::*` to bring the package extension traits into scope.
 
 ## Complete release
 
 ```rust
-use kaji::{csharp, elixir, go, java, mock, php, prelude::*, python, ruby, rust, swift, ts};
+use poolster::{csharp, elixir, go, java, mock, php, prelude::*, python, ruby, rust, swift, ts};
 
 let release = ProfileSet::new("sdk")
     .common(Common::default()
@@ -56,7 +56,7 @@ let release = ProfileSet::new("sdk")
     .package(mock::package("mock-server")
         .with(mock::server().image("httpmock/httpmock:0.8.0").port(4010)));
 
-let tree = kaji::generate(&api, release)?;
+let tree = poolster::generate(&api, release)?;
 tree.write_to("generated")?;
 ```
 
@@ -87,7 +87,7 @@ A release must contain at least one package. Unsafe paths, overlapping file
 owners, and invalid plugin contracts fail generation. Adding a package or plugin
 twice is not a deduplication mechanism.
 
-Generated output is tracked by `.kaji/ownership.json` with stable owners and
+Generated output is tracked by `.poolster/ownership.json` with stable owners and
 content fingerprints.
 `tree.write_to` refuses to overwrite locally edited owned
 files, removes only unchanged obsolete owned files, and preserves unrelated
@@ -111,7 +111,7 @@ and applied before output is materialized. Bundled middleware is wired into the
 supported language's default runtime; added overlays alone are not automatic
 registration. Unsupported middleware languages/paths or incompatible runtime
 providers fail generation. Compile and test supplied source with native tools;
-Kaji does not execute it during generation.
+Poolster does not execute it during generation.
 
 For release-enabled packages, [SDK automation](sdk-automation.md) explains
 optional package metadata, native build/test commands, independent version
@@ -138,7 +138,7 @@ client settings are consumed by each plugin.
 ## Input provider options
 
 `InputRegistry` selects a format and optional provider ID. `InputProvider<C>` adds
-a native capability to a package graph. Features on the `kaji-inputs` bundle select
+a native capability to a package graph. Features on the `poolster-inputs` bundle select
 which providers are linked; each independent provider crate owns its parser
 dependencies. See [input configuration](input-plugins.md#select-or-replace-a-provider)
 for Cargo and Rust examples.
@@ -249,7 +249,13 @@ the supported JSON fields and direct-mode flags.
 
 ## Idempotency keys
 
-Idempotency is opt-in. An operation may declare `x-kaji-idempotency: true`, or
+Use `x-poolster-*` OpenAPI extensions in new contracts. The compiler also accepts
+the earlier `x-kaji-*` keys for existing specifications; when both forms are
+present, the Poolster form wins. Directly constructed Rust API models may still
+need the legacy key for a language plugin until their extension handling is
+updated.
+
+Idempotency is opt-in. An operation may declare `x-poolster-idempotency: true`, or
 an object such as `{ "header": "Idempotency-Key", "auto_generate": true }`.
 The default header is `Idempotency-Key`; automatic key generation defaults to
 `false`. Setting `enabled: false` explicitly disables the policy.
@@ -286,12 +292,12 @@ cannot use transport/authentication headers such as `Authorization`, `Host`,
 `Content-Type`, or `Cookie`, and cannot collide with another parameter’s native
 identifier after punctuation and case normalization.
 
-Rust authors use `.idempotency(kaji_core::idempotency::IdempotencyConfig { ... })`
+Rust authors use `.idempotency(poolster_core::idempotency::IdempotencyConfig { ... })`
 on their typed package.
 Generation prepares a package-local API copy, so one
 SDK's policy does not change another SDK's inputs.
 Native runtime renderers
-consume `x-kaji-idempotency-resolved` metadata; automatic generation must keep a
+consume `x-poolster-idempotency-resolved` metadata; automatic generation must keep a
 single key for all retry attempts and preserve a caller-supplied key.
 
 A header

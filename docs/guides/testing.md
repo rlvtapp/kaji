@@ -28,7 +28,7 @@ docker compose up --build
 ```
 
 The Docker mock returns deterministic contract-derived happy paths. Put durable
-conditional responses in `x-kaji-mock`; keep stateful workflows in a dedicated
+conditional responses in `x-poolster-mock`; keep stateful workflows in a dedicated
 service. See [contract mocking](../mocking.md).
 
 MSW handlers and Cypress tests are editable scaffolding. Review mutation tests
@@ -53,7 +53,7 @@ Tests call public operations through in-memory native HTTP drivers. They check
 method, path, parameters, JSON bodies and decoded success. Samples are bounded
 and omit specification examples/defaults to avoid copying secrets.
 
-Review the emitted report and `.kaji/operation-test-diagnostics.json` before
+Review the emitted report and `.poolster/operation-test-diagnostics.json` before
 claiming coverage. Unsupported operations, bounds and empty supported sets need
 explicit attention. Authentication, streaming, complex constraints and real
 server behavior need dedicated fixtures.
@@ -80,7 +80,7 @@ also emit `OPERATION_TESTS.md`.
 
 TypeScript JSON consumers can bind `uses.models`, `uses.operations` and
 `uses.transport` to named compatible providers. Native custom providers can
-select typed handles through the Rust API, including `kaji::go::operation_tests()`.
+select typed handles through the Rust API, including `poolster_plugin_go::operation_tests()`.
 
 Ruby, Swift, PHP, Elixir, Java and C# JSON recipes infer the bundled SDK. Where
 custom provider selection is exposed, use the Rust API rather than ignored JSON
@@ -100,8 +100,8 @@ page iteration and exact path/query/body serialization.
 Consult its coverage table and unsupported-scenario manifest. Reproduce a check:
 
 ```sh
-KAJI_RUNTIME_EXPORT=/tmp/kaji-runtime-fixture cargo test -p kaji --test runtime_conformance
-node packages/runtime-contract/runner.mjs go /tmp/kaji-runtime-fixture/sdk/go
+KAJI_RUNTIME_EXPORT=/tmp/poolster-runtime-fixture cargo test -p poolster --test runtime_conformance
+node packages/runtime-contract/runner.mjs go /tmp/poolster-runtime-fixture/sdk/go
 node --test packages/runtime-contract/test.mjs packages/sdk-delivery-test/test/*.mjs
 ```
 
@@ -125,7 +125,7 @@ target.
 Generate all ten SDKs from two immutable official Open-Meteo contracts:
 
 ```sh
-export KAJI_PUBLIC_CONTRACT_ROOT=/tmp/kaji-public-contracts
+export KAJI_PUBLIC_CONTRACT_ROOT=/tmp/poolster-public-contracts
 bash scripts/test-public-contracts.sh generate
 bash scripts/test-public-contracts.sh check LANGUAGE
 ```

@@ -45,7 +45,7 @@ and registry publication remain prepared workflows, without a live delivery tria
 1. Generate from the committed contract and recipe.
 2. Build with the package's declared dependencies and native toolchain.
 3. Exercise a generated operation: check URL, headers, body, decoding and policy.
-4. Run `kaji generate --config kaji.json --check` to detect drift.
+4. Run `poolster generate --config poolster.json --check` to detect drift.
 5. Put the build/test commands in `release` metadata for CI.
 
 The [bundled middleware example](../examples/bundled-middleware/README.md)
@@ -55,7 +55,7 @@ customer middleware registration.
 Use a fake driver for exact request assertions. Add a local mock when you need
 to exercise the native HTTP stack.
 
-## What Kaji's own tests establish
+## What Poolster's own tests establish
 
 | Check | Evidence | Boundary |
 | --- | --- | --- |
@@ -73,7 +73,7 @@ READMEs and manifests across the maintained target set. Review changes before
 updating the snapshot.
 
 ```sh
-cargo test -p kaji --test golden_output
+cargo test -p poolster --test golden_output
 ```
 
 ### Runtime and middleware checks
@@ -91,7 +91,7 @@ This Go/Python check uses a loopback server to verify routes, bearer headers
 and decoded models:
 
 ```sh
-cargo test -p kaji --test sdk_to_mock_contract -- --ignored
+cargo test -p poolster --test sdk_to_mock_contract -- --ignored
 ```
 
 It requires a local port and the generated standalone mock fixture.
@@ -123,7 +123,7 @@ and [compatibility results](guru-compatibility.md) describe the checks actually 
 With Python and `jsonschema` installed:
 
 ```sh
-cargo test -p kaji-plugin-postman validates_actual_official_draft04_schema -- --ignored
+cargo test -p poolster-plugin-postman validates_actual_official_draft04_schema -- --ignored
 ```
 
 This uses the pinned official Collection 2.1 Draft04 schema.
@@ -134,7 +134,7 @@ This uses the pinned official Collection 2.1 Draft04 schema.
 With Go and the pinned Framework dependencies:
 
 ```sh
-cargo test -p kaji-plugin-terraform generated_provider_executes_native_framework_lifecycle -- --ignored
+cargo test -p poolster-plugin-terraform generated_provider_executes_native_framework_lifecycle -- --ignored
 ```
 
 The probe covers plan/state consistency, import, drift, auth, 404 handling and

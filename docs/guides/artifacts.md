@@ -26,10 +26,10 @@ server, handle credentials, or provide transport.
 For a runnable stdio server that calls an API origin, use:
 
 ```sh
-kaji mcp ./openapi.yaml --base-url https://api.example.com
+poolster mcp ./openapi.yaml --base-url https://api.example.com
 ```
 
-`kaji mcp generator` exposes generation controls to a trusted MCP host and can write
+`poolster mcp generator` exposes generation controls to a trusted MCP host and can write
 files. Read [the MCP guide](../mcp-server.md) for authentication, inputs, and safety.
 The [multi-package example](../../examples/cli-multi-package/README.md) emits both ReDoc
 and an MCP manifest.

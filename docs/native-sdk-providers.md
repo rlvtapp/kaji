@@ -18,23 +18,23 @@ matching contracts.
 ### Rust recipe
 
 ```rust
-let models = kaji::rust::models();
+let models = poolster_plugin_rust::models();
 let models_handle = models.models_handle();
-let transport = kaji::rust::transport();
+let transport = poolster_plugin_rust::transport();
 let transport_handle = transport.transport_handle();
-let operations = kaji::rust::operations()
+let operations = poolster_plugin_rust::operations()
     .using_models(models_handle)
     .using_transport(transport_handle);
 let operations_handle = operations.operations_handle();
-let package = kaji::rust::package("rust")
+let package = poolster_plugin_rust::package("rust")
     .with(models)
     .with(transport)
     .with(operations)
-    .with(kaji::rust::client().using_operations(operations_handle))
-    .with(kaji::rust::roundtrip_tests().using_models(models_handle));
+    .with(poolster_plugin_rust::client().using_operations(operations_handle))
+    .with(poolster_plugin_rust::roundtrip_tests().using_models(models_handle));
 ```
 
-The corresponding Go API uses `kaji::go` and exports contracts through `kaji::go::providers`; Rust contracts are in `kaji::rust::composition`. Explicit handles select providers and preserve useful ambiguity diagnostics. Model-only packages and raw operation packages are supported. In native clients, operations remain methods on `Client`; selecting the client provider adds resource facades rather than changing their calling convention.
+The corresponding Go API uses `poolster_plugin_go` and exports contracts through `poolster_plugin_go::providers`; Rust contracts are in `poolster_plugin_rust::composition`. Explicit handles select providers and preserve useful ambiguity diagnostics. Model-only packages and raw operation packages are supported. In native clients, operations remain methods on `Client`; selecting the client provider adds resource facades rather than changing their calling convention.
 
 ## Community transports
 
@@ -50,7 +50,7 @@ The maintained request/response ABI still depends on reqwest; replacing the HTTP
 
 ### Go ABI
 
-Go transport plugins emit an implementation in the generated package and publish `providers::Transport { constructor }`. Its constructor returns `KajiHTTPClient`, an interface with `Do(*http.Request) (*http.Response, error)`. `ClientConfig.HTTPClient` accepts that interface as a per-instance override. Requests carry context cancellation. Compatible model providers retain the conventional native module/package symbols; arbitrary module relocation is not implemented.
+Go transport plugins emit an implementation in the generated package and publish `providers::Transport { constructor }`. Its constructor returns `PoolsterHTTPClient`, an interface with `Do(*http.Request) (*http.Response, error)`. `ClientConfig.HTTPClient` accepts that interface as a per-instance override. Requests carry context cancellation. Compatible model providers retain the conventional native module/package symbols; arbitrary module relocation is not implemented.
 
 ### Verify a replacement
 
@@ -58,7 +58,7 @@ Both crates include native generated-package tests demonstrating explicit commun
 
 ## Executable model fixtures
 
-`roundtrip_tests()` consumes the actual published model symbols and emits bounded decode/encode assertions from shared schema samples. Rust emits a unit-test module linked by package finalization; Go emits a `_test.go` file. `.kaji/roundtrip-diagnostics.json` records constraints or recursive shapes needing custom fixtures. Assertions compare JSON values and retain integer digits rather than comparing object key order. Unknown response enum/union policies still need separate unknown-value fixtures.
+`roundtrip_tests()` consumes the actual published model symbols and emits bounded decode/encode assertions from shared schema samples. Rust emits a unit-test module linked by package finalization; Go emits a `_test.go` file. `.poolster/roundtrip-diagnostics.json` records constraints or recursive shapes needing custom fixtures. Assertions compare JSON values and retain integer digits rather than comparing object key order. Unknown response enum/union policies still need separate unknown-value fixtures.
 
 Round-trip coverage includes additional properties and optional nullable fields. Rust retains open additional properties through serde flattening and preserves the distinction between omitted and null optional values. Go generated object codecs preserve additional wire keys and retain decoded explicit nulls on optional nullable fields. Missing constraints, unsupported schema formats, and overlapping unions remain limitations documented in the shared fixture guide.
 
@@ -109,17 +109,17 @@ This is a source audit, not an execution claim for every runtime.
 | Java | `ClientConfig.httpClient` accepts a JDK `HttpClient`; a custom subclass can intercept execution. | Lifecycle callbacks only receive method/URI, status, and error; they cannot replace requests/responses directly. |
 | C# | Injected `HttpClient` supports ordinary `DelegatingHandler` chains, including synthetic responses. | Generated hooks are separate notifications; binary/SSE paths do not consistently invoke the before-request hook. |
 | PHP | Injected PSR-18 `ClientInterface` supports transport decorators and middleware adapters. | Generated callbacks observe context/outcomes; their return values do not replace requests or responses. |
-| Swift | `KajiTransport` and `KajiMiddlewareTransport` support request/response/error transformations and short circuits; `URLSession` initialization remains supported. | Buffered transport only; status and decode errors occur after middleware. Notification hooks remain observational. |
+| Swift | `PoolsterTransport` and `PoolsterMiddlewareTransport` support request/response/error transformations and short circuits; `URLSession` initialization remains supported. | Buffered transport only; status and decode errors occur after middleware. Notification hooks remain observational. |
 | Ruby | Callable `transport` and ordered `middleware` wrap Net::HTTP execution. | Buffered calls; request/response/error rewriting and short circuits. Opt-in bounded replay-safe retries; cancellation callback between attempts. No SSE surface. |
 | Elixir | `transport` function and ordered `middleware` continuations support buffered transformations/recovery/short circuits; `stream_transport` decorates Finch-style SSE execution/events. | Buffered middleware runs per retry attempt and does not process SSE frames; callbacks remain observational. |
 
-Swift generated README examples show `KajiMiddlewareTransport(inner:middleware:)` with a mutable `URLRequest` and async continuation. The `KajiTransport` protocol returns `(Data, URLResponse)` and preserves existing `session:` callers. A Swift 6 warnings-as-errors executable test verifies header mutation, response transformation, transport-error recovery, ordering, and a short circuit without terminal execution.
+Swift generated README examples show `PoolsterMiddlewareTransport(inner:middleware:)` with a mutable `URLRequest` and async continuation. The `PoolsterTransport` protocol returns `(Data, URLResponse)` and preserves existing `session:` callers. A Swift 6 warnings-as-errors executable test verifies header mutation, response transformation, transport-error recovery, ordering, and a short circuit without terminal execution.
 
 Elixir generated README examples show ordered `middleware: [fn request, next -> ... end]`, optional `transport: fn request, options -> ... end`, and the separate `stream_transport` signature.
 The generated dependency-free ExUnit probe covers buffered mutation/recovery/short circuits, error notifications, and synthetic SSE.
 
 Elixir is unavailable in the verification environment; that probe is committed as an ignored toolchain test and has not been executed here.
-Run `cargo test -p kaji-plugin-elixir elixir_customer_middleware_executes -- --ignored` with Elixir installed.
+Run `cargo test -p poolster-plugin-elixir elixir_customer_middleware_executes -- --ignored` with Elixir installed.
 Source-generation tests execute normally.
 
 ## Generic documentation and custom consumers

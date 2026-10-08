@@ -2,7 +2,7 @@
 
 Generate a TypeScript Fetch SDK from the sample Notes API. Then check, build and try it.
 
-**You need:** Node/npm for `npx` and the TypeScript build. If you already have the native or pip CLI, use `kaji` instead.
+**You need:** Node/npm for `npx` and the TypeScript build. If you already have the native or pip CLI, use `poolster` instead.
 
 Generation itself does not need the SDK’s dependencies installed.
 
@@ -14,7 +14,7 @@ From the repository root:
 cd examples/cli-basic
 ```
 
-Or copy [openapi.yaml](../../examples/cli-basic/openapi.yaml) and [kaji.json](../../examples/cli-basic/kaji.json) into an empty directory.
+Or copy [openapi.yaml](../../examples/cli-basic/openapi.yaml) and [poolster.json](../../examples/cli-basic/poolster.json) into an empty directory.
 
 The contract has `GET /notes/{noteId}` and a `Note` with required `id` and `body`. The recipe picks one Fetch SDK:
 
@@ -38,8 +38,8 @@ Input and output paths are resolved from the recipe location. Keep the contract 
 ## 2. Generate and check the result
 
 ```sh
-npx kajicli generate --config kaji.json
-npx kajicli generate --config kaji.json --check
+npx poolster generate --config poolster.json
+npx poolster generate --config poolster.json --check
 ```
 
 - **Generate:** writes `generated/typescript` and generation bookkeeping.
@@ -50,7 +50,7 @@ Open the generated README for exports, build steps and runtime requirements.
 To inspect proposed changes as JSON:
 
 ```sh
-npx kajicli generate --config kaji.json --check --format json
+npx poolster generate --config poolster.json --check --format json
 ```
 
 The report lists `added`, `modified` and `removed` paths. Drift makes the check fail.
@@ -69,7 +69,7 @@ npm install
 npm run build
 ```
 
-This is separate from Kaji generation. Dependency installation may need registry access. Your application's API call then uses the generated contract names:
+This is separate from Poolster generation. Dependency installation may need registry access. Your application's API call then uses the generated contract names:
 
 ```ts
 import { Notes } from "@example/notes";
@@ -96,4 +96,4 @@ Commit your contract, recipe, custom source and chosen generated output/bookkeep
 
 [Prepare SDK PRs](../sdk-automation.md) → [Release and publish](../sdk-publishing.md)
 
-For your own local contract, `kaji init --input ./openapi.yaml --output ./generated` creates a starter recipe without overwriting an existing one. Continue with [configuration](config.md) for exact package settings, [multi-package recipes](recipes.md) for more outputs, or [commands](commands.md) for direct mode and filtering.
+For your own local contract, `poolster init --input ./openapi.yaml --output ./generated` creates a starter recipe without overwriting an existing one. Continue with [configuration](config.md) for exact package settings, [multi-package recipes](recipes.md) for more outputs, or [commands](commands.md) for direct mode and filtering.

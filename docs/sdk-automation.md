@@ -1,7 +1,7 @@
 # Generate, deliver and release an SDK
 
 Follow one generated package from a local recipe to a published release.
-Start with [generation](getting-started.md) if you need a working `kaji.json`.
+Start with [generation](getting-started.md) if you need a working `poolster.json`.
 Registry configuration and publication recovery are in [SDK publishing](sdk-publishing.md).
 
 | Step | Result |
@@ -73,7 +73,7 @@ for generated methods, middleware, errors and important wire formats. Declare
 their command in `test`; ship maintained test sources through
 [source overlays](sdk-customization.md) or a native test plugin.
 
-`release` emits `<package>/.kaji/package.json`: the package's delivery contract.
+`release` emits `<package>/.poolster/package.json`: the package's delivery contract.
 Build/test commands run in the package directory, using executable and argument
 vectors without shell interpolation. If you need pipelines or several shell
 operations, declare a reviewed script as the command. Metadata can also be
@@ -90,12 +90,12 @@ an already released SDK to the API document's version accidentally.
 From the API repository root:
 
 ```sh
-kaji check openapi.yaml
-kaji generate --config kaji.json
-kaji generate --config kaji.json --check --format json
-kaji sdk list --root generated --json
-kaji sdk run --root generated --package web --phase build
-kaji sdk run --root generated --package web --phase test
+poolster check openapi.yaml
+poolster generate --config poolster.json
+poolster generate --config poolster.json --check --format json
+poolster sdk list --root generated --json
+poolster sdk run --root generated --package web --phase build
+poolster sdk run --root generated --package web --phase test
 ```
 
 | Command | Checks or changes |
@@ -108,23 +108,23 @@ kaji sdk run --root generated --package web --phase test
 
 For changed or removed owned files, see [safe regeneration](safe-regeneration.md).
 
-Inspect the exported API, native manifest, `.kaji/package.json` and generated
+Inspect the exported API, native manifest, `.poolster/package.json` and generated
 README. Confirm the package name, version, entry points and publisher. A
 successful SDK build does not establish GitHub App access or registry trust.
 
 ## 3. Preview the workflow bootstrap
 
 ```sh
-kaji sdk init --root generated --config kaji.json --auth app --dry-run
+poolster sdk init --root generated --config poolster.json --auth app --dry-run
 ```
 
 Review the reported local files before writing them. Then run the same command
 without `--dry-run`, specifying the launcher version you intend CI to install:
 
 ```sh
-kaji sdk init --root generated --config kaji.json \
-  --auth app --kaji-version VERSION
-kaji sdk status --root generated --json
+poolster sdk init --root generated --config poolster.json \
+  --auth app --poolster-version VERSION
+poolster sdk status --root generated --json
 ```
 
 `--base` defaults to `main`. With `init`/`sync`, it selects the source workflow's
@@ -134,7 +134,7 @@ values in the reviewed scaffold. `--schedule '17 3 * * *' --bump minor` adds an
 explicit periodic fetch and release-size policy; see the
 [scheduled fetching guide](github-actions.md#fetch-a-remote-specification-periodically).
 
-Replace `VERSION` with a published Kaji launcher containing these commands. A
+Replace `VERSION` with a published Poolster launcher containing these commands. A
 local implementation does not publish that launcher for you. For a source build
 or fork, change the readable generated workflow's launcher command to the binary
 or package you actually distribute.
@@ -146,11 +146,11 @@ remote credentials or installation permissions.
 
 | Generated file | Responsibility |
 | --- | --- |
-| `.github/workflows/kaji-sdks.yml` | Regenerate and open/update the SDK content PR. |
-| `.github/workflows/kaji-sdk-ci.yml` | Check generated SDK packages. |
-| `.github/workflows/kaji-sdk-release.yml` | Release Please orchestration, tag checks and publication. |
-| `.github/actions/kaji-check/` | Readable language setup and package check helper. |
-| `.github/actions/kaji-publish/` | Readable standard-registry publication helper. |
+| `.github/workflows/poolster-sdks.yml` | Regenerate and open/update the SDK content PR. |
+| `.github/workflows/poolster-sdk-ci.yml` | Check generated SDK packages. |
+| `.github/workflows/poolster-sdk-release.yml` | Release Please orchestration, tag checks and publication. |
+| `.github/actions/poolster-check/` | Readable language setup and package check helper. |
+| `.github/actions/poolster-publish/` | Readable standard-registry publication helper. |
 | `release-please-config.json` and `.release-please-manifest.json` | Per-package release strategies and current versions. |
 
 Files depend on the publishers and repository layout.
@@ -158,7 +158,7 @@ Files depend on the publishers and repository layout.
 | Action source | Setup |
 | --- | --- |
 | `--actions local` (default) | Review and commit vendored helpers; broker mode includes token-client sources |
-| `--actions remote --action-ref OWNER/kaji@REVISION` | Select a reviewed, pinned remote implementation |
+| `--actions remote --action-ref OWNER/poolster@REVISION` | Select a reviewed, pinned remote implementation |
 
 Scaffolding does not create a hosted service.
 
@@ -176,20 +176,20 @@ source changes use an SDK PR rather than committing unrelated handwritten work.
 Preview and write the source-side bootstrap with the destination selected:
 
 ```sh
-kaji sdk init --root generated --config kaji.json \
+poolster sdk init --root generated --config poolster.json \
   --repository acme/sdk-repo --auth app --dry-run
-kaji sdk init --root generated --config kaji.json \
-  --repository acme/sdk-repo --auth app --kaji-version VERSION
+poolster sdk init --root generated --config poolster.json \
+  --repository acme/sdk-repo --auth app --poolster-version VERSION
 ```
 
 The source generation workflow stays in the API repository. Destination
 checks/release workflows, actions and release configuration are staged under
-`.kaji/sdk-repository-setup/`. Copy **the contents of that directory**, including
+`.poolster/sdk-repository-setup/`. Copy **the contents of that directory**, including
 hidden files, into the SDK repository root. For sibling checkouts named
 `api-repo` and `sdk-repo`, run this **from the SDK checkout**:
 
 ```sh
-cp -R ../api-repo/.kaji/sdk-repository-setup/. .
+cp -R ../api-repo/.poolster/sdk-repository-setup/. .
 git diff --stat
 ```
 
@@ -213,10 +213,10 @@ overwrite your edits or reset released versions in the release manifest.
 Preview the source workflow and all destination setup files together:
 
 ```sh
-kaji sdk init --root generated --config kaji.json \
+poolster sdk init --root generated --config poolster.json \
   --repository-pattern 'acme/api-{lang}' --auth app --dry-run
-kaji sdk init --root generated --config kaji.json \
-  --repository-pattern 'acme/api-{lang}' --auth app --kaji-version VERSION
+poolster sdk init --root generated --config poolster.json \
+  --repository-pattern 'acme/api-{lang}' --auth app --poolster-version VERSION
 ```
 
 The example routes TypeScript to `acme/api-typescript` and Python to
@@ -227,12 +227,12 @@ Output paths stay intact: `generated/web` remains `generated/web` in its
 TypeScript repository.
 
 Setup is staged separately at
-`.kaji/sdk-repository-setup/OWNER/REPO/`. Copy each repository directory’s contents,
+`.poolster/sdk-repository-setup/OWNER/REPO/`. Copy each repository directory’s contents,
 including `.github`, into that destination’s root, then review and commit there.
 For example, from the `api-typescript` checkout:
 
 ```sh
-cp -R ../api-repo/.kaji/sdk-repository-setup/acme/api-typescript/. .
+cp -R ../api-repo/.poolster/sdk-repository-setup/acme/api-typescript/. .
 git diff --stat
 ```
 
@@ -249,16 +249,16 @@ bootstrap requires the repository owner’s commit or separately authorized work
 permissions.
 The scaffold does not create repositories or install an App remotely.
 
-Instead of copying into a checkout, explicitly ask Kaji to prepare a destination
+Instead of copying into a checkout, explicitly ask Poolster to prepare a destination
 bootstrap PR:
 
 ```sh
-kaji sdk install --setup .kaji/sdk-repository-setup/acme/api-typescript \
+poolster sdk install --setup .poolster/sdk-repository-setup/acme/api-typescript \
   --repository acme/api-typescript --base main \
-  --branch codex/kaji-sdk-setup --dry-run
-kaji sdk install --setup .kaji/sdk-repository-setup/acme/api-typescript \
+  --branch codex/poolster-sdk-setup --dry-run
+poolster sdk install --setup .poolster/sdk-repository-setup/acme/api-typescript \
   --repository acme/api-typescript --base main \
-  --branch codex/kaji-sdk-setup
+  --branch codex/poolster-sdk-setup
 ```
 
 Review the dry-run plan before the second command.
@@ -293,7 +293,7 @@ source-to-destination mapping. See [publishing trust](sdk-publishing.md#configur
 | `--auth token` | `SDK_GITHUB_TOKEN` secret | Provision a token with the required repository permissions yourself. |
 
 Preview an App registration manifest with
-`kaji sdk app --name "Acme SDK Sync" --dry-run`, then follow
+`poolster sdk app --name "Acme SDK Sync" --dry-run`, then follow
 [GitHub App setup](github-app.md) to register and install it. The App needs Contents: write and
 Pull requests: write for the selected repositories; routine workflows do not need
 workflow-write permission. App-token acquisition/revocation belongs to the job.
@@ -308,15 +308,15 @@ Broker mode keeps the App key at your deployed broker rather than in Actions
 secrets. [Broker deployment and policy](github-app-broker.md) explain its signed
 OIDC verification, exact repository/workflow/ref allowlists and installation
 mapping. Approve both the source generation workflow and the destination
-release workflow identities when both exchange tokens. Kaji provides its source; a public hosted App or endpoint is not created
+release workflow identities when both exchange tokens. Poolster provides its source; a public hosted App or endpoint is not created
 by scaffolding. Terraform hosting remains a plan, not provisioned infrastructure.
 
 ## 6. Open and review the SDK content PR
 
 ```sh
-kaji sdk diff --base previous-openapi.yaml --head openapi.yaml --json
-kaji sdk pr --config kaji.json --repository acme/sdk-repo --dry-run
-kaji sdk pr --config kaji.json --repository acme/sdk-repo --bump minor
+poolster sdk diff --base previous-openapi.yaml --head openapi.yaml --json
+poolster sdk pr --config poolster.json --repository acme/sdk-repo --dry-run
+poolster sdk pr --config poolster.json --repository acme/sdk-repo --bump minor
 ```
 
 The PR dry run prints the planned target and release-size selection; it does not
@@ -329,7 +329,7 @@ branch history.
 
 | Setting | Default or behavior |
 | --- | --- |
-| PR branch / base | `codex/kaji-sdks` / `main`; override with `--branch` / `--base` |
+| PR branch / base | `codex/poolster-sdks` / `main`; override with `--branch` / `--base` |
 | Suggested bump | Breaking API change → major; other API change → minor; generation-only change → patch |
 | Comparison base | `--base-spec-ref`, GitHub push before revision, or `HEAD~1` |
 | URL/artifact-only source | Requires explicit `--bump` until prior snapshots are supported |
@@ -373,11 +373,11 @@ allowing a publication job to proceed.
 ## Retry one failed publication
 
 After correcting authentication or transient infrastructure failure, dispatch
-`kaji-sdk-release.yml` with both `path` and the **existing exact `tag`**. Inspect the
+`poolster-sdk-release.yml` with both `path` and the **existing exact `tag`**. Inspect the
 selection locally first, from the SDK repository:
 
 ```sh
-kaji sdk releases --path generated/web --tag EXISTING_PACKAGE_TAG
+poolster sdk releases --path generated/web --tag EXISTING_PACKAGE_TAG
 ```
 
 Use the tag actually created by your release configuration; component names are
@@ -391,7 +391,7 @@ publishers. Custom commands own their own retry/idempotency policy.
 
 | Symptom | First check |
 | --- | --- |
-| Package missing from `sdk list` | Generation emitted its `.kaji/package.json`; `--root` is the actual output root. |
+| Package missing from `sdk list` | Generation emitted its `.poolster/package.json`; `--root` is the actual output root. |
 | Drift or owned-file conflict | Run `generate --check --format json`; change recipe/author source rather than overwriting materialized owned files. |
 | Stale CI matrix | Refresh `sdk sync`, review edited scaffolds, commit destination setup again if needed. |
 | SDK PR denied | App installation includes the destination; token has Contents/PR write; source checkout is clean and `gh`/Git use that identity. |
@@ -407,8 +407,8 @@ Continue with [publishing setup and registry rules](sdk-publishing.md),
 ## Diagnose an existing delivery setup
 
 ```sh
-kaji sdk doctor --root generated --json
-kaji sdk inspect --root generated --json
+poolster sdk doctor --root generated --json
+poolster sdk inspect --root generated --json
 ```
 
 `doctor` checks the generation ownership inventory, package delivery metadata,

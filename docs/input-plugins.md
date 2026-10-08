@@ -1,9 +1,9 @@
 # Input plugins
 
 Input plugins read source contracts and publish typed capabilities. Output plugins
-consume those capabilities through Kaji's existing provider/consumer graph. A
+consume those capabilities through Poolster's existing provider/consumer graph. A
 community format can register its own format identifier and contract types without
-adding a variant to Kaji core.
+adding a variant to Poolster core.
 
 ## Input → core → output
 
@@ -24,9 +24,9 @@ output consumers. See [architecture](architecture.md) for the layer boundaries.
 
 The [Node API](../packages/cli/sdk/README.md#input-plugins) exposes the same five
 compiled Rust providers through individually installable npm input packages and
-the `@relevate/kaji-plugins` bundle. A JavaScript output plugin can consume
+the `@relevate/poolster-plugins` bundle. A JavaScript output plugin can consume
 their summary and diagnostics. `defineInputPlugin` also lets Node packages
-publish a parser; one that returns Kaji's normalized HTTP API can feed the
+publish a parser; one that returns Poolster's normalized HTTP API can feed the
 existing Rust SDK renderers.
 
 ## Inspect the built-in inputs
@@ -36,13 +36,13 @@ Choose a format explicitly. Use `--provider` when more than one provider support
 Build the CLI from this checkout, then run:
 
 ```sh
-cargo build -p kaji-cli
-./target/debug/kaji contract plugins --format json
-./target/debug/kaji contract inspect schema.graphql --input-format graphql --format json
-./target/debug/kaji contract inspect events.yaml --input-format asyncapi --provider asyncapi.roas
-./target/debug/kaji contract inspect workflows.yaml --input-format arazzo --format json
-./target/debug/kaji contract inspect service.proto --input-format protobuf
-./target/debug/kaji contract inspect service.capnp --input-format capnproto
+cargo build -p poolster-cli
+./target/debug/poolster contract plugins --format json
+./target/debug/poolster contract inspect schema.graphql --input-format graphql --format json
+./target/debug/poolster contract inspect events.yaml --input-format asyncapi --provider asyncapi.roas
+./target/debug/poolster contract inspect workflows.yaml --input-format arazzo --format json
+./target/debug/poolster contract inspect service.proto --input-format protobuf
+./target/debug/poolster contract inspect service.capnp --input-format capnproto
 ```
 
 The JSON report contains `provider`, `source`, `summary` and `diagnostics`. Parsing
@@ -68,13 +68,13 @@ introspection JSON and separate operation documents are not accepted as SDL.
 
 ### Include only the formats you need
 
-`InputRegistry` belongs to `kaji-core`; each parser and provider belongs to its own `kaji-input-*` crate under `crates/inputs/`.
-The `kaji-inputs` convenience bundle exposes optional Cargo features named `graphql`, `asyncapi`, `arazzo`,
+`InputRegistry` belongs to `poolster-core`; each parser and provider belongs to its own `poolster-input-*` crate under `crates/inputs/`.
+The `poolster-inputs` convenience bundle exposes optional Cargo features named `graphql`, `asyncapi`, `arazzo`,
 `protobuf` and `capnproto`, enabled by default. An embedded application can build
 only the providers it needs:
 
 ```toml
-kaji-inputs = { path = "../kaji-inputs", default-features = false, features = ["graphql"] }
+poolster-inputs = { path = "../poolster-inputs", default-features = false, features = ["graphql"] }
 ```
 
 ```rust
@@ -128,7 +128,7 @@ for dependency declarations and output publication.
 ## Supply a normalized HTTP input later
 
 An input plugin which normalizes an HTTP contract can publish `AdaptedApi`,
-including its security scheme catalog. `kaji::generate_with_input` passes this
+including its security scheme catalog. `poolster::generate_with_input` passes this
 contract to the existing SDK packages. A future `openapi.roas` input can therefore
 provide the same capability as a compiler-backed input without changing SDK
 renderers. That parser integration is not implemented yet.
@@ -139,12 +139,12 @@ SDK bridge. Input substitution does not establish OpenAPI parser equivalence.
 ## Verification
 
 ```sh
-cargo test -p kaji-core input::
-cargo test -p kaji-inputs -p kaji-input-graphql -p kaji-input-asyncapi -p kaji-input-arazzo -p kaji-input-protobuf -p kaji-input-capnproto
-cargo test -p kaji-cli --test contract
-cargo test -p kaji --lib registered_input
-cargo check -p kaji-inputs --no-default-features
-cargo check -p kaji-inputs --no-default-features --features graphql
+cargo test -p poolster-core input::
+cargo test -p poolster-inputs -p poolster-input-graphql -p poolster-input-asyncapi -p poolster-input-arazzo -p poolster-input-protobuf -p poolster-input-capnproto
+cargo test -p poolster-cli --test contract
+cargo test -p poolster --lib registered_input
+cargo check -p poolster-inputs --no-default-features
+cargo check -p poolster-inputs --no-default-features --features graphql
 ```
 
 The suite covers format semantics, invalid references, registry selection,
@@ -156,15 +156,15 @@ See [verification](verification.md) for toolchain coverage and baseline failures
 
 | Format | Crate | Provider |
 | --- | --- | --- |
-| GraphQL | `kaji-input-graphql` | `GraphqlInput` |
-| AsyncAPI | `kaji-input-asyncapi` | `AsyncApiInput` |
-| Arazzo | `kaji-input-arazzo` | `ArazzoInput` |
-| Protobuf | `kaji-input-protobuf` | `ProtobufInput` |
-| Cap’n Proto | `kaji-input-capnproto` | `CapnProtoInput` |
+| GraphQL | `poolster-input-graphql` | `GraphqlInput` |
+| AsyncAPI | `poolster-input-asyncapi` | `AsyncApiInput` |
+| Arazzo | `poolster-input-arazzo` | `ArazzoInput` |
+| Protobuf | `poolster-input-protobuf` | `ProtobufInput` |
+| Cap’n Proto | `poolster-input-capnproto` | `CapnProtoInput` |
 
 Each crate owns its parser dependencies, native document type and provider.
 Applications can depend on a provider directly and register it in the core
-registry. `kaji-inputs` only reexports providers and assembles the default
+registry. `poolster-inputs` only reexports providers and assembles the default
 registry. Future Roas OpenAPI providers can follow the same structure.
 
 ## Upstream corpus and end-to-end coverage

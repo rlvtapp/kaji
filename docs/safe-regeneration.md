@@ -1,18 +1,18 @@
 # Safe regeneration
 
-Kaji protects generated output with path ownership and SHA-256 fingerprints.
+Poolster protects generated output with path ownership and SHA-256 fingerprints.
 Keep both bookkeeping files with the SDK when regenerating in CI:
 
 | File | Records |
 | --- | --- |
-| `.kaji/ownership.json` | Generated paths, persistent owners and fingerprints |
-| `.kaji/generation.lock.json` | Generation replay lock |
+| `.poolster/ownership.json` | Generated paths, persistent owners and fingerprints |
+| `.poolster/generation.lock.json` | Generation replay lock |
 
 ## Preview changes
 
 ```sh
-kaji generate --config kaji.json --check
-kaji generate --config kaji.json --check --format json
+poolster generate --config poolster.json --check
+poolster generate --config poolster.json --check --format json
 ```
 
 `--check` compares output without writing destination files. JSON contains
@@ -36,7 +36,7 @@ Only fingerprint-matching files in the ownership record can be removed.
 ## Adopt legacy output
 
 Older output can be adopted when its bytes already match, its first eight lines
-contain a Kaji generation notice, or it is the known replay lock. npm manifests
+contain a Poolster generation notice, or it is the known replay lock. npm manifests
 use the merge policy.
 
 Changed, unmarked legacy files require manual review. Legacy obsolete files are

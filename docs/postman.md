@@ -7,7 +7,7 @@
 | Supply custom examples | [Plugin composition](#customize-through-plugins) |
 | Validate or execute locally | [Distribution checks](#validate-before-distributing) |
 
-Kaji exports portable Collection 2.1 JSON through an independent Postman plugin. It uses
+Poolster exports portable Collection 2.1 JSON through an independent Postman plugin. It uses
 the same normalized API and security catalog as SDK generation. You can ship a
 collection beside your SDK without depending on a generated client. These commands
 require a build containing the new target; the published 0.4.0 launcher does not contain
@@ -30,7 +30,7 @@ like this:
 }
 ```
 
-Run `kaji generate --config kaji.json`. Alternatively select `--language postman` in a
+Run `poolster generate --config poolster.json`. Alternatively select `--language postman` in a
 direct generate command; default filenames are `collection.json` and `environment.json`.
 `all` remains the SDK-only shortcut.
 
@@ -92,7 +92,7 @@ The native API exposes `RequestExamples`, `CollectionDocument`, and
 providers:
 
 ```rust
-use kaji::{postman, prelude::*};
+use poolster::{postman, prelude::*};
 let examples = postman::examples();
 let collection = postman::collection()
     .using_examples(examples.handle())
@@ -106,7 +106,7 @@ let package = postman::package("postman")
 
 A custom example provider can supply operation/media-specific values; the renderer still
 applies redaction. Replace the collection renderer with your own plugin when you need
-custom scripts or a different serialization strategy. Kaji does not import JavaScript
+custom scripts or a different serialization strategy. Poolster does not import JavaScript
 from the specification or execute requests during generation.
 
 ## Validate before distributing

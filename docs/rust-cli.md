@@ -42,7 +42,7 @@ single `--data` JSON value rather than trying to infer a form.
 
 ## Generated references
 
-Kaji emits factual OpenAPI-derived command references at
+Poolster emits factual OpenAPI-derived command references at
 `references/<command-group>.md`, containing operations, parameters, and simple
 request-body fields. It deliberately does not generate `SKILL.md`: a real agent skill
 needs provider-authored workflow, safety, and product guidance.
@@ -50,7 +50,7 @@ needs provider-authored workflow, safety, and product guidance.
 ## Authentication and customization
 
 `auth set-token` stores a local bearer token and `<COMMAND>_TOKEN` supplies an ephemeral
-token in CI. Kaji creates `src/kaji_extension.rs` and `src/kaji_auth.rs` only once, so
+token in CI. Poolster creates `src/kaji_extension.rs` and `src/kaji_auth.rs` only once, so
 both are preserved when the CLI is regenerated. The latter's `ExtensionV1` contract is
 versioned.
 
@@ -58,14 +58,14 @@ versioned.
 
 Implement `pre_authenticate` to add custom OAuth, SSO, keychain, or signing credentials,
 then return `AuthenticationResult::Handled`; return `AuthenticationResult::Fallback` to
-retain Kaji's environment/profile token lookup. `before_request` and `after_response` in
+retain Poolster's environment/profile token lookup. `before_request` and `after_response` in
 `kaji_extension.rs` are available for logging, tracing, and audit events.
 
 Existing `authenticate` implementations returning an optional bearer token remain
 supported. The generated `auth login` command delegates to `login`.
 
 ```rust
-impl ExtensionV1 for KajiAuthExtension {
+impl ExtensionV1 for PoolsterAuthExtension {
     fn pre_authenticate(
         &self,
         auth: &mut AuthenticateContext<'_, '_, '_>,

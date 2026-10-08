@@ -1,6 +1,6 @@
-# Kaji from the terminal
+# Poolster from the terminal
 
-Keep a `kaji.json` recipe. Generate, review, repeat.
+Keep a `poolster.json` recipe. Generate, review, repeat.
 
 [Quickstart](quickstart.md) · [Configure packages](config.md) ·
 [Recipes](recipes.md) · [Commands](commands.md)
@@ -8,15 +8,15 @@ Keep a `kaji.json` recipe. Generate, review, repeat.
 ## Generate your first package
 
 ```sh
-npx kajicli init --input ./openapi.yaml --output ./generated
-npx kajicli generate --config kaji.json
-npx kajicli generate --config kaji.json --check
+npx poolster init --input ./openapi.yaml --output ./generated
+npx poolster generate --config poolster.json
+npx poolster generate --config poolster.json --check
 ```
 
 The last command checks for drift without writing output. Build and test the
 generated package separately with its native tools.
 
-Prefer pip? Install `kaji-cli` and use `kaji` in place of `npx kajicli`.
+Prefer pip? Install `poolster-cli` and use `poolster` in place of `npx poolster`.
 Both launchers bundle the generator and OpenAPI compiler.
 [Installation and source builds →](../cli.md)
 
@@ -37,7 +37,7 @@ New input providers need a source build and compatible output consumers.
 ## Check your work
 
 ```sh
-kaji generate --config kaji.json --check --format json
+poolster generate --config poolster.json --check --format json
 ```
 
 The report lists added, modified and removed paths. Drift makes the command fail.

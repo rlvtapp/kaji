@@ -1,11 +1,11 @@
-# Kaji feature catalog
+# Poolster feature catalog
 
 [Docs home](README.md) · [Generate an SDK](cli/quickstart.md) · [Verification](verification.md)
 
 Use this page to choose what to generate and what to verify before shipping it.
-Kaji is a generator and extensible source toolchain: SDK packages, runtime policies,
+Poolster is a generator and extensible source toolchain: SDK packages, runtime policies,
 API artifacts and delivery files belong to you. Optional plugins are selected in
-`kaji.json` or through the typed Rust library API.
+`poolster.json` or through the typed Rust library API.
 
 **Implemented** means available in source. **Verified** means the stated tests
 executed. **Limited** identifies a supported subset. **Prepared** means workflow
@@ -23,7 +23,7 @@ supported. Version 0.5.0 is on the branch; use a source build until published.
 | Review contract changes and release SDKs | Release metadata and editable Actions | [Automation](sdk-automation.md), [publishing](sdk-publishing.md) |
 | Build frontend integrations | TypeScript query/schema/mock consumers | [TypeScript helpers](guides/typescript-helpers.md) |
 | Export a collection or provider | `postman` or typed `terraform` package | [API artifacts example](../examples/api-artifacts/README.md) |
-| Expose tools to an AI client | MCP artifact or local Kaji MCP server | [MCP server](mcp-server.md) |
+| Expose tools to an AI client | MCP artifact or local Poolster MCP server | [MCP server](mcp-server.md) |
 
 ## Contracts and generation
 
@@ -43,7 +43,7 @@ supported. Version 0.5.0 is on the branch; use a source build until published.
 | Large public contract regression | Pinned Graph, six official contracts and 205 APIs.guru contracts (including five Azure services); 205/205 Go generation/native passes; other targets have [recorded failures](guru-compatibility.md) | [Large specs](large-specs.md) |
 | Native input providers | GraphQL, AsyncAPI, Arazzo, Protobuf and Cap’n Proto; typed publication and inspection, output consumers must support each contract | [Input plugins](input-plugins.md) |
 | Arbitrary custom languages | Rust library `Language`/`Plugin` implementations and optional delivery metadata. CLI needs explicit registry integration | [Library plugins](library/plugins.md) |
-| Ejectable generator sources | `kaji eject` exports rebuildable renderers, runtime sources and plugin interfaces, with a SHA-256 manifest | [Own the sources](source-customization.md) |
+| Ejectable generator sources | `poolster eject` exports rebuildable renderers, runtime sources and plugin interfaces, with a SHA-256 manifest | [Own the sources](source-customization.md) |
 
 ## SDK targets
 
@@ -78,7 +78,7 @@ and selector restrictions are in the [pagination guide](guides/pagination.md).
 | Consumer middleware | Rewrite requests/responses, short-circuit or recover through native supported hooks | Java/C#/PHP use native HTTP decorators; hook signatures differ |
 | Bundled author middleware | Ship policy modules and register them by default during generation | Customers need no middleware registration for bundled policies |
 | Retry and backoff | Replay safe operations with bounded attempts and server delay handling | Ruby/Swift default to one attempt; retry settings enable replay-safe retries |
-| Idempotency keys | `x-kaji-idempotency` or per-package rules; secure UUIDs, caller overrides, operation-scoped header | Requires server semantics; blank keys do not protect replay; PATCH requires a key |
+| Idempotency keys | `x-poolster-idempotency` or per-package rules; secure UUIDs, caller overrides, operation-scoped header | Requires server semantics; blank keys do not protect replay; PATCH requires a key |
 | Pagination | Lazy helpers reuse the actual operation, transport/auth and middleware | Helpers yield pages; forms/body controls differ by target |
 | Per-call headers and timeouts | TypeScript/Ruby request options; Go context options; Python/Rust/Java/C# scoped clients | [Native timeout scope differs](guides/request-controls.md); Swift/Elixir offer native scopes; PHP scopes can inject a timeout-configured PSR driver |
 | Cancellation | Native context/signal/task cancellation; tests cover supported transports and pagers | Custom drivers retain native cancellation responsibilities |
@@ -103,11 +103,11 @@ Start from [generated SDKs](generated-sdks.md), then follow
 | Faker | `faker` | Bounded recursive model factories and modules; not business-valid data |
 | MSW | `msw` | Editable MSW v2 handlers with bounded modules |
 | Cypress | `cypress` | Split smoke-test scaffolding needing project fixtures/assertions |
-| Contract mock | `mock` server | Deterministic HTTP/Docker mock; conditional `x-kaji-mock` scenarios |
+| Contract mock | `mock` server | Deterministic HTTP/Docker mock; conditional `x-poolster-mock` scenarios |
 | API CLIs | `typescript-cli` or `rust-cli` | API-specific command tools; TypeScript CLI has optional OAuth configuration |
 | Symfony integration | `symfony` | Wraps a generated PHP SDK |
 | ReDoc | Artifacts `redoc` | Documentation entry point for an OpenAPI contract |
-| MCP | Artifacts `mcp` | Tool manifest for an integration; local Kaji MCP server is separate |
+| MCP | Artifacts `mcp` | Tool manifest for an integration; local Poolster MCP server is separate |
 | API reference | Package `api_reference: true` | Regenerated package-local operation reference |
 
 Read [auxiliary generators](auxiliary-generators.md), [mocking](mocking.md),

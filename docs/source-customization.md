@@ -5,8 +5,8 @@ Rust plugins. Rebuild that workspace to change future generated SDKs.
 Customers use the generated package; they do not need the generator workspace.
 
 ```sh
-kaji eject --language ruby --out ./my-kaji
-cd my-kaji
+poolster eject --language ruby --out ./my-poolster
+cd my-poolster
 ```
 
 **Use a new destination.** Eject writes source only; it does not overwrite files,
@@ -36,18 +36,18 @@ This is source ejection: many renderers construct code directly in Rust, and oth
 Install Rust and Go, then run from the ejected directory:
 
 ```sh
-cargo build --locked -p kaji-cli
-(cd openapi && go build -o ../target/debug/kaji-openapi .)
-./target/debug/kaji generate /absolute/path/to/openapi.yaml \
+cargo build --locked -p poolster-cli
+(cd openapi && go build -o ../target/debug/poolster-openapi .)
+./target/debug/poolster generate /absolute/path/to/openapi.yaml \
   --language ruby --output /absolute/path/to/sdk
 ```
 
-The first build can download Cargo and Go dependencies. The Go executable goes beside the rebuilt CLI. Alternatively, supply an existing compiler with `--openapi-compiler` or `KAJI_OPENAPI_BIN`.
+The first build can download Cargo and Go dependencies. The Go executable goes beside the rebuilt CLI. Alternatively, supply an existing compiler with `--openapi-compiler` or `POOLSTER_OPENAPI_BIN`.
 
-For a release build, run `cargo build --locked --release -p kaji-cli` and place the compiler beside `target/release/kaji`. Existing generation configuration works with the rebuilt binary:
+For a release build, run `cargo build --locked --release -p poolster-cli` and place the compiler beside `target/release/poolster`. Existing generation configuration works with the rebuilt binary:
 
 ```sh
-./target/debug/kaji generate --config /absolute/path/to/kaji.json
+./target/debug/poolster generate --config /absolute/path/to/poolster.json
 ```
 
 ## Change generated behavior
@@ -60,14 +60,14 @@ For a release build, run `cargo build --locked --release -p kaji-cli` and place 
 
 For reusable extensions, use the [typed plugin interfaces](typed-plugins.md). Add a Rust plugin crate, register its workspace/dependency entries, then integrate it with the profile and CLI configuration. Existing plugin `src/lib.rs` files provide maintained registration examples. Plugins can emit additional modules, integrate bundled author middleware and compose generation steps; source ejection preserves that architecture.
 
-Keep your generator changes in version control. When updating Kaji, eject the new version into a fresh directory and compare source manifests before applying your changes. Retain `LICENSE` when distributing sources.
+Keep your generator changes in version control. When updating Poolster, eject the new version into a fresh directory and compare source manifests before applying your changes. Retain `LICENSE` when distributing sources.
 
 ## Verification
 
-Run the relevant plugin tests after customization and compile the resulting SDK with its native toolchain. Kaji includes an opt-in integration probe that ejects the workspace, edits a real Ruby renderer, rebuilds the CLI and Go compiler, then verifies generation consumed the edit:
+Run the relevant plugin tests after customization and compile the resulting SDK with its native toolchain. Poolster includes an opt-in integration probe that ejects the workspace, edits a real Ruby renderer, rebuilds the CLI and Go compiler, then verifies generation consumed the edit:
 
 ```sh
-cargo test -p kaji-cli eject::tests::rebuilt_ejected_renderer_consumes_custom_source \
+cargo test -p poolster-cli eject::tests::rebuilt_ejected_renderer_consumes_custom_source \
   -- --ignored --nocapture
 ```
 

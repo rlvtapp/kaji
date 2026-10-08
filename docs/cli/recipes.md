@@ -15,7 +15,7 @@
 }
 ```
 
-Run `kaji generate` once. Fetch and Axios remain separate packages; place
+Run `poolster generate` once. Fetch and Axios remain separate packages; place
 framework helpers alongside the transport they import. Copy the complete
 [multi-package example](../../examples/cli-multi-package/README.md).
 
@@ -36,11 +36,11 @@ framework helpers alongside the transport they import. Copy the complete
 Set the token in your shell or CI secret store, never in JSON:
 
 ```sh
-PARTNER_OPENAPI_TOKEN=… npx kajicli generate
+PARTNER_OPENAPI_TOKEN=… npx poolster generate
 ```
 
 ## Compile once, render repeatedly
 
 For local package-configuration experiments, retain compiler artifacts and set
 `openapi.artifacts` in your recipe. Artifacts are internal, versioned output;
-regenerate them when the contract or Kaji version changes.
+regenerate them when the contract or Poolster version changes.

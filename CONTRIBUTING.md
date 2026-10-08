@@ -1,6 +1,6 @@
-# Contributing to Kaji
+# Contributing to Poolster
 
-Thanks for contributing. Kaji values small, reviewable changes with clear
+Thanks for contributing. Poolster values small, reviewable changes with clear
 behavioural tests.
 
 Start with the [contributor guide](docs/contributing.md) for workspace structure,
@@ -17,5 +17,5 @@ adding modules, generated-language templates, or test fixtures.
    copied compatibility corpora to the repository.
 
 New language targets belong under `crates/plugins/<language>`. Keep shared
-OpenAPI semantics in `kaji-core`; do not make the core depend on a particular
+OpenAPI semantics in `poolster-core`; do not make the core depend on a particular
 SDK runtime.

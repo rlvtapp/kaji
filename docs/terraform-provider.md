@@ -1,6 +1,6 @@
 # Generate a typed Terraform provider
 
-Kaji's `terraform` plugin generates a Go provider using HashiCorp's Terraform
+Poolster's `terraform` plugin generates a Go provider using HashiCorp's Terraform
 Plugin Framework. It builds a validated entity catalog before rendering resources;
 OpenAPI HTTP operations alone are not a promise of Terraform lifecycle semantics.
 This is the first typed implementation, with a deliberately bounded supported
@@ -43,7 +43,7 @@ Invalid explicit bindings fail generation rather than producing a partial resour
 Set `infer: true` or select `--language terraform` to consider conventional
 collection POST and matching item GET/PATCH-or-PUT/DELETE operations. Inference
 emits only validated candidates; explicit mappings are preferable for production
-contracts. The generated `.kaji/terraform-plan.json` explains accepted resources
+contracts. The generated `.poolster/terraform-plan.json` explains accepted resources
 and excluded operations. Examine it even when generation succeeds.
 
 ## Understand the supported state behavior
@@ -179,12 +179,12 @@ destroy against an ephemeral loopback mock, including a data-source read:
 
 ```sh
 KAJI_TERRAFORM_BIN=/path/to/terraform \
-  cargo test -p kaji-plugin-terraform terraform_cli_local_mock_lifecycle -- --ignored
+  cargo test -p poolster-plugin-terraform terraform_cli_local_mock_lifecycle -- --ignored
 ```
 
 This was verified with Terraform 1.13.4 and pinned Framework dependencies. Go
 modules must be available in `KAJI_TERRAFORM_GOMODCACHE` (default
-`/tmp/kaji-tf-mod-cache`); the harness builds offline and uses provider development
+`/tmp/poolster-tf-mod-cache`); the harness builds offline and uses provider development
 overrides, without registry installation/publication. Local mocks verify the
 generated boundary, not your live API’s lifecycle semantics. Test real API
 behavior deliberately in a sandbox before release.
@@ -199,7 +199,7 @@ separate publisher policy.
 The native API supports independent semantic providers and renderer consumers:
 
 ```rust
-use kaji::{terraform, prelude::*};
+use poolster::{terraform, prelude::*};
 let entities = terraform::entities();
 let provider = terraform::provider().using_entities(entities.catalog_handle());
 let package = terraform::package("terraform")
@@ -211,7 +211,7 @@ let package = terraform::package("terraform")
 
 `terraform::analyze` builds an inspectable catalog without rendering files. The
 new native `terraform::provider()` path consumes a typed `EntityCatalog`.
-Use explicit resource bindings or target-specific `x-kaji-terraform` annotations
+Use explicit resource bindings or target-specific `x-poolster-terraform` annotations
 when conventional inference does not describe your service. Keep custom Go source
 in package-scoped customization files, and use guarded patches for changes to
 owned files. Do not edit generated resource files and expect regeneration to
@@ -277,7 +277,7 @@ selected Terraform executable:
 ```sh
 KAJI_TERRAFORM_BIN=/path/to/terraform \
 KAJI_TERRAFORM_GOMODCACHE=/path/to/go/pkg/mod \
-cargo test -p kaji-plugin-terraform terraform_cli_local_mock_lifecycle -- --ignored
+cargo test -p poolster-plugin-terraform terraform_cli_local_mock_lifecycle -- --ignored
 ```
 
 Additional native Framework tests cover missing resources, malformed or incomplete

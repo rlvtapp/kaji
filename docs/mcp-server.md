@@ -2,10 +2,10 @@
 
 [Artifact recipes](guides/artifacts.md) · [CLI commands](cli/commands.md)
 
-`kaji mcp` turns an OpenAPI document into a stdio [Model Context Protocol](https://modelcontextprotocol.io/) server. It exposes each operation as a tool and sends calls to the API origin you choose.
+`poolster mcp` turns an OpenAPI document into a stdio [Model Context Protocol](https://modelcontextprotocol.io/) server. It exposes each operation as a tool and sends calls to the API origin you choose.
 
 ```sh
-kaji mcp ./openapi.yaml --base-url https://api.example.com
+poolster mcp ./openapi.yaml --base-url https://api.example.com
 ```
 
 The command compiles the document once at startup, then speaks newline-delimited JSON-RPC on standard input/output. Configure it as a stdio server in an MCP host; do not run it in a terminal that writes anything else to standard output.
@@ -29,24 +29,24 @@ Set `contentType` when an operation declares more than one request media type. J
 
 ## Safety and authentication
 
-Kaji does not infer credentials or read them from the OpenAPI document. Supply them per call in `headers` or `cookies`, or place a credential-injecting proxy at `--base-url`. Treat every tool that maps to a mutating HTTP method as production-capable: use a test API origin while evaluating agents.
+Poolster does not infer credentials or read them from the OpenAPI document. Supply them per call in `headers` or `cookies`, or place a credential-injecting proxy at `--base-url`. Treat every tool that maps to a mutating HTTP method as production-capable: use a test API origin while evaluating agents.
 
 MCP calls support ordinary scalar and repeated query values. The generated SDK runtime offers the fuller OpenAPI parameter-serialization and codec surface.
 
 ## Generator-control server
 
-Run `kaji mcp generator` when an MCP host needs to operate Kaji itself rather
-than call an API described by a spec. It exposes `kaji_languages` and
-`kaji_generate`; the latter accepts an explicit local source path, output path,
+Run `poolster mcp generator` when an MCP host needs to operate Poolster itself rather
+than call an API described by a spec. It exposes `poolster_languages` and
+`poolster_generate`; the latter accepts an explicit local source path, output path,
 and selected language targets. It invokes the same CLI generation command and
 therefore overwrites generated output under the path the MCP caller supplies.
 
 ```sh
-kaji mcp generator
+poolster mcp generator
 ```
 
-Keep this server scoped to a trusted workspace: `kaji_generate` writes SDK
-output, just like running `kaji generate` directly.
+Keep this server scoped to a trusted workspace: `poolster_generate` writes SDK
+output, just like running `poolster generate` directly.
 
 The [agentic generation example](../examples/agentic-generation/README.md)
 includes a copyable MCP command fragment, a minimal contract, representative

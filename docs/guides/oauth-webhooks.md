@@ -42,7 +42,7 @@ TypeScript can bind it to a named SDK transport with `"uses":{"transport":"clien
 otherwise composition requires one unambiguous maintained provider. Native Rust plugins
 expose `ts::oauth()`, `rust::oauth()`, `java::oauth()` and `csharp::oauth()`.
 
-This is generated source: SDK customers use the emitted helper without installing Kaji.
+This is generated source: SDK customers use the emitted helper without installing Poolster.
 
 | Target | Connect the generated provider |
 | --- | --- |
@@ -156,7 +156,7 @@ Add `{"name":"oauth"}` beside `sdk` in the recipe, or use `swift::oauth()`,
 
 | Target | Native integration | Scope |
 | --- | --- | --- |
-| Swift | `KajiOAuthClientCredentials(tokenURL:clientID:clientSecret:scope:transport:)`, then `KajiOAuthTransport(inner:provider:origin:)` as the client's transport | Actor-coordinated refresh; buffered transport; caller supplies a bounded issuer transport with redirects disabled |
+| Swift | `PoolsterOAuthClientCredentials(tokenURL:clientID:clientSecret:scope:transport:)`, then `PoolsterOAuthTransport(inner:provider:origin:)` as the client's transport | Actor-coordinated refresh; buffered transport; caller supplies a bounded issuer transport with redirects disabled |
 | PHP | Generated `OAuthClient` wrapping the API PSR-18 client, a separate issuer client, PSR request/stream factories and API origin | Cached synchronous tokens; issuer timeout/redirect policy belongs to its PSR driver; non-seekable request bodies cannot be replayed |
 | Elixir | `OAuthClientCredentials.start_link(token_url: ..., client_id: ..., client_secret: ..., fetch: fetch)`, then `OAuthClientCredentials.middleware(provider, origin)` | GenServer-coordinated refresh; a supplied fetch callback performs issuer HTTP; callback execution is bounded to 30 seconds |
 

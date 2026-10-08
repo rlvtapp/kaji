@@ -1,7 +1,7 @@
 # Terraform generation: Speakeasy comparison
 
 Reviewed against Speakeasy's public documentation on October 7, 2026. The goal is
-reliable Terraform behavior within Kaji's plugin system. Similar feature names do
+reliable Terraform behavior within Poolster's plugin system. Similar feature names do
 not imply equivalent coverage or native test evidence.
 
 ## What the comparison covers
@@ -23,14 +23,14 @@ success/failure conditions and cancellation-sensitive waits. [Polling guide](htt
 More advanced mappings can reshape API data and combine lifecycle calls.
 [Transformation overview](https://www.speakeasy.com/blog/release-terraform-jq-transformations).
 
-## Kaji's implementation and boundaries
+## Poolster's implementation and boundaries
 
 The runnable [provider guide](terraform-provider.md) is authoritative for current
-configuration and supported shapes. Kaji keeps native typed provider contracts,
+configuration and supported shapes. Poolster keeps native typed provider contracts,
 explicit operation bindings, and actionable generation diagnostics. It does not
-interpret arbitrary Speakeasy extensions as Kaji configuration.
+interpret arbitrary Speakeasy extensions as Poolster configuration.
 
-| Capability | Kaji |
+| Capability | Poolster |
 | --- | --- |
 | CRUD resource mapping | Explicit bindings and conservative opt-in inference; unsupported lifecycle semantics fail validation |
 | Authentication and drift | Supported bearer/basic/API-key schemes; reads refresh state and distinguish missing objects from errors |

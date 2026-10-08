@@ -1,6 +1,6 @@
 # Shared SDK behavior plans and wire fixtures
 
-Language plugins can use `kaji_core::pagination::normalize_pagination` instead of independently parsing pagination extensions. It returns a typed cursor, offset/limit, page, or URL plan, or an error identifying invalid declarations. An explicit `PaginationRule` takes precedence over `x-kaji-pagination`, which takes precedence over `x-speakeasy-pagination`.
+Language plugins can use `poolster_core::pagination::normalize_pagination` instead of independently parsing pagination extensions. It returns a typed cursor, offset/limit, page, or URL plan, or an error identifying invalid declarations. An explicit `PaginationRule` takes precedence over `x-poolster-pagination`, which takes precedence over `x-speakeasy-pagination`.
 
 Rules retain the established extension shape:
 
@@ -27,10 +27,10 @@ Existing language paginator renderers remain available; exposing a shared plan d
 
 ## Optional serialization fixture consumers
 
-A test plugin can consume model-provider symbols and emit deterministic inputs with `kaji_core::samples::schema_samples`:
+A test plugin can consume model-provider symbols and emit deterministic inputs with `poolster_core::samples::schema_samples`:
 
 ```rust
-use kaji_core::samples::{SampleOptions, schema_samples};
+use poolster_core::samples::{SampleOptions, schema_samples};
 
 let report = schema_samples(api, &schema.value, SampleOptions::default());
 for sample in report.samples {

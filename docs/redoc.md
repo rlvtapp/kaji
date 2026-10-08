@@ -20,10 +20,10 @@ that plugin's rendering utilities.
 }
 ```
 
-Run `kaji generate --config kaji.json`. The package contains `redoc/redoc.html`
+Run `poolster generate --config poolster.json`. The package contains `redoc/redoc.html`
 and `redoc/redocly.yaml`. Copy a public, credential-free OpenAPI export to
 `generated/reference/redoc/openapi.yaml` before hosting. `openapi_spec` is a
-browser URL resolved relative to the HTML page, not a file Kaji copies or bundles.
+browser URL resolved relative to the HTML page, not a file Poolster copies or bundles.
 Serve the folder over HTTP so the browser can fetch the specification. If you use
 an absolute specification URL, its host must permit the browser's CORS request.
 

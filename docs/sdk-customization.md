@@ -15,10 +15,10 @@ once available, or the [source build](source-customization.md).
 
 | Change | Use | Enabled by |
 | --- | --- | --- |
-| Ship a default HTTP policy with an SDK | Package `middleware` | Kaji during generation |
+| Ship a default HTTP policy with an SDK | Package `middleware` | Poolster during generation |
 | Add a helper, export, or test | `customizations` with `add` | Your imports/exports/test commands |
-| Replace a generated operation or file | `customizations` with `replace` | Kaji during generation |
-| Make a small guarded source change | `customizations` with `patch` | Kaji during generation |
+| Replace a generated operation or file | `customizations` with `replace` | Poolster during generation |
+| Make a small guarded source change | `customizations` with `patch` | Poolster during generation |
 | Customer-specific HTTP behavior | Runtime middleware/driver configuration | SDK customer |
 | Replace a renderer or transport provider | Typed plugin composition | SDK generator author |
 
@@ -32,7 +32,7 @@ Create an author-maintained file outside the output directory, for example
 `middleware/author-policy.ts`:
 
 ```ts
-import type { ClientMiddleware } from '../.kaji/client'
+import type { ClientMiddleware } from '../.poolster/client'
 
 export const authorPolicy: ClientMiddleware = async (request, next) => {
   const headers = new Headers(request.headers as HeadersInit)
@@ -43,10 +43,10 @@ export const authorPolicy: ClientMiddleware = async (request, next) => {
 
 The import is resolved from the destination file in the SDK, not from the source
 file beside your recipe. This example uses the TypeScript SDK convenience
-renderer, whose transport is `.kaji/client.ts`. Use a type-only import to avoid
+renderer, whose transport is `.poolster/client.ts`. Use a type-only import to avoid
 creating a runtime cycle between your policy and the client that imports it.
 
-Inside your TypeScript package entry in `kaji.json`:
+Inside your TypeScript package entry in `poolster.json`:
 
 ```json
 {
@@ -61,7 +61,7 @@ Inside your TypeScript package entry in `kaji.json`:
 }
 ```
 
-Generate normally. Kaji copies the source into
+Generate normally. Poolster copies the source into
 `<output>/typescript/middleware/author-policy.ts` and imports it into the shared
 runtime. Direct operation functions and SDK class instances use the policy.
 Customers still construct the ordinary SDK:
@@ -79,7 +79,7 @@ native build/tests check the export and signature.
 
 | Field | Meaning |
 | --- | --- |
-| `source` | UTF-8 source file, relative to `kaji.json` |
+| `source` | UTF-8 source file, relative to `poolster.json` |
 | `path` | Destination file, relative to this SDK package's root |
 | `symbol` | Exported function, factory, constant, or class; see native contracts below |
 | `async_symbol` | Python async middleware function; required for async Python output |
@@ -96,7 +96,7 @@ customer controlling the SDK source can change it.
 <summary>Language paths, signatures and support limits</summary>
 
 Choose the actual source directory and namespace from your generated package.
-Kaji rejects unsupported layouts and collisions instead of guessing an import.
+Poolster rejects unsupported layouts and collisions instead of guessing an import.
 Symbols must be simple ASCII identifiers; the language may impose additional
 keyword/casing restrictions.
 
@@ -104,10 +104,10 @@ keyword/casing restrictions.
 | --- | --- | --- |
 | TypeScript Fetch/Axios | Any portable `.ts` implementation path in the package | Named export implementing `ClientMiddleware` |
 | Python | `.py` module beside generated `runtime.py`, usually `src/<package>/policy.py` | `symbol(request, next)`; optional async output requires `async_symbol(request, next)` as an async function |
-| Go | Root `.go` file beside `client.go`, with the SDK's package declaration | Function with `KajiMiddleware` signature: `func(next KajiHTTPClient) KajiHTTPClient` |
+| Go | Root `.go` file beside `client.go`, with the SDK's package declaration | Function with `PoolsterMiddleware` signature: `func(next PoolsterHTTPClient) PoolsterHTTPClient` |
 | Rust | `src/<module>.rs` | Public `symbol()` factory returning a type implementing generated `Middleware` |
 | Ruby | `.rb` file beside `lib/<module>/client.rb` | Top-level callable constant `symbol` accepting `(request, following)` |
-| Swift | `.swift` file beside `Sources/<module>/KajiClient.swift` | Free `symbol()` factory returning `KajiMiddleware` |
+| Swift | `.swift` file beside `Sources/<module>/PoolsterClient.swift` | Free `symbol()` factory returning `PoolsterMiddleware` |
 | Elixir | `lib/<name>.ex` | Module `symbol` exporting `handle(request, next)` for buffered requests |
 | Java | `<symbol>.java` beside `ClientBase.java` | Class in generated package with static `wrap(HttpClient)` returning a decorated `HttpClient` |
 | C#/DotNet | Compiled `.cs` file in the package, outside `bin`/`obj` | Class in generated namespace with static `Wrap(HttpClient)` returning a decorated `HttpClient` |
@@ -162,8 +162,8 @@ live API behavior, full schema validation or SSE validation. The bundled example
 supplies its test commands to release automation.
 
 ```sh
-kaji generate --config kaji.json
-kaji generate --config kaji.json --check
+poolster generate --config poolster.json
+poolster generate --config poolster.json --check
 ```
 
 A source edit causes `--check` to report drift without writing. Regeneration
@@ -221,10 +221,10 @@ generator fixes.
 ## Embed the same policy in a Rust generation program
 
 ```rust
-use kaji::{BundledMiddleware, prelude::*};
+use poolster::{BundledMiddleware, prelude::*};
 
-let package = kaji::ts::package("web")
-    .with(kaji::ts::sdk())
+let package = poolster_plugin_typescript::package("web")
+    .with(poolster_plugin_typescript::sdk())
     .middleware(BundledMiddleware {
         path: "middleware/author-policy.ts".into(),
         contents: std::fs::read_to_string("middleware/author-policy.ts")?,
