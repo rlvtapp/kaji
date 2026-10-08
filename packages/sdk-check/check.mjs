@@ -13,7 +13,7 @@ export function packageDirectory(workspace, input) {
 }
 const command = (program, ...args) => ({ program, args });
 export function plan(directory, language) {
-  const metadata = resolve(directory, '.kaji/package.json');
+  const metadata = resolve(directory, '.poolster/package.json');
   if (existsSync(metadata)) {
     const value = JSON.parse(readFileSync(metadata, 'utf8'));
     if (value.schema_version !== 1 || value.language !== language) throw new Error('SDK metadata version/language mismatch');

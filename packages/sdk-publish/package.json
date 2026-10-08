@@ -1,5 +1,5 @@
 {
-  "name": "@relevate/kaji-sdk-publish-action",
+  "name": "@relevate/poolster-sdk-publish-action",
   "private": true,
   "type": "module",
   "scripts": { "test": "node --test test/*.test.mjs" },

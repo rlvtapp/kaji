@@ -6,10 +6,10 @@ import { join } from 'node:path';
 import { packageDirectory, plan, execute } from '../check.mjs';
 
 test('plugin commands stay literal and failing checks stop publication', () => {
-  const root = mkdtempSync(join(tmpdir(), 'kaji-check-'));
+  const root = mkdtempSync(join(tmpdir(), 'poolster-check-'));
   try {
-    mkdirSync(join(root, '.kaji'));
-    writeFileSync(join(root, '.kaji/package.json'), JSON.stringify({schema_version:1,language:'community',build:[{program:'builder',args:['$(literal)']}],test:[{program:'tester'}]}));
+    mkdirSync(join(root, '.poolster'));
+    writeFileSync(join(root, '.poolster/package.json'), JSON.stringify({schema_version:1,language:'community',build:[{program:'builder',args:['$(literal)']}],test:[{program:'tester'}]}));
     const calls = [];
     execute(plan(root, 'community'), root, (program,args,options) => { calls.push({program,args,options}); return {status:0}; });
     assert.equal(calls[0].args[0], '$(literal)');
@@ -19,8 +19,8 @@ test('plugin commands stay literal and failing checks stop publication', () => {
   } finally { rmSync(root,{recursive:true,force:true}); }
 });
 test('paths cannot escape through traversal or symlink', () => {
-  const root = mkdtempSync(join(tmpdir(),'kaji-root-'));
-  const outside = mkdtempSync(join(tmpdir(),'kaji-outside-'));
+  const root = mkdtempSync(join(tmpdir(),'poolster-root-'));
+  const outside = mkdtempSync(join(tmpdir(),'poolster-outside-'));
   try {
     assert.equal(packageDirectory(root,'.'),realpathSync(root));
     assert.throws(()=>packageDirectory(root,outside),/relative/);
@@ -29,7 +29,7 @@ test('paths cannot escape through traversal or symlink', () => {
   } finally { rmSync(root,{recursive:true,force:true});rmSync(outside,{recursive:true,force:true}); }
 });
 test('native defaults select real tools and exclude dependency directories', () => {
-  const root = mkdtempSync(join(tmpdir(),'kaji-native-'));
+  const root = mkdtempSync(join(tmpdir(),'poolster-native-'));
   try {
     mkdirSync(join(root,'src'));mkdirSync(join(root,'vendor'));
     writeFileSync(join(root,'src','Model.php'),'<?php');writeFileSync(join(root,'vendor','Other.php'),'<?php');

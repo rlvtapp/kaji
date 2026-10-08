@@ -103,7 +103,7 @@ function verifyNpmEntryPoints(manifest, files) {
 
 export async function registryJson(url, fetcher = fetch) {
   const response = await fetcher(url, {
-    headers: { 'User-Agent': 'kaji-sdk-publish/1', 'Cache-Control': 'no-cache' },
+    headers: { 'User-Agent': 'poolster-sdk-publish/1', 'Cache-Control': 'no-cache' },
     signal: AbortSignal.timeout(15000), redirect: 'error',
   });
   if (response.status === 404) return null;
@@ -150,16 +150,16 @@ async function publishedState(plan, dependencies = {}) {
 
 export async function preparePublish(inputs, dependencies = {}) {
   const registry = cleanString(inputs.registry, 'registry');
-  if (!REGISTRIES.has(registry)) throw new Error('Unsupported standard registry; use kaji sdk run --phase publish for custom publishers');
+  if (!REGISTRIES.has(registry)) throw new Error('Unsupported standard registry; use poolster sdk run --phase publish for custom publishers');
   const run = dependencies.run ?? runCommand;
   const workspace = await realpath(inputs.workspace ?? process.env.GITHUB_WORKSPACE ?? process.cwd());
   const directory = await contained(workspace, path.resolve(workspace, cleanString(inputs.path, 'path')));
   const tag = cleanString(inputs.tag, 'tag');
   if (tag.startsWith('-')) throw new Error('Release tag cannot start with a dash');
-  const metadataPath = await contained(workspace, path.join(directory, '.kaji/package.json'));
+  const metadataPath = await contained(workspace, path.join(directory, '.poolster/package.json'));
   const metadata = JSON.parse(await readFile(metadataPath, 'utf8'));
   if (metadata.schema_version !== 1 || metadata.publisher?.registry !== registry) throw new Error('Package publisher metadata must explicitly match the selected registry');
-  if (metadata.publisher.commands?.length) throw new Error('Package declares custom publishing commands; use kaji sdk run --phase publish');
+  if (metadata.publisher.commands?.length) throw new Error('Package declares custom publishing commands; use poolster sdk run --phase publish');
   const version = cleanString(metadata.version, 'package metadata version').replace(/^v(?=\d)/, '');
   const pythonVersion = /^[0-9]+\.[0-9]+\.[0-9]+(?:(?:a|b|rc)[0-9]+|\.post[0-9]+|\.dev[0-9]+)?(?:\+[A-Za-z0-9.-]+)?$/;
   if (!(registry === 'pypi' ? pythonVersion.test(version) : SEMVER.test(version))) throw new Error('Standard publishing requires a semantic package version (normalized PEP 440 for PyPI)');
@@ -170,7 +170,7 @@ export async function preparePublish(inputs, dependencies = {}) {
   const release = await run('git', ['rev-parse', `refs/tags/${tag}^{commit}`], { cwd: directory });
   if (head !== release) throw new Error('Checkout must be the exact released tag commit');
   const temporaryRoot = inputs.temporaryRoot ?? process.env.RUNNER_TEMP ?? workspace;
-  const staging = path.join(temporaryRoot, `kaji-publish-${randomUUID()}`);
+  const staging = path.join(temporaryRoot, `poolster-publish-${randomUUID()}`);
   await mkdir(staging, { recursive: true });
   const plan = { schema_version: 1, registry, directory, workspace, tag, version, staging };
   if (registry === 'npm') {
@@ -297,14 +297,14 @@ async function writeOutputs(plan, statePath) {
 export async function main(arguments_ = process.argv.slice(2)) {
   const phase = arguments_[0] ?? 'prepare';
   if (phase === 'prepare' || phase === 'execute') {
-    const plan = await preparePublish({ registry: process.env.KAJI_PUBLISH_REGISTRY, path: process.env.KAJI_PUBLISH_PATH, tag: process.env.KAJI_PUBLISH_TAG, npmTag: process.env.KAJI_NPM_TAG || 'latest', distDir: process.env.KAJI_DIST_DIR || 'dist' });
+    const plan = await preparePublish({ registry: process.env.POOLSTER_PUBLISH_REGISTRY, path: process.env.POOLSTER_PUBLISH_PATH, tag: process.env.POOLSTER_PUBLISH_TAG, npmTag: process.env.POOLSTER_NPM_TAG || 'latest', distDir: process.env.POOLSTER_DIST_DIR || 'dist' });
     const statePath = path.join(plan.staging, 'state.json');
     await writeFile(statePath, JSON.stringify(plan, null, 2));
     await writeOutputs(plan, statePath);
     if (phase === 'execute') await publishPrepared(plan);
     return;
   }
-  const state = JSON.parse(await readFile(cleanString(process.env.KAJI_PUBLISH_STATE, 'publication state path'), 'utf8'));
+  const state = JSON.parse(await readFile(cleanString(process.env.POOLSTER_PUBLISH_STATE, 'publication state path'), 'utf8'));
   if (phase === 'publish') { await publishPrepared(state); return; }
   if (phase === 'confirm') {
     await confirmPublication(state);

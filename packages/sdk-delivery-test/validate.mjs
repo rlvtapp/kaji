@@ -8,7 +8,7 @@ export function validateInput(input, allowed) {
   if(!Array.isArray(repos)||!Array.isArray(prefixes)||!prefixes.length)throw Error('Configure repository and package-prefix allowlists');
   for(const repo of [input.source,input.destination])if(!/^[A-Za-z0-9-]+\/[A-Za-z0-9_.-]+$/.test(repo)||!repos.includes(repo))throw Error('Repository is not allowlisted');
   if(!/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(input.tag)||input.tag.includes('..'))throw Error('Source must be an explicit immutable tag');
-  if(!/^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$/.test(input.version))throw Error('Pin an exact Kaji version');
+  if(!/^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$/.test(input.version))throw Error('Pin an exact Poolster version');
   if(!['npm','pypi','crates.io','go'].includes(input.registry))throw Error('Unsupported test registry');
   if(!prefixes.includes(input.prefix)||input.prefix.length<4)throw Error('Test package prefix is not allowlisted');
   if(!['preview','open_pr'].includes(input.mode))throw Error('Unknown mode');
@@ -25,7 +25,7 @@ export function validateRecipe(recipe,input) {
   return {root,packages:packages.map(p=>({path:p.path,language:p.language,name:p.name}))};
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
-  const input={source:process.env.SOURCE_REPOSITORY,destination:process.env.DESTINATION_REPOSITORY,tag:process.env.SOURCE_TAG,version:process.env.KAJI_VERSION,registry:process.env.TEST_REGISTRY,prefix:process.env.TEST_PACKAGE_PREFIX,mode:process.env.DELIVERY_MODE,language:process.env.SDK_LANGUAGE,config:process.env.SDK_CONFIG};
+  const input={source:process.env.SOURCE_REPOSITORY,destination:process.env.DESTINATION_REPOSITORY,tag:process.env.SOURCE_TAG,version:process.env.POOLSTER_VERSION,registry:process.env.TEST_REGISTRY,prefix:process.env.TEST_PACKAGE_PREFIX,mode:process.env.DELIVERY_MODE,language:process.env.SDK_LANGUAGE,config:process.env.SDK_CONFIG};
   const plan=validateInput(input,{repositories:process.env.ALLOWED_REPOSITORIES,packagePrefixes:process.env.ALLOWED_PACKAGE_PREFIXES});
   if(process.argv.includes('--recipe')) {
     const recipe=validateRecipe(JSON.parse(readFileSync(resolve('probe',plan.config),'utf8')),plan);
@@ -34,12 +34,12 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
     if(!process.argv.includes('--check-only')) for(const p of recipe.packages) {
       const packageRoot=resolve(root,p.path);
       if(relative(root,packageRoot).startsWith('..'))throw Error('Package path escapes output');
-      const metadata=JSON.parse(readFileSync(resolve(packageRoot,'.kaji/package.json'),'utf8'));
+      const metadata=JSON.parse(readFileSync(resolve(packageRoot,'.poolster/package.json'),'utf8'));
       if(metadata.language!==plan.language||typeof metadata.name!=='string'||!metadata.name.startsWith(plan.prefix)||metadata.publisher?.registry!==plan.registry)throw Error('Emitted metadata is outside disposable publication scope');
     }
     if(process.env.GITHUB_OUTPUT)appendFileSync(process.env.GITHUB_OUTPUT,`root=${root}\n`);
     if(!process.argv.includes('--check-only')) for(const p of recipe.packages)for(const phase of ['build','test']) {
-      const result=spawnSync('kaji',['sdk','run','--root',root,'--package',p.path,'--phase',phase],{cwd:resolve('probe'),stdio:'inherit'});
+      const result=spawnSync('poolster',['sdk','run','--root',root,'--package',p.path,'--phase',phase],{cwd:resolve('probe'),stdio:'inherit'});
       if(result.status!==0)throw Error('Native SDK check failed');
     }
   }

@@ -1,4 +1,4 @@
-name: Kaji publish SDK
+name: Poolster publish SDK
 description: Publish an explicitly selected SDK registry with trusted identity and verified retry handling.
 author: Relevate
 
@@ -7,7 +7,7 @@ inputs:
     description: Explicit package publisher registry (npm, pypi, crates.io, or go).
     required: true
   path:
-    description: Package directory containing .kaji/package.json, relative to the checkout.
+    description: Package directory containing .poolster/package.json, relative to the checkout.
     required: true
   tag:
     description: Already checked out and pushed immutable release tag.
@@ -45,13 +45,13 @@ runs:
       id: prepare
       shell: bash
       env:
-        KAJI_ACTION_PATH: ${{ github.action_path }}
-        KAJI_PUBLISH_REGISTRY: ${{ inputs.registry }}
-        KAJI_PUBLISH_PATH: ${{ inputs.path }}
-        KAJI_PUBLISH_TAG: ${{ inputs.tag }}
-        KAJI_NPM_TAG: ${{ inputs.npm-tag }}
-        KAJI_DIST_DIR: ${{ inputs.dist-dir }}
-      run: node "$KAJI_ACTION_PATH/publish.mjs" prepare
+        POOLSTER_ACTION_PATH: ${{ github.action_path }}
+        POOLSTER_PUBLISH_REGISTRY: ${{ inputs.registry }}
+        POOLSTER_PUBLISH_PATH: ${{ inputs.path }}
+        POOLSTER_PUBLISH_TAG: ${{ inputs.tag }}
+        POOLSTER_NPM_TAG: ${{ inputs.npm-tag }}
+        POOLSTER_DIST_DIR: ${{ inputs.dist-dir }}
+      run: node "$POOLSTER_ACTION_PATH/publish.mjs" prepare
     - name: Exchange crates.io trusted publishing identity
       id: crates-auth
       if: inputs.registry == 'crates.io' && steps.prepare.outputs.already-published != 'true'
@@ -60,10 +60,10 @@ runs:
       if: inputs.registry != 'pypi' && steps.prepare.outputs.already-published != 'true'
       shell: bash
       env:
-        KAJI_ACTION_PATH: ${{ github.action_path }}
-        KAJI_PUBLISH_STATE: ${{ steps.prepare.outputs.state }}
+        POOLSTER_ACTION_PATH: ${{ github.action_path }}
+        POOLSTER_PUBLISH_STATE: ${{ steps.prepare.outputs.state }}
         CARGO_REGISTRY_TOKEN: ${{ steps.crates-auth.outputs.token }}
-      run: node "$KAJI_ACTION_PATH/publish.mjs" publish
+      run: node "$POOLSTER_ACTION_PATH/publish.mjs" publish
     - name: Publish Python distributions with trusted identity
       if: inputs.registry == 'pypi' && steps.prepare.outputs.already-published != 'true'
       uses: pypa/gh-action-pypi-publish@release/v1
@@ -75,6 +75,6 @@ runs:
       if: inputs.registry == 'pypi' && steps.prepare.outputs.already-published != 'true'
       shell: bash
       env:
-        KAJI_ACTION_PATH: ${{ github.action_path }}
-        KAJI_PUBLISH_STATE: ${{ steps.prepare.outputs.state }}
-      run: node "$KAJI_ACTION_PATH/publish.mjs" confirm
+        POOLSTER_ACTION_PATH: ${{ github.action_path }}
+        POOLSTER_PUBLISH_STATE: ${{ steps.prepare.outputs.state }}
+      run: node "$POOLSTER_ACTION_PATH/publish.mjs" confirm

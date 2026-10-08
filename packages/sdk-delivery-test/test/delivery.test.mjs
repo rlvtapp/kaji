@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {deliveryPlan,execute} from '../delivery.mjs';
 test('local mock covers generation drift native checks and scaffold without external writes',()=>{
   const calls=[];
-  const result=execute(deliveryPlan({mode:'mock',binary:'mock-kaji'}),(program,args)=>{calls.push(args);return {status:0,stdout:'{"added":[],"modified":[],"removed":[]}'};});
+  const result=execute(deliveryPlan({mode:'mock',binary:'mock-poolster'}),(program,args)=>{calls.push(args);return {status:0,stdout:'{"added":[],"modified":[],"removed":[]}'};});
   assert.equal(result.steps,7);assert.equal(result.publication,false);
   assert(!calls.some(args=>args.includes('pr') || args.includes('install') || args.includes('publish')));
   assert(calls.some(args=>args.includes('--check')));
@@ -22,10 +22,10 @@ test('local release tag feeds checked package into mocked exact-artifact publish
   const {spawnSync}=await import('node:child_process'); const {createHash}=await import('node:crypto');
   const check=await import('../../sdk-check/check.mjs');
   const publish=await import('../../sdk-publish/publish.mjs');
-  const root=await realpath(await mkdtemp(join(tmpdir(),'kaji-release-e2e-')));t.after(()=>rm(root,{recursive:true,force:true}));
-  const sdk=join(root,'sdk');await mkdir(join(sdk,'.kaji'),{recursive:true});
-  const metadata={schema_version:1,name:'@kaji-delivery/probe',language:'typescript',version:'1.2.3',build:[{program:'node',args:['--version']}],test:[{program:'node',args:['--version']}],publisher:{registry:'npm',release_type:'node',commands:[]}};
-  await writeFile(join(sdk,'.kaji/package.json'),JSON.stringify(metadata));
+  const root=await realpath(await mkdtemp(join(tmpdir(),'poolster-release-e2e-')));t.after(()=>rm(root,{recursive:true,force:true}));
+  const sdk=join(root,'sdk');await mkdir(join(sdk,'.poolster'),{recursive:true});
+  const metadata={schema_version:1,name:'@poolster-delivery/probe',language:'typescript',version:'1.2.3',build:[{program:'node',args:['--version']}],test:[{program:'node',args:['--version']}],publisher:{registry:'npm',release_type:'node',commands:[]}};
+  await writeFile(join(sdk,'.poolster/package.json'),JSON.stringify(metadata));
   await writeFile(join(sdk,'package.json'),JSON.stringify({name:metadata.name,version:metadata.version}));
   const git=args=>{const r=spawnSync('git',args,{cwd:root,encoding:'utf8'});assert.equal(r.status,0,r.stderr);return r.stdout.trim();};
   git(['init']);git(['config','user.name','Delivery test']);git(['config','user.email','delivery@example.invalid']);git(['add','.']);git(['commit','-m','release fixture']);git(['tag','sdk-v1.2.3']);
@@ -46,14 +46,14 @@ test('local release tag feeds checked package into mocked exact-artifact publish
 
 test('manual workflow plan fails closed on repositories prefixes mutable refs and package identities',async()=>{
   const {validateInput,validateRecipe}=await import('../validate.mjs');
-  const input={source:'test/source',destination:'test/sdk',tag:'v1.2.3',version:'0.5.0',registry:'npm',prefix:'@kaji-test/',mode:'preview',language:'typescript',config:'kaji.json'};
-  const allowed={repositories:'["test/source","test/sdk"]',packagePrefixes:'["@kaji-test/"]'};
+  const input={source:'test/source',destination:'test/sdk',tag:'v1.2.3',version:'0.5.0',registry:'npm',prefix:'@poolster-test/',mode:'preview',language:'typescript',config:'poolster.json'};
+  const allowed={repositories:'["test/source","test/sdk"]',packagePrefixes:'["@poolster-test/"]'};
   assert.equal(validateInput(input,allowed).publication,false);
   assert.throws(()=>validateInput({...input,destination:'production/sdk'},allowed),/allowlisted/);
   assert.throws(()=>validateInput({...input,tag:'../main'},allowed),/immutable/);
   assert.throws(()=>validateInput({...input,prefix:'@production/'},allowed),/allowlisted/);
   assert.throws(()=>validateInput({...input,version:'latest'},allowed),/exact/);
-  const recipe={output:{path:'generated'},packages:[{language:'typescript',path:'ts',name:'@kaji-test/sdk',release:{publisher:{registry:'npm'}}}]};
+  const recipe={output:{path:'generated'},packages:[{language:'typescript',path:'ts',name:'@poolster-test/sdk',release:{publisher:{registry:'npm'}}}]};
   assert.equal(validateRecipe(recipe,input).packages.length,1);
   recipe.packages[0].name='@production/sdk';assert.throws(()=>validateRecipe(recipe,input),/prefix/);
 });
@@ -66,7 +66,7 @@ test('every failed delivery phase stops subsequent checks and cleans its checkou
       assert.throws(() => execute(deliveryPlan({mode:'mock'}), (program,args,options) => {
         temporaryRoot=options.cwd;
         assert(existsSync(temporaryRoot));
-        const recipe=JSON.parse(readFileSync(`${temporaryRoot}/kaji.json`,'utf8'));
+        const recipe=JSON.parse(readFileSync(`${temporaryRoot}/poolster.json`,'utf8'));
         assert.equal(recipe.packages[0].release.publisher.registry,'npm');
         assert.equal(options.encoding,'utf8');
         calls.push(args);

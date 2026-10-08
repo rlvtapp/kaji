@@ -8,4 +8,4 @@ See [publishing setup and registry behavior](../../docs/sdk-publishing.md). This
 npm test --prefix packages/sdk-publish
 ```
 
-Tests do not upload packages. Set `KAJI_TEST_PYTHON` to Python 3.11+ to exercise the real Python TOML and archive metadata reader if the default interpreter is older.
+Tests do not upload packages. Set `POOLSTER_TEST_PYTHON` to Python 3.11+ to exercise the real Python TOML and archive metadata reader if the default interpreter is older.

@@ -11,12 +11,12 @@ const checksum = data => createHash('sha256').update(data).digest('hex');
 const response = (status, value = {}) => ({ status, json: async () => value });
 
 async function fixture(t, registry, relative = 'sdk') {
-  const workspace = await realpath(await mkdtemp(path.join(tmpdir(), 'kaji-publish-test-')));
+  const workspace = await realpath(await mkdtemp(path.join(tmpdir(), 'poolster-publish-test-')));
   t.after(() => rm(workspace, { recursive: true, force: true }));
   const directory = path.join(workspace, relative);
-  await mkdir(path.join(directory, '.kaji'), { recursive: true });
+  await mkdir(path.join(directory, '.poolster'), { recursive: true });
   const metadata = { schema_version: 1, name: 'release-component', version: '1.2.3', publisher: { registry, release_type: 'simple', commands: [] } };
-  const saveMetadata = async () => writeFile(path.join(directory, '.kaji/package.json'), JSON.stringify(metadata));
+  const saveMetadata = async () => writeFile(path.join(directory, '.poolster/package.json'), JSON.stringify(metadata));
   await saveMetadata();
   const calls = [];
   const git = async (program, args, options) => {
@@ -109,7 +109,7 @@ test('invalid registry, wrong checkout/version, custom commands and lookup outag
 });
 test('package and distribution symlinks cannot escape their workspace', async t => {
   const fixture_ = await npmFixture(t);
-  const outside = await mkdtemp(path.join(tmpdir(), 'kaji-publish-outside-'));
+  const outside = await mkdtemp(path.join(tmpdir(), 'poolster-publish-outside-'));
   t.after(() => rm(outside, { recursive: true, force: true }));
   await symlink(outside, path.join(fixture_.workspace, 'outside'));
   await assert.rejects(preparePublish({ ...fixture_.inputs, path: 'outside' }, fixture_.dependencies), /escapes/);
@@ -226,18 +226,18 @@ test('vendored composite uses official identity actions and passes inputs throug
   assert.match(action, /rust-lang\/crates-io-auth-action@v1/);
   assert.match(action, /pypa\/gh-action-pypi-publish@release\/v1/);
   assert.match(action, /skip-existing: 'true'/);
-  assert.match(action, /KAJI_PUBLISH_TAG: \$\{\{ inputs\.tag \}\}/);
+  assert.match(action, /POOLSTER_PUBLISH_TAG: \$\{\{ inputs\.tag \}\}/);
   for (const line of action.split('\n').filter(line => /^\s+run:/.test(line))) {
     assert.doesNotMatch(line, /\$\{\{/);
-    assert.match(line, /node "\$KAJI_ACTION_PATH\/publish\.mjs" (?:prepare|publish|confirm)/);
+    assert.match(line, /node "\$POOLSTER_ACTION_PATH\/publish\.mjs" (?:prepare|publish|confirm)/);
   }
 });
 
 
 test('actual Python reader validates static TOML and wheel/sdist metadata without extraction', async t => {
-  const python = process.env.KAJI_TEST_PYTHON ?? 'python3';
+  const python = process.env.POOLSTER_TEST_PYTHON ?? 'python3';
   try { await runCommand(python, ['-c', 'import tomllib']); }
-  catch { t.skip('requires Python 3.11+ (set KAJI_TEST_PYTHON to a compatible interpreter)'); return; }
+  catch { t.skip('requires Python 3.11+ (set POOLSTER_TEST_PYTHON to a compatible interpreter)'); return; }
   const fixture_ = await fixture(t, 'pypi');
   await writeFile(path.join(fixture_.directory, 'pyproject.toml'), '[project]\nname="example-sdk"\nversion="1.2.3"\n');
   const dist = path.join(fixture_.directory, 'dist');

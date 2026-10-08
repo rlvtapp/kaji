@@ -1,4 +1,4 @@
-name: Kaji SDK checks
+name: Poolster SDK checks
 description: Build and test one generated SDK using editable native-language checks or plugin-declared commands.
 inputs:
   path:

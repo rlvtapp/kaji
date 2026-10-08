@@ -1,7 +1,7 @@
 # Editable SDK language checks
 
-Use this composite action after checkout, or let `kaji sdk init` copy `action.yml`
-and `check.mjs` into `.github/actions/kaji-check` in the generated repository.
+Use this composite action after checkout, or let `poolster sdk init` copy `action.yml`
+and `check.mjs` into `.github/actions/poolster-check` in the generated repository.
 
 ```yaml
 permissions:
