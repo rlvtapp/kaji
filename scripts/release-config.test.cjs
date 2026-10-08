@@ -73,6 +73,9 @@ test('CLI native tests build the compiler first and releases require explicit en
   const publish = read('.github/workflows/npm-publish.yml');
   assert.match(publish, /publish:\n    name: Publish to npm\n    needs: \[verify, generated-sdk, native, launchers\]\n    if: vars\.POOLSTER_RELEASE_ENABLED == 'true'/);
   assert.match(publish, /publish-python:\n    name: Publish to PyPI\n    needs: \[verify, generated-sdk, native, launchers\]\n    if: vars\.POOLSTER_RELEASE_ENABLED == 'true'/);
+  assert.match(publish, /publish-crates:\n    name: Publish Rust SDK to crates.io\n    needs: \[verify, generated-sdk, native, launchers\]\n    if: vars\.POOLSTER_RELEASE_ENABLED == 'true'/);
+  assert.match(publish, /CARGO_REGISTRY_TOKEN: \$\{\{ secrets\.CRATES_IO_TOKEN \}\}/);
+  assert.match(publish, /python scripts\/publish-crates.py --tag "\$GITHUB_REF_NAME"/);
 });
 
 test('feature releases advance minor versions before 1.0', () => {
