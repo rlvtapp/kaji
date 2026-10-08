@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: rlvtapp/kaji/packages/sdk-check@YOUR_PINNED_REVISION
+      - uses: rlvtapp/kaji/packages/internal/sdk-check@YOUR_PINNED_REVISION
         with:
           path: generated/go
           language: go
@@ -34,5 +34,5 @@ fallback; custom commands are trusted repository code.
 
 Modify these sources directly. Generation protects edited vendored files and
 asks you to merge updates when the upstream action changes; it does not silently
-reset custom checks. `node --test packages/sdk-check/test/*.mjs` verifies literal
+reset custom checks. `node --test packages/internal/sdk-check/test/*.mjs` verifies literal
 arguments, custom metadata, native defaults, failure propagation and path bounds.

@@ -9,7 +9,7 @@ delete collections or synchronize environment secrets.
 POOLSTER_POSTMAN_COLLECTION=generated/postman/api.postman_collection.json \
 POOLSTER_POSTMAN_UID=YOUR_COLLECTION_UID \
 POOLSTER_POSTMAN_API_KEY=YOUR_SECRET \
-node packages/postman-sync/sync.mjs
+node packages/internal/postman-sync/sync.mjs
 ```
 
 After reviewing both documents, use `POOLSTER_POSTMAN_MODE=publish` and set
@@ -28,15 +28,15 @@ has been accessed by this implementation.
 API requests use the [official Postman API](https://learning.postman.com/docs/reference/postman-api/intro-api).
 
 ```sh
-node --test packages/postman-sync/test/*.mjs
+node --test packages/internal/postman-sync/test/*.mjs
 ```
 
 ## Existing environment sync
 
-Use `node packages/postman-sync/environment.mjs` with `POOLSTER_POSTMAN_ENVIRONMENT`,
+Use `node packages/internal/postman-sync/environment.mjs` with `POOLSTER_POSTMAN_ENVIRONMENT`,
 `POOLSTER_POSTMAN_UID`, `POOLSTER_POSTMAN_API_KEY`, and the same `POOLSTER_POSTMAN_MODE` /
 `POOLSTER_POSTMAN_EXPECTED_HASH` review flow as collections. The composite action is
-`./packages/postman-sync/environment` with `environment`, `uid`, `api-key`,
+`./packages/internal/postman-sync/environment` with `environment`, `uid`, `api-key`,
 `mode`, and `expected-hash` inputs.
 
 The destination must already exist. The check reports hashes only. Publishing

@@ -10,12 +10,12 @@ It uses Node.js builtins and has no dependencies.
 - `policy.example.json`: non-secret source/target policy example.
 - `broker.test.mjs`: signed JWT and mocked GitHub security/runtime tests.
 
-See [deployment and configuration](../../docs/github-app-broker.md). No hosted
+See [deployment and configuration](../../../docs/github-app-broker.md). No hosted
 endpoint, GitHub App registration, account, or infrastructure is created by this
 package.
 
 ```sh
-node --test packages/github-app-broker/broker.test.mjs
+node --test packages/internal/github-app-broker/broker.test.mjs
 ```
 
 The HTTP integration test binds to localhost. All GitHub/JWKS traffic in the tests

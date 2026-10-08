@@ -24,8 +24,8 @@ For local verification with jsonschema installed:
 ```sh
 POOLSTER_COLLECTION=generated/postman/collection.json \
 POOLSTER_ENVIRONMENT=generated/postman/environment.json \
-python3 packages/postman-check/check.py
-python3 -m unittest discover -s packages/postman-check/test -v
+python3 packages/internal/postman-check/check.py
+python3 -m unittest discover -s packages/internal/postman-check/test -v
 ```
 
 The schema comes from

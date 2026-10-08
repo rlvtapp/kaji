@@ -6,8 +6,8 @@ Generate all fixtures from the repository root:
 
 ```sh
 KAJI_RUNTIME_EXPORT=/tmp/poolster-runtime-fixture cargo test -p poolster --test runtime_conformance
-node packages/runtime-contract/runner.mjs go /tmp/poolster-runtime-fixture/sdk/go
-node packages/runtime-contract/runner.mjs python /tmp/poolster-runtime-fixture/sdk/python
+node packages/internal/runtime-contract/runner.mjs go /tmp/poolster-runtime-fixture/sdk/go
+node packages/internal/runtime-contract/runner.mjs python /tmp/poolster-runtime-fixture/sdk/python
 ```
 
 `runner.mjs` accepts a language and that generated package's directory. It copies the package into a temporary workspace before adding the probe/building, and removes the workspace on completion. The generated source artifact remains unchanged. Child failures, timeouts, missing requests and wire mismatches fail the run; they cannot pass as an SDK's expected error outcome.
@@ -33,7 +33,7 @@ This corpus covers a small neutral API. It does not establish exhaustive SSE, mu
 
 TypeScript requires `KAJI_TSC_JS` pointing at an installed TypeScript compiler. Other targets need their native compiler/runtime and the generated package's dependencies. See `.github/workflows/ci.yml` for the pinned matrix setup.
 
-Run package-level runner tests with `node --test packages/runtime-contract/test.mjs`. These validate manifest coverage, child failure handling and the shared server itself.
+Run package-level runner tests with `node --test packages/internal/runtime-contract/test.mjs`. These validate manifest coverage, child failure handling and the shared server itself.
 
 For CI, export the fixture once, upload `sdk/` as an artifact, and run each language's probe in the existing native toolchain matrix. Each job needs Node for the orchestrator in addition to its language toolchain. Install the TypeScript compiler explicitly and set `KAJI_TSC_JS`; initialize Hex for Elixir. Maven/Composer/Mix/Cargo builds may download the generated package's declared dependencies. Set `KAJI_RUNTIME_OFFLINE=1` to require Cargo's existing module cache; `KAJI_RUNTIME_RUST_TARGET` and `GOCACHE` may point to reusable CI caches. Unsupported scenarios print their reasons, and missing native tools fail rather than silently skip.
 
@@ -44,7 +44,7 @@ Test the artifact a customer actually installs, including ESM root/subpath expor
 ```sh
 KAJI_PACKAGE_FIXTURE=/tmp/poolster-runtime-fixture/sdk/typescript \
 KAJI_TSC_JS=/path/to/typescript/lib/tsc.js \
-node --test packages/runtime-contract/package-consumer.test.mjs
+node --test packages/internal/runtime-contract/package-consumer.test.mjs
 ```
 
 This builds, packs and installs a local archive without publishing. The test is skipped when either variable is absent; CI supplies both explicitly.

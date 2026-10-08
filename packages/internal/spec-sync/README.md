@@ -53,8 +53,8 @@ JSON is parsed and recursively checked for `$ref`. YAML uses a conservative lite
 ## Local tests
 
 ```sh
-npm test --prefix packages/spec-sync
-node --check packages/spec-sync/sync.mjs
+npm test --prefix packages/internal/spec-sync
+node --check packages/internal/spec-sync/sync.mjs
 ```
 
 Tests mock GitHub's API and perform no live repository writes. They verify branch ancestry, nonforce ref updates, idempotency, PR handling, provenance protection, relative-ref rejection, safe paths and credential-safe failures. Test the destination's regeneration workflow separately before enabling your production source connection.

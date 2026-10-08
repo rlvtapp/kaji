@@ -4,8 +4,8 @@ Run from the repository root with Node 20+ and a built Poolster CLI:
 
 ```sh
 cargo build -p poolster-cli
-node --test packages/sdk-delivery-test/test/delivery.test.mjs
-node packages/sdk-delivery-test/delivery.mjs --mode local --binary "$PWD/target/debug/poolster"
+node --test packages/internal/sdk-delivery-test/test/delivery.test.mjs
+node packages/internal/sdk-delivery-test/delivery.mjs --mode local --binary "$PWD/target/debug/poolster"
 ```
 
 The local run creates a temporary contract and recipe, generates a TypeScript
@@ -19,7 +19,7 @@ An opt-in authenticated observation uses an explicitly named disposable SDK
 repository and registry label:
 
 ```sh
-node packages/sdk-delivery-test/delivery.mjs --mode live \
+node packages/internal/sdk-delivery-test/delivery.mjs --mode live \
   --binary "$PWD/target/debug/poolster" \
   --repository YOUR_ORG/DISPOSABLE_SDK_TEST_REPO --registry TEST_REGISTRY
 ```
