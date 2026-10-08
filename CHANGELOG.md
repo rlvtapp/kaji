@@ -4,6 +4,12 @@
 
 ## 0.5.0 — 2026-10-08
 
+### Changed
+
+- Kaji is now **Poolster**. Packages, commands, configuration files, environment
+  variables and OpenAPI extensions use the Poolster name, and repository links
+  point to `rlvtapp/poolster`. The old names are no longer supported.
+
 ### Added
 
 #### Generation and customization

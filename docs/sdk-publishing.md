@@ -31,6 +31,15 @@ The lockfile selector addresses Release Please's tagged TOML name values. When
 adding a workspace crate, update that selector; the regression test requires every
 member to change and every external dependency to remain unchanged.
 
+The same release workflow publishes the Rust SDK to crates.io after verification.
+Set the repository secret `CRATES_IO_TOKEN` to a crates.io API token authorized
+to publish the SDK and its dependency crates. `scripts/publish-crates.py` checks
+the release tag against the workspace version, publishes dependencies first,
+and skips versions already published when a run is retried. The public crates
+are `poolster`, `poolster-core`, the input crates and output plugin crates;
+`poolster-cli` and `poolster-node` remain private. This job uses the same
+`POOLSTER_RELEASE_ENABLED` gate as npm and PyPI.
+
 </details>
 
 ## Decide which publisher owns the release

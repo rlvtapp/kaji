@@ -5,6 +5,9 @@
 Poolster turns API contracts into SDKs, CLIs, docs and tools. Pick your plugins,
 compose a recipe, and regenerate when your API changes.
 
+**Poolster** is Dutch for “North Star”: a steady reference point to navigate by.
+Your API contract plays that role, keeping generated packages pointed in the same direction.
+
 [Get started](#quick-start) · [Explore outputs](#output-plugins) · [Build a plugin](#build-your-own-plugin) · [Read the docs](docs/README.md)
 
 ## How Poolster works

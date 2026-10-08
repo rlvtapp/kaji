@@ -141,8 +141,9 @@ requires each factory to appear in `plugins` or `input.plugin` in the config.
 
 ## Rust workspace names
 
-The current crates all have `publish = false`. Their package names and source
-folders follow this plan. Publication is a separate decision.
+The SDK, core, input and output plugin crates are prepared for crates.io, with
+versioned local dependencies and dependency-ordered release automation.
+The CLI and Node bridge retain `publish = false`.
 Reserve the crates.io name `poolster` for the embedding SDK. Keep the Rust CLI
 as an internal workspace crate named `poolster-cli`, producing the `poolster`
 executable bundled with the Go compiler in npm platform packages and PyPI

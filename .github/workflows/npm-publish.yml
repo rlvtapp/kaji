@@ -318,6 +318,25 @@ jobs:
             npm publish "$package" --access public
           done
 
+  publish-crates:
+    name: Publish Rust SDK to crates.io
+    needs: [verify, generated-sdk, native, launchers]
+    if: vars.POOLSTER_RELEASE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: poolster-crates-publication
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Publish SDK dependencies and facade
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+        run: python scripts/publish-crates.py --tag "$GITHUB_REF_NAME"
+
   publish-python:
     name: Publish to PyPI
     needs: [verify, generated-sdk, native, launchers]

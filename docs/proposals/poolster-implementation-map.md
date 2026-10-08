@@ -67,11 +67,9 @@ This is a compact API sketch. Packages remain unpublished under the new names.
 
 ## Rust distribution boundary
 
-All 26 Rust workspace crates currently have `publish = false`, and their local
-dependencies use paths without registry versions. The SDK facade previously
-re-exported all 16 output plugins; its default feature set is now
-slim. Publishable path dependencies still need registry versions and an
-ordered release. Keep `poolster-node` unpublished because it ships via npm.
+The SDK, core, input and output plugin crates have versioned local dependencies
+and an ordered crates.io release job. The SDK facade has a slim default feature
+set. Keep `poolster-node` unpublished because it ships via npm.
 
 The Rust CLI remains a workspace implementation, but it is not a public Rust
 install. The npm and PyPI packages already bundle the prebuilt Rust executable
@@ -100,6 +98,6 @@ later, after the npm/PyPI CLI distribution is established.
    from the existing platform matrix. Verify exact versions and installation
    behavior before enabling any public publish job.
 
-The release workflow defines npm and PyPI publication jobs behind an explicit
-repository variable. It has no crates.io job. Nothing in this map enables one
-or publishes a package.
+The release workflow defines npm, PyPI and crates.io publication jobs behind
+`POOLSTER_RELEASE_ENABLED`. The crates.io job also requires `CRATES_IO_TOKEN`.
+Preparing these jobs does not publish a package.
