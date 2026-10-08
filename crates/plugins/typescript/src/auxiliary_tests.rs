@@ -382,12 +382,12 @@ fn zod_constraints_unions_and_lossless_boundaries_execute() {
         String::from_utf8_lossy(&output.stdout)
     );
     fs::write(directory.join("probe.mjs"),r#"
-import assert from 'node:assert/strict';import {kajiSchemas} from './zod.js';
-assert.equal(kajiSchemas.Wide.parse(9007199254740993n),9007199254740993n);
-for(const value of [9007199254740992n,9007199254741004n,9007199254740994n,9007199254740993])assert.equal(kajiSchemas.Wide.safeParse(value).success,false);
-assert.equal(kajiSchemas.Text.parse('ABC'),'ABC');for(const value of ['AB','ABCDE','abc'])assert.equal(kajiSchemas.Text.safeParse(value).success,false);
-assert.deepEqual(kajiSchemas.Unique.parse([1,2]),[1,2]);for(const value of [[1],[1,1]])assert.equal(kajiSchemas.Unique.safeParse(value).success,false);
-assert.equal(kajiSchemas.Exclusive.safeParse(1).success,false);assert.equal(kajiSchemas.Exclusive.safeParse(1.5).success,true);assert.deepEqual(kajiSchemas.Node.parse({child:{}}),{child:{}});
+import assert from 'node:assert/strict';import {poolsterSchemas} from './zod.js';
+assert.equal(poolsterSchemas.Wide.parse(9007199254740993n),9007199254740993n);
+for(const value of [9007199254740992n,9007199254741004n,9007199254740994n,9007199254740993])assert.equal(poolsterSchemas.Wide.safeParse(value).success,false);
+assert.equal(poolsterSchemas.Text.parse('ABC'),'ABC');for(const value of ['AB','ABCDE','abc'])assert.equal(poolsterSchemas.Text.safeParse(value).success,false);
+assert.deepEqual(poolsterSchemas.Unique.parse([1,2]),[1,2]);for(const value of [[1],[1,1]])assert.equal(poolsterSchemas.Unique.safeParse(value).success,false);
+assert.equal(poolsterSchemas.Exclusive.safeParse(1).success,false);assert.equal(poolsterSchemas.Exclusive.safeParse(1.5).success,true);assert.deepEqual(poolsterSchemas.Node.parse({child:{}}),{child:{}});
 "#).unwrap();
     let output = Command::new("node")
         .arg("probe.mjs")

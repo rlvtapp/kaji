@@ -150,7 +150,7 @@ pub(crate) fn generate(api: &Api, config: &ArtifactOptions) -> Result<Vec<Genera
     };
     if !split {
         let mut source = runtime.to_owned();
-        source.push_str(&format!("\nconst __kajiSchemas: Record<string, FixtureSchema> = {{ {} }};\nconst __kajiFixtures = createFixtureRuntime(__kajiSchemas, {settings});\nexport const seedPoolsterFixtures = (seed: number | number[]) => __kajiFixtures.seed(seed);\n",api.schemas.iter().zip(&descriptors).map(|(schema,value)|format!("{}: {value}",render::js_string(&schema.name))).collect::<Vec<_>>().join(",")));
+        source.push_str(&format!("\nconst __poolsterSchemas: Record<string, FixtureSchema> = {{ {} }};\nconst __kajiFixtures = createFixtureRuntime(__poolsterSchemas, {settings});\nexport const seedPoolsterFixtures = (seed: number | number[]) => __kajiFixtures.seed(seed);\n",api.schemas.iter().zip(&descriptors).map(|(schema,value)|format!("{}: {value}",render::js_string(&schema.name))).collect::<Vec<_>>().join(",")));
         source.push_str(&factory(&(0..api.schemas.len()).collect::<Vec<_>>(), "./"));
         return Ok(vec![file(config, "faker.ts", source)?]);
     }

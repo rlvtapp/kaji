@@ -688,12 +688,12 @@ mod tests {
                 .contents
                 .contains("export const GetPetsResponseSchemas")
         );
-        assert!(zod[0].contents.contains("export const kajiSchemas = {"));
+        assert!(zod[0].contents.contains("export const poolsterSchemas = {"));
         assert!(zod[0].contents.contains("\"Pet\": PetSchema"));
         assert!(
             zod[0]
                 .contents
-                .contains("export const kajiOperationSchemas:")
+                .contains("export const poolsterOperationSchemas:")
         );
         assert!(zod[0].contents.contains("\"get-pets\": {"));
         assert!(zod[0].contents.contains("getPoolsterSchema"));

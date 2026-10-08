@@ -139,7 +139,7 @@ pub(crate) fn render_zod_operation_schemas(output: &mut String, api: &Api) {
 /// Schema-aware integration without a second validation dependency.
 pub(crate) fn render_zod_registry(output: &mut String, api: &Api) {
     output.push_str(
-        "/**\n * Component schemas keyed by their OpenAPI component name.\n *\n * Every value is a Zod 4 schema and therefore implements Standard Schema V1.\n */\nexport const kajiSchemas = {\n",
+        "/**\n * Component schemas keyed by their OpenAPI component name.\n *\n * Every value is a Zod 4 schema and therefore implements Standard Schema V1.\n */\nexport const poolsterSchemas = {\n",
     );
     for schema in &api.schemas {
         let _ = writeln!(
@@ -157,17 +157,17 @@ pub(crate) fn render_zod_registry(output: &mut String, api: &Api) {
         );
     }
     output.push_str("} as const;\n\n");
-    output.push_str("export type PoolsterSchemaName = keyof typeof kajiSchemas;\n");
-    output.push_str("export type PoolsterSchema = (typeof kajiSchemas)[PoolsterSchemaName];\n");
+    output.push_str("export type PoolsterSchemaName = keyof typeof poolsterSchemas;\n");
+    output.push_str("export type PoolsterSchema = (typeof poolsterSchemas)[PoolsterSchemaName];\n");
     output.push_str(
-        "export const getPoolsterSchema = <Name extends PoolsterSchemaName>(name: Name): (typeof kajiSchemas)[Name] => kajiSchemas[name];\n\n",
+        "export const getPoolsterSchema = <Name extends PoolsterSchemaName>(name: Name): (typeof poolsterSchemas)[Name] => poolsterSchemas[name];\n\n",
     );
 
-    render_zod_operation_registry(output, api, "kajiOperationSchemas");
-    output.push_str("export type PoolsterOperationId = keyof typeof kajiOperationSchemas;\n");
-    output.push_str("export type PoolsterOperationSchemas = typeof kajiOperationSchemas;\n");
+    render_zod_operation_registry(output, api, "poolsterOperationSchemas");
+    output.push_str("export type PoolsterOperationId = keyof typeof poolsterOperationSchemas;\n");
+    output.push_str("export type PoolsterOperationSchemas = typeof poolsterOperationSchemas;\n");
     output.push_str(
-        "export const getPoolsterOperationSchemas = <Operation extends PoolsterOperationId>(operation: Operation): PoolsterOperationSchemas[Operation] => kajiOperationSchemas[operation];\n",
+        "export const getPoolsterOperationSchemas = <Operation extends PoolsterOperationId>(operation: Operation): PoolsterOperationSchemas[Operation] => poolsterOperationSchemas[operation];\n",
     );
 }
 

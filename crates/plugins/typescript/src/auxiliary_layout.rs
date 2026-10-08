@@ -199,7 +199,7 @@ pub(crate) fn zod(api: &Api, config: &ArtifactOptions) -> Result<Vec<GeneratedFi
             source.push_str(&format!("import type {{ {n} as __PoolsterModel{n} }} from '../models';\nexport const {n}Schema: z.ZodType<__PoolsterModel{n}> = {};\nexport type {n} = z.infer<typeof {n}Schema>;\n", render::render_zod(&s.value)));
             root.push_str(&format!("export {{ {n}Schema }} from './zod_chunks/schemas_{chunk:04}';\nexport type {{ {n} }} from './zod_chunks/schemas_{chunk:04}';\n"));
         }
-        source.push_str("export const __kajiSchemas = {\n");
+        source.push_str("export const __poolsterSchemas = {\n");
         for &i in indices {
             let s = &api.schemas[i];
             let key = s
@@ -216,7 +216,7 @@ pub(crate) fn zod(api: &Api, config: &ArtifactOptions) -> Result<Vec<GeneratedFi
         }
         source.push_str("} as const;\n");
         root.push_str(&format!(
-            "import {{ __kajiSchemas as schemas{chunk} }} from './zod_chunks/schemas_{chunk:04}';\n"
+            "import {{ __poolsterSchemas as schemas{chunk} }} from './zod_chunks/schemas_{chunk:04}';\n"
         ));
         schema_registries.push(format!("...schemas{chunk}"));
         files.push(file(
@@ -263,8 +263,8 @@ pub(crate) fn zod(api: &Api, config: &ArtifactOptions) -> Result<Vec<GeneratedFi
             ));
         }
         render::render_zod_operation_schemas(&mut source, &local);
-        render::render_zod_operation_registry(&mut source, &local, "__kajiOperationSchemas");
-        root.push_str(&format!("import {{ __kajiOperationSchemas as operations{chunk} }} from './zod_chunks/operations_{chunk:04}';\n"));
+        render::render_zod_operation_registry(&mut source, &local, "__poolsterOperationSchemas");
+        root.push_str(&format!("import {{ __poolsterOperationSchemas as operations{chunk} }} from './zod_chunks/operations_{chunk:04}';\n"));
         operation_registries.push(format!("...operations{chunk}"));
         for operation in &local.operations {
             let n = name(&operation.id);
@@ -291,8 +291,8 @@ pub(crate) fn zod(api: &Api, config: &ArtifactOptions) -> Result<Vec<GeneratedFi
             source,
         )?);
     }
-    root.push_str(&format!("export const kajiSchemas: {} = {{ {} }} as const;\nexport type PoolsterSchemaName = keyof typeof kajiSchemas;\nexport type PoolsterSchema = (typeof kajiSchemas)[PoolsterSchemaName];\nexport const getPoolsterSchema = <Name extends PoolsterSchemaName>(name: Name): (typeof kajiSchemas)[Name] => kajiSchemas[name];\n", if schema_registries.is_empty() { "Record<never, never>".into() } else { (0..schema_registries.len()).map(|i| format!("typeof schemas{i}")).collect::<Vec<_>>().join(" & ") }, schema_registries.join(", ")));
-    root.push_str(&format!("export const kajiOperationSchemas: {} = {{ {} }} as const;\nexport type PoolsterOperationId = keyof typeof kajiOperationSchemas;\nexport type PoolsterOperationSchemas = typeof kajiOperationSchemas;\nexport const getPoolsterOperationSchemas = <Operation extends PoolsterOperationId>(operation: Operation): PoolsterOperationSchemas[Operation] => kajiOperationSchemas[operation];\n", if operation_registries.is_empty() { "Record<never, never>".into() } else { (0..operation_registries.len()).map(|i| format!("typeof operations{i}")).collect::<Vec<_>>().join(" & ") }, operation_registries.join(", ")));
+    root.push_str(&format!("export const poolsterSchemas: {} = {{ {} }} as const;\nexport type PoolsterSchemaName = keyof typeof poolsterSchemas;\nexport type PoolsterSchema = (typeof poolsterSchemas)[PoolsterSchemaName];\nexport const getPoolsterSchema = <Name extends PoolsterSchemaName>(name: Name): (typeof poolsterSchemas)[Name] => poolsterSchemas[name];\n", if schema_registries.is_empty() { "Record<never, never>".into() } else { (0..schema_registries.len()).map(|i| format!("typeof schemas{i}")).collect::<Vec<_>>().join(" & ") }, schema_registries.join(", ")));
+    root.push_str(&format!("export const poolsterOperationSchemas: {} = {{ {} }} as const;\nexport type PoolsterOperationId = keyof typeof poolsterOperationSchemas;\nexport type PoolsterOperationSchemas = typeof poolsterOperationSchemas;\nexport const getPoolsterOperationSchemas = <Operation extends PoolsterOperationId>(operation: Operation): PoolsterOperationSchemas[Operation] => poolsterOperationSchemas[operation];\n", if operation_registries.is_empty() { "Record<never, never>".into() } else { (0..operation_registries.len()).map(|i| format!("typeof operations{i}")).collect::<Vec<_>>().join(" & ") }, operation_registries.join(", ")));
     files.push(file(config, "zod.ts", root)?);
     Ok(files)
 }
