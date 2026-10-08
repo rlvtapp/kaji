@@ -201,21 +201,20 @@ func collectSwaggerV2Operations(spec *v2.Swagger, outDir string, index map[strin
 }
 
 func mergeSwaggerV2Parameters(pathParameters, operationParameters []*v2.Parameter) []*v2.Parameter {
-	merged := append([]*v2.Parameter(nil), pathParameters...)
-	for _, parameter := range operationParameters {
-		if parameter == nil {
-			continue
-		}
-		replaced := false
-		for index, existing := range merged {
-			if existing != nil && strings.EqualFold(existing.Name, parameter.Name) && strings.EqualFold(existing.In, parameter.In) {
-				merged[index] = parameter
-				replaced = true
-				break
+	var merged []*v2.Parameter
+	positions := make(map[string]int)
+	for _, parameters := range [][]*v2.Parameter{pathParameters, operationParameters} {
+		for _, parameter := range parameters {
+			if parameter == nil {
+				continue
 			}
-		}
-		if !replaced {
-			merged = append(merged, parameter)
+			key := paramDocKey(ParameterDoc{Name: parameter.Name, In: parameter.In})
+			if index, exists := positions[key]; exists {
+				merged[index] = parameter
+			} else {
+				positions[key] = len(merged)
+				merged = append(merged, parameter)
+			}
 		}
 	}
 	return merged

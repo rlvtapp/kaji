@@ -317,3 +317,15 @@ func TestFirstNonNullTypeSkipsNull(t *testing.T) {
 		t.Fatalf("unexpected type: %s", got)
 	}
 }
+
+func TestMergeParametersPreservesWireIdentityAndDeduplicatesBothLists(t *testing.T) {
+	path := []ParameterDoc{{Name: "id", In: "path"}, {Name: "id", In: "path", Required: true}, {Name: "Id", In: "query"}, {Name: "id", In: "query"}, {Name: "X-Key", In: "header"}}
+	operation := []ParameterDoc{{Name: "id", In: "path"}, {Name: "id", In: "path", Required: true}, {Name: "x-key", In: "header", Required: true}}
+	got := mergeParameters(path, operation)
+	if len(got) != 4 {
+		t.Fatalf("wire identities lost or duplicated: %#v", got)
+	}
+	if !got[0].Required || got[1].Name != "Id" || got[2].Name != "id" || got[3].Name != "x-key" || !got[3].Required {
+		t.Fatalf("incorrect override or case handling: %#v", got)
+	}
+}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	v2 "github.com/pb33f/libopenapi/datamodel/high/v2"
 	"os"
 	"path/filepath"
 	"testing"
@@ -129,5 +130,14 @@ func readSwaggerArtifact(t *testing.T, path string, target any) {
 	}
 	if err := json.Unmarshal(contents, target); err != nil {
 		t.Fatalf("decode %s: %v", path, err)
+	}
+}
+
+func TestSwaggerParameterMergingPreservesCaseSensitiveNames(t *testing.T) {
+	path := []*v2.Parameter{{Name: "id", In: "path"}, {Name: "id", In: "path"}, {Name: "Id", In: "query"}, {Name: "id", In: "query"}, {Name: "X-Key", In: "header"}}
+	override := &v2.Parameter{Name: "x-key", In: "header"}
+	got := mergeSwaggerV2Parameters(path, []*v2.Parameter{nil, override})
+	if len(got) != 4 || got[1].Name != "Id" || got[2].Name != "id" || got[3] != override {
+		t.Fatalf("wire identity merge incorrect: %#v", got)
 	}
 }

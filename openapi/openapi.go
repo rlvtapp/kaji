@@ -48,7 +48,7 @@ func runWithHash(specPath, outDir string, prevHash *uint64) (uint64, bool, int, 
 	}
 	// Artifact changes must invalidate caches even when the contract is unchanged.
 	// Keep the provenance manifest's digest specific to source bytes.
-	newHash := xxhash.Sum64String(fmt.Sprintf("content-ir-3.2-v3:%016x", source.Hash))
+	newHash := xxhash.Sum64String(fmt.Sprintf("content-ir-3.2-v4:%016x", source.Hash))
 
 	if prevHash != nil && *prevHash == newHash {
 		return newHash, false, 0, nil
@@ -1021,36 +1021,32 @@ func convertSecurityRequirements(opReqs, rootReqs []*base.SecurityRequirement) [
 }
 
 func mergeParameters(pathParams, opParams []ParameterDoc) []ParameterDoc {
-	if len(pathParams) == 0 && len(opParams) == 0 {
-		return nil
-	}
-
-	merged := append([]ParameterDoc{}, pathParams...)
-
-	for _, param := range opParams {
-		key := paramDocKey(param)
-		replaced := false
-		for i := range merged {
-			if paramDocKey(merged[i]) == key {
-				merged[i] = param
-				replaced = true
-				break
+	var merged []ParameterDoc
+	positions := make(map[string]int)
+	// Operation parameters override path parameters. A repeated entry in either
+	// list must not produce duplicate native arguments. Only header wire names
+	// are case-insensitive; query and path names retain their exact spelling.
+	for _, params := range [][]ParameterDoc{pathParams, opParams} {
+		for _, param := range params {
+			key := paramDocKey(param)
+			if index, exists := positions[key]; exists {
+				merged[index] = param
+			} else {
+				positions[key] = len(merged)
+				merged = append(merged, param)
 			}
 		}
-		if !replaced {
-			merged = append(merged, param)
-		}
 	}
-
-	if len(merged) == 0 {
-		return nil
-	}
-
 	return merged
 }
 
 func paramDocKey(param ParameterDoc) string {
-	return strings.ToLower(param.In) + ":" + strings.ToLower(param.Name)
+	location := strings.ToLower(param.In)
+	name := param.Name
+	if location == "header" {
+		name = strings.ToLower(name)
+	}
+	return location + ":" + name
 }
 
 func yamlNodeToInterface(node *yaml.Node) (any, error) {
