@@ -220,3 +220,25 @@ pub(super) fn operation_request_name(api: &Api, operation: &Operation) -> String
     }
     unreachable!("colliding operation belongs to API")
 }
+
+pub(super) fn render_error_return(
+    output: &mut String,
+    response_kind: &GoResponseKind,
+    error: &str,
+) {
+    match response_kind {
+        GoResponseKind::None => {
+            let _ = writeln!(output, "\t\treturn {error}");
+        }
+        GoResponseKind::Text => {
+            let _ = writeln!(output, "\t\treturn \"\", {error}");
+        }
+        GoResponseKind::Json(_) | GoResponseKind::Binary | GoResponseKind::EventStream => {
+            let _ = writeln!(output, "\t\treturn nil, {error}");
+        }
+    }
+}
+
+pub(super) fn operation_response_type(operation: &Operation) -> Option<String> {
+    operation.success_schema().map(go_type)
+}

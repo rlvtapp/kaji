@@ -205,3 +205,40 @@ pub(super) fn has_multipart(operation: &Operation) -> bool {
         })
     })
 }
+
+pub(super) fn go_type(value: &SchemaValue) -> String {
+    let value_type = match &value.kind {
+        SchemaKind::Any | SchemaKind::Null | SchemaKind::Not { .. } => "any".into(),
+        SchemaKind::Boolean => "bool".into(),
+        SchemaKind::Integer => "int64".into(),
+        SchemaKind::Number => "float64".into(),
+        SchemaKind::String => match value.format.as_deref() {
+            Some("binary") | Some("byte") => "[]byte".into(),
+            _ => "string".into(),
+        },
+        SchemaKind::Array { items } => format!("[]{}", go_type(items)),
+        SchemaKind::Object {
+            additional_properties,
+            ..
+        } => match additional_properties {
+            AdditionalProperties::Schema { value } => format!("map[string]{}", go_type(value)),
+            _ => "map[string]any".into(),
+        },
+        SchemaKind::Reference { reference } => go_type_name(
+            &reference
+                .rsplit('/')
+                .next()
+                .unwrap_or(reference)
+                .replace("~1", "/")
+                .replace("~0", "~"),
+        ),
+        SchemaKind::OneOf { .. } | SchemaKind::AnyOf { .. } | SchemaKind::AllOf { .. } => {
+            "json.RawMessage".into()
+        }
+    };
+    if (value.nullable || value.nullish) && value_type != "any" && !value_type.starts_with('*') {
+        format!("*{value_type}")
+    } else {
+        value_type
+    }
+}
