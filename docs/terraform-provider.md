@@ -253,3 +253,51 @@ signing key, configure the protected release environment, then validate with
 sources/native Framework checks were verified; GoReleaser signing, GitHub release
 upload and registry ingestion remain unexecuted. Existing Terraform state is not
 migrated automatically by changing the provider address.
+
+## Local lifecycle verification matrix
+
+The provider tests use disposable generated providers and local services. They do
+not publish a provider or exercise a customer's API. The real Terraform CLI probe
+`terraform_cli_local_mock_lifecycle` now verifies this scalar bearer-auth resource:
+
+| Lifecycle | Verified behavior |
+| --- | --- |
+| Create | Apply records the remote ID and exact 64-bit quantity. |
+| Refresh | A remote name change gives Terraform plan exit code 2. |
+| Failed refresh | HTTP 401 gives a diagnostic and retains the managed resource. |
+| Update | PATCH followed by HTTP 204 refresh records the changed name while preserving quantity. |
+| Failed update | HTTP 500 fails apply and retains the managed resource for recovery. |
+| Import | Removing local state and importing the encoded ID gives a clean plan. |
+| Read-only lookup | The data source reads the created resource in the same apply. |
+| Delete | Destroy succeeds against the disposable service. |
+
+Run the gated probe with Go, cached Framework dependencies and an explicitly
+selected Terraform executable:
+
+```sh
+KAJI_TERRAFORM_BIN=/path/to/terraform \
+KAJI_TERRAFORM_GOMODCACHE=/path/to/go/pkg/mod \
+cargo test -p kaji-plugin-terraform terraform_cli_local_mock_lifecycle -- --ignored
+```
+
+Additional native Framework tests cover missing resources, malformed or incomplete
+responses, pending deletes, normalized create values, composite identity, nested
+attributes, polling and state upgrades. These direct Framework probes are separate
+from Terraform CLI acceptance. The CLI matrix above does not establish full CLI
+coverage for every nested shape, authentication scheme, polling policy or migration.
+
+### Additional CLI acceptance profiles
+
+| Profile | Real CLI evidence | Direct Framework evidence beyond CLI |
+| --- | --- | --- |
+| Scalar + bearer | CRUD, data source, drift, denied reads, failed update, exact int64, import, clean plan | Malformed/null/missing fields, identity changes, create normalization, absent-resource removal |
+| Nested, unauthenticated | Object, list of objects, map of objects, string list/map; CRUD, drift, failed reads/updates, import, data source, clean plan | Recursive unknown/null diagnostics and state upgrade field renames |
+| Composite identity + bearer + polling | Authenticated async create/update/delete, update timeout, state retention, secret-free diagnostics, timeout recovery, clean plan; mutation sent once per invocation | Terminal errors, cancellation, timeout variants, accepted-status enforcement, composite import validation |
+| Basic and API-key header/query/cookie | Native generated transport tests; CLI coverage not yet claimed | Declared credentials applied only to secured operations |
+
+The nested CLI profile is `terraform_cli_nested_local_mock_lifecycle`; the
+asynchronous profile is `terraform_cli_polling_local_mock_lifecycle`. Both use the
+same executable/cache variables as the scalar command above. Polling tests hold a
+remote operation pending deliberately, verify failed apply retains its identity,
+and recover through refresh. They verify bearer authentication on the local
+mutation endpoint. They do not exercise hosted API credentials or a registry.

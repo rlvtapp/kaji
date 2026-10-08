@@ -11,7 +11,7 @@ directly while testing the stdio protocol:
 
 ```sh
 cd examples/agentic-generation
-npx @relevate/kaji mcp generator
+npx kajicli mcp generator
 ```
 
 The server exposes only two tools:

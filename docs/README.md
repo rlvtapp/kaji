@@ -1,69 +1,149 @@
-# Kaji documentation
+# Kaji docs
 
-Kaji turns an OpenAPI contract into SDK packages and related artifacts. The main workflow is for **SDK authors who own the generated code and its releases**: keep a recipe, bundle your policies, review regeneration, and deliver tested versions to customers.
+**Read a contract. Compose plugins. Ship something useful.**
 
-Use the [full feature catalog](features.md) to compare SDK targets, runtime policies, plugins, artifacts and delivery options. It distinguishes implemented features from verified behavior and prepared workflows.
+```text
+Input plugins → Kaji → Output plugins → Your packages
+```
 
-If you already received an SDK, start with [using generated SDKs](generated-sdks.md) and its package-local README. You do not need Kaji to use that package.
+<a id="sdk-authors-from-a-contract-to-a-released-package"></a>
 
-Start an existing Stainless, Fern or Speakeasy project with the [migration guide](migration.md).
+## Pick your starting point
 
-## SDK authors: from a contract to a released package
-
-Start with a local Swagger 2.0 or OpenAPI 3.0/3.1/3.2 document and a supported Kaji installation. Building the output also needs the target language's toolchain. Publishing later requires an SDK repository, registry identity, and configured authentication; generation itself does not create those accounts or publish anything.
-
-| Step | Read and do | What you have afterwards |
-| --- | --- | --- |
-| 1. Generate | [CLI quickstart](cli/quickstart.md) uses the small local Notes contract. [CLI workflow](cli/README.md) explains installation and repeatable recipes. | A `kaji.json`, generated package, and an output check you can repeat. |
-| 2. Shape your SDK | [Recipe configuration](cli/config.md) selects packages/plugins. [SDK customization](sdk-customization.md) bundles author middleware and source overrides. | Package-specific behavior shipped to customers by default, with customization sources kept beside the recipe. |
-| 3. Validate changes | [Safe regeneration](safe-regeneration.md), [testing guide](guides/testing.md), and [verification overview](verification.md). | A reviewable generated diff and native build/behavioral checks. |
-| 4. Send an SDK update | [SDK repository automation](sdk-automation.md) configures metadata, local setup, and generated SDK PRs. [GitHub Actions arrangements](github-actions.md) cover spec relay, scheduled fetches and remote inspection. | Editable checks and synchronization workflows for the source or a separate SDK repository. |
-| 5. Release and publish | [Publishing generated SDKs](sdk-publishing.md) explains Release Please integration, native manifests/tags, registry prerequisites, and publication checks. | Independently versioned, tested packages published through the chosen registry workflow. |
-
-The delivery sequence is **contract change → generated SDK PR → merge → Release Please version/changelog PR → merge → release tag → checks → publication**. The automation and publishing guides explain which files are scaffolded locally and which repository permissions, environments, and registry trust relationships you must configure yourself. Use a launcher containing the commands in those guides; [source customization](source-customization.md) explains unpublished builds and forks.
-
-For complete projects, use [examples](../examples/README.md). If your contract is remote or private, read [discovery and download](discovery.md) or [CLI recipes](cli/recipes.md) before committing source credentials or workflow settings.
-
-## SDK users: install and call the delivered package
-
-The generated package's README is the first reference for its installation, exports, authentication, and native requirements. The [generated SDK guide](generated-sdks.md) explains client layouts, models, errors, and capabilities across languages. For application-level request policies, follow [runtime middleware](guides/runtime-middleware.md); an author's bundled policy is already enabled.
-
-Choose the guide for the task around your client: [pagination](guides/pagination.md) for declared continuation and target capabilities, [idempotency](guides/idempotency.md) for bundled keys and safe mutation retries, [TypeScript helpers](guides/typescript-helpers.md) for validation/data fetching, [contract mocking](mocking.md) for local APIs, or [testing generated SDKs](guides/testing.md) for executable fixtures. Those artifacts are selected by the SDK author; they are not automatically present in every package.
-
-## Plugin developers: extend generation through contracts
-
-Use the [Rust library workflow](library/README.md) when generation belongs in a tool or when you need a native custom plugin. Start from the [standalone custom plugin example](../examples/custom-plugin/README.md). Follow [plugin composition](library/plugins.md), then the [typed plugin reference](typed-plugins.md) to provide or consume contracts and control package finalization. [Architecture](architecture.md) explains the compiler boundary and neutral model; [native SDK providers](native-sdk-providers.md) documents Rust/Go transport composition and runtime extension boundaries.
-
-Native Rust plugins are composed through the library API. Installing an arbitrary plugin does not register it in `kaji.json`; the CLI exposes its bundled registry. Keep target-specific behavior in the plugin, and use [source customization](source-customization.md) if you need to extend the CLI or delivery actions.
-
-## Find a focused guide
-
-| Topic | Guide |
+| You want to… | Start here |
 | --- | --- |
-| Full capabilities and target differences | [Feature catalog](features.md) |
-| Per-call headers, timeouts and cancellation | [Request controls](guides/request-controls.md) |
-| OAuth providers and signed webhooks | [OAuth/webhooks](guides/oauth-webhooks.md) |
-| All CLI commands or typed settings | [CLI reference](cli.md), [configuration reference](configuration.md) |
-| OpenAPI 3.2 wire formats and metadata | [OpenAPI 3.2 guide](guides/openapi32.md) |
-| Large contracts and compiler artifacts | [Large specifications](large-specs.md), [OpenAPI compiler](openapi-compiler.md) |
-| Extra generated outputs | [Auxiliary generators](auxiliary-generators.md), [ReDoc/MCP artifacts](guides/artifacts.md) |
-| API command-line clients | [TypeScript API CLI](typescript-cli.md), [Rust API CLI](rust-cli.md) |
-| CI, App authentication, and broker setup | [CI integration](ci-integration.md), [GitHub App](github-app.md), [OIDC broker](github-app-broker.md) |
-| Future enum values, unknown fields and null presence | [Forward-compatible models](guides/forward-compatible-models.md) |
-| Native model fixtures | [Shared SDK fixtures](shared-sdk-fixtures.md) |
-| Product background and release changes | [Why Kaji](why-kaji.md), [0.4.0 release](releases/0.4.0.md), [0.3.0 release](releases/0.3.0.md) |
+| Generate your first SDK | [CLI quickstart](cli/quickstart.md) |
+| Configure a repeatable build | [Recipes](cli/config.md) |
+| Use an SDK someone gave you | [Generated SDKs](generated-sdks.md) and its package README |
+| Add a format or generator | [Plugin development](library/README.md) |
+| Embed Kaji in your own tool | [Rust quickstart](library/quickstart.md) |
+| Use JavaScript or TypeScript plugins | [Node API](../packages/cli/sdk/README.md) |
+| Move an existing SDK project | [Migration](migration.md) |
 
-## Capability and verification boundaries
+## Understand the pieces
 
-A generated source snapshot, a native compile, a mock lifecycle test, and a live registry upload prove different things. Read [verification](verification.md), [native providers](native-sdk-providers.md), and the relevant language guide before choosing production checks. Some native tests require a toolchain and run explicitly; bounded [schema fixtures](shared-sdk-fixtures.md) are not exhaustive protocol tests. Add tests for your API's authentication, errors, pagination, and any bundled policy.
+### Input plugins
 
-Generate portable [Postman collections](postman.md) and a supported subset of [typed Terraform providers](terraform-provider.md) through the CLI or native plugins. Their design plans retain advanced follow-up work; the [roadmap](sdk-roadmap.md) distinguishes implemented behavior from future stages.
+Read and validate source documents, then publish typed data.
 
-## API artifacts
+- [OpenAPI compiler](openapi-compiler.md): the existing HTTP SDK workflow.
+- [Input providers](input-plugins.md): GraphQL, AsyncAPI, Arazzo, Protobuf and Cap’n Proto.
+- [Discover a contract](discovery.md): find or download public OpenAPI documents.
 
-Generate [Postman collections](postman.md) and [typed Terraform providers](terraform-provider.md), with a [Speakeasy comparison](terraform-speakeasy.md), beside your SDKs. The [combined example](../examples/api-artifacts/README.md) includes a recipe and editable CI checks.
+Outputs must support the published contract. Native parsing does not make every
+SDK generator compatible with every format.
 
-Compare the options in [Why choose Kaji?](comparison.md), including the strengths
-of its plugin architecture, source ownership and integrated delivery.
+### Kaji
 
-For file and JSON-part uploads, see [multipart uploads](guides/uploads.md).
+Compose packages, resolve dependencies and manage generated files.
+
+[Architecture](architecture.md) · [CLI workflow](cli/README.md) ·
+[Rust workflow](library/README.md) · [Node workflow](../packages/cli/sdk/README.md) ·
+[Safe regeneration](safe-regeneration.md)
+
+<a id="api-artifacts"></a>
+
+### Output plugins
+
+| Output | Guides |
+| --- | --- |
+| SDK packages | [Language capabilities](generated-sdks.md) · [Provider composition](native-sdk-providers.md) |
+| API commands | [TypeScript CLI](typescript-cli.md) · [Rust CLI](rust-cli.md) |
+| Frontend helpers | [Query hooks, validation and fixtures](guides/typescript-helpers.md) |
+| Local APIs | [Contract mocks](mocking.md) |
+| API tools | [Postman](postman.md) · [Terraform](terraform-provider.md) · [MCP](mcp-server.md) |
+| Docs and other artifacts | [Auxiliary generators](auxiliary-generators.md) · [Artifact recipes](guides/artifacts.md) |
+
+<a id="plugin-developers-extend-generation-through-contracts"></a>
+
+[All extension hooks at a glance →](plugin-hooks.md)
+
+## Build a plugin
+
+Start with the [working example](../examples/custom-plugin/README.md).
+Then choose a hook:
+
+| Hook | Reference |
+| --- | --- |
+| Read another input format | [Register an input provider](input-plugins.md#select-or-replace-a-provider) |
+| Consume data and emit files | [Write an output plugin](typed-plugins.md#implement-a-reusable-consumer) |
+| Swap a model or transport provider | [Compose providers](typed-plugins.md#compose-typescript-providers-independently) |
+| Add a language | [Language responsibilities](typed-plugins.md#what-core-owns-and-what-the-language-owns) |
+| Add derived artifacts after generation | [Generation phases](typed-plugins.md#generation-phases-and-file-ownership) |
+| Bundle middleware or custom source | [SDK customization](sdk-customization.md) |
+
+Plugins are Rust crates linked into a generator application. The shipped CLI
+exposes its compiled-in plugins. [Full authoring reference →](typed-plugins.md)
+
+In Node.js, install the input or output packages you want and select their
+exports in `kaji.config.mjs`. You can also write JavaScript input and output
+plugins. [Node authoring guide →](../packages/cli/sdk/README.md)
+
+## Generate, review, release
+
+1. [Generate](cli/quickstart.md) a package from your contract.
+2. [Customize](sdk-customization.md) behavior through your recipe.
+3. [Check regeneration](safe-regeneration.md) and [test the SDK](guides/testing.md).
+4. [Open SDK update PRs](sdk-automation.md).
+5. [Release and publish](sdk-publishing.md) reviewed versions.
+
+```text
+Contract change → SDK PR → Release PR → Tag → Checks → Publication
+```
+
+[CI setup](ci-integration.md) · [GitHub Actions](github-actions.md) ·
+[GitHub App](github-app.md) · [OIDC broker](github-app-broker.md)
+
+<a id="sdk-users-install-and-call-the-delivered-package"></a>
+
+## Use the generated SDK
+
+The package README gives the exact installation, exports and runtime requirements.
+Use these guides when you need a specific behavior:
+
+| Task | Guide |
+| --- | --- |
+| Add HTTP policy | [Middleware](guides/runtime-middleware.md) |
+| Follow pages | [Pagination](guides/pagination.md) |
+| Retry mutations safely | [Idempotency](guides/idempotency.md) |
+| Set headers, deadlines or cancellation | [Request controls](guides/request-controls.md) |
+| Upload files or JSON parts | [Uploads](guides/uploads.md) |
+| Use OAuth or signed webhooks | [OAuth and webhooks](guides/oauth-webhooks.md) |
+| Handle future enum values and fields | [Model compatibility](guides/forward-compatible-models.md) |
+| Use OpenAPI 3.2 wire formats | [OpenAPI 3.2](guides/openapi32.md) |
+
+<a id="find-a-focused-guide"></a>
+
+## Ask AI about Kaji
+
+Use the [AI context and copyable prompts](ai.md), or start from the
+[README’s quick prompt](../README.md#ask-ai-about-kaji).
+Give your assistant your goal, Kaji version and target language.
+
+[Kaji tools through MCP →](mcp-server.md)
+
+## Reference shelf
+
+[All CLI options](cli.md) · [JSON recipe fields](config-file.md) ·
+[Rust settings](configuration.md) · [Feature catalog](features.md) ·
+[Verification](verification.md) · [Large contracts](large-specs.md)
+
+Need a complete project? Browse [examples](../examples/README.md).
+For source builds and forks, see [source customization](source-customization.md).
+
+<details>
+<summary>Benchmarks, background and plans</summary>
+
+- [Compatibility results](guru-compatibility.md) and [shared fixtures](shared-sdk-fixtures.md)
+- [Why Kaji](why-kaji.md) and [comparison](comparison.md)
+- [Roadmap](sdk-roadmap.md) and [generator backlog](generator-backlog.md)
+- [Postman plan](postman-generation-plan.md) and [Terraform plan](terraform-provider-plan.md)
+- [0.4.0](releases/0.4.0.md) and [0.3.0](releases/0.3.0.md) release notes
+- [AI context](ai.md) and [contributing](contributing.md)
+
+</details>
+
+<a id="capability-and-verification-boundaries"></a>
+
+A snapshot, a native build and an API test prove different things.
+[Verification](verification.md) records what has been checked and what still needs testing.

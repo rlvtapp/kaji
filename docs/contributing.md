@@ -1,5 +1,7 @@
 # Contributing
 
+[Docs home](README.md) · [Plugin authoring](typed-plugins.md) · [Maintainer checks](verification.md#maintainer-checks)
+
 This guide is for developing Kaji itself. To use it on an API, start with the
 [CLI](cli.md) or [Rust getting-started guide](getting-started.md).
 
@@ -13,7 +15,7 @@ This guide is for developing Kaji itself. To use it on an API, start with the
 | `crates/plugins/*` | Language implementations and language-owned configuration. |
 | `crates/kaji-cli` | Native command-line application. |
 | `packages/cli` | Thin Node launcher and platform package build tooling. |
-| `packages/npm` | Optional unscoped npm facade. |
+| `packages/cli/sdk` | Node SDK with NAPI bindings and JavaScript plugins. |
 | `docs/` | User guides, configuration, architecture, and verification. |
 
 ## Local checks
@@ -68,7 +70,8 @@ tests. A snapshot alone is not proof that the generated code compiles.
 User-facing configuration changes need corresponding examples and reference
 updates. Kaji is pre-1.0; avoid retaining unused compatibility layers.
 
-See [architecture](architecture.md), [plugin authoring](typed-plugins.md), and
-[verification](verification.md) before expanding the generation pipeline.
+See [code organization](code-organization.md), [architecture](architecture.md),
+[plugin authoring](typed-plugins.md), and [verification](verification.md) before
+expanding the generation pipeline.
 Native npm builds and release ordering are documented in [the CLI guide](cli.md#npm-layout-and-release-preparation).
 Do not publish packages as part of an ordinary build or test.

@@ -6,7 +6,7 @@ that explains exactly what Kaji produced.
 
 ```sh
 cd examples/reproducible-generation
-npx @relevate/kaji generate
+npx kajicli generate
 ```
 
 The `openapi.paths` configuration includes `/messages*` and `/admin*`, then
@@ -28,7 +28,7 @@ changes.
 The direct-command equivalent is useful for one-off work:
 
 ```sh
-npx @relevate/kaji generate openapi.yaml --output generated --language typescript,csharp \
+npx kajicli generate openapi.yaml --output generated --language typescript,csharp \
   --include-path '/messages*' --include-path '/admin*' --exclude-path '/admin/audit*'
 ```
 

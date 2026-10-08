@@ -1,13 +1,15 @@
 # GitHub Actions for SDK authors
 
-Use GitHub Actions to deliver changes while keeping the specification, generator
-recipe, middleware sources and automation readable in your repositories. This
-page explains four repository arrangements. [SDK automation](sdk-automation.md)
-contains the full content-PR → release-PR → exact-tag publication journey.
+Choose where your specification, generation and SDK releases live.
+This page covers repository handoffs, specification relay and scheduled fetching.
+For the full SDK PR → release PR → exact-tag publication flow, see
+[SDK automation](sdk-automation.md).
 
 > Use a Kaji launcher containing the commands/options shown here. The current
 > source checkout and a previously published launcher/action can differ; verify
 > the version you install in CI before committing its scaffold.
+
+**On this page:** [Layout](#choose-where-generation-runs) · [Bootstrap](#bootstrap-generation-and-release-in-one-repository) · [Per language](#deliver-each-language-to-its-own-repository) · [Relay](#relay-a-specification-to-an-sdk-repository) · [Schedule](#fetch-a-remote-specification-periodically) · [Status](#inspect-local-and-remote-automation-state)
 
 ## Choose where generation runs
 
@@ -18,10 +20,9 @@ contains the full content-PR → release-PR → exact-tag publication journey.
 | The API repository owns generation; each language has its own repository | `sdk init --repository-pattern 'OWNER/api-{lang}'` writes source jobs per language and stages setup per destination. | API repository; each job delivers only its selected language. |
 | The API repository only exports a specification; SDK authors own generation | `sdk connect` relays the spec as a destination PR; destination `sdk init` handles generation and release. | SDK repository, pointing at the relayed specification path. |
 
-Do not enable two generation owners for the same output branch. Decide which
-repository owns the recipe, package options and author source before bootstrap.
-A relay moves the specification; it does not move generated SDKs, rewrite the
-recipe or deploy a hosted generation service.
+Choose one generation owner per output branch. That repository owns the recipe,
+package options and author source. A relay copies only the specification;
+generation and release remain in the destination.
 
 ## Bootstrap generation and release in one repository
 
@@ -35,11 +36,17 @@ kaji sdk init --root generated --config kaji.json --auth app --dry-run
 ```
 
 Inspect the planned files, then rerun without `--dry-run` and with a Kaji launcher
-version that actually contains these commands. Review and commit the generated
-workflows/actions along with the recipe and author sources. `--base` defaults to
+version that actually contains these commands.
+Review and commit the generated
+workflows/actions along with the recipe and author sources.
+
+`--base` defaults to
 `main`; for `sdk init`/`sync` it selects the source push trigger, SDK PR base and
-Release Please target branch. Use `--base your-branch` for another convention. Configure the App,
-registry trust and protected `release` environment separately. The
+Release Please target branch.
+Use `--base your-branch` for another convention.
+Configure the App,
+registry trust and protected `release` environment separately.
+The
 [bootstrap guide](sdk-automation.md#3-preview-the-workflow-bootstrap) covers each
 file's role.
 
@@ -60,24 +67,32 @@ Rerun without `--dry-run` after review. Use the same flag with `sdk sync` when t
 package list changes; `--schedule`, `--bump`, `--actions` and authentication options
 still apply. Configuration-based per-package routing is not available.
 
-The source workflow generates a language matrix. Each job uses a destination-scoped
-token and `sdk pr --language LANG`; packages sharing a language share its
-repository. Their original output root and package directories are preserved.
-Commit the source recipe, bundled author sources and workflow in the API repository.
+Each language job uses a destination-scoped token and `sdk pr --language LANG`.
+Packages sharing a language share a repository; output paths stay intact.
+Commit the recipe, author sources and source workflow in the API repository.
 
-Each destination’s bootstrap is local staging under
-`.kaji/sdk-repository-setup/OWNER/REPO/`: check/publish helpers, CI/release workflows
-and Release Please configuration/manifest. Copy that directory’s **contents** into
-the matching destination and commit them with owner/workflow authority before the
-first SDK PR. The routine App needs Contents/Pull requests access; it does not
-bootstrap workflows. No repository, hosted service or live App installation is
-created by this command. Configure registry trust separately for each repository.
-An explicit `sdk install --setup .kaji/sdk-repository-setup/acme/api-typescript
---repository acme/api-typescript --dry-run` previews a bootstrap PR alternative to
-manual copying. Rerun without `--dry-run` only when you intend to open that PR with
-GitHub credentials authorized to write workflow files. This does not install the
-API repository’s source generation workflow; its owner commits that separately.
-Tracked installed files preserve edits and surface conflicts on refresh. See the
+Each destination has staged setup under
+`.kaji/sdk-repository-setup/OWNER/REPO/`: CI/release workflows, check/publish
+helpers and Release Please configuration.
+
+1. Copy that directory's **contents** into the matching repository root.
+2. Review and commit with owner/workflow authority before the first SDK PR.
+3. Configure registry trust separately in each destination.
+
+Routine App tokens have Contents/Pull requests access; installing workflow files
+requires bootstrap authority. The command creates no remote repository, hosted
+service or App installation.
+
+To preview a bootstrap PR instead of copying manually:
+
+```sh
+kaji sdk install --setup .kaji/sdk-repository-setup/acme/api-typescript \
+  --repository acme/api-typescript --dry-run
+```
+
+Rerun without `--dry-run` to open the PR using credentials authorized to write
+workflow files. Commit the API repository's source workflow separately.
+Tracked installed files preserve edits and report refresh conflicts. See the
 [complete bootstrap procedure](sdk-automation.md#repository-per-language).
 
 ## Relay a specification to an SDK repository
@@ -143,22 +158,25 @@ not update that recipe for you.
 
 Local bootstrap writes `.github/workflows/kaji-spec-sync.yml` and
 `.github/actions/kaji-spec-sync/{action.yml,sync.mjs}`; broker mode also includes
-its token helper. The relay workflow watches source pushes to `--base` (default
-`main`) and allows manual dispatch. The same `--base` selects the destination PR
-base; its review branch defaults to `codex/kaji-spec-sync`. For example, add
-`--base develop` when both repositories use `develop`. If their branches differ,
+its token helper.
+The relay workflow watches source pushes to `--base` (default
+`main`) and allows manual dispatch.
+The same `--base` selects the destination PR
+base; its review branch defaults to `codex/kaji-spec-sync`.
+
+For example, add
+`--base develop` when both repositories use `develop`.
+If their branches differ,
 edit the generated workflow to set the source trigger and destination action
-`base` independently. The upstream
+`base` independently.
+The upstream
 [spec-sync action](../packages/spec-sync/action.yml) and
 [relay implementation](../packages/spec-sync/sync.mjs) are available for review.
 
 
-The relay carries one specification file. External relative `$ref` documents,
-for example `./schemas/contact.yaml`, are unsupported because their sibling
-files are not copied to the destination. Bundle those references into a
-self-contained contract before connecting. Internal `#/components/...`
-references stay in the same document. The relay is not a generic repository
-mirror or dependency-copy mechanism.
+**Relay limit: one specification file.** Bundle external relative `$ref` files
+(such as `./schemas/contact.yaml`) before connecting; siblings are not copied.
+Internal `#/components/...` references remain supported.
 
 ### Select credentials and action sources
 
@@ -200,16 +218,18 @@ above schedules 03:17 UTC daily in the generated workflow. The schedule is opt-i
 a recipe pointing to a URL does not itself create a periodic poller. Commit the
 reviewed workflow to the repository's default branch before expecting it to run.
 
-A scheduled job reuses the normal recipe/generation/PR path. Configure private
-spec credentials as environment-backed source credentials in that job, following
-[remote source recipes](cli/recipes.md). Fetching credentials are distinct from
-App credentials for a destination PR and from registry publishing identity.
-The example explicitly chooses a `minor` bump policy for remote updates. Review
-that choice for your contract: use `--bump major` for a policy requiring major
-releases, or `--bump patch` for patch-only updates. URL/artifact-only sources need
-an explicit bump until prior source snapshots support automatic comparison; a
-schedule does not create those snapshots. For local versioned specifications,
-omit `--bump` when you want the existing API-diff sizing path.
+Scheduled jobs use the ordinary recipe → generation → PR flow. Configure private
+spec credentials through environment-backed source credentials in that job;
+see [remote source recipes](cli/recipes.md). These are separate from App PR
+credentials and registry publishing identity.
+
+| Source | Bump policy |
+| --- | --- |
+| URL/artifact-only | Explicit `--bump` required until prior source snapshots support comparison |
+| Local versioned specification | Omit `--bump` to use API-diff sizing |
+
+The example chooses `minor`. Review that policy; choose `major` or `patch` when
+appropriate. Scheduling does not create source snapshots.
 
 GitHub schedules run on the default branch, can be delayed under load, and may
 be disabled in inactive public repositories. The time is a requested schedule,
@@ -230,13 +250,15 @@ Read-only remote inspection selects a repository explicitly:
 kaji sdk status --remote --repository acme/sdk-repo --json
 ```
 
-It inspects generation/check/release workflows, the optional spec-sync workflow,
-recent runs, SDK/specification pull requests and visible secret names using
-your authenticated GitHub identity. It does not return secret values, create
-secrets, install an App, repair workflows, approve PRs or dispatch publishing.
-A listed secret name is not proof its value works; a workflow file is not proof
-it has run successfully. Visibility depends on that identity's permissions, so
-a denied query is not evidence that the remote item is absent.
+Remote status uses your authenticated GitHub identity to inspect:
+
+- Generation/check/release and optional spec-sync workflows.
+- Recent runs and SDK/specification PRs.
+- Visible secret **names**, never values.
+
+It makes no remote changes. A secret name does not prove the credential works;
+a workflow file does not prove a successful run. Treat denied queries as
+permission errors rather than evidence that an item is absent.
 
 For two repositories, inspect the API repository's relay runs and the SDK
 repository's specification PRs, generation runs and release runs separately.

@@ -21,6 +21,7 @@ together. Start small, then move to the complete stacks.
 | [Ruby SDK](ruby-sdk/README.md) | Ruby 3.1+ standard-library client and gem output | Ruby consumers |
 | [Swift SDK](swift-sdk/README.md) | Swift 5.9+ URLSession package output | Apple and server-side Swift consumers |
 | [Rust embedded](rust-embedded/README.md) | Calling Kaji from a Rust application | Integrators and plugin authors |
+| [Node embedded](node-embedded/README.md) | Async native generation with JavaScript plugins and artifact previews | Node build tools and plugin authors |
 | [TypeScript stack](typescript-stack/README.md) | Transports, validation, hooks, and testing helpers | Frontend consumers |
 | [Microsoft Graph](microsoft-graph/README.md) | Remote large contract and Go scaling | Large specifications |
 

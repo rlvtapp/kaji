@@ -5,7 +5,7 @@ documentation, and a Docker mock from one contract:
 
 ```sh
 cd examples/cli-multi-package
-npx @relevate/kaji generate
+npx kajicli generate
 ```
 
 ```text

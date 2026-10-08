@@ -1,8 +1,10 @@
 # Generate your first SDK from a local contract
 
-This walkthrough uses the small Notes API already in the repository. It produces a TypeScript Fetch package, verifies repeatable generation, and gives you a starting point for customization and releases. It does not call a live API or publish anything.
+Generate a TypeScript Fetch SDK from the sample Notes API. Then check, build and try it.
 
-You need a supported Kaji installation. The `npx @relevate/kaji` examples use Node/npm; replace that prefix with `kaji` if you installed the Python launcher or already have the executable. Building TypeScript later needs Node/npm, but the first generation/check requires no target dependency installation.
+**You need:** Node/npm for `npx` and the TypeScript build. If you already have the native or pip CLI, use `kaji` instead.
+
+Generation itself does not need the SDK’s dependencies installed.
 
 ## 1. Start with the two sample files
 
@@ -12,7 +14,9 @@ From the repository root:
 cd examples/cli-basic
 ```
 
-Alternatively, copy [openapi.yaml](../../examples/cli-basic/openapi.yaml) and [kaji.json](../../examples/cli-basic/kaji.json) into an empty directory, then run the following commands there. The contract describes `GET /notes/{noteId}` and a `Note` with required `id` and `body` fields. The recipe selects one TypeScript Fetch SDK:
+Or copy [openapi.yaml](../../examples/cli-basic/openapi.yaml) and [kaji.json](../../examples/cli-basic/kaji.json) into an empty directory.
+
+The contract has `GET /notes/{noteId}` and a `Note` with required `id` and `body`. The recipe picks one Fetch SDK:
 
 ```json
 {
@@ -34,21 +38,26 @@ Input and output paths are resolved from the recipe location. Keep the contract 
 ## 2. Generate and check the result
 
 ```sh
-npx @relevate/kaji generate --config kaji.json
-npx @relevate/kaji generate --config kaji.json --check
+npx kajicli generate --config kaji.json
+npx kajicli generate --config kaji.json --check
 ```
 
-The first command writes `generated/typescript` and generation bookkeeping. Open that package's README to see its actual exports, build steps, and runtime requirements. The second command succeeds without changing destination files when generation matches the output.
+- **Generate:** writes `generated/typescript` and generation bookkeeping.
+- **Check:** succeeds without writes when the destination matches.
+
+Open the generated README for exports, build steps and runtime requirements.
 
 To inspect proposed changes as JSON:
 
 ```sh
-npx @relevate/kaji generate --config kaji.json --check --format json
+npx kajicli generate --config kaji.json --check --format json
 ```
 
-The report contains `added`, `modified`, and `removed` paths. A nonempty report exits unsuccessfully so CI can detect drift. A clean report verifies generation consistency, not native compilation or API behavior.
+The report lists `added`, `modified` and `removed` paths. Drift makes the check fail.
 
-Try changing `operationId: getNote` to `operationId: fetchNote` in the sample contract. Run the check to inspect the changed operation output, then run generation to apply it. Restore the name if you want the client example below to remain unchanged.
+This checks generation consistency. Native builds and API tests come next.
+
+**Try a change:** rename `getNote` to `fetchNote` in the contract. Run the check to see the diff, then generate to apply it. Restore `getNote` for the example below.
 
 ## 3. Build the generated package
 
@@ -69,16 +78,22 @@ const api = new Notes({ baseUrl: "https://your-notes-api.example" });
 const note = await api.notes.getNote({ path: { noteId: "note_123" } });
 ```
 
-Install/link the built package into your application before using this import. The URL is a placeholder for a server implementing the Notes contract; generating the SDK does not start a server. Use [contract mocking](../mocking.md) when you need a local test API.
+Install or link the built package in your application. Replace the example URL with your server.
+
+Need a local API? Use [contract mocking](../mocking.md).
 
 ## 4. Keep author changes in the recipe
 
-Avoid editing materialized generated operations directly. [SDK customization](../sdk-customization.md) shows how to bundle middleware that runs automatically for your customers, add source, or replace/patch a specific generated file. Keep those source files beside the recipe and test their runtime behavior.
+Keep custom source beside your recipe. [SDK customization](../sdk-customization.md) covers bundled middleware, added files and replacement patches.
 
-Generation refuses to overwrite locally edited owned files. It removes obsolete generated files only when their recorded fingerprints still match, and preserves unrelated/create-once files. Read [safe regeneration](../safe-regeneration.md) before resolving an ownership conflict; an I/O failure can still interrupt materialization, so this is not an atomic directory swap.
+Regeneration protects edited owned files and preserves unrelated or create-once files. Stale generated files are removed only when their fingerprints match.
+
+[Resolve ownership conflicts →](../safe-regeneration.md) Writing is not an atomic directory swap; an I/O failure can interrupt it.
 
 ## 5. Prepare delivery when the package is ready
 
-Commit the source contract, recipe, customization sources, and your chosen generated output/bookkeeping. Add meaningful build/tests before automation. [SDK repository automation](../sdk-automation.md) walks through package release metadata, local workflow setup, generated SDK PRs, and Release Please's separate version/changelog PR. [Publishing](../sdk-publishing.md) covers registry identity, tagged artifacts, credentials/trust, and protected publication jobs.
+Commit your contract, recipe, custom source and chosen generated output/bookkeeping. Add build and behavior tests.
+
+[Prepare SDK PRs](../sdk-automation.md) → [Release and publish](../sdk-publishing.md)
 
 For your own local contract, `kaji init --input ./openapi.yaml --output ./generated` creates a starter recipe without overwriting an existing one. Continue with [configuration](config.md) for exact package settings, [multi-package recipes](recipes.md) for more outputs, or [commands](commands.md) for direct mode and filtering.

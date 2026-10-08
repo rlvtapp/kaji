@@ -1,5 +1,10 @@
 # Postman collection generation plan
 
+**Design history.** For current APIs and support, use the [postman guide](postman.md). Statements about the prototype below describe the original proposal.
+
+<details>
+<summary>Explore the original design and follow-up ideas</summary>
+
 Status: initial portable exporter implemented. See [the user guide](postman.md)
 and [combined example](../examples/api-artifacts/README.md) for the supported
 API and verification. This document retains the broader roadmap; unsupported
@@ -10,9 +15,12 @@ remain follow-up work.
 
 Add an independent `kaji-plugin-postman` consumer of Kaji's normalized `Api`,
 security catalog, request/response media types, parameter serialization metadata,
-and bounded request samples. Produce portable Collection 2.1 JSON, an optional
-empty-credential environment template, response examples, and diagnostics. Keep
+and bounded request samples.
+Produce portable Collection 2.1 JSON, an optional
+empty-credential environment template, response examples, and diagnostics.
+Keep
 collection execution and remote workspace publication separate and opt-in.
+
 Speakeasy exports collections from OpenAPI; Kaji can fit that capability into its
 existing plugin graph rather than requiring its SDK or Terraform models.
 [Speakeasy's Postman generator](https://www.speakeasy.com/blog/release-postman-generator).
@@ -25,13 +33,18 @@ OpenAPI -> sidecar -> neutral Kaji API
 ```
 
 Use typed contracts `RequestExamples`, `CollectionDocument` and
-`EnvironmentTemplate`. A custom example provider or collection renderer can
-replace the defaults. Reuse `core::samples` for bounded representative values,
-but do not treat its samples as complete schema validation. Examples may need
+`EnvironmentTemplate`.
+A custom example provider or collection renderer can
+replace the defaults.
+Reuse `core::samples` for bounded representative values,
+but do not treat its samples as complete schema validation.
+Examples may need
 explicit fixtures for recursive/overlapping unions and unsupported constraints.
+
 Collection item IDs and ordering must be stable across regeneration; key
 requests by operation identity and detect collisions rather than depending on
-list position or random UUIDs. File ownership/check mode apply to generated JSON
+list position or random UUIDs.
+File ownership/check mode apply to generated JSON
 and diagnostic files just as they do to SDKs.
 
 ## Request and response mapping
@@ -61,11 +74,16 @@ Validate actual generated files against the pinned schema, not just snapshots.
 ## Authentication and variables
 
 Use empty secret placeholders, never values from the generator process's
-credentials. Bearer/basic/API-key schemes map to Postman authentication or
-explicit headers/query/cookies as appropriate. Resolve each operation's OR
+credentials.
+Bearer/basic/API-key schemes map to Postman authentication or
+explicit headers/query/cookies as appropriate.
+Resolve each operation's OR
 alternatives and AND scheme combinations; one inherited collection auth setting
-cannot represent every combination. Make alternative selection explicit when
-necessary. Per-operation public security overrides suppress inherited auth.
+cannot represent every combination.
+Make alternative selection explicit when
+necessary.
+
+Per-operation public security overrides suppress inherited auth.
 OAuth flows/scopes map only when supported by Postman; otherwise export token
 placeholders and instructions, not an invented login script.
 
@@ -116,11 +134,16 @@ user-owned scripts through an explicit opt-in hook consumer.
 ## CI and distribution
 
 A collection validation action should check the schema, placeholders, stable
-IDs and generated drift. Execution with Newman/Postman CLI is a separate
-workflow against an explicitly configured sandbox/mock API. It must not execute
+IDs and generated drift.
+Execution with Newman/Postman CLI is a separate
+workflow against an explicitly configured sandbox/mock API.
+It must not execute
 create/delete requests against a real service merely because a collection was
-generated. Run ordered multi-operation scenarios only from explicit fixtures;
-reuse Kaji's mock/scenario layer where possible. Export files first; remote
+generated.
+
+Run ordered multi-operation scenarios only from explicit fixtures;
+reuse Kaji's mock/scenario layer where possible.
+Export files first; remote
 Postman API synchronization would need separately authorized workspace access
 and credential handling.
 
@@ -152,3 +175,6 @@ can accept those commands once the collection plugin exists.
 Terraform entities/state/upgrades remain in the Terraform plugin. Shared gains
 are source metadata, parameter/request binding, security and fixture generation;
 neither plugin should import the other's target-specific plan.
+
+
+</details>

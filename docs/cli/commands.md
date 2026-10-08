@@ -12,11 +12,13 @@ kaji update [--output <directory>] [--force]
 kaji auth <login|logout|status> ...
 kaji discover <query> [--limit <count>] [--format human|json]
 kaji download <api-id> --output <file> [--version <version>]
+kaji contract plugins [--format human|json]
+kaji contract inspect <file> --input-format <format> [--provider <id>]
 kaji languages
 kaji --version
 ```
 
-Use `npx @relevate/kaji` in place of `kaji` when Kaji is not installed in your
+Use `npx kajicli` in place of `kaji` when Kaji is not installed in your
 project. The npm facade launches the native generator.
 
 `discover` searches the public APIs.guru OpenAPI directory; `download` writes a
@@ -26,7 +28,7 @@ preferred (or explicitly selected) directory version to a new local file. See
 ## Direct-mode example
 
 ```sh
-npx @relevate/kaji generate openapi.yaml \
+npx kajicli generate openapi.yaml \
   --output ./generated \
   --language typescript,go \
   --name "Pet Store" \
@@ -108,3 +110,22 @@ remove the mapping. `KAJI_CONFIG_HOME` overrides the profile-store directory.
 
 See [the complete CLI reference](../cli.md) for every option and source-build
 instructions.
+
+## Inspect other input formats
+
+Use a source build to inspect native contracts:
+
+```sh
+kaji contract plugins --format json
+kaji contract inspect schema.graphql --input-format graphql --format json
+```
+
+[Input providers and format support →](../input-plugins.md)
+
+## Check a contract
+
+```sh
+kaji check openapi.yaml --format json
+```
+
+[Rules, severity and baselines →](checks.md)

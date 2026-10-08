@@ -15,6 +15,9 @@ kaji = { path = "../kaji/crates/kaji" }
 
 ## Compile and generate
 
+This example generates HTTP SDKs from OpenAPI compiler artifacts. For GraphQL,
+event, workflow or RPC sources, use the [input provider path](../input-plugins.md).
+
 ```sh
 cd openapi
 go run . --out ../.kaji/openapi ../openapi.yaml
@@ -39,6 +42,9 @@ fn main() -> Result<()> {
 }
 ```
 
+## Verify the output
+
+Use `files.check("generated")?` to inspect drift before writing.
 Generation does not install dependencies or publish packages. Build each output
 with its target-native tooling. Continue with [plugin composition](plugins.md)
 or the full [embedded-generation reference](../getting-started.md).

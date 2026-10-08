@@ -1,17 +1,31 @@
 # Customize and rebuild the generator
 
-Kaji supports both registered Rust plugins and edits to its maintained renderers. SDK authors can eject the sources from their installed CLI to customize what future SDKs contain. Customers continue to use the generated SDK; they do not install your generator workspace.
+Eject the installed CLI's source workspace to customize renderers or register
+Rust plugins. Rebuild that workspace to change future generated SDKs.
+Customers use the generated package; they do not need the generator workspace.
 
 ```sh
 kaji eject --language ruby --out ./my-kaji
 cd my-kaji
 ```
 
-The destination must be new. Eject does not overwrite files or run generation, downloads, registry publication or GitHub installation. It writes a source workspace, `EJECTED.md` with target-specific entrypoints, and `EJECTED-SOURCES.json` with the original file SHA-256 hashes and generator version.
+**Use a new destination.** Eject writes source only; it does not overwrite files,
+generate an SDK, download dependencies, publish or install GitHub automation.
+
+| File | Purpose |
+| --- | --- |
+| `EJECTED.md` | Target-specific editing entrypoints |
+| `EJECTED-SOURCES.json` | Original file SHA-256 hashes and generator version |
+
+**On this page:** [Bundle](#what-gets-ejected) · [Build](#build-and-generate) · [Edit](#change-generated-behavior) · [Verify](#verification)
 
 ## What gets ejected
 
-The bundle contains the native Rust CLI, normalized API/core interfaces, maintained language plugins, their runtime source templates, Cargo manifests and lockfile, the Go OpenAPI compiler sources, supporting action/check sources, schemas, documentation and the MIT license. It excludes dependency caches, built output and visual assets.
+| Included | Excluded |
+| --- | --- |
+| Rust CLI/core, maintained language plugins and runtime templates | Dependency caches |
+| Cargo manifests/lockfile and Go OpenAPI compiler source | Built output |
+| Action/check sources, schemas, documentation and MIT license | Visual assets |
 
 `--language` identifies the plugin to customize. The other plugins remain available because the CLI's profiles register them and depend on the common workspace. A rebuilt generator can still generate the other targets and compose plugin chains. `dotnet` selects the C# renderer.
 
@@ -38,7 +52,11 @@ For a release build, run `cargo build --locked --release -p kaji-cli` and place 
 
 ## Change generated behavior
 
-For Ruby, edit `crates/plugins/ruby/src/`; the selected target's directory appears in `EJECTED.md`. For example, changing the Ruby renderer's `NOTICE` constant changes headers in the emitted Ruby source. Rebuild the CLI and regenerate to see that change. Editing a runtime file consumed by a renderer similarly changes the runtime bundled into future SDKs.
+1. Find your target's source directory in `EJECTED.md`; Ruby uses
+   `crates/plugins/ruby/src/`.
+2. Edit the renderer or an adjacent runtime file it consumes. For example,
+   changing Ruby's `NOTICE` changes emitted source headers.
+3. Rebuild the CLI and regenerate with the rebuilt binary.
 
 For reusable extensions, use the [typed plugin interfaces](typed-plugins.md). Add a Rust plugin crate, register its workspace/dependency entries, then integrate it with the profile and CLI configuration. Existing plugin `src/lib.rs` files provide maintained registration examples. Plugins can emit additional modules, integrate bundled author middleware and compose generation steps; source ejection preserves that architecture.
 

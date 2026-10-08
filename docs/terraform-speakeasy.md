@@ -48,11 +48,15 @@ interpret arbitrary Speakeasy extensions as Kaji configuration.
 
 ## Evidence required before relying on a feature
 
-Generated Go compilation is the first check. Framework tests then need to exercise
+Generated Go compilation is the first check.
+Framework tests then need to exercise
 known/unknown/null plan values, request bytes, response-to-state conversion, drift,
-missing-object handling and import diagnostics. Nested shapes must preserve wire
+missing-object handling and import diagnostics.
+Nested shapes must preserve wire
 names independently of Terraform attribute names, and reject unsupported shapes
-before writing files. Migration tests must start from a prior raw-state version
+before writing files.
+
+Migration tests must start from a prior raw-state version
 and verify the current schema rather than merely checking emitted source strings.
 
 The real local Terraform CLI lifecycle probe complements Framework object tests.

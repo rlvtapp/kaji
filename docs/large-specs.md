@@ -1,5 +1,7 @@
 # Large specifications and Go SDK layout
 
+[Compiler](openapi-compiler.md) · [Compatibility results](guru-compatibility.md) · [Verification](verification.md)
+
 Kaji always splits Go output: one model per file, one operation (with
 request/errors/pagers) per file, and service files capped at 50 methods.
 The files share one Go package, so splitting does not introduce import cycles
@@ -24,7 +26,7 @@ let release = ProfileSet::new("sdk")
 Equivalent CLI selection:
 
 ```sh
-npx @relevate/kaji generate graph.yaml --output ./generated --language go \
+npx kajicli generate graph.yaml --output ./generated --language go \
   --name "Microsoft Graph" --jobs 4
 ```
 
@@ -64,11 +66,15 @@ bash scripts/test-large-graph.sh
 
 It downloads a pinned Microsoft Graph v1.0 document, compiles it using Kaji's bundled Go
 compiler source, generates the complete Go SDK with one and four workers,
-compares every output file, and runs a generated-SDK test. The test uses an
+compares every output file, and runs a generated-SDK test.
+
+The test uses an
 in-memory HTTP transport (no Graph account, credentials, or live API calls) and
 checks path escaping, bearer auth, OData query parameters, resource access, and
-typed inherited response fields. The temporary workspace is retained and printed
-for inspection. Allow several hundred MB of disk plus compiler cache space.
+typed inherited response fields.
+The temporary workspace is retained and printed
+for inspection.
+Allow several hundred MB of disk plus compiler cache space.
 
 The September 27, 2026 input used during development had SHA-256
 `77c1a39c94ab0a72c0a2e07ff74f221903141e8913e748fddcc189b98da42feb`:
@@ -82,12 +88,16 @@ The September 27, 2026 input used during development had SHA-256
 
 The test now pins upstream revision `fd42f0e5bcd96b0c5edd5e62e2956a1dc1c5d17a`
 and SHA-256 `533f6d86985584327109ba2c52c0e51454ce1ba2153c11f4d841e898b88c5b1b`.
-A changed checksum fails before compilation. `KAJI_GRAPH_SPEC` can supply those
+A changed checksum fails before compilation.
+`KAJI_GRAPH_SPEC` can supply those
 exact bytes from a local cache; `KAJI_BINARY` can use an already built generator.
-The historical counts above describe the earlier recorded input. A new pin needs
+The historical counts above describe the earlier recorded input.
+A new pin needs
 intentional review and a new native run.
+
 The compiler previously hit a 1 GB goroutine stack overflow while synthesizing
-recursive examples; path-local guards now stop that traversal. Tests also cover
+recursive examples; path-local guards now stop that traversal.
+Tests also cover
 recursive field summaries, branching budgets, long paths, and filename collisions.
 
 Compatible named object `allOf` inheritance becomes ordinary typed Go structs.
@@ -122,23 +132,35 @@ bash scripts/test-public-contracts.sh check go
 ```
 
 The manual `public-contracts.yml` workflow selects a contract and generates and
-compiles it separately in all ten language lanes. It only reads upstream sources
+compiles it separately in all ten language lanes.
+It only reads upstream sources
 and uses local compilation; it does not call production APIs or publish packages.
-Each lane uploads compiler diagnostics even when generation fails. A workflow
+Each lane uploads compiler diagnostics even when generation fails.
+
+A workflow
 matrix is coverage infrastructure, not evidence that every contract compiles in
-every language. Local native Go compilation passed for full OpenAI, GitHub, Stripe,
-Twilio, Linode and DigitalOcean. Full OpenAI native compilation also passed for
-TypeScript, Python, Ruby, Rust, Java and C#. This does not prove every wire behavior
-in those APIs. Other lanes are being hardened against these same contracts;
+every language.
+Local native Go compilation passed for full OpenAI, GitHub, Stripe,
+Twilio, Linode and DigitalOcean.
+Full OpenAI native compilation also passed for
+TypeScript, Python, Ruby, Rust, Java and C#.
+This does not prove every wire behavior
+in those APIs.
+
+Other lanes are being hardened against these same contracts;
 unsupported constructs fail explicitly rather than silently dropping operations.
 
 ## APIs.guru corpus
 
 `scripts/fixtures/guru-contracts.json` pins 205 specifications from 201
 APIs.guru providers to one immutable repository revision, with byte sizes and
-SHA-256 checksums. The root documents total about 181 MB. Every contract
+SHA-256 checksums.
+The root documents total about 181 MB.
+Every contract
 exceeds 100 KB; the
-original 32 exceed 1 MB. Selection keeps the original fixtures and adds the
+original 32 exceed 1 MB.
+
+Selection keeps the original fixtures and adds the
 largest qualifying OpenAPI document from each additional provider, plus five
 Azure Swagger 2 contracts: Web Apps, Compute, Virtual WAN, Storage and Key Vault.
 It includes GitHub, Stripe, AWS EC2, Google Compute, Mailchimp, Zoom, DocuSign,
@@ -176,11 +198,14 @@ compilation, not every API operation's runtime semantics or all language targets
 
 The expanded corpus exposed model/runtime/service/enum symbol collisions,
 repeated operation IDs, nested schema references, YAML block scalar compatibility,
-and JSON keys that cannot appear in Go struct tags. Kaji now allocates stable Go
+and JSON keys that cannot appear in Go struct tags.
+Kaji now allocates stable Go
 symbols and operation identities, lifts nested reference targets, preserves
 valid block content, and generates custom JSON encoding for those wire keys.
+
 References inside vendor extension data remain literal and do not trigger file
-fetches. Focused tests cover these behaviors through independent typed plugins.
+fetches.
+Focused tests cover these behaviors through independent typed plugins.
 
 The catalog's DigitalOcean root omits discriminator mapping files. Its original
 bytes remain unchanged; the manifest separately pins 14 companion files from

@@ -12,7 +12,7 @@ namespaced SDKs:
 From this directory, run:
 
 ```sh
-npx @relevate/kaji generate --config kaji.json
+npx kajicli generate --config kaji.json
 ```
 
 The first run downloads the roughly 42 MiB public contract. Kaji stores the

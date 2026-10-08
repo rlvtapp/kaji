@@ -1,6 +1,21 @@
 # Native Rust and Go SDK providers
 
-Rust and Go packages expose independently selectable `models()`, `transport()`, `operations()`, and `client()` providers. `sdk()` uses the same maintained renderers and publishes equivalent provider contracts, so optional consumers can depend on either composition or the complete SDK.
+Rust and Go expose independent model, transport, operation and client providers.
+Their `sdk()` convenience plugins reuse the maintained renderers and publish
+matching contracts.
+
+## Choose the composition
+
+| Need | Provider |
+| --- | --- |
+| Complete SDK | `sdk()` |
+| Models without a client | `models()` |
+| Replace HTTP execution | `transport()` or a compatible community provider |
+| Raw operation methods | `operations()` with model and transport handles |
+| Resource facades | `client()` with the operations handle |
+| Bounded codec checks | `roundtrip_tests()` with the model handle |
+
+### Rust recipe
 
 ```rust
 let models = kaji::rust::models();
@@ -23,9 +38,21 @@ The corresponding Go API uses `kaji::go` and exports contracts through `kaji::go
 
 ## Community transports
 
-Rust transport plugins emit a root module and publish `composition::Transport { module, constructor }`. The module exports a `Transport: Send + Sync` trait whose `execute(reqwest::Request)` returns a boxed, `Send` future producing `Result<reqwest::Response, reqwest::Error>`. The constructor expression creates the default executor. Generated operations continue handling encoding, authentication, retries, response decoding, and typed errors. Clients also expose `with_transport` for per-instance substitution. The maintained request/response ABI still depends on reqwest; replacing the HTTP execution boundary does not make Rust clients independent of reqwest.
+### Rust ABI
+
+Rust transport plugins emit a root module and publish `composition::Transport { module, constructor }`.
+The module exports a `Transport: Send + Sync` trait whose `execute(reqwest::Request)` returns a boxed, `Send` future producing `Result<reqwest::Response, reqwest::Error>`.
+The constructor expression creates the default executor.
+
+Generated operations continue handling encoding, authentication, retries, response decoding, and typed errors.
+Clients also expose `with_transport` for per-instance substitution.
+The maintained request/response ABI still depends on reqwest; replacing the HTTP execution boundary does not make Rust clients independent of reqwest.
+
+### Go ABI
 
 Go transport plugins emit an implementation in the generated package and publish `providers::Transport { constructor }`. Its constructor returns `KajiHTTPClient`, an interface with `Do(*http.Request) (*http.Response, error)`. `ClientConfig.HTTPClient` accepts that interface as a per-instance override. Requests carry context cancellation. Compatible model providers retain the conventional native module/package symbols; arbitrary module relocation is not implemented.
+
+### Verify a replacement
 
 Both crates include native generated-package tests demonstrating explicit community transport selection. Go executes requests through a fake provider and validates returned JSON. Rust compiles a custom executor and polls an operation to prove the selected executor is called, without contacting an external service.
 
@@ -62,7 +89,14 @@ let transport = MiddlewareTransport::new(logging_layer,
 let client = generated_sdk::Client::new(base_url).with_transport(Arc::new(transport));
 ```
 
-`logging_layer` and `customer_auth_layer` are customer implementations of the generated `Middleware` trait. Outer layers run first for requests and last for responses. Middleware runs inside the SDK retry loop, once per executor attempt; it should not independently retry unsafe operations. Dropping the composed future cancels its pending work. HTTP status and response decode errors are classified after middleware, while transport errors retain the existing `reqwest::Error` ABI. Existing observational `ClientHooks` remain available. Custom generator transport providers can expose their own middleware surface; the default middleware types are not automatically inserted into a replacement module.
+`logging_layer` and `customer_auth_layer` are customer implementations of the generated `Middleware` trait.
+Outer layers run first for requests and last for responses.
+Middleware runs inside the SDK retry loop, once per executor attempt; it should not independently retry unsafe operations.
+Dropping the composed future cancels its pending work.
+
+HTTP status and response decode errors are classified after middleware, while transport errors retain the existing `reqwest::Error` ABI.
+Existing observational `ClientHooks` remain available.
+Custom generator transport providers can expose their own middleware surface; the default middleware types are not automatically inserted into a replacement module.
 
 Executable generated tests verify request mutation, nesting order, response-header mutation, transport-error propagation/recovery, and a synthetic response through a generated operation with zero terminal transport calls.
 
@@ -81,9 +115,18 @@ This is a source audit, not an execution claim for every runtime.
 
 Swift generated README examples show `KajiMiddlewareTransport(inner:middleware:)` with a mutable `URLRequest` and async continuation. The `KajiTransport` protocol returns `(Data, URLResponse)` and preserves existing `session:` callers. A Swift 6 warnings-as-errors executable test verifies header mutation, response transformation, transport-error recovery, ordering, and a short circuit without terminal execution.
 
-Elixir generated README examples show ordered `middleware: [fn request, next -> ... end]`, optional `transport: fn request, options -> ... end`, and the separate `stream_transport` signature. The generated dependency-free ExUnit probe covers buffered mutation/recovery/short circuits, error notifications, and synthetic SSE. Elixir is unavailable in the verification environment; that probe is committed as an ignored toolchain test and has not been executed here. Run `cargo test -p kaji-plugin-elixir elixir_customer_middleware_executes -- --ignored` with Elixir installed. Source-generation tests execute normally.
+Elixir generated README examples show ordered `middleware: [fn request, next -> ... end]`, optional `transport: fn request, options -> ... end`, and the separate `stream_transport` signature.
+The generated dependency-free ExUnit probe covers buffered mutation/recovery/short circuits, error notifications, and synthetic SSE.
+
+Elixir is unavailable in the verification environment; that probe is committed as an ignored toolchain test and has not been executed here.
+Run `cargo test -p kaji-plugin-elixir elixir_customer_middleware_executes -- --ignored` with Elixir installed.
+Source-generation tests execute normally.
 
 ## Generic documentation and custom consumers
+
+Native source formats enter through [input providers](input-plugins.md). A consumer
+requests their native contracts; HTTP SDK providers continue consuming the
+normalized HTTP API.
 
 The core `api_reference::<L>()` consumer works with native providers, the SDK
 convenience plugin and community languages. Add it through `.with(...)` or enable

@@ -12,7 +12,14 @@ Rules retain the established extension shape:
 }
 ```
 
-Inputs refer to actual parameters or fields in a declared JSON request body. Cursor inputs are strings or integers; page, offset, and limit inputs are integers. Cursor and page declarations may include an optional limit input. URL plans require no continuation parameter and explicitly require origin restrictions. Offset and page plans require a results selector. Schema references and declared JSON response selectors are validated when response schemas exist. Missing response schemas still permit a syntax-validated plan.
+Inputs refer to actual parameters or fields in a declared JSON request body.
+Cursor inputs are strings or integers; page, offset, and limit inputs are integers.
+Cursor and page declarations may include an optional limit input.
+URL plans require no continuation parameter and explicitly require origin restrictions.
+Offset and page plans require a results selector.
+
+Schema references and declared JSON response selectors are validated when response schemas exist.
+Missing response schemas still permit a syntax-validated plan.
 
 Selectors support dotted fields, signed array indices, and JSON pointers: `$.pages[-1].next`, `$.items`, and `/links/next`. Filters and wildcard expressions are rejected. The shared `Selector::select` implementation can also be used by test consumers. Native language runtimes must implement the same selector semantics before claiming support for every shared-plan capability.
 

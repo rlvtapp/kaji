@@ -5,6 +5,8 @@ pull requests and Release Please. The App authenticates automation; generation,
 checks and release planning still run in the repositories' readable workflows.
 Registry publishing is a separate trusted identity or custom publisher command.
 
+**On this page:** [Private App](#private-app) · [OIDC broker](#hosted-app-with-oidc-broker) · [Token](#other-authentication)
+
 ## Private App
 
 ```sh
@@ -14,16 +16,20 @@ kaji sdk init --root generated --config kaji.json --auth app --dry-run
 kaji sdk sync --root generated --config kaji.json --auth app
 ```
 
-`app` writes a reviewable registration manifest, not credentials or a registration.
-Register a GitHub App in your account/organization settings with that name,
-homepage and **Contents: write** / **Pull requests: write** permissions. No webhook
-subscription is needed: GitHub Actions triggers generation. For an automated
-registration portal, pass this JSON through GitHub's manifest registration flow
-and exchange its temporary code server-side; the CLI does not host that portal.
-Install the App on the source/SDK repositories you choose, then configure:
+1. Review the manifest written by `sdk app`.
+2. Register the App in your account/organization settings with its name and
+   homepage, plus **Contents: write** and **Pull requests: write**.
+3. Install it on the selected source and SDK repositories.
+4. Set the following repository/organization values:
 
-- Repository/organization variable `SDK_APP_CLIENT_ID`.
-- Repository/organization secret `SDK_APP_PRIVATE_KEY`, containing its PEM key.
+| Value | Storage |
+| --- | --- |
+| `SDK_APP_CLIENT_ID` | Variable |
+| `SDK_APP_PRIVATE_KEY` | Secret containing the PEM private key |
+
+GitHub Actions triggers generation; no webhook subscription is required.
+An automated registration portal can pass the manifest to GitHub and exchange
+its temporary code server-side. The CLI supplies neither registration nor a portal.
 
 `actions/create-github-app-token` creates a token for the specific owner/repository
 in each workflow and revokes it after the job. App pushes/PRs trigger downstream

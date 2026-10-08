@@ -4,7 +4,7 @@ Generate one TypeScript Fetch SDK from a small local OpenAPI contract:
 
 ```sh
 cd examples/cli-basic
-npx @relevate/kaji generate
+npx kajicli generate
 cd generated/typescript
 npm install
 npm run build

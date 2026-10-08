@@ -1,14 +1,15 @@
 # Customize and ship your SDK
 
-As the SDK author, you can ship runtime policies that are active for every
-customer, add helpers, or replace one operation's implementation. Keep that
-source beside your recipe; Kaji includes it when it generates the package.
-Customers do not have to edit generated code or register your bundled policies.
+Keep author-maintained source beside your recipe and include it during
+generation. Use it to bundle default runtime policies, add helpers or replace an
+operation. Customers receive those policies already registered in the SDK.
 
 Start with the executable [bundled middleware example](../examples/bundled-middleware/README.md).
 It includes a contract, recipe, policy, SDK test, and release metadata. These
 APIs are in the current source tree; use a published launcher containing them
 once available, or the [source build](source-customization.md).
+
+**On this page:** [Choose an extension](#choose-the-extension-that-matches-your-change) · [Bundle middleware](#bundle-a-policy-that-runs-automatically) · [Source overlays](#add-or-replace-source-in-one-sdk) · [Rust API](#embed-the-same-policy-in-a-rust-generation-program) · [Delivery](#continue-to-delivery)
 
 ## Choose the extension that matches your change
 
@@ -70,10 +71,9 @@ const sdk = new Notes({ baseUrl: 'https://api.example.com' })
 // No middleware option: authorPolicy is already registered.
 ```
 
-The copied policy is normal owned output, not a create-once editable starter.
-Edit the original source, regenerate, and review the copied source and runtime
-registration together. Native build/tests verify that its export and signature
-match the runtime contract.
+**Edit the original policy source.** Its generated copy is owned output.
+Regenerate and review the copied source and runtime registration together;
+native build/tests check the export and signature.
 
 ### Configuration fields
 
@@ -91,6 +91,9 @@ injected driver. Middleware is customization, not an enforcement boundary: a
 customer controlling the SDK source can change it.
 
 ### Native source contracts
+
+<details>
+<summary>Language paths, signatures and support limits</summary>
 
 Choose the actual source directory and namespace from your generated package.
 Kaji rejects unsupported layouts and collisions instead of guessing an import.
@@ -110,11 +113,15 @@ keyword/casing restrictions.
 | C#/DotNet | Compiled `.cs` file in the package, outside `bin`/`obj` | Class in generated namespace with static `Wrap(HttpClient)` returning a decorated `HttpClient` |
 | PHP | `.php` file under `src` | Class in generated namespace with static `wrap(ClientInterface)` returning a PSR-18 decorator |
 
-The factory contracts deliberately use native transport interfaces. A Java
+The factory contracts deliberately use native transport interfaces.
+A Java
 wrapper must implement the JDK client's abstract methods and asynchronous
 variants; a C# wrapper must handle native request ownership when forwarding to
-another client. See each plugin README for its contract and generated SDK README
-for registration guidance. An optional Python dependency used only by
+another client.
+See each plugin README for its contract and generated SDK README
+for registration guidance.
+
+An optional Python dependency used only by
 `async_symbol` should be imported inside that async path so sync users do not
 need it merely to import the package.
 
@@ -124,12 +131,14 @@ different ABI do not automatically support these contracts. Community language
 plugins can implement `Language::bundle_middleware`; unsupported language hooks
 fail explicitly.
 
+</details>
+
 ### Author defaults and customer choices
 
-A bundled policy is generation input: its source ships in the SDK and registration
-is automatic. A customer's runtime `middleware` array adds behavior for that
-application; it is not needed to activate the author’s defaults. In TypeScript,
-author layers are outermost and precede customer layers in recipe order.
+| Policy | Registration and order |
+| --- | --- |
+| Author `middleware` in recipe | Bundled automatically; TypeScript author layers are outermost, in recipe order |
+| Customer runtime `middleware` array | Adds application behavior inside author layers |
 
 TypeScript customers separately choose `validateResponses: true` for structural
 checks of declared successful buffered JSON. That check sees the final result
@@ -139,15 +148,18 @@ See the [scope and limitations](guides/runtime-middleware.md#opt-into-typescript
 
 ### Test the policy before shipping it
 
-Build the SDK and call an actual generated operation through a fake native
-HTTP driver. Do not pass a middleware option in that test. Assert the request
-change and the decoded result; test error recovery and short circuits when your
-policy uses them. For TypeScript, also test a malformed synthetic response with
-`validateResponses: true`; check the failure path without logging the payload.
-Keep enum expansion and extra-field compatibility tests. These fake-driver tests
-verify the generated boundary and registration, not live API behavior, full schema
-constraints or SSE validation. The checked-in example demonstrates middleware
-registration and supplies its commands to release automation.
+Build the SDK and exercise a generated operation through a fake native HTTP
+driver, without passing a middleware option.
+
+- Assert the changed request and decoded result.
+- Cover error recovery and short circuits when the policy uses them.
+- For TypeScript, reject a malformed synthetic response with
+  `validateResponses: true`, without logging its payload.
+- Keep enum-expansion and extra-field compatibility tests.
+
+These tests verify registration and the generated boundary. They do not establish
+live API behavior, full schema validation or SSE validation. The bundled example
+supplies its test commands to release automation.
 
 ```sh
 kaji generate --config kaji.json

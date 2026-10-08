@@ -1,18 +1,16 @@
 # Command-line SDK generation
 
+[CLI workflow](cli/README.md) · [Everyday commands](cli/commands.md) · [Contract checks](cli/checks.md)
+
 > Prefer the task-focused [CLI documentation](cli/README.md) for a first
 > project: [quickstart](cli/quickstart.md), [`kaji.json` recipes](cli/config.md),
 > [commands](cli/commands.md), and [common recipes](cli/recipes.md). This page
 > remains the exhaustive reference and source-build guide.
 
-Kaji's CLI uses the same Rust plugins as the library. Its npm entry point is a
-small Node launcher, not a JavaScript implementation of the generator. Platform
-packages contain two executables: `kaji` (Rust) and `kaji-openapi` (the embedded Go
-OpenAPI compiler). No Rust or Go installation is required for npm users.
+The CLI runs Kaji's Rust plugins. The `kajicli` npm launcher selects the
+platform package containing `kaji` and the Go `kaji-openapi` compiler.
 
-The npm facade is published as `@relevate/kaji`. It chooses the matching
-platform package and launches the native executable. Rust and Go are only
-needed when building Kaji itself from source.
+Installed users do not need Rust or Go. Source builds do.
 
 ## Local source build
 
@@ -33,20 +31,20 @@ to its own executable. Override that location with `--openapi-compiler <file>` o
 ## Commands and options
 
 ```sh
-npx @relevate/kaji init [--config <file>] [--input <openapi-file>] [--output <directory>]
-npx @relevate/kaji generate                         # reads ./kaji.json
-npx @relevate/kaji generate --config <file>
-npx @relevate/kaji generate <openapi-file> --output <directory> --language <target>...
-npx @relevate/kaji generate --artifacts <directory> --output <directory> --language <target>...
-npx @relevate/kaji mock serve <openapi-file> [--port <port>]
-npx @relevate/kaji check <openapi-file> [--format human|json]
-npx @relevate/kaji show <openapi-file> [--include-path <pattern>] [--exclude-path <pattern>]
-npx @relevate/kaji update [--output <directory>] [--force]
-npx @relevate/kaji auth <login|logout|status> ...
-npx @relevate/kaji eject --language ruby --out ./my-kaji
-npx @relevate/kaji languages
-npx @relevate/kaji --version
-npx @relevate/kaji --help
+npx kajicli init [--config <file>] [--input <openapi-file>] [--output <directory>]
+npx kajicli generate                         # reads ./kaji.json
+npx kajicli generate --config <file>
+npx kajicli generate <openapi-file> --output <directory> --language <target>...
+npx kajicli generate --artifacts <directory> --output <directory> --language <target>...
+npx kajicli mock serve <openapi-file> [--port <port>]
+npx kajicli check <openapi-file> [--format human|json]
+npx kajicli show <openapi-file> [--include-path <pattern>] [--exclude-path <pattern>]
+npx kajicli update [--output <directory>] [--force]
+npx kajicli auth <login|logout|status> ...
+npx kajicli eject --language ruby --out ./my-kaji
+npx kajicli languages
+npx kajicli --version
+npx kajicli --help
 ```
 
 `eject` exports a rebuildable generator workspace into a new directory. Edit the
@@ -92,8 +90,8 @@ operations so a regeneration is reviewable and repeatable.
 
 ### JSON recipes and built-in plugins
 
-`npx @relevate/kaji init` writes a non-destructive starter `kaji.json`; it never replaces an
-existing file. Use `npx @relevate/kaji generate` to load that recipe. Paths inside the recipe
+`npx kajicli init` writes a non-destructive starter `kaji.json`; it never replaces an
+existing file. Use `npx kajicli generate` to load that recipe. Paths inside the recipe
 are relative to the config file, not the current terminal directory.
 
 ```json
@@ -159,7 +157,7 @@ are downloaded with a 120-second timeout and a 128 MiB size limit before the
 bundled compiler runs. For example:
 
 ```sh
-npx @relevate/kaji generate https://aka.ms/graph/v1.0/openapi.yaml \
+npx kajicli generate https://aka.ms/graph/v1.0/openapi.yaml \
   --output graph-sdk --language go --name "Microsoft Graph" --jobs 4
 ```
 
@@ -167,83 +165,27 @@ Go SDK source is always split into model and operation files; no layout toggle i
 The CLI reports compilation, SDK generation and writing durations separately.
 Go worker counts are capped at 64; automatic selection uses at most 8 workers.
 `--jobs` controls Go model/operation emission, not OpenAPI parsing or other languages.
+
 `--artifacts` skips compilation for repeated language/configuration experiments.
-Argument errors exit with code 2; compiler/generator/write errors exit with code 1.
-Compiler failure does not write SDK output. Writes are not transactional if a
-filesystem error occurs during materialization.
+
+| Result | Exit code |
+| --- | --- |
+| Invalid arguments | `2` |
+| Compiler, generator or write failure | `1` |
+
+Compiler failure leaves SDK output untouched. Materialization can be interrupted
+by a filesystem error.
 
 ### Contract checks
 
-Run `kaji check openapi.yaml` before generation to catch contract details that
-would make generated SDK and CLI surfaces unstable or ambiguous. It compiles the
-same OpenAPI input used by generation and reports actionable errors for missing
-or duplicate operation IDs, IDs that collide after code-style normalization,
-missing 2xx responses, ambiguous path segments, and invalid path parameters.
-Use `--openapi-compiler <file>` when source builds need an explicit compiler.
-A passing check exits successfully; reported issues exit non-zero so it can run
-in CI. Human output is the default. Use `--format json` (or `--json`) when a
-CI system or agent needs a stable machine-readable report containing rule,
-severity, request location, hint, and diagnostic fingerprint.
+Validate operation IDs, success responses and path bindings before generation.
+[Check rules, severity and baselines →](cli/checks.md)
 
-Checks default to `error` severity and fail on errors, preserving the strict
-behavior of `kaji check`. Teams can adopt rules gradually without hiding new
-problems:
-
-```sh
-# Treat one noisy rule as advisory while the contract is being cleaned up.
-kaji check openapi.yaml --severity missing-operation-id=warning --fail-on error
-
-# Capture today's known findings once, then fail only on new findings.
-kaji check openapi.yaml --write-baseline .kaji/check-baseline.json --fail-on none
-kaji check openapi.yaml --baseline .kaji/check-baseline.json
-
-# Suppress a rule explicitly for a short-lived migration.
-kaji check openapi.yaml --ignore missing-operation-id
-```
-
-`--baseline` matches the stable `code:METHOD:path` fingerprint, so a rule at a
-new endpoint still appears. `--write-baseline` writes a compact JSON file that
-can be committed; its format is described by
-[`check-baseline.schema.json`](../schemas/v1/check-baseline.schema.json).
-`--fail-on warning` treats both warnings and errors as failures, while
-`--fail-on none` only reports them. `--ignore` suppresses an entire rule and is
-best reserved for temporary exceptions.
-
-Generated files are overwritten. Custom starter files and unrelated files are
-retained; stale generated files are not automatically deleted. Use a fresh output
-directory when removing or renaming operations/models/targets, or changing
-generation options that affect file paths. Removed files and target packages
-remain until explicitly cleaned up.
+Use [safe regeneration](safe-regeneration.md) when applying output changes.
+Kaji protects edited owned files and removes unchanged stale owned files.
+Writing can still be interrupted by a filesystem error.
 
 ## npm layout and release preparation
 
-- `crates/kaji-cli`: native Rust command-line implementation.
-- `packages/cli`: `@relevate/kaji` Node launcher with version-pinned optional native packages.
-- `packages/cli/npm/<platform>`: generated platform package, containing both executables.
-- `packages/npm`: optional unscoped `kaji` facade forwarding to `@relevate/kaji`.
-
-```sh
-node packages/cli/scripts/build-platform.mjs
-```
-
-An explicit platform argument can be `darwin-arm64`, `darwin-x64`,
-`linux-x64-gnu`, or `win32-x64-msvc`. Cross-building Rust requires the matching
-installed target and linker. The build script does not download targets, publish
-packages, or create releases. Linux builds target glibc; musl and Linux ARM64
-packages are not included in the initial matrix.
-
-The manual **Build npm CLI packages** workflow builds and packs platform artifacts
-for review without publishing them. Before a release, align the Cargo CLI version,
-scoped launcher version, optional dependency versions, and facade dependency.
-Test the tarballs on their platforms, then publish the platform packages before
-the scoped launcher. Publish the optional unscoped facade only if npm grants that
-name; it is not needed to use `@relevate/kaji`.
-
-For a local launcher smoke test, set `KAJI_BINARY` to the built Rust binary and
-invoke `node packages/cli/bin/kaji.cjs --help`. Normal installed usage resolves the
-matching optional package and verifies its version matches the launcher. Do not
-install with `--omit=optional`; there is intentionally no postinstall downloader.
-`ruby` emits a Ruby 3.1+ gem using the standard-library HTTP stack. `swift`
-emits a Swift 5.9+ Swift Package Manager library. Each accepts
-`base_url:`, `api_key:`, `bearer_token:`, and per-client `headers:`; the
-namespaced surface adds resource facades without removing direct methods.
+Maintain platform packages and the npm launcher together.
+[Distribution and release checklist →](cli/distribution.md)

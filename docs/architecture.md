@@ -1,33 +1,55 @@
 # Architecture
 
-Kaji has three layers:
+Kaji connects source contracts to generated files through typed plugins.
 
-1. **Core** holds the language-neutral API model, shared SDK semantics, artifact
-   adapter, generated file tree, and typed plugin engine.
-2. **Packages** select a language, output directory, package settings, and plugin
-   instances. A release groups independently configured packages.
-3. **Language plugins** render native files and own their own options. Rust and
-   TypeScript live under `crates/plugins/`, just like the other languages.
+```text
+Source -> input plugin -> typed contract -> output plugins -> owned files
+                              |                |
+                         core registry    package graph
+```
 
-The bundled Go compiler parses OpenAPI into local JSON artifacts. Rust loads
-those artifacts into typed schemas, request bodies, responses, and security
-requirements. The compiler is a build-time tool; generated SDKs do not run it.
+## Input, core, and output hooks
 
-`Package<L>` accepts `Plugin<L>` instances. Typed contracts connect providers
-to consumers and determine generation order. Each language owns a mutable
-workspace; immutable published contracts carry declared dependencies between
-plugins. `Language::finalize` can merge package metadata after rendering.
+| Layer | Owns | Extension hook |
+| --- | --- | --- |
+| Input provider | Parsing, validation, native schema and source diagnostics | Implement `InputPlugin`; publish values implementing `Contract`. |
+| Core | Registry selection, typed dependencies, execution order and safe output ownership | Register providers in `InputRegistry`; connect them with `InputProvider<C>`. |
+| Output plugin | Language syntax, runtime ABI, artifacts and optional output contracts | Implement `Plugin<L>`; declare requirements, read inputs, emit files. |
+| Language package | Settings, shared workspace, manifests and exports | Implement `Language` and its finalization hooks. |
 
-TypeScript currently has symbol and dependency tracking in its workspace.
-Other first-party SDK plugins use unit workspaces and render complete packages.
-The engine supports community languages without adding a central language enum;
-the CLI still has an explicit list of bundled targets.
+Input providers live in `crates/inputs/`; output providers live in
+`crates/plugins/`. Community formats and languages can extend these hooks without
+adding a core enum variant. Plugins are Rust code linked into the application.
+The shipped CLI exposes the providers compiled into its registry.
 
-Complete SDK plugins are not decomposed into interchangeable transport/model
-providers yet. Auxiliary TypeScript artifacts are standalone renderers; their
-imports and dependencies must be configured explicitly. See
-[plugin authoring](typed-plugins.md) and
-[auxiliary generators](auxiliary-generators.md).
+## Native contracts and HTTP SDKs
 
-The same typed API drives contract mocks. Shared semantics keep SDKs and test
-fixtures aligned, without making the mock dependent on one SDK language.
+GraphQL, AsyncAPI, Arazzo, Protobuf and Cap’n Proto providers publish native
+contracts. These retain queries, events, workflows and RPC streaming semantics.
+Their current outputs support inspection and tested documentation consumers;
+protocol-specific SDK generators require their own consumers.
+
+Existing HTTP SDKs consume `Api` and its security catalog. The bundled Go OpenAPI
+compiler produces local artifacts that Rust loads as `AdaptedApi`. An alternative
+HTTP input provider can publish the same contract through `generate_with_input`.
+Generated SDKs do not run the source compiler.
+
+See [input providers](input-plugins.md) for supported formats and inspection.
+
+## Package generation
+
+A release groups `Package<L>` instances, each with its own directory, settings and
+plugins. Contracts and handles are package-local. Declared requirements determine
+provider order; missing or ambiguous inputs and cycles fail before emission.
+
+TypeScript, Rust and Go expose independently selectable model, transport,
+operation and client providers. Their `sdk()` convenience plugins reuse maintained
+renderers. Languages own their mutable workspaces; TypeScript tracks symbols,
+dependencies and exports. Finalizers assemble shared metadata.
+
+The engine then applies Post plugins, bundled middleware, language file
+finalization and ordered source overlays. Ownership checks protect authored files
+when checking or writing the result.
+
+Continue with [typed plugins](typed-plugins.md), [native SDK providers](native-sdk-providers.md)
+and [safe regeneration](safe-regeneration.md).

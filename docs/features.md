@@ -1,5 +1,7 @@
 # Kaji feature catalog
 
+[Docs home](README.md) · [Generate an SDK](cli/quickstart.md) · [Verification](verification.md)
+
 Use this page to choose what to generate and what to verify before shipping it.
 Kaji is a generator and extensible source toolchain: SDK packages, runtime policies,
 API artifacts and delivery files belong to you. Optional plugins are selected in
@@ -39,6 +41,7 @@ supported. Version 0.5.0 is on the branch; use a source build until published.
 | Read-only drift and inspection | `generate --check`, SDK doctor and inspectable compiler/package artifacts | [CLI](cli.md), [verification](verification.md) |
 | Existing generator projects | Stainless/Fern/Speakeasy config import and direct generation; supported annotations normalized; unsupported settings reported for review | [Migration](migration.md) |
 | Large public contract regression | Pinned Graph, six official contracts and 205 APIs.guru contracts (including five Azure services); 205/205 Go generation/native passes; other targets have [recorded failures](guru-compatibility.md) | [Large specs](large-specs.md) |
+| Native input providers | GraphQL, AsyncAPI, Arazzo, Protobuf and Cap’n Proto; typed publication and inspection, output consumers must support each contract | [Input plugins](input-plugins.md) |
 | Arbitrary custom languages | Rust library `Language`/`Plugin` implementations and optional delivery metadata. CLI needs explicit registry integration | [Library plugins](library/plugins.md) |
 | Ejectable generator sources | `kaji eject` exports rebuildable renderers, runtime sources and plugin interfaces, with a SHA-256 manifest | [Own the sources](source-customization.md) |
 

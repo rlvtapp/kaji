@@ -18,7 +18,7 @@ instead; do not combine the two transports in a single published package.
 Run this from this directory:
 
 ```sh
-npx @relevate/kaji generate --config kaji.json
+npx kajicli generate --config kaji.json
 ```
 
 The generated Fetch package contains this layout:

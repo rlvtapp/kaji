@@ -1,54 +1,64 @@
-# Embed generation and develop plugins in Rust
+# Embed Kaji in Rust
 
-Use the Rust library when generation belongs inside your own tool, or when you need a plugin that the CLI's bundled registry does not expose. It gives you typed packages, provider/consumer contracts, and a virtual file tree. Your application decides when to inspect, check, or write that tree.
+Use the library to compose generators in your own tool or link custom Rust
+plugins. Generation returns a virtual file tree; your application checks or
+writes it.
 
-For SDK authors who only need a recipe, bundled middleware, and releases, start with the [CLI workflow](../cli/README.md). The library uses the same renderers and output safety rules; embedding is an integration choice rather than a different SDK format.
+[Hook reference: inputs, plugins, contexts, finalizers and files →](../plugin-hooks.md)
 
-## Prerequisites and first result
+## Choose a starting point
 
-You need a Rust toolchain compatible with the workspace and access to a Kaji checkout. The [quickstart](quickstart.md) uses local Cargo path dependencies; do not assume every workspace crate is published to crates.io. For its source compiler step, you also need Go. [OpenAPI compiler](../openapi-compiler.md) explains the artifacts consumed by `generate_openapi`.
+| Task | Guide |
+| --- | --- |
+| Generate a first SDK | [Quickstart](quickstart.md) |
+| Copy a runnable application | [Embedded example](../../examples/rust-embedded/README.md) |
+| Combine maintained output plugins | [Plugin composition](plugins.md) |
+| Parse another source format | [Input plugins](../input-plugins.md) |
+| Author a consumer or language | [Typed plugins](../typed-plugins.md) |
+| Find package and SDK options | [Configuration](../configuration.md) |
 
-Start with [the library quickstart](quickstart.md), or copy [the embedded Rust example](../../examples/rust-embedded/README.md). The result is a program that reads compiler artifacts, composes packages, and writes an SDK tree. Generation does not install output dependencies or publish anything; run the generated package's native build and tests afterwards.
+For recipes and releases through the bundled CLI, start with the
+[CLI workflow](../cli/README.md).
 
-The public Rust API is pre-1.0. Pin compatible revisions/versions and review [release notes](../releases/0.4.0.md) when updating.
+<a id="prerequisites-and-first-result"></a>
 
-## SDK authors: compose, customize, and verify
+## Requirements
 
-Packages own language settings, identity, and directories. Plugins own rendering choices. A simple composition looks like this:
+Use a workspace-compatible Rust toolchain and local Cargo path dependencies from
+a Kaji checkout. The API is pre-1.0; pin compatible revisions and review
+[release notes](../releases/0.4.0.md) when updating.
 
-```rust
-use kaji::{prelude::*, ts};
+The OpenAPI artifact compiler requires Go. Native input providers have their own
+requirements; Cap’n Proto source compilation requires `capnp` on PATH. See
+[input support](../input-plugins.md).
 
-let release = ProfileSet::new("sdk")
-    .package(ts::package("typescript")
-        .name("@acme/api")
-        .with(ts::sdk().fetch())
-        .with(ts::zod()));
+<a id="plugin-developers-learn-the-contracts-before-the-renderer"></a>
 
-let tree = kaji::generate(&api, release)?;
-let drift = tree.check("generated")?;
-if !drift.is_empty() {
-    // Inspect the proposed changes before materializing them.
-    tree.write_to("generated")?;
-}
+## The extension path
+
+```text
+InputPlugin -> InputContract -> InputProvider<C> -> Plugin<L> -> GeneratedTree
 ```
 
-This fragment assumes an already-normalized `api` and an enclosing function returning a compatible `Result`. It checks/writes below `generated/sdk`; it does not run a build. Follow the [quickstart](quickstart.md) for a complete executable program and [configuration reference](../configuration.md) for package/plugin settings.
+Input providers publish typed native documents. Output consumers declare required
+contracts, read those values and emit package-relative files. Core resolves
+bindings and execution order; each language owns its syntax and workspace.
+See [architecture](../architecture.md) for layer ownership.
 
-[SDK customization](../sdk-customization.md) shows the library equivalents of author source overlays and bundled middleware. [Safe regeneration](../safe-regeneration.md) explains how owner identities and hashes protect materialized files. Use native build/behavioral checks for your API and customization; [shared fixtures](../shared-sdk-fixtures.md) can supply bounded schema samples, while [verification](../verification.md) explains their practical limits.
+A plugin is compiled into your application. Naming a community crate in
+`kaji.json` does not load it dynamically.
 
-When you are ready to deliver packages, [SDK automation](../sdk-automation.md) explains optional release metadata and [publishing](../sdk-publishing.md) explains tagged registry artifacts. A native/community plugin can supply that metadata without adding a registry implementation to core.
+<a id="sdk-authors-compose-customize-and-verify"></a>
+<a id="choose-checks-that-prove-the-intended-behavior"></a>
 
-## Plugin developers: learn the contracts before the renderer
+## Check and deliver
 
-First follow [plugin composition](plugins.md) to combine maintained providers and consumers. Then read [typed plugins](../typed-plugins.md) for the `Language`/`Plugin` APIs, contract handles, dependencies, execution phases, and finalization. Missing inputs, ambiguous providers, cycles, and conflicting paths are generation errors; ordering alone is not a substitute for declaring a dependency.
+Use `tree.check(directory)` to inspect drift, then `tree.write_to(directory)` to
+materialize it. [Safe regeneration](../safe-regeneration.md) explains file owners,
+manual-edit conflicts and create-once starter files.
 
-Use [architecture](../architecture.md) and the [compiler guide](../openapi-compiler.md) to understand the source-model boundary. Keep target-specific semantics in the language/plugin. Publish typed contracts for reusable results instead of requiring another plugin to scrape generated source. [Native SDK providers](../native-sdk-providers.md) shows existing Rust/Go composition and transport ABI limits; [auxiliary generators](../auxiliary-generators.md) shows consumers that add artifacts around an SDK.
-
-A native plugin is registered by composing it in your Rust application. It is not automatically available as a `kaji.json` plugin name. To extend that registry or change delivery action sources, follow [source customization](../source-customization.md).
-
-## Choose checks that prove the intended behavior
-
-Compile a representative generated package, execute its custom transport/policy, and test request/response/error behavior. Snapshot checks prove output stability; schema roundtrips prove selected codec cases. Neither alone proves authentication, pagination, cancellation, or a live registry upload. The [verification overview](../verification.md), [native provider boundaries](../native-sdk-providers.md), and [testing guide](../guides/testing.md) help choose coverage.
-
-The facade also exposes `postman` and `terraform` plugins. [Postman collections](../postman.md) use typed example/document/environment contracts; [Terraform](../terraform-provider.md) separates entity analysis from typed provider rendering. Read each guide for the initial supported subset and plugin composition examples.
+Compile generated packages and exercise their transports with native tools.
+Generation does not install dependencies or publish packages. Follow
+[SDK customization](../sdk-customization.md), [verification](../verification.md),
+[release automation](../sdk-automation.md) and [publishing](../sdk-publishing.md)
+for those steps.

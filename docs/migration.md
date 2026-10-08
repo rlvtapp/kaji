@@ -1,5 +1,7 @@
 # Move an existing SDK project to Kaji
 
+[Quickstart](cli/quickstart.md) · [Configure packages](cli/config.md) · [Feature catalog](features.md)
+
 Use the configuration and OpenAPI files you already maintain for Stainless, Fern
 or Speakeasy. You do not need to start with a blank Kaji recipe. Kaji imports
 supported settings and reports the rest for review. Generated SDK interfaces and
@@ -17,12 +19,18 @@ kaji generate --config fern/generators.yml
 kaji generate --config .speakeasy/workflow.yaml
 ```
 
-Each command creates SDKs under `kaji-generated` in the project root. It reads
+Each command creates SDKs under `kaji-generated` in the project root.
+It reads
 and bundles the source contract into temporary storage, prints settings that
-need review, and preserves your existing configuration and SDK output. It does
-not execute vendor hooks or publish packages. With no `kaji.json`, `kaji generate`
-can detect a single vendor configuration automatically. If several tools are
-present, pass the configuration filename explicitly. A Speakeasy workflow takes
+need review, and preserves your existing configuration and SDK output.
+It does
+not execute vendor hooks or publish packages.
+With no `kaji.json`, `kaji generate`
+can detect a single vendor configuration automatically.
+
+If several tools are
+present, pass the configuration filename explicitly.
+A Speakeasy workflow takes
 precedence over its companion `gen.yaml` during detection.
 
 ## Save an editable migration
@@ -40,11 +48,17 @@ The output must be a new directory. Migration writes:
 - `openapi.json`: the contract with bundled references and translated annotations.
 - `migration-report.json`: converted settings and items requiring manual review.
 
-Original files remain intact. Local referenced files are bundled so moving the
-output does not break their relative paths. Generator versions are never used as
-SDK package versions; imported SDKs start at `0.1.0`. Edit that version before
-shipping an existing package. Credentials and vendor publication settings are
-not copied into the recipe or report. Configure delivery through [SDK automation](sdk-automation.md)
+Original files remain intact.
+Local referenced files are bundled so moving the
+output does not break their relative paths.
+Generator versions are never used as
+SDK package versions; imported SDKs start at `0.1.0`.
+Edit that version before
+shipping an existing package.
+Credentials and vendor publication settings are
+not copied into the recipe or report.
+
+Configure delivery through [SDK automation](sdk-automation.md)
 and [publishing](sdk-publishing.md).
 
 Use `--strict` to reject migrations with any manual-review items before creating
@@ -74,14 +88,19 @@ and paths remain unchanged. Conflicting names and unsupported behavior are
 reported; duplicate SDK operation names fail generation.
 
 Fern cursor conversion currently requires direct `$request.<query-parameter>`,
-`$response.<results>` and `$response.<next_cursor>` bindings. Offset/step rules,
+`$response.<results>` and `$response.<next_cursor>` bindings.
+Offset/step rules,
 body-bound cursors and relative next-page URLs require an explicit
-[portable pagination declaration](guides/pagination.md). Stainless's automatic
+[portable pagination declaration](guides/pagination.md).
+Stainless's automatic
 pagination scheme matching, vendor retry policies, model/property naming,
 streaming conventions, examples, custom templates and proprietary generators
-are not automatically reproduced. Review the migration report and native
+are not automatically reproduced.
+
+Review the migration report and native
 [feature catalog](features.md), then test your generated SDK before switching
-customers. Unknown vendor operation annotations are preserved and diagnosed.
+customers.
+Unknown vendor operation annotations are preserved and diagnosed.
 
 The import formats follow the official [Stainless configuration reference](https://www.stainless.com/docs/reference/config/),
 [Fern generator configuration](https://buildwithfern.com/learn/sdks/reference/generators-yml)

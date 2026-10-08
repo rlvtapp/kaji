@@ -1,11 +1,18 @@
 # Publish and recover an SDK release
 
-This guide is for SDK authors configuring the final registry step. Begin with
-[SDK automation](sdk-automation.md) to generate packages, bootstrap repositories,
-configure GitHub authentication and create release tags. Publishing does not
-regenerate the SDK, create its tag, register an account or establish registry trust.
+Publish an existing, tested SDK release tag to its registry.
+Use [SDK automation](sdk-automation.md) first to generate packages, bootstrap
+repositories and create release tags.
+
+**Before publishing:** establish package ownership, registry trust and a protected
+`release` environment. Publication does not generate code or create tags/accounts.
+
+**On this page:** [Publisher](#decide-which-publisher-owns-the-release) · [Trust](#configure-trust-before-the-first-publication) · [Exact tag](#publish-exactly-what-passed-checks) · [Verification](#what-a-standard-publisher-verifies) · [Custom registry](#custom-commands-and-editable-sources) · [Retry](#retry-without-changing-release-identity)
 
 ## Kaji's own repository releases
+
+<details>
+<summary>Maintainer reference: releasing Kaji itself</summary>
 
 Kaji's root release workflow prepares and updates Release Please pull requests
 when commits reach `main`. The PR can remain open while development continues.
@@ -24,12 +31,17 @@ The lockfile selector addresses Release Please's tagged TOML name values. When
 adding a workspace crate, update that selector; the regression test requires every
 member to change and every external dependency to remain unchanged.
 
+</details>
+
 ## Decide which publisher owns the release
 
-The package's `.kaji/package.json` declares a publisher. Use `npm`, `pypi`,
-`crates.io` or `go` with empty/omitted `commands` for a standard publisher.
-**Explicit nonempty commands select the custom path**, even if the registry name
-is one of those four. Other registries require commands.
+The package's `.kaji/package.json` selects the publisher:
+
+| Configuration | Path |
+| --- | --- |
+| `npm`, `pypi`, `crates.io` or `go`; no commands | Standard publisher |
+| Any registry with nonempty `commands` | Custom publisher, including the four standard registry names |
+| Any other registry | Commands required |
 
 | Package ecosystem | Standard path | Native prerequisite | Author setup |
 | --- | --- | --- | --- |
@@ -69,11 +81,15 @@ A generated Python delivery contract might be:
 ```
 
 Author this through the recipe's `release` object or a native release metadata
-plugin, rather than editing the emitted bookkeeping file. `name` identifies the
-release component. The publisher obtains the registry package name and version
+plugin, rather than editing the emitted bookkeeping file.
+`name` identifies the
+release component.
+The publisher obtains the registry package name and version
 from the native manifest and verifies its version against this metadata.
+
 `release_type` and `extra_files` configure Release Please manifest updates, not
-registry authentication. An arbitrary strategy name is not automatically a new
+registry authentication.
+An arbitrary strategy name is not automatically a new
 Release Please implementation; review the generated release configuration.
 
 Builds and tests should exercise the package's actual public methods and wire
@@ -88,12 +104,10 @@ and the `release` environment from the generated workflow when configuring trust
 If you rename these files or change the environment, update registry trust too.
 GitHub App credentials used to create SDK/release PRs do not grant registry access.
 
-With `sdk init`/`sync --repository-pattern 'acme/api-{lang}'`, configure trust
-against each resulting destination independently: for example npm trusts
-`acme/api-typescript` while PyPI trusts `acme/api-python`. Use the exact workflow
-filename `kaji-sdk-release.yml` and environment `release` from that destination’s
-staged workflow. Copy and commit its bootstrap first; local staging does not
-register a registry publisher or install repository permissions.
+For `--repository-pattern 'acme/api-{lang}'`, configure every destination
+independently: npm may trust `acme/api-typescript`, while PyPI trusts
+`acme/api-python`. Copy and commit each destination's bootstrap first.
+Local staging establishes neither registry trust nor repository permissions.
 
 The pattern groups packages by language and retains their full output paths.
 Several packages in one destination still need their own registry identities and
@@ -131,13 +145,18 @@ and [using a publisher](https://docs.pypi.org/trusted-publishers/using-a-publish
 ### crates.io
 
 Configure the crate's Trusted Publishing settings for the repository, workflow
-filename and selected environment. The helper obtains a temporary token through
+filename and selected environment.
+The helper obtains a temporary token through
 [the official crates.io authentication action](https://github.com/rust-lang/crates-io-auth-action)
-and publishes using Cargo. For a new crate, establish ownership and check the current initial-publish
+and publishes using Cargo.
+
+For a new crate, establish ownership and check the current initial-publish
 requirements in [crates.io trusted publishing](https://crates.io/docs/trusted-publishing)
-before enabling automation; this helper does not register trust for a new name. Check ownership and `publish` restrictions in
+before enabling automation; this helper does not register trust for a new name.
+Check ownership and `publish` restrictions in
 `Cargo.toml`; a workspace needing coordinated multi-crate publishing requires a
-custom command path. See [Cargo publication](https://doc.rust-lang.org/cargo/commands/cargo-publish.html).
+custom command path.
+See [Cargo publication](https://doc.rust-lang.org/cargo/commands/cargo-publish.html).
 
 ### Go
 
@@ -234,16 +253,17 @@ manifest updates or artifact verification for your registry. Run it locally with
 `kaji sdk run --root generated --package web --phase publish` **only when you
 intend a live publication**. Build/test phases are separate commands.
 
-Custom publishers own credential setup, immutable version checks, duplicate-race
-handling, partial upload recovery and final registry verification. Their toolchain
-or environment dependencies need explicit workflow setup. Credentials belong in
-the protected publication environment; do not hardcode them in metadata, source,
-arguments or logs. Map protected-environment secrets explicitly into the custom publish step's
-`env`, then read them inside your script. Environment membership does not export
-all secrets to subprocesses automatically, and command argument vectors do not
-expand `$TOKEN` placeholders. Keep the generated workflow edit reviewable.
-`extra_files` must cover the manifests your selected release strategy needs to
-update.
+Custom publishers must implement:
+
+- Credential setup and explicit native toolchain setup.
+- Immutable-version checks and duplicate-race handling.
+- Partial-upload recovery and final registry verification.
+- Manifest updates through the selected release strategy's `extra_files`.
+
+Keep credentials in the protected publication environment. Map secrets explicitly
+into the publish step's `env` and read them in the script; environment membership
+does not export secrets automatically. Argument vectors do not expand `$TOKEN`.
+Keep credentials out of source, metadata, arguments and logs.
 
 By default, `sdk init`/`sync` vendor readable helpers under
 `.github/actions/kaji-publish/`. Review and edit `action.yml` and `publish.mjs` as

@@ -1,21 +1,28 @@
 # Author and compose native generator plugins
 
-Kaji's plugin API is for SDK authors who need a new generator capability, a
-replaceable provider, or a reusable extension across packages. For a one-SDK
-policy or operation replacement, start with [SDK source customization](sdk-customization.md).
-For delivering the resulting package, use [SDK automation](sdk-automation.md).
-The shorter [composition introduction](library/plugins.md) covers basic recipes.
+Use native Rust plugins to add an input format, output consumer, provider or
+language. Plugins are linked into your generator application. The shipped CLI
+exposes its compiled registry; JSON cannot dynamically load crates or binaries.
+The Rust API is pre-1.0, with no stable binary ABI.
 
-Plugins are native Rust code linked into a generator application. They can add a
-language without editing a central core enum, or extend an existing language.
-The shipped CLI exposes its compiled-in plugin set; a published community crate
-does not become an installable CLI plugin automatically. There is no dynamic
-binary loader, Node plugin runtime or stable binary ABI. The Rust API is pre-1.0.
+```text
+InputPlugin -> typed source contract -> package graph -> Plugin<L> -> files
+```
+
+| Starting point | Guide |
+| --- | --- |
+| Parse or replace an input | [Input plugins](input-plugins.md) |
+| Compose maintained plugins | [Composition introduction](library/plugins.md) |
+| Customize source for one SDK | [SDK customization](sdk-customization.md) |
+| Deliver a generated package | [SDK automation](sdk-automation.md) |
+
+[All hook signatures and lifecycle defaults →](plugin-hooks.md)
 
 ## Decide the extension scope
 
 | Need | Authoring surface | What you maintain |
 | --- | --- | --- |
+| Add a source format or parser | `InputPlugin` plus native `Contract` values | Parsing, validation, source diagnostics and compatible consumers. |
 | Generate standard SDKs in several languages | Package recipe plus each language's `sdk()` | Spec, names/options and native tests. |
 | Add/replace/patch code for one package | `customizations` / `Package::customize` | Source files and explicit export/wiring patches. |
 | Ship runtime policy already enabled for SDK consumers | `middleware` / `Package::middleware` | Source implementing the supported language factory ABI. |
@@ -29,7 +36,7 @@ a programmable transform of the neutral API model.
 
 ## What core owns, and what the language owns
 
-Core owns typed graph resolution, phase ordering, contract publication, safe file
+Core owns input registry selection, typed graph resolution, phase ordering, contract publication, safe file
 paths and ownership, package option inheritance, source overlays and optional
 release metadata. It does not own language syntax, model renderers, transport
 ABIs, framework code or registry authentication.
@@ -76,6 +83,10 @@ model renderer owning the same model files.
 
 ## Contracts describe actual outputs
 
+The same `Contract` trait connects native inputs and generated outputs.
+`InputProvider<C>` places a registered input capability into this graph; see
+[the input bridge](input-plugins.md#feed-an-input-into-the-output-graph).
+
 A contract is a Rust value implementing `Contract`. It might contain generated
 symbols, module paths, model settings, or another typed capability. Prefer facts
 about the actual provider output over naming conventions that consumers guess.
@@ -87,13 +98,14 @@ about the actual provider output over naming conventions that consumers guess.
 | `Requirement::on::<C>(Some(handle))` | `cx.inputs.get::<C>()` | Bind this particular provider instance. |
 | Requirement with `.optional()` | `cx.inputs.optional::<C>()` | Absence is permitted; ambiguous/dangling bindings still fail. |
 
-The resolver validates the package before emission, orders providers before
-consumers and rejects missing/ambiguous providers, cycles, duplicate identities
-and invalid handles. Contracts and handles are package-local. A plugin cannot
-read an undeclared input or publish an undeclared contract; declared outputs
-must actually be published. Store one fresh `Meta` on every plugin instance and
-return a reference to it. Recreating it during calls breaks instance identity.
-A descriptive label changes diagnostics, not that identity.
+The resolver orders providers before consumers and rejects missing or ambiguous
+bindings, cycles, duplicate identities and invalid handles. Contracts and handles
+are package-local.
+
+A plugin may only read declared inputs and publish declared outputs. Every
+provision must be published. Store one fresh `Meta` on each instance and return a
+reference to it; recreating metadata breaks instance identity. Labels affect
+diagnostics only.
 
 ## Compose TypeScript providers independently
 
@@ -205,9 +217,7 @@ handle. Its test verifies the actual emitted value, not just registration:
 cargo test --manifest-path examples/custom-plugin/Cargo.toml
 ```
 
-This is the smallest authoring path before adding a target-specific model or
-transport ABI. A Rust plugin must be compiled into an embedded generator; naming
-it in CLI JSON does not dynamically load its source.
+Use this example before introducing a model or transport ABI.
 
 ## Add a target-neutral API reference
 
@@ -226,11 +236,16 @@ model/transport provider dependency. CLI packages can opt in with
 `"api_reference": true`; the default is false.
 
 The reference lists operation IDs, HTTP methods/paths, parameters, request media,
-response statuses/media, schema references and component field shapes. These are
-contract identifiers, not a promise of generated client method names. It omits
+response statuses/media, schema references and component field shapes.
+These are
+contract identifiers, not a promise of generated client method names.
+It omits
 examples, defaults, enum literal values, source descriptions and external reference
-URIs, and escapes active Markdown/HTML. It is documentation, not an executable
-operation test or full schema validator. Output remains owned and participates in
+URIs, and escapes active Markdown/HTML.
+
+It is documentation, not an executable
+operation test or full schema validator.
+Output remains owned and participates in
 safe regeneration/checks; the normal writer rejects path escapes and collisions.
 
 ## Implement a reusable consumer
@@ -261,8 +276,7 @@ impl Plugin<TypeScript> for ModelInventory {
 Construct it with `ModelInventory { meta: Meta::new() }` and add `.with(...)` to
 a package containing the SDK or model provider. The `kaji` prelude re-exports the core plugin types; a generator can also depend
 on `kaji_core` directly.
-The metadata and import paths above should be checked against the crate version
-your generator embeds, since this API is pre-1.0.
+Check imports against the pinned crate version.
 
 ## Generation phases and file ownership
 
@@ -272,6 +286,7 @@ Validate graph
   -> language finalize (manifests, barrels, shared metadata)
   -> Post plugins
   -> language bundled middleware registration
+  -> language finalize_files
   -> ordered source overlays
   -> owned-output planning and write/check
 ```
@@ -340,7 +355,3 @@ tests require a local TypeScript installation and actual framework dependencies.
 Native language compilation tests require their toolchains. State which tests
 you executed; generation success alone does not prove a package compiles or a
 publisher can authenticate.
-
-Continue with [SDK customization](sdk-customization.md),
-[release automation](sdk-automation.md), or
-[publishing contracts](sdk-publishing.md).

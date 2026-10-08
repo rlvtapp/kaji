@@ -73,25 +73,42 @@ from the existing raw-JSON prototype to typed lifecycle-aware providers. The
 [Postman plan](postman-generation-plan.md) describes a new collection output.
 Postman export/execution, reviewed remote collection updates and typed Terraform CRUD/single-entity data sources are available. See [Postman](postman.md) and [Terraform](terraform-provider.md); remote environment/workspace provisioning, advanced lifecycle and live registry verification remain roadmap work.
 
-1. Broaden the verified model policies to more real public contracts. Open enum
+1.
+Broaden the verified model policies to more real public contracts.
+Open enum
    options, decoded unknown fields and nullable presence now have native roundtrip
    probes across targets; constructor helpers expose explicit null on dynamic models.
-2. Extend the explicitly unsupported pagination forms and bindings in the
+2.
+
+Extend the explicitly unsupported pagination forms and bindings in the
    capability table where needed, and verify legacy continuation edge cases.
-   Preserve native public APIs; different iteration interfaces are expected.
-3. Extend OAuth and native protocol coverage. All ten targets have optional
+Preserve native public APIs; different iteration interfaces are expected.
+3.
+Extend OAuth and native protocol coverage.
+
+All ten targets have optional
    client-credentials helpers and native call scopes; PHP timeout policy is supplied
-   by its PSR driver. Timeout scope remains native and documented.
-4. Broaden independent native provider/consumer APIs and expose Rust/Go composition
-   in the recipe registry. Retain convenient `sdk()` plugins and make ambiguous
+   by its PSR driver.
+Timeout scope remains native and documented.
+4.
+Broaden independent native provider/consumer APIs and expose Rust/Go composition
+   in the recipe registry.
+Retain convenient `sdk()` plugins and make ambiguous
    bindings fail before file emission.
-5. Exercise release workflows end to end in a test repository: release tags,
+5.
+
+Exercise release workflows end to end in a test repository: release tags,
    registry-specific auth, custom toolchains, multi-repository routing and
-   published launcher availability. Add provenance/source snapshots for remote
+   published launcher availability.
+Add provenance/source snapshots for remote
    spec diffs and richer status reporting.
-6. Extend source ejection with optional template adapters only when demanded by
-   real custom plugins. Verify additional custom media codecs beyond the implemented
-   OpenAPI 3.2 whole-query, sequential JSON and ordered multipart transports. Bounded public-HTTPS
+6.
+Extend source ejection with optional template adapters only when demanded by
+   real custom plugins.
+
+Verify additional custom media codecs beyond the implemented
+   OpenAPI 3.2 whole-query, sequential JSON and ordered multipart transports.
+Bounded public-HTTPS
    reference resolution is available with closure provenance.
 
 Each stage requires generated consumer compilation and meaningful wire behavior
@@ -120,7 +137,9 @@ See [TypeScript](../crates/plugins/typescript/README.md),
 The latest local verification passed 418 workspace tests, all fifteen native Swift
 probes, 163 shared native wire cases across ten runtimes and 37 Node checks.
 Java/C#/PHP/Elixir operation, model and pagination probes passed with disposable
-native toolchains and are repeated in CI. General Terraform type migrations,
+native toolchains and are repeated in CI.
+
+General Terraform type migrations,
 actual OpenAPI 3.2 handling, remaining protocol
 features and the prepared-only live delivery trial remain separate work.
 
@@ -135,12 +154,16 @@ endpoints and type-conversion migrations remain future work.
 ## Current parity hardening
 
 Source ejection now exports the actual rebuildable generator and plugin workspace;
-it does not introduce a runtime template override flag. OpenAPI 3.2 ordinary
+it does not introduce a runtime template override flag.
+OpenAPI 3.2 ordinary
 contracts, QUERY/custom methods, whole-query content, sequential item schemas and
-ordered/nested multipart encodings are accepted. Native transport plans retain
+ordered/nested multipart encodings are accepted.
+Native transport plans retain
 encoding and MIME headers; custom formats retain documented codec boundaries.
+
 Local reference closure hashing and artifact revisions prevent stale compiler
-caches. Optional OAuth providers and native call scopes cover all ten targets.
+caches.
+Optional OAuth providers and native call scopes cover all ten targets.
 
 Six pinned official contracts and a manual ten-language matrix expose failures
 beyond the shared wire fixtures. Full Go SDKs compile for OpenAI, GitHub, Stripe,
@@ -154,11 +177,15 @@ prepared-only at the user's request. These boundaries are tracked separately fro
 implemented features; Kaji keeps its plugin architecture.
 
 Per-call controls now cover the TypeScript, Rust, Python, Go, Java and C# targets plus Ruby, using native scoped
-clients or request/context options. Swift adds bounded typed multipart; Go/Python/
+clients or request/context options.
+Swift adds bounded typed multipart; Go/Python/
 Rust expose buffered part builders, and Java/C# extend typed multipart with JSON
-and repeated arrays. Rust `open_unions` can preserve unmatched future values.
+and repeated arrays.
+Rust `open_unions` can preserve unmatched future values.
+
 These capabilities keep their documented scope and do not imply universal model
-or multipart compatibility. See [request controls](guides/request-controls.md).
+or multipart compatibility.
+See [request controls](guides/request-controls.md).
 
 ## Expanded native coverage
 
@@ -175,9 +202,13 @@ remain unsupported rather than being silently discarded.
 
 The 3.2 compiler/runtime expansion adds typed recursive encoding metadata, whole-query
 and named JSON content parameters, buffered record-oriented JSON and ordered nested
-multipart in the native targets. `$self`, tag hierarchy, reusable media definitions,
-XML node metadata and device authorization endpoints are preserved. Multipart
-responses remain native buffered data for caller decoding. See the
+multipart in the native targets.
+`$self`, tag hierarchy, reusable media definitions,
+XML node metadata and device authorization endpoints are preserved.
+Multipart
+responses remain native buffered data for caller decoding.
+
+See the
 [OpenAPI 3.2 guide](guides/openapi32.md) and
 [model policy guide](guides/forward-compatible-models.md) for the concrete APIs.
 

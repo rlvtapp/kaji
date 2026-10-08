@@ -1,16 +1,24 @@
 # Configuration reference
 
+## Choose a configuration surface
+
+| Task | Surface |
+| --- | --- |
+| Select bundled HTTP SDKs and artifacts | [`kaji.json`](config-file.md) |
+| Inspect a native source format | [Contract CLI and input providers](input-plugins.md#inspect-the-built-in-inputs) |
+| Register an input or output plugin | Rust application linked to its provider crate |
+| Compose typed provider/consumer contracts | [Typed Rust plugins](typed-plugins.md) |
+
 ## CLI JSON configuration
 
 For normal CLI use, `kaji.json` is the source of truth. Create it with
-`npx @relevate/kaji init`, then run `npx @relevate/kaji generate`. The complete config format and the
+`npx kajicli init`, then run `npx kajicli generate`. The complete config format and the
 built-in SDK, TypeScript artifact, documentation, and mock plugin names are in
 the dedicated [`kaji.json` reference](config-file.md).
 
 The config is deliberately explicit: every package has a language, a directory,
 and a list of selected plugins. Kaji does not run Node/JavaScript plugin code
-from this file. A future external plugin mechanism can add new compiled plugin
-packages without changing the meaning of an existing recipe.
+from this file. Custom input and output plugins are linked into a Rust application.
 
 The rest of this page is the equivalent typed Rust API for embedding Kaji,
 building custom plugins, or using options that are not yet represented in the
@@ -70,6 +78,7 @@ one TypeScript SDK plugin uses one transport.
 | `.settings(L::Settings)` / `.settings_mut()` | Language-owned configuration, useful for community integrations. |
 | `generate(&api, release)` | Render packages into a `GeneratedTree`. |
 | `generate_with_security_catalog(&api, release, Some(&catalog))` | Include named OpenAPI security definitions with an in-memory API. |
+| `generate_with_input(&input, release)` | Consume an `InputContract` publishing `AdaptedApi` and render existing HTTP SDKs. |
 | `generate_openapi(path, name, version, release)` | Read current compiler artifacts, including required schema and security catalogs, and generate. |
 | `tree.check(directory)` | Compare expected output with its destination without writing. |
 | `tree.write_to(directory)` | Validate/materialize owned output while preserving custom and unrelated files. |
@@ -79,13 +88,19 @@ owners, and invalid plugin contracts fail generation. Adding a package or plugin
 twice is not a deduplication mechanism.
 
 Generated output is tracked by `.kaji/ownership.json` with stable owners and
-content fingerprints. `tree.write_to` refuses to overwrite locally edited owned
+content fingerprints.
+`tree.write_to` refuses to overwrite locally edited owned
 files, removes only unchanged obsolete owned files, and preserves unrelated
-files. TypeScript `custom/index.ts` is create-once. `tree.check(directory)` returns
+files.
+TypeScript `custom/index.ts` is create-once.
+`tree.check(directory)` returns
 added/modified/removed paths without writing; use it before materialization when
-reviewing drift. Preflight validates the proposed output, but filesystem I/O
+reviewing drift.
+
+Preflight validates the proposed output, but filesystem I/O
 failures can still interrupt writing: materialization is not an atomic directory
-transaction. See [safe regeneration](safe-regeneration.md) for legacy adoption,
+transaction.
+See [safe regeneration](safe-regeneration.md) for legacy adoption,
 manifest merge rules, and conflict resolution.
 
 ### SDK-author customization and delivery
@@ -113,11 +128,20 @@ the complete author workflow.
 | --- | --- |
 | `.client_name(name)` / `client_name: Option<String>` | TypeScript SDK class name. Other first-party SDKs do not consume this value. |
 | `.client_style(style)` / `client_style: Option<SdkClientStyle>` | `Flat` or `Namespaced`. SDK plugins default to namespaced. |
+| `.layout(SourceLayout::PerOperation)` / `layout: Option<SourceLayout>` | Shared layout for supporting generators; explicit plugin layouts take precedence. |
 | `.package_version(version)` / `package_version: Option<String>` | Overrides the API version seen by this package's generators. |
 
 Precedence is explicit plugin choice, then package defaults, then release
 defaults, then plugin defaults. Package version is resolved by the engine;
 client settings are consumed by each plugin.
+
+## Input provider options
+
+`InputRegistry` selects a format and optional provider ID. `InputProvider<C>` adds
+a native capability to a package graph. Features on the `kaji-inputs` bundle select
+which providers are linked; each independent provider crate owns its parser
+dependencies. See [input configuration](input-plugins.md#select-or-replace-a-provider)
+for Cargo and Rust examples.
 
 ## SDK plugin options
 
@@ -247,31 +271,51 @@ Each SDK package can override operation extensions independently:
 ```
 
 Package defaults override operation extensions; named operation rules override
-both. Rules are complete replacements, rather than partial merges. Unknown or
-ambiguous operation IDs fail generation. The core adds an optional string header
+both.
+Rules are complete replacements, rather than partial merges.
+Unknown or
+ambiguous operation IDs fail generation.
+The core adds an optional string header
 parameter to enabled operations and preserves an existing header's spelling
-when it matches without regard to case. Duplicate, required, referenced,
-constrained, or non-string idempotency header schemas fail generation. Policies
+when it matches without regard to case.
+
+Duplicate, required, referenced,
+constrained, or non-string idempotency header schemas fail generation.
+Policies
 cannot use transport/authentication headers such as `Authorization`, `Host`,
 `Content-Type`, or `Cookie`, and cannot collide with another parameter’s native
 identifier after punctuation and case normalization.
 
 Rust authors use `.idempotency(kaji_core::idempotency::IdempotencyConfig { ... })`
-on their typed package. Generation prepares a package-local API copy, so one
-SDK's policy does not change another SDK's inputs. Native runtime renderers
+on their typed package.
+Generation prepares a package-local API copy, so one
+SDK's policy does not change another SDK's inputs.
+Native runtime renderers
 consume `x-kaji-idempotency-resolved` metadata; automatic generation must keep a
-single key for all retry attempts and preserve a caller-supplied key. A header
+single key for all retry attempts and preserve a caller-supplied key.
+
+A header
 policy does not add retry loops to targets without them or promise server-side
-deduplication. See [the author and customer guide](guides/idempotency.md).
+deduplication.
+See [the author and customer guide](guides/idempotency.md).
+
+## Forward-compatible models
 
 Java and C# SDK recipes support `"preserve_presence": true` on the `sdk` plugin.
 This opt-in changes optional-property types to generated `Presence<T>` wrappers,
-so missing properties round-trip separately from explicit null. Required property
+so missing properties round-trip separately from explicit null.
+Required property
 types stay unchanged; the generated `PRESENCE.md` describes native construction
-and inspection. Leave the option unset to preserve the existing public model API.
-The option is rejected on other languages. `"open_enums": true` also works for
-TypeScript, Python, Rust, Java, C# and Swift. It keeps known enum APIs while
+and inspection.
+
+Leave the option unset to preserve the existing public model API.
+The option is rejected on other languages.
+`"open_enums": true` also works for
+TypeScript, Python, Rust, Java, C# and Swift.
+It keeps known enum APIs while
 allowing future wire values; TypeScript enum styles can change to const value
-objects. Rust also supports `"open_unions": true` for raw unmatched union values.
+objects.
+
+Rust also supports `"open_unions": true` for raw unmatched union values.
 See [forward-compatible models](guides/forward-compatible-models.md) for native
 representations and migration considerations.

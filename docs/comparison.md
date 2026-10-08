@@ -1,14 +1,19 @@
 # Why choose Kaji?
 
+[Why Kaji](why-kaji.md) · [Feature catalog](features.md) · [Try it](cli/quickstart.md)
+
 Kaji is the best fit for SDK authors who want to own and extend their entire
 OpenAPI generation workflow: native SDKs, bundled HTTP policies, API artifacts,
 checks and releases, composed through one typed plugin graph.
 
 You can replace a provider, add a consumer, ship your own source per language,
 eject and rebuild the generator, and keep delivery in readable GitHub workflows.
-That combination is Kaji's main advantage. The choice is about control and scope;
+That combination is Kaji's main advantage.
+The choice is about control and scope;
 it is not a claim that every generated language or OpenAPI construct has the same
-coverage. See the [feature catalog](features.md) and [verification](verification.md).
+coverage.
+
+See the [feature catalog](features.md) and [verification](verification.md).
 
 ## What makes Kaji a strong choice
 

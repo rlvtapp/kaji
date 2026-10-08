@@ -1,10 +1,18 @@
 # Generate, deliver and release an SDK
 
-This guide is for the SDK author: the team that owns the OpenAPI document,
-generator recipe, generated packages and releases. It follows one package from
-local generation to a published version. Start with [generation](getting-started.md)
-if you do not yet have a working `kaji.json`. For registry setup and retry details,
-continue with [SDK publishing](sdk-publishing.md).
+Follow one generated package from a local recipe to a published release.
+Start with [generation](getting-started.md) if you need a working `kaji.json`.
+Registry configuration and publication recovery are in [SDK publishing](sdk-publishing.md).
+
+| Step | Result |
+| --- | --- |
+| Declare metadata and verify locally | Generated package with build/test commands |
+| Preview and commit bootstrap | Reviewed generation, CI and release workflows |
+| Configure authentication and registry trust | Separate identities for repository PRs and publication |
+| Merge SDK and release PRs | Immutable package tag |
+| Check and publish that tag | Verified registry release |
+
+**On this page:** [Layout](#choose-the-repository-layout) · [Recipe](#1-declare-the-package-and-its-delivery-metadata) · [Bootstrap](#3-preview-the-workflow-bootstrap) · [Authentication](#5-configure-github-authentication) · [SDK PR](#6-open-and-review-the-sdk-content-pr) · [Release](#7-merge-release-and-publish-the-exact-tag) · [Troubleshooting](#diagnose-the-boundary-that-failed)
 
 ## Choose the repository layout
 
@@ -14,17 +22,17 @@ continue with [SDK publishing](sdk-publishing.md).
 | Separate SDK repository | API repository | SDK repository, retaining `output.path` | Commit destination setup files there before enabling source generation. |
 | Repository per language | API repository | One destination per language, retaining package paths | Commit each destination’s staged setup independently. |
 
-Use `--repository OWNER/SDK` for one shared destination, or
-`--repository-pattern 'acme/api-{lang}'` for one destination per language.
-The pattern must contain exactly one `{lang}` placeholder; the two flags cannot
-be combined. Several packages of the same language share its repository.
-Per-package configuration routing is planned and is not implemented; the pattern
-flag is the available routing interface. Release metadata identifies each package.
+| Routing option | Rule |
+| --- | --- |
+| `--repository OWNER/SDK` | One shared SDK destination |
+| `--repository-pattern 'acme/api-{lang}'` | Exactly one `{lang}`; packages of the same language share a destination |
 
-In this guide, `kaji.json` uses `output.path: "generated"`, and the TypeScript
-package has `path: "web"`. Its repository-relative path is therefore
-`generated/web`. Commands that select a package below `--root generated` use
-`--package web`; release-tag selection uses the complete `generated/web` path.
+Choose one option. Per-package configuration routing is not implemented;
+release metadata identifies packages within the selected repositories.
+
+**Paths used below:** `output.path` is `generated`; the package path is `web`.
+Use `--root generated --package web` for package commands, and the complete
+`generated/web` path when selecting a release tag.
 
 For a specification-only handoff, scheduled remote fetching or read-only GitHub
 inspection, see [GitHub Actions for SDK authors](github-actions.md). Use a
@@ -58,12 +66,12 @@ A complete starting recipe looks like this:
 }
 ```
 
-Replace `@acme/api` with a package you own, and point the recipe at your actual
-specification. The example's test phase checks compilation only. Before enabling
-publication, add behavioral tests for the generated methods, customer middleware,
-error handling and important wire formats, and declare their command in `test`.
-Keep those test sources alongside the recipe and ship them through
-[source overlays](sdk-customization.md), or use a maintained native test plugin.
+Replace `@acme/api` and the specification path with your own values.
+
+**The sample test phase checks compilation only.** Before publishing, add tests
+for generated methods, middleware, errors and important wire formats. Declare
+their command in `test`; ship maintained test sources through
+[source overlays](sdk-customization.md) or a native test plugin.
 
 `release` emits `<package>/.kaji/package.json`: the package's delivery contract.
 Build/test commands run in the package directory, using executable and argument
@@ -90,11 +98,15 @@ kaji sdk run --root generated --package web --phase build
 kaji sdk run --root generated --package web --phase test
 ```
 
-`check` diagnoses the API contract. Generation writes owned output.
-`generate --check` previews drift without writing; immediately after generation,
-it should report no generated changes. Build/test commands execute locally, so
-your language toolchain and declared dependencies must already be available.
-See [safe regeneration](safe-regeneration.md) for changed or removed owned files.
+| Command | Checks or changes |
+| --- | --- |
+| `check` | API contract diagnostics |
+| `generate` | Writes owned generated output |
+| `generate --check` | Reports drift without writing; should be empty after generation |
+| `sdk list` | Emitted delivery metadata |
+| `sdk run --phase build/test` | Runs declared commands locally; requires the native toolchain and dependencies |
+
+For changed or removed owned files, see [safe regeneration](safe-regeneration.md).
 
 Inspect the exported API, native manifest, `.kaji/package.json` and generated
 README. Confirm the package name, version, entry points and publisher. A
@@ -141,11 +153,14 @@ remote credentials or installation permissions.
 | `.github/actions/kaji-publish/` | Readable standard-registry publication helper. |
 | `release-please-config.json` and `.release-please-manifest.json` | Per-package release strategies and current versions. |
 
-Actual files depend on whether packages have publishers and whether the SDK
-repository is separate. `--actions local` is the default: helpers are vendored,
-committed source. `--actions remote --action-ref OWNER/kaji@REVISION` selects a
-remote action implementation instead. In broker mode, local token-client sources
-are also included. Pin the code you review; no Kaji hosted service is implied.
+Files depend on the publishers and repository layout.
+
+| Action source | Setup |
+| --- | --- |
+| `--actions local` (default) | Review and commit vendored helpers; broker mode includes token-client sources |
+| `--actions remote --action-ref OWNER/kaji@REVISION` | Select a reviewed, pinned remote implementation |
+
+Scaffolding does not create a hosted service.
 
 ## 4. Commit the bootstrap in the correct repository
 
@@ -204,12 +219,12 @@ kaji sdk init --root generated --config kaji.json \
   --repository-pattern 'acme/api-{lang}' --auth app --kaji-version VERSION
 ```
 
-For TypeScript and Python this selects `acme/api-typescript` and
-`acme/api-python`. The source workflow has a job per language; each job obtains
-access scoped to its destination and runs `sdk pr --language LANG`. Every package
-of that language is included. Recipe output paths remain intact: `generated/web`
-stays `generated/web` in the TypeScript repository, even when it is the only
-package there.
+The example routes TypeScript to `acme/api-typescript` and Python to
+`acme/api-python`. Each source job obtains destination-scoped access and runs
+`sdk pr --language LANG` for every package of that language.
+
+Output paths stay intact: `generated/web` remains `generated/web` in its
+TypeScript repository.
 
 Setup is staged separately at
 `.kaji/sdk-repository-setup/OWNER/REPO/`. Copy each repository directory’s contents,
@@ -222,12 +237,17 @@ git diff --stat
 ```
 
 Each directory contains its check/publish helpers, CI and release workflows, and
-Release Please configuration/manifest. Create the repositories and their base
-branches yourself. Give the App installation access to every selected destination,
+Release Please configuration/manifest.
+Create the repositories and their base
+branches yourself.
+Give the App installation access to every selected destination,
 and configure registry publishers and the `release` environment independently in
-each one. Routine Contents/Pull requests tokens cannot install workflow files;
+each one.
+
+Routine Contents/Pull requests tokens cannot install workflow files;
 bootstrap requires the repository owner’s commit or separately authorized workflow
-permissions. The scaffold does not create repositories or install an App remotely.
+permissions.
+The scaffold does not create repositories or install an App remotely.
 
 Instead of copying into a checkout, explicitly ask Kaji to prepare a destination
 bootstrap PR:
@@ -241,18 +261,23 @@ kaji sdk install --setup .kaji/sdk-repository-setup/acme/api-typescript \
   --branch codex/kaji-sdk-setup
 ```
 
-Review the dry-run plan before the second command. Installation uses the
+Review the dry-run plan before the second command.
+Installation uses the
 invoker’s GitHub authentication and needs authority to commit workflow files;
 the routine SDK App’s Contents/Pull requests token is insufficient for that
-bootstrap. It opens a reviewable PR, without a direct commit to the base branch or
-force push. Merge it through the destination’s review process. Repeat for every
-destination. The API repository’s source generation workflow still needs its
+bootstrap.
+It opens a reviewable PR, without a direct commit to the base branch or
+force push.
+
+Merge it through the destination’s review process.
+Repeat for every
+destination.
+The API repository’s source generation workflow still needs its
 owner’s commit separately.
 
-Installed helper/workflow sources remain editable. The tracked installation
-inventory protects destination edits when setup changes: review conflicts and
-merge intentional changes instead of expecting regeneration to overwrite them.
-No remote installation was performed while preparing this example.
+The installation inventory protects edited helper/workflow files. Review
+refresh conflicts and merge intended changes. The example has not been installed
+remotely.
 
 Refresh with `sdk sync` and the same pattern, authentication, base, schedule and
 bump options. When source and destination base branches differ, edit the generated
@@ -273,6 +298,7 @@ Preview an App registration manifest with
 Pull requests: write for the selected repositories; routine workflows do not need
 workflow-write permission. App-token acquisition/revocation belongs to the job.
 Registry publication uses its own identity and configuration.
+
 For separate repositories, configure the App variables/secrets in the repositories
 running generation and release jobs (or grant both repositories access to the
 organization-level values). Destination release jobs need their own working
@@ -301,13 +327,14 @@ files survive; modified owned files fail rather than being overwritten. Existing
 PR ancestry/manual commits survive. Normal pushes reject races instead of forcing
 branch history.
 
-The default branch is `codex/kaji-sdks`, targeting `main`; use `--branch` and
-`--base` for your repository's conventions. API diffs suggest major for breaking
-changes, minor for other API changes, patch for generation-only changes. Automatic
-comparison uses `--base-spec-ref`, a GitHub push's before revision, or `HEAD~1`.
-Remote URL/artifact-only specifications require an explicit `--bump` until prior
-source snapshots are supported. Review suggested release sizes rather than
-assuming a schema diff captures every behavioral change.
+| Setting | Default or behavior |
+| --- | --- |
+| PR branch / base | `codex/kaji-sdks` / `main`; override with `--branch` / `--base` |
+| Suggested bump | Breaking API change → major; other API change → minor; generation-only change → patch |
+| Comparison base | `--base-spec-ref`, GitHub push before revision, or `HEAD~1` |
+| URL/artifact-only source | Requires explicit `--bump` until prior snapshots are supported |
+
+Review the bump: a schema diff cannot capture every behavioral change.
 
 ## 7. Merge, release and publish the exact tag
 
@@ -329,11 +356,17 @@ language. Standard publisher names are `npm`, `pypi`, `crates.io` and `go`; othe
 registries and explicit publisher commands use the custom path described in
 [SDK publishing](sdk-publishing.md).
 
-The release matrix reads metadata from each tag, not today's main branch. Checks
-run without publication credentials. The publication job checks out the same tag
-and restores its tested output. All release checks gate publishing. Native fallback
+The release matrix reads metadata from each tag, not today's main branch.
+Checks
+run without publication credentials.
+The publication job checks out the same tag
+and restores its tested output.
+All release checks gate publishing.
+Native fallback
 checks can be compile/lint-only; declare real behavioral tests in metadata.
-Swift uses a macOS check runner. Community toolchains need explicit setup steps.
+
+Swift uses a macOS check runner.
+Community toolchains need explicit setup steps.
 Configure the registry's trusted publisher and GitHub `release` environment before
 allowing a publication job to proceed.
 
@@ -398,3 +431,23 @@ to preview and requires configured allowlists and a protected environment before
 opening a test SDK PR. Registry publication follows the destination's regular
 reviewed release workflow. This template has not been dispatched or published
 as part of these changes.
+
+## Local source and publication-gate verification
+
+The repository regression `all_sdk_languages_receive_readable_checks_and_gated_publish_sources`
+constructs separate SDK repository scaffolds for TypeScript, Python, Go, Rust,
+Java, C#, Swift, PHP, Ruby and Elixir. Every destination gets editable local check
+and publish action sources, CI metadata for its language, and a release workflow.
+Swift checks select macOS; the other built-in profiles select Ubuntu. The test
+checks that native checks run against the selected immutable release tag, precede
+publication, and receive no publication OIDC permission. Only the publication job
+requests OIDC and targets the `release` environment. Configure reviewers and
+registry trust for that environment in GitHub; emitting YAML does not create them.
+
+Standard publication applies to npm, PyPI, crates.io and Go source tags. The other
+profiles require reviewed custom publisher commands. A generated action source is
+not proof that a Maven/NuGet/RubyGems/Packagist/Hex endpoint is configured. The local
+matrix verifies scaffold structure and isolation; SDK compilation tests verify
+language generation separately. The disposable delivery workflow remains opt-in
+and does not establish live registry/GitHub acceptance until an owner supplies
+allowlisted disposable destinations and explicitly runs it.

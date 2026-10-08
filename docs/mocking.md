@@ -1,12 +1,19 @@
 # Contract mocking
 
+| Need | Use |
+| --- | --- |
+| Run immediately without Docker | [Native mock](#native-mock-inspector-no-docker) |
+| Share a reproducible service across SDK tests | [Generated Docker package](#generate-and-run) |
+| Return a conditional error or fixture | [`x-kaji-mock`](#full-x-kaji-mock-reference) |
+| Configure page continuation | [Pagination declarations](#pagination-declarations) |
+
 > Need help choosing between Faker, MSW, Cypress, and the Docker mock? Start
 > with [testing generated SDKs](guides/testing.md).
 
-`mock::package("mock-server").with(mock::server())` writes an `httpmock` Docker package next
-to SDK outputs. Its happy-path fixtures are derived from declared OpenAPI
-responses and schema examples. This is one service every generated SDK can
-use: set its normal base URL to `http://localhost:5000` during a test.
+`mock::package("mock-server").with(mock::server())` writes an `httpmock` Docker package
+next to SDK outputs. Its happy-path fixtures are derived from declared OpenAPI responses
+and schema examples. This is one service every generated SDK can use: set its normal
+base URL to `http://localhost:5000` during a test.
 
 ## Native mock inspector (no Docker)
 
@@ -16,22 +23,25 @@ For local development, Kaji can run the contract directly:
 kaji mock serve openapi.yaml --port 4010
 ```
 
-The mock API is available at `http://127.0.0.1:4010`. `GET /_kaji/health`
-returns `{ "ok": true }`. Its machine-readable `GET /_kaji/requests` log
-returns up to the 200 most recent calls, including the matched operation ID,
-scenario name, status code, and request body. This keeps diagnosis useful for
-people and agents without shipping a separate dashboard.
+The mock API is available at `http://127.0.0.1:4010`. `GET /_kaji/health` returns `{
+"ok": true }`. Its machine-readable `GET /_kaji/requests` log returns up to the 200 most
+recent calls, including the matched operation ID, scenario name, status code, and
+request body. This keeps diagnosis useful for people and agents without shipping a
+separate dashboard.
 
-Unless an `x-kaji-mock` scenario matches, unconstrained schema fields vary for
-every request: strings, IDs, emails, numbers, dates, arrays, and objects are
-generated from the response schema. Explicit examples, defaults, constants,
-and enum values remain stable. This gives local apps realistic changing data
-while retaining contract-owned values where the API specifies them.
+Unless an `x-kaji-mock` scenario matches, unconstrained schema fields vary for every
+request: strings, IDs, emails, numbers, dates, arrays, and objects are generated from
+the response schema. Explicit examples, defaults, constants, and enum values remain
+stable.
 
-The native server also evaluates declared `x-kaji-mock` scenarios. The first
-matching scenario in OpenAPI order wins and returns its exact status, headers,
-body, and optional delay; its name is recorded in `/_kaji/requests`. This gives
-local development and Docker fixtures the same conditional contract cases,
+This gives local apps realistic changing data while retaining contract-owned values
+where the API specifies them.
+
+The native server also evaluates declared `x-kaji-mock` scenarios. The first matching
+scenario in OpenAPI order wins and returns its exact status, headers, body, and optional
+delay; its name is recorded in `/_kaji/requests`.
+
+This gives local development and Docker fixtures the same conditional contract cases,
 while only the native server generates a fresh fallback body.
 
 ## Generate and run
@@ -50,9 +60,9 @@ let artifacts = generate(
 artifacts.write_to("generated")?;
 ```
 
-The mock package is written to `generated/sdk/mock-server` and contains a
-`Dockerfile`, `compose.yaml`, `run.sh`, `.env.example`, and one YAML file per
-operation below `fixtures/`.
+The mock package is written to `generated/sdk/mock-server` and contains a `Dockerfile`,
+`compose.yaml`, `run.sh`, `.env.example`, and one YAML file per operation below
+`fixtures/`.
 
 ```sh
 cd generated/sdk/mock-server
@@ -61,11 +71,11 @@ docker compose up --build
 # or: sh ./run.sh
 ```
 
-The default happy path chooses the lowest declared numeric `2xx` response,
-then `default`, then the first declared response, then `200`. Bodies prefer
-OpenAPI defaults, constants, enum values, and examples; otherwise Kaji emits a
-conservative schema-shaped value. Change the OpenAPI source and regenerate
-instead of hand-editing generated fixtures.
+The default happy path chooses the lowest declared numeric `2xx` response, then
+`default`, then the first declared response, then `200`. Bodies prefer OpenAPI defaults,
+constants, enum values, and examples; otherwise Kaji emits a conservative schema-shaped
+value. Change the OpenAPI source and regenerate instead of hand-editing generated
+fixtures.
 
 Use `x-kaji-mock` only for named conditional behaviour:
 
@@ -85,15 +95,17 @@ x-kaji-mock:
         delay_ms: 25
 ```
 
-Scenarios validate request headers, query values, path parameters, or an exact
-JSON body. Responses can set a status, headers, body, and bounded delay. Both
-the native server and fixture generator put scenarios ahead of the default
-route, so the fallback cannot swallow them. The native server compares headers
-case-insensitively and decodes query/path values before comparison.
+Scenarios validate request headers, query values, path parameters, or an exact JSON
+body. Responses can set a status, headers, body, and bounded delay. Both the native
+server and fixture generator put scenarios ahead of the default route, so the fallback
+cannot swallow them.
 
-For a runnable contract with dynamic fallback responses, a conditional error,
-and request-log inspection, use the
-[mock scenarios example](../examples/mock-scenarios/README.md).
+The native server compares headers case-insensitively and decodes query/path values
+before comparison.
+
+For a runnable contract with dynamic fallback responses, a conditional error, and
+request-log inspection, use the [mock scenarios
+example](../examples/mock-scenarios/README.md).
 
 ## Full `x-kaji-mock` reference
 
@@ -113,19 +125,19 @@ x-kaji-mock:
         delay_ms: 25               # optional, 0 through 600000
 ```
 
-Unknown fields, duplicate or empty names, invalid status codes, and unsafe
-header values fail generation. This is deliberate: a broken test scenario must
-not silently fall back to a happy-path response.
+Unknown fields, duplicate or empty names, invalid status codes, and unsafe header values
+fail generation. This is deliberate: a broken test scenario must not silently fall back
+to a happy-path response.
 
-Use `path` only for declared path parameters. `query` uses the serialized wire
-value, so quote numbers and booleans. `body` is an exact JSON match, not a
-partial-object or JSONPath matcher. Omit `when` only when a scenario should
-take precedence for every request to the operation.
+Use `path` only for declared path parameters. `query` uses the serialized wire value, so
+quote numbers and booleans. `body` is an exact JSON match, not a partial-object or
+JSONPath matcher. Omit `when` only when a scenario should take precedence for every
+request to the operation.
 
 ## Pagination declarations
 
-The generated mock and generated pager both come from the same operation.
-Add `x-kaji-pagination` when the SDK should offer a pager:
+The generated mock and generated pager both come from the same operation. Add
+`x-kaji-pagination` when the SDK should offer a pager:
 
 ```yaml
 # Cursor in a query or request body field.
@@ -165,8 +177,9 @@ Kaji also accepts `x-speakeasy-pagination` for existing specifications. Use
 
 ## Scope
 
-This is an HTTP contract mock: request method/path plus explicit scenarios in,
-then either a deterministic scenario response or a schema-shaped dynamic
-fallback. It is not a stateful database, authentication emulator, or arbitrary
-code runtime. Keep durable HTTP contract cases in the OpenAPI document; use a
-dedicated test service for stateful product behavior.
+This is an HTTP contract mock: request method/path plus explicit scenarios in, then
+either a deterministic scenario response or a schema-shaped dynamic fallback. It is not
+a stateful database, authentication emulator, or arbitrary code runtime.
+
+Keep durable HTTP contract cases in the OpenAPI document; use a dedicated test service
+for stateful product behavior.

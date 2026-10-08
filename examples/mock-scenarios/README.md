@@ -7,14 +7,14 @@ Run the native mock without Docker:
 
 ```sh
 cd examples/mock-scenarios
-npx @relevate/kaji mock serve openapi.yaml --port 4010
+npx kajicli mock serve openapi.yaml --port 4010
 ```
 
 Or generate and run the Docker fixture:
 
 ```sh
 cd examples/mock-scenarios
-npx @relevate/kaji generate
+npx kajicli generate
 cd generated/mock-server
 docker compose up --build
 ```

@@ -1,8 +1,6 @@
 # Native plugin composition
 
-Kaji plugins are typed Rust implementations. They render SDKs, consume declared
-outputs from other plugins, or run after generation to add derived files. Missing
-inputs, duplicate providers, cycles, and conflicting paths are errors.
+Packages choose a language, directory and identity. Plugins choose what to render.
 
 ```rust
 use kaji::{prelude::*, ts};
@@ -13,11 +11,27 @@ let package = ts::package("typescript")
     .with(ts::composition::zod().output("validation"));
 ```
 
-Use one package per transport and layout. Package configuration owns names and
-directories; plugin configuration owns rendering behavior. The full
-[plugin-authoring reference](../typed-plugins.md) explains contracts, handles,
-post phases, dependencies, and current composition boundaries.
+## Connect the hooks
 
-Language implementations can override `Language::finalize_files` to adapt the
-assembled output after middleware bundling and before explicit source overlays.
-Its default is a no-op, preserving existing custom language implementations.
+| Step | API |
+| --- | --- |
+| Read a source and publish native contracts | `InputPlugin::load` and `InputContract::publish` |
+| Make an input available to a package | `InputProvider<C>` and its `.handle()` |
+| Declare a consumer dependency | `Requirement::on::<C>(Some(handle))` |
+| Read the selected contract | `cx.inputs.get::<C>()` |
+| Publish reusable output metadata | `Provision::of::<C>()` and `cx.publish(value)` |
+| Emit an owned file | `cx.files.emit(GeneratedFile::new(...))` |
+
+Core orders providers before consumers. Missing or ambiguous inputs, cycles,
+duplicate identities and conflicting paths fail generation. Handles are
+package-local. Select separate packages for Fetch and Axios variants.
+
+See [input plugins](../input-plugins.md) for parsing hooks and
+[typed plugins](../typed-plugins.md) for complete consumer examples.
+
+## Finalize shared files
+
+During Generate, plugins register shared dependency and export state. The language
+finalizer assembles manifests and barrels. `Language::finalize_files` can adapt
+assembled files after middleware bundling and before source overlays; its default
+is a no-op. See [generation phases](../typed-plugins.md#generation-phases-and-file-ownership).

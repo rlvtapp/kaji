@@ -1,5 +1,7 @@
 # Finding and downloading OpenAPI contracts
 
+[CLI workflow](cli/README.md) · [Remote recipes](cli/recipes.md#private-remote-contract)
+
 Kaji can search the public [APIs.guru directory](https://api.apis.guru) before
 you have a spec URL. The directory is queried when the command runs; Kaji does
 not retain API credentials or a local catalogue.

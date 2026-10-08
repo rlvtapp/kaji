@@ -8,7 +8,7 @@ service.
 
 ```sh
 cd examples/typescript-cli
-npx @relevate/kaji generate
+npx kajicli generate
 cd generated/notes
 npm install
 npm run build

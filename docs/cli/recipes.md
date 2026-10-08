@@ -36,7 +36,7 @@ framework helpers alongside the transport they import. Copy the complete
 Set the token in your shell or CI secret store, never in JSON:
 
 ```sh
-PARTNER_OPENAPI_TOKEN=… npx @relevate/kaji generate
+PARTNER_OPENAPI_TOKEN=… npx kajicli generate
 ```
 
 ## Compile once, render repeatedly

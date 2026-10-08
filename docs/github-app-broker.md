@@ -9,6 +9,8 @@ Kaji needs to open a source update PR.
 The code is self-hostable. This repository does not supply a running endpoint,
 registered App, account onboarding service, or deployed infrastructure.
 
+**On this page:** [Trust](#trust-and-permissions) · [Policy](#configure-your-app-and-policy) · [Deploy](#run-and-deploy) · [Action](#use-the-composite-action) · [Protocol](#protocol) · [Tests](#verification)
+
 ## Trust and permissions
 
 The broker verifies RS256 signatures using the fixed [GitHub Actions issuer's
@@ -17,15 +19,17 @@ It checks issuer, exact audience, expiration, issue/not-before times, a bounded
 lifetime and a single-use `jti`. JOSE-provided key URLs and algorithm substitutions
 are rejected. Signature verification precedes repository authorization.
 
-Each source policy checks exact repository name and immutable repository/owner
-IDs, exact subjects, workflow path/ref, branch, signed `ref_protected`, event and
-runner environment. Optional environment and workflow SHA conditions further
-restrict access. Reusable workflow delegation is rejected unless explicitly
-configured with a pinned `job_workflow_sha`.
-All pull request events, `pull_request_target`, and PR head/base contexts are
-rejected. [GitHub documents these identity
-claims](https://docs.github.com/en/actions/reference/security/oidc); the discovery
-document includes `ref_protected` among supported claims.
+| Source identity check | Policy |
+| --- | --- |
+| Repository | Exact name and immutable repository/owner IDs |
+| Workflow | Exact subject, path/ref and branch; signed `ref_protected` |
+| Execution | Allowed event and runner environment |
+| Optional restrictions | Environment and caller workflow SHA |
+| Reusable workflow | Explicit delegation and pinned `job_workflow_sha` required |
+| PR context | All PR events, `pull_request_target` and PR head/base contexts rejected |
+
+[GitHub documents the identity claims](https://docs.github.com/en/actions/reference/security/oidc);
+the discovery document includes `ref_protected`.
 
 Destinations are administrator-owned mappings of repository name, immutable ID
 and installation ID. Callers send repository names, never installation IDs,
@@ -107,24 +111,29 @@ provides `GET /healthz` and `POST /token`; token responses have `Cache-Control:
 no-store`. Logs contain issuance/denial metadata and request IDs, never bearer
 JWTs, installation tokens, App JWTs or private keys.
 
-For public hosting, put the listener behind HTTPS ingress, provision real App
-credentials and policy, mount persistent replay storage, configure inbound rate
-limits and outbound access to the fixed GitHub API/JWKS hosts, and run it as an
-unprivileged process. Configure proxy/access logs to exclude Authorization headers
-and response bodies. GitHub API availability and clock synchronization are runtime
-dependencies. A config or key change requires a process restart.
+For public deployment:
+
+- Put the listener behind HTTPS ingress and run it unprivileged.
+- Supply App credentials, administrator-owned policy and persistent replay storage.
+- Set ingress rate limits and permit outbound access to the fixed GitHub API/JWKS hosts.
+- Exclude Authorization headers and response bodies from proxy/access logs.
+- Maintain clock synchronization and GitHub API access.
+- Restart after configuration or key changes.
 
 The HTTP layer limits headers, body size, concurrency, request time and requests
 per connection-peer address. It never trusts arbitrary `X-Forwarded-For` values.
 If a reverse proxy funnels all requests through one peer address, its limits apply
 to that shared address; enforce public per-client limits at ingress as well.
 
-Persistent replay markers use atomic file creation and survive restarts. Multiple
-instances require a shared filesystem with atomic exclusive creation, or an
-injected durable store implementing atomic `consume(key, expiresAt)`. Independent
-per-replica volumes do not provide a global replay guarantee. The memory store is
-for tests and embedded single-process use only. Keep replay storage separate from
-untrusted writable files and preserve it across restarts.
+| Replay storage | Supported use |
+| --- | --- |
+| Persistent directory with atomic file creation | Single instance; survives restarts |
+| Shared filesystem with atomic exclusive creation | Multiple instances |
+| Injected durable store with atomic `consume(key, expiresAt)` | Multiple instances |
+| Memory store | Tests and embedded single-process use |
+
+Independent per-replica volumes cannot guarantee global replay protection.
+Preserve replay storage across restarts and keep it separate from untrusted files.
 
 ## Use the composite action
 
@@ -161,10 +170,14 @@ jobs:
 
 The action requests OIDC from the official GitHub Actions request URL, sends the
 repository array to the broker, masks the returned token before writing
-`GITHUB_OUTPUT`, and exposes `token` and `expires-at`. Use the token as a secret
-input/environment value, not a URL or command literal. Composite actions cannot
+`GITHUB_OUTPUT`, and exposes `token` and `expires-at`.
+Use the token as a secret
+input/environment value, not a URL or command literal.
+
+Composite actions cannot
 register an automatic post hook, so the explicit `always()` cleanup step is
-necessary for immediate revocation. If cleanup cannot run, GitHub's one-hour
+necessary for immediate revocation.
+If cleanup cannot run, GitHub's one-hour
 expiration remains the limit.
 
 ## Protocol

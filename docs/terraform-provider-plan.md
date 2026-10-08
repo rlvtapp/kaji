@@ -1,10 +1,23 @@
 # Terraform provider generation plan
 
+**Design history.** For current APIs and support, use the [terraform-provider guide](terraform-provider.md). Statements about the prototype below describe the original proposal.
+
+<details>
+<summary>Explore the original design and follow-up ideas</summary>
+
 Status: typed scalar CRUD and opt-in resource-read data sources are available; a real Terraform CLI lifecycle harness passes against a local mock. See [the implementation guide](terraform-provider.md) for its supported subset and actual recipe API. Repository inspection and primary-source research: 7 October 2026. Advanced configuration and Rust structures below remain proposed APIs unless covered by that guide.
 
 ## 1. Current architecture and gaps
 
-Kaji already has a workspace Terraform crate, `crates/plugins/terraform`. Its `sdk().resource(...)` API requires explicit create/read/update/delete operation IDs and an identity path parameter. It renders a Go Plugin Framework provider with an `id` and a raw JSON `body`, a base URL, and a hard-coded bearer API key. It does not infer entities, expose data sources/import, model individual attributes, or consume the core security catalog. Create/update currently replace the configured body with the API response; a server-added or normalized field can therefore violate Terraform's planned-value consistency. Read does not remove a missing object from state. This is a prototype to evolve, not a production lifecycle implementation to expose unchanged.
+Kaji already has a workspace Terraform crate, `crates/plugins/terraform`.
+Its `sdk().resource(...)` API requires explicit create/read/update/delete operation IDs and an identity path parameter.
+It renders a Go Plugin Framework provider with an `id` and a raw JSON `body`, a base URL, and a hard-coded bearer API key.
+
+It does not infer entities, expose data sources/import, model individual attributes, or consume the core security catalog.
+Create/update currently replace the configured body with the API response; a server-added or normalized field can therefore violate Terraform's planned-value consistency.
+Read does not remove a missing object from state.
+
+This is a prototype to evolve, not a production lifecycle implementation to expose unchanged.
 
 `crates/kaji-core/src/ast.rs` already represents operations, request/response schemas, path/query/header parameters, security requirements, schema constraints, readOnly/writeOnly, composition, and annotations. `openapi/types.go`, `openapi/openapi.go`, and `openapi/schema_walk.go` produce the Go sidecar representation; `crates/kaji-core/src/adapter/openapi_sidecar.rs` converts it. Operation and schema extensions survive today, but parameter extensions, response headers/links/extensions, root metadata, and server provenance need a deliberate preservation audit. Generic metadata gaps should be fixed there; Terraform-specific types should not be added there.
 
@@ -119,21 +132,45 @@ terraform:
   exclude_operations: [deleteAllProjects]
 ```
 
-Precedence: explicit exclusions; target configuration; Kaji extensions; opt-in Speakeasy compatibility translation; conservative inference. Conflicting explicit directives are errors rather than silently ordered guesses. Include an `explain` report with the effective source of each decision. Avoid putting arbitrary executable Go expressions in OpenAPI: custom types, validators, modifiers, and hooks reference typed plugin registrations or generated create-once interfaces. Existing explicit `.resource(...)` callers get a migration adapter with warnings; do not silently reinterpret their raw-body state.
+Precedence: explicit exclusions; target configuration; Kaji extensions; opt-in Speakeasy compatibility translation; conservative inference.
+Conflicting explicit directives are errors rather than silently ordered guesses.
+Include an `explain` report with the effective source of each decision.
+
+Avoid putting arbitrary executable Go expressions in OpenAPI: custom types, validators, modifiers, and hooks reference typed plugin registrations or generated create-once interfaces.
+Existing explicit `.resource(...)` callers get a migration adapter with warnings; do not silently reinterpret their raw-body state.
 
 ## 5. Schema and advanced attribute semantics
 
 Build a per-operation field matrix before merging into Terraform attributes. Required create inputs generally become Required; response-only/readOnly values become Computed; optional configurable values remain Optional. Optional+Computed needs explicit default/refresh behavior, not automatic assignment to every response field. Conflicting types or requirements need bindings/overrides. API defaults and server normalization must respect known planned values; implement semantic equality only for documented equivalent representations.
 
-Map enums, numeric/string/list bounds and patterns into supported validators, checking RE2 compatibility. Support conflicts, exactly-one, at-least-one, required-with, nested paths, and cross-field plan validators. Validate those constraints together for contradictions. Infer replacement for identity/path-parent fields and fields proven create-only; unresolved mutability is a blocking diagnostic, not a blanket ForceNew guess. Render replacement through Framework plan modifiers, with `UseStateForUnknown` only for values guaranteed stable. Framework requires final state to agree with known planned values. [HashiCorp plan modification](https://developer.hashicorp.com/terraform/plugin/framework/resources/plan-modification).
+Map enums, numeric/string/list bounds and patterns into supported validators, checking RE2 compatibility.
+Support conflicts, exactly-one, at-least-one, required-with, nested paths, and cross-field plan validators.
+Validate those constraints together for contradictions.
+Infer replacement for identity/path-parent fields and fields proven create-only; unresolved mutability is a blocking diagnostic, not a blanket ForceNew guess.
+
+Render replacement through Framework plan modifiers, with `UseStateForUnknown` only for values guaranteed stable.
+Framework requires final state to agree with known planned values.
+[HashiCorp plan modification](https://developer.hashicorp.com/terraform/plugin/framework/resources/plan-modification).
 
 Treat OpenAPI writeOnly as “not returned by the API,” distinct from Terraform write-only storage. Sensitive suppresses presentation but does not itself prevent persistence. Terraform write-only arguments require Terraform 1.11+, cannot be Computed, and need explicit change triggers because their values are not retained in state. Reject unsupported combinations, including set elements and a naive unconditional replacement modifier. [HashiCorp write-only arguments](https://developer.hashicorp.com/terraform/plugin/framework/resources/write-only-arguments).
 
-Preserve nullable vs omitted update behavior explicitly. PATCH changed-fields mode compares plan to prior state, excluding computed-only fields and preserving deletion/null semantics; PUT normally sends a complete configured representation. JSON Patch, Merge Patch, and custom PATCH media types need separate codecs. Collections default to API-order-preserving lists; infer sets only with a proven stable identity/order-insensitive contract. Arbitrary maps, unions, recursive schemas, semantic JSON strings, and custom types need explicit supported mappings or actionable rejection. Custom naming and ignored API-only fields must detect collisions and ensure omitted fields are not lifecycle-required.
+Preserve nullable vs omitted update behavior explicitly.
+PATCH changed-fields mode compares plan to prior state, excluding computed-only fields and preserving deletion/null semantics; PUT normally sends a complete configured representation.
+JSON Patch, Merge Patch, and custom PATCH media types need separate codecs.
+
+Collections default to API-order-preserving lists; infer sets only with a proven stable identity/order-insensitive contract.
+Arbitrary maps, unions, recursive schemas, semantic JSON strings, and custom types need explicit supported mappings or actionable rejection.
+Custom naming and ignored API-only fields must detect collisions and ensure omitted fields are not lifecycle-required.
 
 ## 6. Resource, data source, import, and state lifecycle
 
-Create builds requests from plan/config, records identity as soon as available, then refreshes computed values while preserving configured planned values. A failed post-create poll must retain recoverable identity rather than repeat an unsafe POST. Read refreshes drift; a documented missing-object response removes managed state, whereas authentication, rate limits, transport errors, and malformed responses produce diagnostics. Update preserves identity and checks state consistency. Delete verifies the configured success condition; a documented already-missing response succeeds. Retry safe operations only under an explicit idempotency policy.
+Create builds requests from plan/config, records identity as soon as available, then refreshes computed values while preserving configured planned values.
+A failed post-create poll must retain recoverable identity rather than repeat an unsafe POST.
+
+Read refreshes drift; a documented missing-object response removes managed state, whereas authentication, rate limits, transport errors, and malformed responses produce diagnostics.
+Update preserves identity and checks state consistency.
+Delete verifies the configured success condition; a documented already-missing response succeeds.
+Retry safe operations only under an explicit idempotency policy.
 
 Implement single-object and collection data sources separately, including pagination through the shared normalized pagination plan. Missing data-source results produce errors rather than removing resource state. Do not invent user filters that the server cannot support unless explicitly configured client-side filtering is bounded and documented.
 
@@ -149,7 +186,12 @@ Distinguish independently addressable child resources from nested configuration 
 
 Derive provider settings from the core security catalog, preserving OpenAPI OR alternatives and AND combinations per operation. API keys retain header/query/cookie location; HTTP basic/bearer remain distinct. Choose authentication alternatives explicitly when multiple are available; generate required scopes validation and per-operation credential checks. Never hard-code bearer semantics for all schemes.
 
-Preserve root/path/operation server precedence and server variables generically, then expose a validated base URL/provider setting where appropriate. Environment fallback names and proxy/TLS/timeouts are configurable; unknown configuration during planning must not trigger API calls. Secrets are never embedded in generated fixtures, ownership metadata, diagnostics, or release workflows. OAuth refresh/client credentials and custom signing use pluggable transports with explicit capabilities rather than inferred login flows. Missing security metadata must not imply a guessed public operation.
+Preserve root/path/operation server precedence and server variables generically, then expose a validated base URL/provider setting where appropriate.
+Environment fallback names and proxy/TLS/timeouts are configurable; unknown configuration during planning must not trigger API calls.
+Secrets are never embedded in generated fixtures, ownership metadata, diagnostics, or release workflows.
+
+OAuth refresh/client credentials and custom signing use pluggable transports with explicit capabilities rather than inferred login flows.
+Missing security metadata must not imply a guessed public operation.
 
 ## 9. Framework and project structure
 
@@ -248,8 +290,17 @@ New Terraform-local modules: `plan.rs`, `extensions.rs`, `inference.rs`, `bindin
 
 ## 14. Optional neighboring consumer: Postman
 
-A Postman exporter should be a separate plugin consuming neutral operations/security/server metadata and bounded request examples. It should emit collections/environments with secret placeholders, deterministic request naming, response examples, and explicit authentication alternatives. It should not consume Terraform entity lifecycle plans by default or infer destructive collection execution. There is no existing Postman crate in this repository. Shared improvements are source metadata, request bindings/codecs, examples, and authentication representation; Postman-specific output and Terraform-specific state remain independent contracts. A separate detailed Postman plan can define format/version and tests.
+A Postman exporter should be a separate plugin consuming neutral operations/security/server metadata and bounded request examples.
+It should emit collections/environments with secret placeholders, deterministic request naming, response examples, and explicit authentication alternatives.
+It should not consume Terraform entity lifecycle plans by default or infer destructive collection execution.
+
+There is no existing Postman crate in this repository.
+Shared improvements are source metadata, request bindings/codecs, examples, and authentication representation; Postman-specific output and Terraform-specific state remain independent contracts.
+A separate detailed Postman plan can define format/version and tests.
 
 ## 15. Decisions to settle before implementation
 
 Approve the automatic-emission gate; absence-of-update replacement policy; supported schemas and media types; import codec; state migration compatibility promise; write-only change-trigger syntax; extension compatibility policy; framework/Terraform version matrix; and custom plugin ABI. The recommended first release handles a narrow, correct conventional CRUD subset and explains exclusions. Advanced capabilities enter only with explicit typed semantics and executable state/lifecycle coverage.
+
+
+</details>

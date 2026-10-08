@@ -8,7 +8,7 @@ JavaScript implementation of OpenAPI generation and not a virtual module.
 Install the generator, the integration package, and `unplugin` in the project:
 
 ```sh
-npm install --save-dev @relevate/kaji @relevate/unplugin-kaji unplugin
+npm install --save-dev kajicli @relevate/unplugin-kaji unplugin
 ```
 
 For Vite:
@@ -71,10 +71,10 @@ kaji({
 ```
 
 Set `watch: false` to skip follow-up regeneration while retaining the initial
-build-step generation. `command` overrides the resolved `@relevate/kaji`
+build-step generation. `command` overrides the resolved `kajicli`
 launcher with a Kaji executable for source builds or unusual deployments.
 
-This package is released separately from `@relevate/kaji`; it has optional peer
+This package is released separately from `kajicli`; it has optional peer
 dependencies on `unplugin` for bundler adapters and `@nuxt/kit` for the Nuxt
 module. Astro uses the `unplugin` Vite adapter and needs no Astro runtime
 dependency from this package.

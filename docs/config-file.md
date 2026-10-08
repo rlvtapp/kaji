@@ -1,5 +1,7 @@
 # `kaji.json` reference
 
+[Recipe introduction](cli/config.md) · [Copyable recipes](cli/recipes.md) · [CLI reference](cli.md)
+
 > New to configuration? Start with the shorter [`kaji.json` recipe guide](cli/config.md)
 > and [copyable CLI recipes](cli/recipes.md). This page is the complete field
 > reference.
@@ -21,8 +23,8 @@ For an existing file, add this as the first property:
 }
 ```
 
-Run `npx @relevate/kaji init` to create a safe starter file, then run `npx @relevate/kaji generate`. Kaji
-never overwrites an existing config file. Use `npx @relevate/kaji generate --config path.json`
+Run `npx kajicli init` to create a safe starter file, then run `npx kajicli generate`. Kaji
+never overwrites an existing config file. Use `npx kajicli generate --config path.json`
 when the recipe is not named `kaji.json` or is not in the current directory.
 
 ## Config mode versus direct mode
@@ -31,10 +33,10 @@ Kaji has two intentionally separate ways to generate:
 
 | Mode | Command | Use it when |
 | --- | --- | --- |
-| Config-first | `npx @relevate/kaji generate` or `npx @relevate/kaji generate --config kaji.json` | The project has multiple packages, helper artifacts, a mock server, or a generation recipe worth reviewing and committing. |
-| Direct | `npx @relevate/kaji generate openapi.yaml --output generated --language go` | You need one quick package, an experiment, or a compact CI command. |
+| Config-first | `npx kajicli generate` or `npx kajicli generate --config kaji.json` | The project has multiple packages, helper artifacts, a mock server, or a generation recipe worth reviewing and committing. |
+| Direct | `npx kajicli generate openapi.yaml --output generated --language go` | You need one quick package, an experiment, or a compact CI command. |
 
-They cannot be combined. For example, `npx @relevate/kaji generate --config kaji.json
+They cannot be combined. For example, `npx kajicli generate --config kaji.json
 --language go` fails rather than silently overriding part of the recipe. This
 keeps generated releases deterministic and easy to review.
 
@@ -44,6 +46,9 @@ TypeScript packages as needed, each with its own output path, package name, and
 SDK transport.
 
 ## Complete example
+
+<details>
+<summary>Expand a full multi-package recipe</summary>
 
 ```json
 {
@@ -109,6 +114,9 @@ SDK transport.
 All paths in the config are resolved from the directory containing the config
 file. `input` and `artifacts` may be absolute paths, but package paths and
 artifact `output` paths must remain safe relative output paths.
+
+
+</details>
 
 ## Top-level fields
 
@@ -224,11 +232,16 @@ removes the mapping. Set `KAJI_CONFIG_HOME` to relocate this local profile
 store, for example in a sandboxed agent workspace.
 
 Use `headers` for API-key schemes or nonstandard authentication, for example
-`"X-API-Key": { "env": "PARTNER_OPENAPI_KEY" }`. Header names and values are
-validated by the HTTP client. Kaji applies custom headers first, then Basic or
+`"X-API-Key": { "env": "PARTNER_OPENAPI_KEY" }`.
+Header names and values are
+validated by the HTTP client.
+Kaji applies custom headers first, then Basic or
 Bearer auth, so the `auth` object deliberately wins if both try to set
-`Authorization`. Remote downloads follow normal HTTPS redirects, time out after
-120 seconds, and reject documents larger than 128 MiB. The download is stored
+`Authorization`.
+
+Remote downloads follow normal HTTPS redirects, time out after
+120 seconds, and reject documents larger than 128 MiB.
+The download is stored
 only in the temporary compilation workspace.
 
 ## Packages and plugins
@@ -261,12 +274,18 @@ default `kaji/<api>-sdk`.
 ### TypeScript
 
 TypeScript supports the convenient `sdk` plugin or independent `models`,
-`transport`, `operations`, and `client` providers. Give instances unique `id`
+`transport`, `operations`, and `client` providers.
+Give instances unique `id`
 values and select dependencies through `uses.models`, `uses.transport`, or
-`uses.operations`. An unbound role requires exactly one compatible provider.
+`uses.operations`.
+An unbound role requires exactly one compatible provider.
 Providers use `output` for a module or directory; helper consumers use it for
-a directory. Complete `sdk` and explicit providers cannot be mixed. Native
-providers support customized imports without `clients_import`. See the
+a directory.
+
+Complete `sdk` and explicit providers cannot be mixed.
+Native
+providers support customized imports without `clients_import`.
+See the
 [TypeScript plugin reference](../crates/plugins/typescript/README.md).
 
 When present, `sdk` appears exactly once and accepts:
@@ -316,18 +335,28 @@ using it for integration tests.
 ## Package source customizations
 
 SDK packages can also declare `middleware` entries with `source`, `path`, and
-`symbol`; Python async output additionally needs `async_symbol`. Kaji copies each
+`symbol`; Python async output additionally needs `async_symbol`.
+Kaji copies each
 native source module and enables it in the generated HTTP runtime by default.
-SDK customers need no registration. Supported source layouts and factory ABIs
-are listed in [SDK customization](sdk-customization.md). Unsupported targets or
-transport ABIs fail explicitly. See the [complete runnable example](../examples/bundled-middleware/README.md)
+SDK customers need no registration.
+Supported source layouts and factory ABIs
+are listed in [SDK customization](sdk-customization.md).
+
+Unsupported targets or
+transport ABIs fail explicitly.
+See the [complete runnable example](../examples/bundled-middleware/README.md)
 for generation, an executable policy test, and release metadata.
 
-Every package accepts a `customizations` array. Each entry sets `mode` to `add`,
+Every package accepts a `customizations` array.
+Each entry sets `mode` to `add`,
 `replace`, or `patch`, a destination `path` relative to that package, and a
-UTF-8 `source` relative to the config file. A patch also sets `find`, which must
-match exactly once. These source overlays run after package finalization and
-remain subject to safe regeneration and drift checks. See [SDK customization](sdk-customization.md)
+UTF-8 `source` relative to the config file.
+A patch also sets `find`, which must
+match exactly once.
+
+These source overlays run after package finalization and
+remain subject to safe regeneration and drift checks.
+See [SDK customization](sdk-customization.md)
 for examples, ownership rules, and runtime middleware.
 
 ## Console output and automation
@@ -358,3 +387,30 @@ Python packages accept the optional `operation-tests` consumer. Terraform's
 `provider` plugin accepts `data_sources: true` to expose supported single-entity
 GET bindings as typed data sources. Both remain opt-in; consult the testing and
 Terraform guides for capability limits.
+
+### Shared source layout
+
+Set `defaults.layout` once to split every supporting plugin into focused files.
+A package's `layout` overrides this default; an individual plugin's `layout`
+overrides both. An explicit `single-file` opts that plugin out of splitting.
+Layout objects replace the inherited object in full.
+
+```json
+{
+  "defaults": { "layout": { "mode": "per-operation" } },
+  "packages": [{
+    "language": "typescript",
+    "path": "typescript",
+    "plugins": [
+      { "name": "sdk" },
+      { "name": "tanstack-react-query" },
+      { "name": "zod", "layout": { "mode": "single-file" } }
+    ]
+  }]
+}
+```
+
+This excerpt belongs inside a config with `openapi` and `output`. Configurable
+layouts in JSON are consumed by TypeScript query helpers, Zod, Faker,
+MSW and Cypress. Other generators retain their native automatic file splitting.
+A shared default does not imply that every generator supports every layout mode.

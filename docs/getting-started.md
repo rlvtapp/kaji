@@ -7,9 +7,17 @@
 For a command-line workflow without writing Rust configuration, use the
 [CLI guide](cli.md). This guide covers native package composition.
 
-Kaji has a bundled Go OpenAPI compiler and Rust SDK generators. Compile a local
-Swagger 2.0 or OpenAPI 3.0/3.1 JSON or YAML document once, then generate as many packages as
-needed from its artifacts.
+## Choose the input path
+
+| Source | Entry point | Current result |
+| --- | --- | --- |
+| OpenAPI / Swagger | Compile artifacts, then `generate_openapi` | Existing HTTP SDK packages. |
+| An in-memory `Api` | `generate` or `generate_with_security_catalog` | Existing HTTP SDK packages. |
+| Registered HTTP input | `generate_with_input` with an `AdaptedApi` capability | Existing HTTP SDK packages. |
+| GraphQL, events, workflows or RPC | `InputRegistry` and `InputProvider<C>` | Native contracts for inspection and custom output consumers. |
+
+Follow [input plugins](input-plugins.md) for native format support and the
+input-to-output hook. The steps below use the bundled Go OpenAPI compiler.
 
 ## Add dependencies
 
@@ -116,12 +124,14 @@ The API model uses typed `request_body`, `responses`, and schemas. For example,
 
 ## Regeneration
 
-Generated files are replaced. Explicit custom starter files, including
-TypeScript `custom/index.ts`, are created only if absent. Unrelated and obsolete
-files are not deleted. Use a new output directory when removing/renaming
-operations or changing output paths, then review the result before replacing a
-published package. The writer checks relative paths and refuses symlink escapes;
-a filesystem failure can still leave a partially written result.
+Call `tree.check(directory)` to review drift before writing. `write_to` updates
+unchanged owned files, removes unchanged obsolete owned files and rejects local
+edits to owned output. Unrelated files and create-once starters such as
+TypeScript `custom/index.ts` are preserved.
+
+The writer rejects unsafe paths and symlink escapes. Filesystem failures can
+still interrupt materialization. See [safe regeneration](safe-regeneration.md)
+for ownership, legacy adoption and conflict resolution.
 
 Next: [all configuration options](configuration.md),
 [raw versus full SDKs](generated-sdks.md), or

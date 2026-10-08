@@ -1,5 +1,7 @@
 # OpenAPI compiler
 
+[Input plugins](input-plugins.md) · [Architecture](architecture.md) · [OpenAPI 3.2](guides/openapi32.md)
+
 Kaji owns its OpenAPI compiler under `openapi/`. It is Go source checked into
 this repository, built with the Go toolchain, and does not call Relevate Docs,
 an external sidecar service, or Node.
@@ -40,11 +42,16 @@ OpenAPI complexity in one proven parser while every SDK generator remains pure
 Rust.
 
 The artifact directory is an internal, versioned-together compiler/generator
-boundary, not a stable interchange format. Regenerate it with this repository's
-compiler when updating Kaji. `schemas.json` and `security-schemes.json` are
-required even when their catalogs are empty. Operation `security_requirements` preserve the full
+boundary, not a stable interchange format.
+Regenerate it with this repository's
+compiler when updating Kaji.
+`schemas.json` and `security-schemes.json` are
+required even when their catalogs are empty.
+Operation `security_requirements` preserve the full
 declared alternatives; request bodies carry their representations under
-`media_types`, including media-specific schema and example data. Rust generators
+`media_types`, including media-specific schema and example data.
+
+Rust generators
 consume typed `request_body` and `responses`, rather than guessed type-name
 strings or a first-scheme authentication summary.
 
@@ -83,21 +90,34 @@ nodes for positional encodings and the official `deviceAuthorization` flow where
 version 0.38.7's high-level models omit or misname fields. Compiler and native runtime
 tests cover these paths rather than inferring support from a version number.
 
-Sequential JSON is buffered and decoded record by record. Multipart requests use
+Sequential JSON is buffered and decoded record by record.
+Multipart requests use
 native or explicit ordered builders; custom media formats and multipart response
-interpretation still require a native codec or application decoding. Preserving an
-XML Schema annotation does not install an XML codec. Kaji is not a complete JSON
-Schema validator. Future OpenAPI minor versions and malformed conflicting encodings
-fail before artifacts are modified. See the
+interpretation still require a native codec or application decoding.
+Preserving an
+XML Schema annotation does not install an XML codec.
+Kaji is not a complete JSON
+Schema validator.
+
+Future OpenAPI minor versions and malformed conflicting encodings
+fail before artifacts are modified.
+See the
 [OpenAPI 3.2 specification](https://spec.openapis.org/oas/v3.2.1.html).
 
 Local referenced files contribute to the compiler cache digest and `source.json`
-manifest, so editing a child document invalidates the cache. Generation provenance
-records this closure digest. Remote `$ref` documents are supported over public HTTPS, including relative remote
-references. All fetched bytes contribute to the closure digest. Fetching forwards
+manifest, so editing a child document invalidates the cache.
+Generation provenance
+records this closure digest.
+Remote `$ref` documents are supported over public HTTPS, including relative remote
+references.
+All fetched bytes contribute to the closure digest.
+
+Fetching forwards
 no credentials, uses no proxy, follows no redirects, and pins validated public DNS
-addresses before dialing. Requests have a 30-second timeout; each document is
-limited to 16 MiB and the closure to 256 MiB / 16,384 documents. Private-network,
+addresses before dialing.
+Requests have a 30-second timeout; each document is
+limited to 16 MiB and the closure to 256 MiB / 16,384 documents.
+Private-network,
 HTTP and authenticated reference servers require explicit local bundling.
 
 For a root document downloaded by the CLI, `--source-url` communicates its original

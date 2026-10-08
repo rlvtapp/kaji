@@ -21,10 +21,14 @@
         },
         {
           "name": "tanstack-react-query",
-          "output": "react-query",
-          "max_operations_per_file": 50
+          "output": "react-query"
         }
       ]
     }
-  ]
+  ],
+  "defaults": {
+    "layout": {
+      "mode": "per-operation"
+    }
+  }
 }

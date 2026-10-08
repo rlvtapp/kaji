@@ -1,5 +1,7 @@
 # MCP server
 
+[Artifact recipes](guides/artifacts.md) · [CLI commands](cli/commands.md)
+
 `kaji mcp` turns an OpenAPI document into a stdio [Model Context Protocol](https://modelcontextprotocol.io/) server. It exposes each operation as a tool and sends calls to the API origin you choose.
 
 ```sh
@@ -49,3 +51,20 @@ output, just like running `kaji generate` directly.
 The [agentic generation example](../examples/agentic-generation/README.md)
 includes a copyable MCP command fragment, a minimal contract, representative
 tool input, and the recommended workspace boundary.
+
+## Author workflow and supported subset
+
+Keep the API-calling server and generator-control server as separate MCP entries.
+Use a small local contract/mock origin first: list tools, invoke a read operation,
+then invoke a reviewed mutation and inspect the local request log. For an API
+whose authentication needs signing or refresh, use an author-controlled proxy;
+the MCP server does not execute SDK middleware or OAuth acquisition code.
+
+The API-calling protocol is newline-delimited JSON-RPC over stdio. It is not an
+HTTP/SSE MCP deployment or a hosted credential manager. Request media and ordinary
+parameter support are described above; do not assume generated SDK runtime hooks,
+retry settings, pagination iterators, streaming response handling or language
+customizations apply to these tool calls. Verify the specific operation/media
+combination against a local server before giving an agent a mutating production
+tool. Generator-control writes require an explicitly trusted workspace and keep
+normal generation diagnostics/ownership checks.
