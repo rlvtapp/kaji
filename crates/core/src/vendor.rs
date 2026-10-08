@@ -93,26 +93,26 @@ fn normalize_operation(
     if let Some(group) = group {
         annotations.insert("tags".into(), json!([group]));
     }
-    if !annotations.contains_key("x-kaji-pagination") {
+    if !annotations.contains_key("x-poolster-pagination") {
         if let Some(value) = annotations.get("x-speakeasy-pagination").cloned() {
             // Validation remains owned by the portable pagination contract.
-            annotations.insert("x-kaji-pagination".into(), value);
+            annotations.insert("x-poolster-pagination".into(), value);
             report
                 .converted
                 .push(format!("{original}: Speakeasy pagination"));
         } else if let Some(value) = annotations.get("x-fern-pagination") {
             if let Some(rule) = fern_pagination(value) {
-                annotations.insert("x-kaji-pagination".into(), rule);
+                annotations.insert("x-poolster-pagination".into(), rule);
                 report
                     .converted
                     .push(format!("{original}: Fern cursor pagination"));
             } else {
-                report.manual.push(format!("{original}: pagination requires explicit x-kaji-pagination (unsupported Fern binding)"));
+                report.manual.push(format!("{original}: pagination requires explicit x-poolster-pagination (unsupported Fern binding)"));
             }
         }
     }
     if annotations.get("x-fern-idempotent") == Some(&Value::Bool(true))
-        && !annotations.contains_key("x-kaji-idempotency")
+        && !annotations.contains_key("x-poolster-idempotency")
     {
         let headers = root
             .get("x-fern-idempotency-headers")
@@ -123,7 +123,7 @@ fn normalize_operation(
             .and_then(Value::as_str)
         {
             annotations.insert(
-                "x-kaji-idempotency".into(),
+                "x-poolster-idempotency".into(),
                 json!({"header":header,"auto_generate":false}),
             );
             report
@@ -337,11 +337,11 @@ mod tests {
     }
     #[test]
     fn explicit_native_rule_wins_and_unknown_behavior_is_reported() {
-        let mut doc = json!({"paths":{"/a":{"get":{"x-stainless-method":"accounts.list","x-kaji-pagination":{"type":"page"},"x-speakeasy-pagination":{"type":"cursor"},"x-speakeasy-retries":{"secret":"never print me"}}}}});
+        let mut doc = json!({"paths":{"/a":{"get":{"x-stainless-method":"accounts.list","x-poolster-pagination":{"type":"page"},"x-speakeasy-pagination":{"type":"cursor"},"x-speakeasy-retries":{"secret":"never print me"}}}}});
         let report = normalize_openapi(&mut doc);
         assert_eq!(doc["paths"]["/a"]["get"]["operationId"], "accounts_list");
         assert_eq!(
-            doc["paths"]["/a"]["get"]["x-kaji-pagination"]["type"],
+            doc["paths"]["/a"]["get"]["x-poolster-pagination"]["type"],
             "page"
         );
         assert!(
@@ -356,11 +356,11 @@ mod tests {
         let mut doc = json!({"x-fern-idempotency-headers":[{"header":"Request-Key"}],"paths":{"/a":{"post":{"x-fern-idempotent":true,"x-fern-pagination":{"cursor":"$request.cursor","next_cursor":"$response.next","results":"$response.data"}}}}});
         assert!(normalize_openapi(&mut doc).manual.is_empty());
         assert_eq!(
-            doc["paths"]["/a"]["post"]["x-kaji-idempotency"]["header"],
+            doc["paths"]["/a"]["post"]["x-poolster-idempotency"]["header"],
             "Request-Key"
         );
         assert_eq!(
-            doc["paths"]["/a"]["post"]["x-kaji-pagination"]["outputs"]["results"],
+            doc["paths"]["/a"]["post"]["x-poolster-pagination"]["outputs"]["results"],
             "$.data"
         );
     }

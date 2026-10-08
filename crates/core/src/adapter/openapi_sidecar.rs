@@ -233,7 +233,6 @@ pub fn load_operations(output_dir: &Path, name: String, version: String) -> Resu
             .with_context(|| format!("sidecar operation index is missing {key:?}"))?;
         let document: SidecarOperation = read_json(&output_dir.join("operations").join(file))?;
         let mut annotations = document.extensions;
-        alias_poolster_extensions(&mut annotations);
         if !document.kind.is_empty() {
             annotations.insert(
                 "poolster.openapi.operation_kind".into(),
@@ -711,33 +710,7 @@ pub(crate) fn convert_value(schema: &Value) -> SchemaValue {
             value.constraints.insert(key.clone(), raw.clone());
         }
     }
-    alias_poolster_extensions(&mut value.extensions);
     value
-}
-
-/// Keep existing OpenAPI extension names readable while Poolster names become
-/// the preferred spelling. A canonical value wins if both names are supplied.
-fn alias_poolster_extensions(extensions: &mut BTreeMap<String, Value>) {
-    let aliases: Vec<_> = extensions
-        .iter()
-        .filter_map(|(name, value)| {
-            name.strip_prefix("x-poolster-")
-                .map(|suffix| (format!("x-kaji-{suffix}"), value.clone()))
-        })
-        .collect();
-    for (name, value) in aliases {
-        extensions.insert(name, value);
-    }
-    let aliases: Vec<_> = extensions
-        .iter()
-        .filter_map(|(name, value)| {
-            name.strip_prefix("x-kaji-")
-                .map(|suffix| (format!("x-poolster-{suffix}"), value.clone()))
-        })
-        .collect();
-    for (name, value) in aliases {
-        extensions.entry(name).or_insert(value);
-    }
 }
 
 fn convert_kind(schema: &Map<String, Value>) -> SchemaKind {
@@ -1283,7 +1256,7 @@ mod tests {
             r##"{
               "path":"/widgets", "method":"GET", "operation_id":"listWidgets",
               "extensions": {
-                "x-kaji-mock": {
+                "x-poolster-mock": {
                   "scenarios": [{
                     "name":"rate-limited",
                     "when":{"headers":{"x-test-scenario":"rate-limited"}},
@@ -1297,7 +1270,11 @@ mod tests {
         .unwrap();
 
         let api = load_operations(temp.path(), "Widgets".into(), "1.0.0".into()).unwrap();
-        assert!(api.operations[0].annotations.contains_key("x-kaji-mock"));
+        assert!(
+            api.operations[0]
+                .annotations
+                .contains_key("x-poolster-mock")
+        );
         let scenarios = crate::extract_mock_scenarios(&api).unwrap();
         assert_eq!(scenarios.len(), 1);
         assert_eq!(scenarios[0].name, "rate-limited");

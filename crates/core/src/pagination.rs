@@ -13,7 +13,7 @@ pub enum PaginationKind {
     Url,
 }
 
-/// Same portable shape as x-kaji-pagination. An explicit rule overrides extensions.
+/// Same portable shape as x-poolster-pagination. An explicit rule overrides extensions.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PaginationRule {
@@ -175,7 +175,6 @@ pub fn normalize_pagination(
         let Some(extension) = operation
             .annotations
             .get("x-poolster-pagination")
-            .or_else(|| operation.annotations.get("x-kaji-pagination"))
             .or_else(|| operation.annotations.get("x-speakeasy-pagination"))
         else {
             return Ok(None);
@@ -483,7 +482,7 @@ mod tests {
         );
         let mut operation = operation();
         operation.annotations.insert(
-            "x-kaji-pagination".into(),
+            "x-poolster-pagination".into(),
             json!({"type":"cursor", "inputs":[], "outputs":{"nextCursor":"$.next"}}),
         );
         assert!(normalize_pagination(&Api::default(), &operation, None).is_err());

@@ -262,7 +262,7 @@ fn request_body_kind(media: &OperationMediaType) -> RequestBodyKind {
 }
 
 fn pagination_hint(operation: &Operation) -> Option<PaginationHint> {
-    if operation.annotations.contains_key("x-kaji-pagination") {
+    if operation.annotations.contains_key("x-poolster-pagination") {
         Some(PaginationHint {
             source: PaginationSource::Poolster,
         })
@@ -316,7 +316,7 @@ mod tests {
         assert_eq!(retry_class(&operation), RetryClass::Unsafe);
         let mut api = Api::default();
         operation.annotations.insert(
-            "x-kaji-idempotency".into(),
+            "x-poolster-idempotency".into(),
             serde_json::json!({"header":"X-Request-Key"}),
         );
         api.operations.push(operation);
@@ -374,7 +374,7 @@ mod tests {
             security: vec![SecurityRequirement {
                 schemes: BTreeMap::from([("apiKey".into(), vec![])]),
             }],
-            annotations: BTreeMap::from([("x-kaji-pagination".into(), json!({}))]),
+            annotations: BTreeMap::from([("x-poolster-pagination".into(), json!({}))]),
         };
         let catalog = SecuritySchemeCatalog {
             schemes: vec![SecurityScheme {
