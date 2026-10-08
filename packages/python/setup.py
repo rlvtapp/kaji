@@ -1,4 +1,4 @@
-"""Build configuration for Kaji's platform-native Python wheels."""
+"""Build configuration for Poolster's platform-native Python wheels."""
 
 import os
 from pathlib import Path
@@ -24,11 +24,11 @@ class bdist_wheel(_bdist_wheel):
         self.root_is_pure = False
 
     def get_tag(self):
-        platform = os.environ.get("KAJI_PYTHON_PLATFORM")
+        platform = os.environ.get("POOLSTER_PYTHON_PLATFORM")
         if platform not in PLATFORM_TAGS:
             choices = ", ".join(PLATFORM_TAGS)
             raise RuntimeError(
-                "KAJI_PYTHON_PLATFORM must identify the packaged native binaries "
+                "POOLSTER_PYTHON_PLATFORM must identify the packaged native binaries "
                 f"({choices}); got {platform!r}"
             )
         return PLATFORM_TAGS[platform]
@@ -37,9 +37,9 @@ class bdist_wheel(_bdist_wheel):
 root = Path(__file__).parent
 
 setup(
-    name="kaji-cli",
+    name="poolster",
     version="0.5.0",  # x-release-please-version
-    description="Native Kaji OpenAPI SDK generator for Python environments",
+    description="Native Poolster OpenAPI SDK generator for Python environments",
     long_description=(root / "README.md").read_text(encoding="utf-8"),
     long_description_content_type="text/markdown",
     python_requires=">=3.9",
@@ -65,8 +65,8 @@ setup(
     ],
     package_dir={"": "src"},
     packages=find_packages("src"),
-    package_data={"kaji_cli": ["bin/*"]},
+    package_data={"poolster": ["bin/*"]},
     include_package_data=True,
-    entry_points={"console_scripts": ["kaji=kaji_cli:main"]},
+    entry_points={"console_scripts": ["poolster=poolster:main"]},
     cmdclass={"bdist_wheel": bdist_wheel},
 )

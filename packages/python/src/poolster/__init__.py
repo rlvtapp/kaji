@@ -1,4 +1,4 @@
-"""Console launcher for Kaji's packaged native generator."""
+"""Console launcher for Poolster's packaged native generator."""
 
 from __future__ import annotations
 
@@ -13,21 +13,21 @@ from typing import Sequence
 def executable_path() -> Path:
     """Return the packaged generator executable for this installation."""
 
-    override = os.environ.get("KAJI_BINARY")
+    override = os.environ.get("POOLSTER_BINARY")
     if override:
         return Path(override).expanduser().resolve()
-    name = "kaji.exe" if os.name == "nt" else "kaji"
-    executable = Path(str(files("kaji_cli").joinpath("bin", name)))
+    name = "poolster.exe" if os.name == "nt" else "poolster"
+    executable = Path(str(files("poolster").joinpath("bin", name)))
     if not executable.is_file():
         raise RuntimeError(
-            f"the bundled Kaji executable is missing: {executable}. "
-            "Reinstall kaji-cli."
+            f"the bundled Poolster executable is missing: {executable}. "
+            "Reinstall poolster."
         )
     return executable
 
 
 def run(arguments: Sequence[str]) -> int:
-    """Launch Kaji, preserving signals and exit status on every platform."""
+    """Launch Poolster, preserving signals and exit status on every platform."""
 
     executable = executable_path()
     command = [str(executable), *arguments]
@@ -41,6 +41,6 @@ def main() -> None:
     try:
         code = run(sys.argv[1:])
     except (OSError, RuntimeError) as error:
-        print(f"kaji: {error}", file=sys.stderr)
+        print(f"poolster: {error}", file=sys.stderr)
         code = 1
     raise SystemExit(code)

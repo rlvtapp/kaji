@@ -13,11 +13,11 @@ if (!platforms.has(key)) throw new Error(`Unsupported platform ${key}. Choose ${
 
 const suffix = key.startsWith('win32') ? '.exe' : '';
 const source = path.join(root, 'packages', 'cli', 'npm', key);
-const destination = path.join(packageRoot, 'src', 'kaji_cli', 'bin');
+const destination = path.join(packageRoot, 'src', 'poolster', 'bin');
 const dist = path.join(packageRoot, 'dist');
 fs.rmSync(dist, { recursive: true, force: true });
 fs.mkdirSync(dist, { recursive: true });
-for (const binary of [`kaji${suffix}`, `kaji-openapi${suffix}`]) {
+for (const binary of [`poolster${suffix}`, `poolster-openapi${suffix}`]) {
   const input = path.join(source, binary);
   if (!fs.existsSync(input)) throw new Error(`Missing ${input}. Build the native package first.`);
   fs.copyFileSync(input, path.join(destination, binary));
@@ -28,7 +28,7 @@ const python = process.env.PYTHON ?? (process.platform === 'win32' ? 'python' : 
 const result = spawnSync(
   python,
   ['-m', 'pip', 'wheel', '--no-deps', '--wheel-dir', 'dist', '.'],
-  { cwd: packageRoot, stdio: 'inherit', env: { ...process.env, KAJI_PYTHON_PLATFORM: key } },
+  { cwd: packageRoot, stdio: 'inherit', env: { ...process.env, POOLSTER_PYTHON_PLATFORM: key } },
 );
 if (result.error) throw result.error;
 if (result.status !== 0) throw new Error(`${python} -m pip wheel failed (${result.status ?? result.signal})`);

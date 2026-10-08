@@ -3,20 +3,20 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import kaji_cli
+import poolster
 
 
 class LauncherTests(unittest.TestCase):
     def test_development_override_is_resolved(self):
-        with mock.patch.dict(os.environ, {"KAJI_BINARY": "./test-kaji"}, clear=False):
-            self.assertEqual(kaji_cli.executable_path(), Path("./test-kaji").resolve())
+        with mock.patch.dict(os.environ, {"POOLSTER_BINARY": "./test-poolster"}, clear=False):
+            self.assertEqual(poolster.executable_path(), Path("./test-poolster").resolve())
 
     @unittest.skipIf(os.name == "nt", "Unix uses execv; Windows uses subprocess")
-    def test_unix_replaces_the_python_process_with_kaji(self):
-        executable = Path("/tmp/kaji")
-        with mock.patch("kaji_cli.executable_path", return_value=executable), mock.patch(
-            "kaji_cli.os.execv", side_effect=OSError("test error")
+    def test_unix_replaces_the_python_process_with_poolster(self):
+        executable = Path("/tmp/poolster")
+        with mock.patch("poolster.executable_path", return_value=executable), mock.patch(
+            "poolster.os.execv", side_effect=OSError("test error")
         ) as execute:
             with self.assertRaises(OSError):
-                kaji_cli.run(["languages"])
-        execute.assert_called_once_with("/tmp/kaji", ["/tmp/kaji", "languages"])
+                poolster.run(["languages"])
+        execute.assert_called_once_with("/tmp/poolster", ["/tmp/poolster", "languages"])
