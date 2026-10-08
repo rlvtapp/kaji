@@ -68,7 +68,7 @@ fn render_sdk(
     if api.operations.iter().any(has_multipart) {
         tree.insert(GeneratedFile::new(
             output_path(&output_dir, "MULTIPART.md"),
-            include_str!("go_multipart_readme.md"),
+            include_str!("../templates/multipart.md.tmpl"),
         )?)?;
     }
     if client_style == SdkClientStyle::Namespaced {
@@ -185,7 +185,7 @@ fn render_schema(output: &mut String, schema: &Schema) {
                 );
             }
             if !nullable.is_empty() {
-                output.push_str("\tkajiNullFields map[string]bool\n");
+                output.push_str("\tpoolsterNullFields map[string]bool\n");
             }
             output.push_str("}\n");
             if extra_type.is_some() || !nullable.is_empty() || !custom_fields.is_empty() {
@@ -335,15 +335,15 @@ fn render_runtime(api: &Api, package: &str, client_style: SdkClientStyle) -> Str
         String::new()
     };
     let mut output = format!(
-        "{NOTICE}\npackage {package}\n\nimport (\n\t\"bytes\"\n\t\"context\"\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"io\"\n\t\"net/http\"\n\t\"net/url\"\n\t\"reflect\"\n\t\"strings\"\n)\n\n// ClientConfig configures a generated API client.\ntype ClientConfig struct {{\n\tBaseURL      string\n\tAPIKey       string\n\tAPIKeyHeader string\n\tAPIKeyPrefix string\n\tHTTPClient   *http.Client\n}}\n\n// Client is safe for concurrent use after construction.\ntype Client struct {{\n\tbaseURL      string\n\tapiKey       string\n\tapiKeyHeader string\n\tapiKeyPrefix string\n\thttpClient   *http.Client\n{facade_fields}}}\n\n// NewClient builds a client from explicit configuration. BaseURL is required.\nfunc NewClient(config ClientConfig) (*Client, error) {{\n\tbaseURL := strings.TrimRight(config.BaseURL, \"/\")\n\tif baseURL == \"\" {{\n\t\treturn nil, fmt.Errorf(\"kaji: BaseURL is required\")\n\t}}\n\theader := config.APIKeyHeader\n\tif header == \"\" {{\n\t\theader = \"Authorization\"\n\t}}\n\thttpClient := config.HTTPClient\n\tif httpClient == nil {{\n\t\thttpClient = http.DefaultClient\n\t}}\n\tclient := &Client{{baseURL: baseURL, apiKey: config.APIKey, apiKeyHeader: header, apiKeyPrefix: config.APIKeyPrefix, httpClient: httpClient}}\n{facade_setup}\treturn client, nil\n}}\n\n// APIError describes a non-success HTTP response.\ntype APIError struct {{\n\tStatusCode int\n\tBody       string\n}}\n\nfunc (errorResponse *APIError) Error() string {{\n\treturn fmt.Sprintf(\"kaji: API request failed with status %d: %s\", errorResponse.StatusCode, errorResponse.Body)\n}}\n\nfunc (client *Client) newRequest(ctx context.Context, method, path string, query url.Values, headers http.Header, body any) (*http.Request, error) {{\n\tendpoint := client.baseURL + path\n\tif len(query) > 0 {{\n\t\tendpoint += \"?\" + query.Encode()\n\t}}\n\tvar reader io.Reader\n\tif body != nil {{\n\t\tencoded, err := json.Marshal(body)\n\t\tif err != nil {{\n\t\t\treturn nil, fmt.Errorf(\"kaji: encode request body: %w\", err)\n\t\t}}\n\t\treader = bytes.NewReader(encoded)\n\t}}\n\trequest, err := http.NewRequestWithContext(ctx, method, endpoint, reader)\n\tif err != nil {{\n\t\treturn nil, fmt.Errorf(\"kaji: build request: %w\", err)\n\t}}\n\trequest.Header.Set(\"Accept\", \"application/json\")\n\tif body != nil {{\n\t\trequest.Header.Set(\"Content-Type\", \"application/json\")\n\t}}\n\tfor name, values := range headers {{\n\t\tfor _, value := range values {{\n\t\t\trequest.Header.Add(name, value)\n\t\t}}\n\t}}\n\tif client.apiKey != \"\" {{\n\t\tcredential := client.apiKey\n\t\tif client.apiKeyPrefix != \"\" {{\n\t\t\tcredential = client.apiKeyPrefix + \" \" + credential\n\t\t}}\n\t\trequest.Header.Set(client.apiKeyHeader, credential)\n\t}}\n\treturn request, nil\n}}\n\nfunc (client *Client) do(request *http.Request, destination any) error {{\n\tresponse, err := client.httpClient.Do(request)\n\tif err != nil {{\n\t\treturn fmt.Errorf(\"kaji: execute request: %w\", err)\n\t}}\n\tdefer response.Body.Close()\n\tif response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {{\n\t\tbody, _ := io.ReadAll(io.LimitReader(response.Body, 1<<20))\n\t\treturn &APIError{{StatusCode: response.StatusCode, Body: string(body)}}\n\t}}\n\tif destination == nil || response.StatusCode == http.StatusNoContent {{\n\t\treturn nil\n\t}}\n\tif err := json.NewDecoder(response.Body).Decode(destination); err != nil && err != io.EOF {{\n\t\treturn fmt.Errorf(\"kaji: decode response: %w\", err)\n\t}}\n\treturn nil\n}}\n\nfunc addQuery(query url.Values, name string, value any) error {{\n\tif value == nil {{\n\t\treturn nil\n\t}}\n\treflected := reflect.ValueOf(value)\n\tif reflected.Kind() == reflect.Pointer {{\n\t\tif reflected.IsNil() {{\n\t\t\treturn nil\n\t\t}}\n\t\treturn addQuery(query, name, reflected.Elem().Interface())\n\t}}\n\tif reflected.Kind() == reflect.Slice || reflected.Kind() == reflect.Array {{\n\t\tfor index := 0; index < reflected.Len(); index++ {{\n\t\t\tif err := addQuery(query, name, reflected.Index(index).Interface()); err != nil {{\n\t\t\t\treturn err\n\t\t\t}}\n\t\t}}\n\t\treturn nil\n\t}}\n\tswitch value.(type) {{\n\tcase string, bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:\n\t\tquery.Add(name, fmt.Sprint(value))\n\t\treturn nil\n\tdefault:\n\t\tencoded, err := json.Marshal(value)\n\t\tif err != nil {{\n\t\t\treturn fmt.Errorf(\"kaji: encode query %s: %w\", name, err)\n\t\t}}\n\t\tquery.Add(name, string(encoded))\n\t\treturn nil\n\t}}\n\n"
+        "{NOTICE}\npackage {package}\n\nimport (\n\t\"bytes\"\n\t\"context\"\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"io\"\n\t\"net/http\"\n\t\"net/url\"\n\t\"reflect\"\n\t\"strings\"\n)\n\n// ClientConfig configures a generated API client.\ntype ClientConfig struct {{\n\tBaseURL      string\n\tAPIKey       string\n\tAPIKeyHeader string\n\tAPIKeyPrefix string\n\tHTTPClient   *http.Client\n}}\n\n// Client is safe for concurrent use after construction.\ntype Client struct {{\n\tbaseURL      string\n\tapiKey       string\n\tapiKeyHeader string\n\tapiKeyPrefix string\n\thttpClient   *http.Client\n{facade_fields}}}\n\n// NewClient builds a client from explicit configuration. BaseURL is required.\nfunc NewClient(config ClientConfig) (*Client, error) {{\n\tbaseURL := strings.TrimRight(config.BaseURL, \"/\")\n\tif baseURL == \"\" {{\n\t\treturn nil, fmt.Errorf(\"poolster: BaseURL is required\")\n\t}}\n\theader := config.APIKeyHeader\n\tif header == \"\" {{\n\t\theader = \"Authorization\"\n\t}}\n\thttpClient := config.HTTPClient\n\tif httpClient == nil {{\n\t\thttpClient = http.DefaultClient\n\t}}\n\tclient := &Client{{baseURL: baseURL, apiKey: config.APIKey, apiKeyHeader: header, apiKeyPrefix: config.APIKeyPrefix, httpClient: httpClient}}\n{facade_setup}\treturn client, nil\n}}\n\n// APIError describes a non-success HTTP response.\ntype APIError struct {{\n\tStatusCode int\n\tBody       string\n}}\n\nfunc (errorResponse *APIError) Error() string {{\n\treturn fmt.Sprintf(\"poolster: API request failed with status %d: %s\", errorResponse.StatusCode, errorResponse.Body)\n}}\n\nfunc (client *Client) newRequest(ctx context.Context, method, path string, query url.Values, headers http.Header, body any) (*http.Request, error) {{\n\tendpoint := client.baseURL + path\n\tif len(query) > 0 {{\n\t\tendpoint += \"?\" + query.Encode()\n\t}}\n\tvar reader io.Reader\n\tif body != nil {{\n\t\tencoded, err := json.Marshal(body)\n\t\tif err != nil {{\n\t\t\treturn nil, fmt.Errorf(\"poolster: encode request body: %w\", err)\n\t\t}}\n\t\treader = bytes.NewReader(encoded)\n\t}}\n\trequest, err := http.NewRequestWithContext(ctx, method, endpoint, reader)\n\tif err != nil {{\n\t\treturn nil, fmt.Errorf(\"poolster: build request: %w\", err)\n\t}}\n\trequest.Header.Set(\"Accept\", \"application/json\")\n\tif body != nil {{\n\t\trequest.Header.Set(\"Content-Type\", \"application/json\")\n\t}}\n\tfor name, values := range headers {{\n\t\tfor _, value := range values {{\n\t\t\trequest.Header.Add(name, value)\n\t\t}}\n\t}}\n\tif client.apiKey != \"\" {{\n\t\tcredential := client.apiKey\n\t\tif client.apiKeyPrefix != \"\" {{\n\t\t\tcredential = client.apiKeyPrefix + \" \" + credential\n\t\t}}\n\t\trequest.Header.Set(client.apiKeyHeader, credential)\n\t}}\n\treturn request, nil\n}}\n\nfunc (client *Client) do(request *http.Request, destination any) error {{\n\tresponse, err := client.httpClient.Do(request)\n\tif err != nil {{\n\t\treturn fmt.Errorf(\"poolster: execute request: %w\", err)\n\t}}\n\tdefer response.Body.Close()\n\tif response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {{\n\t\tbody, _ := io.ReadAll(io.LimitReader(response.Body, 1<<20))\n\t\treturn &APIError{{StatusCode: response.StatusCode, Body: string(body)}}\n\t}}\n\tif destination == nil || response.StatusCode == http.StatusNoContent {{\n\t\treturn nil\n\t}}\n\tif err := json.NewDecoder(response.Body).Decode(destination); err != nil && err != io.EOF {{\n\t\treturn fmt.Errorf(\"poolster: decode response: %w\", err)\n\t}}\n\treturn nil\n}}\n\nfunc addQuery(query url.Values, name string, value any) error {{\n\tif value == nil {{\n\t\treturn nil\n\t}}\n\treflected := reflect.ValueOf(value)\n\tif reflected.Kind() == reflect.Pointer {{\n\t\tif reflected.IsNil() {{\n\t\t\treturn nil\n\t\t}}\n\t\treturn addQuery(query, name, reflected.Elem().Interface())\n\t}}\n\tif reflected.Kind() == reflect.Slice || reflected.Kind() == reflect.Array {{\n\t\tfor index := 0; index < reflected.Len(); index++ {{\n\t\t\tif err := addQuery(query, name, reflected.Index(index).Interface()); err != nil {{\n\t\t\t\treturn err\n\t\t\t}}\n\t\t}}\n\t\treturn nil\n\t}}\n\tswitch value.(type) {{\n\tcase string, bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:\n\t\tquery.Add(name, fmt.Sprint(value))\n\t\treturn nil\n\tdefault:\n\t\tencoded, err := json.Marshal(value)\n\t\tif err != nil {{\n\t\t\treturn fmt.Errorf(\"poolster: encode query %s: %w\", name, err)\n\t\t}}\n\t\tquery.Add(name, string(encoded))\n\t\treturn nil\n\t}}\n\n"
     );
     output = output.replace(
         "func (client *Client) newRequest(ctx context.Context, method, path string, query url.Values, headers http.Header, body any) (*http.Request, error) {\n\tendpoint := client.baseURL + path\n\tif len(query) > 0 {\n\t\tendpoint += \"?\" + query.Encode()\n\t}\n\tvar reader io.Reader",
-        "func (client *Client) newRequest(ctx context.Context, method, path string, query url.Values, headers http.Header, body any) (*http.Request, error) {\n\tendpoint := client.baseURL + path\n\tif len(query) > 0 { endpoint += \"?\" + query.Encode() }\n\treturn client.newRequestURL(ctx, method, endpoint, headers, body)\n}\n\n// newPaginationRequest is private on purpose: a generated pager may follow\n// only a same-origin URL supplied by its declared response contract. It still\n// uses the normal request builder, so auth, caller headers, and body encoding\n// cannot be bypassed by a continuation link.\nfunc (client *Client) newPaginationRequest(ctx context.Context, method, continuation string, headers http.Header, body any) (*http.Request, error) {\n\tbase, err := url.Parse(client.baseURL)\n\tif err != nil { return nil, fmt.Errorf(\"kaji: parse BaseURL: %w\", err) }\n\tnext, err := url.Parse(continuation)\n\tif err != nil { return nil, fmt.Errorf(\"kaji: parse pagination URL: %w\", err) }\n\tendpoint := base.ResolveReference(next)\n\tif endpoint.Scheme != base.Scheme || endpoint.Host != base.Host {\n\t\treturn nil, fmt.Errorf(\"kaji: pagination URL must remain on the configured API origin\")\n\t}\n\treturn client.newRequestURL(ctx, method, endpoint.String(), headers, body)\n}\n\nfunc (client *Client) newRequestURL(ctx context.Context, method, endpoint string, headers http.Header, body any) (*http.Request, error) {\n\tvar reader io.Reader",
+        "func (client *Client) newRequest(ctx context.Context, method, path string, query url.Values, headers http.Header, body any) (*http.Request, error) {\n\tendpoint := client.baseURL + path\n\tif len(query) > 0 { endpoint += \"?\" + query.Encode() }\n\treturn client.newRequestURL(ctx, method, endpoint, headers, body)\n}\n\n// newPaginationRequest is private on purpose: a generated pager may follow\n// only a same-origin URL supplied by its declared response contract. It still\n// uses the normal request builder, so auth, caller headers, and body encoding\n// cannot be bypassed by a continuation link.\nfunc (client *Client) newPaginationRequest(ctx context.Context, method, continuation string, headers http.Header, body any) (*http.Request, error) {\n\tbase, err := url.Parse(client.baseURL)\n\tif err != nil { return nil, fmt.Errorf(\"poolster: parse BaseURL: %w\", err) }\n\tnext, err := url.Parse(continuation)\n\tif err != nil { return nil, fmt.Errorf(\"poolster: parse pagination URL: %w\", err) }\n\tendpoint := base.ResolveReference(next)\n\tif endpoint.Scheme != base.Scheme || endpoint.Host != base.Host {\n\t\treturn nil, fmt.Errorf(\"poolster: pagination URL must remain on the configured API origin\")\n\t}\n\treturn client.newRequestURL(ctx, method, endpoint.String(), headers, body)\n}\n\nfunc (client *Client) newRequestURL(ctx context.Context, method, endpoint string, headers http.Header, body any) (*http.Request, error) {\n\tvar reader io.Reader",
     );
     // A spec can legitimately define a model called APIError. Keep the
     // transport error private so it can never collide with exported models.
-    output = output.replace("APIError", "kajiAPIError");
+    output = output.replace("APIError", "poolsterAPIError");
     // The format literal closes `addQuery`'s switch; this closes the helper.
     output.push_str("}\n\n");
 
@@ -357,7 +357,7 @@ fn render_runtime(api: &Api, package: &str, client_style: SdkClientStyle) -> Str
     }
     let mut output = add_retry_runtime(output);
     output = output.replace("\t\"reflect\"\n", "\t\"reflect\"\n\t\"sort\"\n");
-    output.push_str(include_str!("openapi32_runtime.txt"));
+    output.push_str(include_str!("../templates/openapi32.go.tmpl"));
     output = output
         .replace(
             "HTTPClient   *http.Client",
@@ -368,7 +368,7 @@ fn render_runtime(api: &Api, package: &str, client_style: SdkClientStyle) -> Str
             "httpClient   PoolsterHTTPClient",
         );
     output = output.replace("HTTPClient   PoolsterHTTPClient\n", "HTTPClient   PoolsterHTTPClient\n\t// Middleware wraps each transport attempt; first configured is outermost.\n\tMiddleware []PoolsterMiddleware\n");
-    output = output.replace("client := &Client{baseURL:", "for index := len(config.Middleware) - 1; index >= 0; index-- {\n\t\tif config.Middleware[index] == nil { return nil, fmt.Errorf(\"kaji: nil middleware\") }\n\t\thttpClient = config.Middleware[index](httpClient)\n\t\tif httpClient == nil { return nil, fmt.Errorf(\"kaji: middleware returned nil transport\") }\n\t}\n\tclient := &Client{baseURL:");
+    output = output.replace("client := &Client{baseURL:", "for index := len(config.Middleware) - 1; index >= 0; index-- {\n\t\tif config.Middleware[index] == nil { return nil, fmt.Errorf(\"poolster: nil middleware\") }\n\t\thttpClient = config.Middleware[index](httpClient)\n\t\tif httpClient == nil { return nil, fmt.Errorf(\"poolster: middleware returned nil transport\") }\n\t}\n\tclient := &Client{baseURL:");
     output = output.replace("Middleware []PoolsterMiddleware\n", "Middleware []PoolsterMiddleware\n\t// ValidateResponses checks named model shapes in buffered JSON responses.\n\tValidateResponses bool\n");
     output = output.replace(
         "hooks        PoolsterClientHooks\n",
@@ -381,19 +381,22 @@ fn render_runtime(api: &Api, package: &str, client_style: SdkClientStyle) -> Str
     if api.operations.iter().any(|operation| {
         operation
             .annotations
-            .contains_key("x-kaji-idempotency-resolved")
+            .contains_key("x-poolster-idempotency-resolved")
+            || operation
+                .annotations
+                .contains_key("x-kaji-idempotency-resolved")
     }) {
         output = output.replace("\t\"context\"\n", "\t\"context\"\n\t\"crypto/rand\"\n");
-        output = output.replace("return strings.TrimSpace(request.Header.Get(\"Idempotency-Key\")) != \"\"", "header, _ := request.Context().Value(kajiIdempotencyContextKey{}).(string)\n\t\treturn strings.TrimSpace(request.Header.Get(\"Idempotency-Key\")) != \"\" || (header != \"\" && strings.TrimSpace(request.Header.Get(header)) != \"\")");
-        output.push_str(include_str!("go_idempotency_runtime.txt"));
+        output = output.replace("return strings.TrimSpace(request.Header.Get(\"Idempotency-Key\")) != \"\"", "header, _ := request.Context().Value(poolsterIdempotencyContextKey{}).(string)\n\t\treturn strings.TrimSpace(request.Header.Get(\"Idempotency-Key\")) != \"\" || (header != \"\" && strings.TrimSpace(request.Header.Get(header)) != \"\")");
+        output.push_str(include_str!("../templates/idempotency.go.tmpl"));
     }
     output.push_str(&response_validation::render(api));
-    output.push_str(include_str!("go_middleware_runtime.txt"));
+    output.push_str(include_str!("../templates/middleware.go.tmpl"));
     output = output.replace(
         "\treturn request, nil\n}",
         "\tapplyCallHeaders(request)\n\treturn request, nil\n}",
     );
-    output.push_str(include_str!("go_call_options.txt"));
+    output.push_str(include_str!("../templates/call_options.go.tmpl"));
     output = output.replace(
         "\tvar reader io.Reader\n",
         "\tvar reader io.Reader\n\tcontentType := \"application/json\"\n",
@@ -411,9 +414,9 @@ fn render_runtime(api: &Api, package: &str, client_style: SdkClientStyle) -> Str
         "request.Header.Set(\"Content-Type\", contentType)",
     );
     if api.operations.iter().any(has_multipart) {
-        output.push_str(include_str!("go_multipart_runtime.txt"));
+        output.push_str(include_str!("../templates/multipart.go.tmpl"));
     }
-    output.push_str("\nfunc encodePoolsterWireBody(body any) ([]byte,string,error) { if sequential,ok:=body.(kajiSequentialBody);ok {return encodePoolsterSequential(sequential)}\n");
+    output.push_str("\nfunc encodePoolsterWireBody(body any) ([]byte,string,error) { if sequential,ok:=body.(poolsterSequentialBody);ok {return encodePoolsterSequential(sequential)}\n");
     if api.operations.iter().any(has_multipart) {
         output.push_str("return encodePoolsterBody(body)\n}\n");
     } else {
@@ -437,7 +440,7 @@ fn render_runtime(api: &Api, package: &str, client_style: SdkClientStyle) -> Str
 
 fn add_retry_runtime(mut output: String) -> String {
     let needs_errors = output.contains("errors.As(")
-        || include_str!("go_response_validation.txt").contains("errors.Is(");
+        || include_str!("../templates/response_validation.go.tmpl").contains("errors.Is(");
     output = output.replace(
         "\t\"strings\"\n)",
         if needs_errors {
@@ -471,7 +474,7 @@ fn add_retry_runtime(mut output: String) -> String {
         "client := &Client{baseURL: baseURL, apiKey: config.APIKey, apiKeyHeader: header, apiKeyPrefix: config.APIKeyPrefix, httpClient: httpClient, retry: normalizeRetry(config.Retry), hooks: config.Hooks}",
     );
     output = output.replace("client.do(request,", "client.doWithRetry(request,");
-    output.push_str(include_str!("go_retry_runtime.txt"));
+    output.push_str(include_str!("../templates/retry.go.tmpl"));
     output
 }
 
@@ -484,7 +487,7 @@ enum GoResponseKind {
     EventStream,
 }
 
-const PAGINATION_RUNTIME: &str = include_str!("go_pagination_runtime.txt");
+const PAGINATION_RUNTIME: &str = include_str!("../templates/pagination.go.tmpl");
 
 #[derive(Clone, Debug)]
 enum GoCursorLocation {
@@ -761,7 +764,7 @@ fn render_declared_errors(output: &mut String, operation: &Operation) {
         let _ = writeln!(output, "func (errorResponse *{name}) Error() string {{");
         let _ = writeln!(
             output,
-            "\treturn fmt.Sprintf(\"kaji: {} failed with status %d\", errorResponse.StatusCode)",
+            "\treturn fmt.Sprintf(\"poolster: {} failed with status %d\", errorResponse.StatusCode)",
             go_type_name(&operation.id)
         );
         output.push_str("}\n\n");
@@ -771,7 +774,7 @@ fn render_declared_errors(output: &mut String, operation: &Operation) {
     }
     let decoder = format!("decode{}Error", go_type_name(&operation.id));
     let _ = writeln!(output, "func {decoder}(requestError error) error {{");
-    output.push_str("\tvar transportError *kajiAPIError\n\tif !errors.As(requestError, &transportError) { return requestError }\n\tswitch transportError.StatusCode {\n");
+    output.push_str("\tvar transportError *poolsterAPIError\n\tif !errors.As(requestError, &transportError) { return requestError }\n\tswitch transportError.StatusCode {\n");
     for response in error_responses(operation) {
         if response.status == "default" {
             continue;
@@ -976,7 +979,10 @@ fn render_operation(output: &mut String, api: &Api, operation: &Operation) {
             &response_kind,
         );
     }
-    let idempotency = operation.annotations.get("x-kaji-idempotency-resolved");
+    let idempotency = operation
+        .annotations
+        .get("x-poolster-idempotency-resolved")
+        .or_else(|| operation.annotations.get("x-kaji-idempotency-resolved"));
     if let Some(rule) = idempotency {
         if rule
             .get("auto_generate")
@@ -989,7 +995,7 @@ fn render_operation(output: &mut String, api: &Api, operation: &Operation) {
                 .unwrap();
             let _ = writeln!(
                 output,
-                "\tif len(headers.Values({header:?})) == 0 {{\n\t\tkey, err := kajiNewIdempotencyKey()\n\t\tif err != nil {{"
+                "\tif len(headers.Values({header:?})) == 0 {{\n\t\tkey, err := poolsterNewIdempotencyKey()\n\t\tif err != nil {{"
             );
             render_error_return(
                 output,
@@ -1040,7 +1046,7 @@ fn render_operation(output: &mut String, api: &Api, operation: &Operation) {
         let encoded = serde_json::to_string(&metadata).expect("typed multipart metadata");
         let _ = writeln!(
             output,
-            "\tif multipartBody, ok := any(body).(*PoolsterMultipartBody); ok && multipartBody != nil {{\n\t\tpreparedMultipart, preparationError := kajiDeclaredMultipart(multipartBody, {:?})\n\t\tif preparationError != nil {{",
+            "\tif multipartBody, ok := any(body).(*PoolsterMultipartBody); ok && multipartBody != nil {{\n\t\tpreparedMultipart, preparationError := poolsterDeclaredMultipart(multipartBody, {:?})\n\t\tif preparationError != nil {{",
             encoded
         );
         render_error_return(output, &response_kind, "preparationError");
@@ -1054,7 +1060,7 @@ fn render_operation(output: &mut String, api: &Api, operation: &Operation) {
         if sequential_media(&media.content_type) {
             let _ = writeln!(
                 output,
-                "\tif body != nil {{ body = kajiSequentialBody{{ContentType:{:?},Value:body}} }}",
+                "\tif body != nil {{ body = poolsterSequentialBody{{ContentType:{:?},Value:body}} }}",
                 media.content_type
             );
         }
@@ -1084,7 +1090,7 @@ fn render_operation(output: &mut String, api: &Api, operation: &Operation) {
     {
         let _ = writeln!(
             output,
-            "\trequest = request.WithContext(context.WithValue(request.Context(), kajiIdempotencyContextKey{{}}, {header:?}))"
+            "\trequest = request.WithContext(context.WithValue(request.Context(), poolsterIdempotencyContextKey{{}}, {header:?}))"
         );
     }
     match response_kind {
@@ -1171,7 +1177,7 @@ fn render_cursor_pager(output: &mut String, api: &Api, operation: &Operation) {
                 )
             } else {
                 format!(
-                    "\tif pager.started {{\n\t\tif pager.input.Body == nil {{ return nil, fmt.Errorf(\"kaji: cursor pagination requires a {body_type} body\") }}\n\t\tbodyCopy := *pager.input.Body\n\t\tbodyCopy.{field_name} = &pager.cursor\n\t\tpager.input.Body = &bodyCopy\n\t}}\n"
+                    "\tif pager.started {{\n\t\tif pager.input.Body == nil {{ return nil, fmt.Errorf(\"poolster: cursor pagination requires a {body_type} body\") }}\n\t\tbodyCopy := *pager.input.Body\n\t\tbodyCopy.{field_name} = &pager.cursor\n\t\tpager.input.Body = &bodyCopy\n\t}}\n"
                 )
             }
         }
@@ -1182,7 +1188,7 @@ fn render_cursor_pager(output: &mut String, api: &Api, operation: &Operation) {
             body_required: false,
             ..
         } => format!(
-            "\tif pager.input.Body == nil {{ return nil, fmt.Errorf(\"kaji: cursor pagination requires a {body_type} body\") }}\n"
+            "\tif pager.input.Body == nil {{ return nil, fmt.Errorf(\"poolster: cursor pagination requires a {body_type} body\") }}\n"
         ),
         _ => String::new(),
     };
@@ -1227,7 +1233,7 @@ fn render_cursor_pager(output: &mut String, api: &Api, operation: &Operation) {
     output.push_str("\tif err != nil { return nil, err }\n");
     let _ = writeln!(
         output,
-        "\tcursor, ok := kajiPaginationString(response, {:?})",
+        "\tcursor, ok := poolsterPaginationString(response, {:?})",
         pagination.next_cursor_path
     );
     output.push_str("\tif !ok { pager.done = true; return response, nil }\n\tpager.cursor = cursor\n\tpager.started = true\n\treturn response, nil\n}\n\n");
@@ -1290,7 +1296,7 @@ fn render_offset_pager(output: &mut String, api: &Api, operation: &Operation) {
     output.push_str("\tif err != nil { return nil, err }\n");
     let _ = writeln!(
         output,
-        "\tcount, ok := kajiPaginationArrayLen(response, {:?})",
+        "\tcount, ok := poolsterPaginationArrayLen(response, {:?})",
         pagination.results_path
     );
     output.push_str("\tif !ok || count == 0 { pager.done = true; return response, nil }\n");
@@ -1368,7 +1374,7 @@ fn render_url_pager(output: &mut String, api: &Api, operation: &Operation) {
     output.push_str("\t\tif err != nil { return nil, err }\n");
     let _ = writeln!(
         output,
-        "\t\tnextURL, ok := kajiPaginationString(response, {:?})",
+        "\t\tnextURL, ok := poolsterPaginationString(response, {:?})",
         pagination.next_url_path
     );
     output.push_str("\t\tpager.started = true\n\t\tif !ok { pager.done = true; return response, nil }\n\t\tpager.nextURL = nextURL\n\t\treturn response, nil\n\t}\n");
@@ -1389,7 +1395,7 @@ fn render_url_pager(output: &mut String, api: &Api, operation: &Operation) {
     );
     let _ = writeln!(
         output,
-        "\tnextURL, ok := kajiPaginationString(&response, {:?})",
+        "\tnextURL, ok := poolsterPaginationString(&response, {:?})",
         pagination.next_url_path
     );
     output.push_str("\tif !ok { pager.done = true } else { pager.nextURL = nextURL }\n\treturn &response, nil\n}\n\n");
@@ -1480,12 +1486,12 @@ fn render_parameter_use(
             .expect("validated parameter content")
             .first()
         {
-            let value = format!("kajiContent{name}");
-            let present = format!("kajiPresent{name}");
-            let error = format!("kajiError{name}");
+            let value = format!("poolsterContent{name}");
+            let present = format!("poolsterPresent{name}");
+            let error = format!("poolsterError{name}");
             let _ = writeln!(
                 output,
-                "\t{value}, {present}, {error} := kajiParameterContent({field}, {:?})\n\tif {error} != nil {{",
+                "\t{value}, {present}, {error} := poolsterParameterContent({field}, {:?})\n\tif {error} != nil {{",
                 content.content_type
             );
             render_error_return(output, response_kind, &error);
@@ -1539,7 +1545,7 @@ fn render_parameter_use(
             let metadata = serde_json::to_string(&content).expect("typed content metadata");
             let _ = writeln!(
                 output,
-                "\tencodedQuery, queryError := kajiWholeQuery({field}, {content_type:?}, {metadata:?})\n\tif queryError != nil {{"
+                "\tencodedQuery, queryError := poolsterWholeQuery({field}, {content_type:?}, {metadata:?})\n\tif queryError != nil {{"
             );
             render_error_return(output, response_kind, "queryError");
             output.push_str("\t}\n\twholeQuery = encodedQuery\n");
@@ -1757,7 +1763,7 @@ fn render_readme(api: &Api, style: SdkClientStyle) -> String {
     format!(
         "# {} Go SDK\n\nGenerated by Poolster. This package exposes the `{}` client style. Direct operations remain available in either mode. Generate with `SdkClientStyle::Flat` for `client.GetContact(...)`, or `SdkClientStyle::Namespaced` for resource-first calls such as `client.Contacts.Get(...)`.\n\n```go\nclient, err := NewClient(ClientConfig{{BaseURL: \"https://api.example.com\"}})\nif err != nil {{ panic(err) }}\n_ = {}\n```\n",
         api.name, usage, usage
-    ) + include_str!("middleware_readme.md")
+    ) + include_str!("../templates/middleware.md.tmpl")
         + &page_pagination::documentation(api)
 }
 
@@ -1793,7 +1799,7 @@ fn go_module_name(value: &str) -> String {
         .collect::<Vec<_>>()
         .join("-");
     if slug.is_empty() {
-        "kaji/sdk".into()
+        "poolster/sdk".into()
     } else {
         slug
     }
@@ -2030,13 +2036,13 @@ mod tests {
             .unwrap();
         fs::write(
             root.path().join("sdk/multipart_test.go"),
-            include_str!("go_multipart_probe.txt"),
+            include_str!("../tests/fixtures/multipart_test.go"),
         )
         .unwrap();
         let output = Command::new("go")
             .args(["test", "-race", "./..."])
             .current_dir(root.path().join("sdk"))
-            .env("GOCACHE", std::env::temp_dir().join("kaji-go-cache"))
+            .env("GOCACHE", std::env::temp_dir().join("poolster-go-cache"))
             .output()
             .unwrap();
         assert!(
@@ -2066,13 +2072,13 @@ mod tests {
             .unwrap();
         fs::write(
             root.path().join("sdk/call_options_test.go"),
-            include_str!("go_call_options_probe.txt"),
+            include_str!("../tests/fixtures/call_options_test.go"),
         )
         .unwrap();
         let output = Command::new("go")
             .args(["test", "-race", "./..."])
             .current_dir(root.path().join("sdk"))
-            .env("GOCACHE", std::env::temp_dir().join("kaji-go-cache"))
+            .env("GOCACHE", std::env::temp_dir().join("poolster-go-cache"))
             .output()
             .unwrap();
         assert!(
@@ -2121,7 +2127,7 @@ func TestCustomMethod(t *testing.T){
         let output = Command::new("go")
             .args(["test", "-race", "./..."])
             .current_dir(root.path().join("sdk"))
-            .env("GOCACHE", std::env::temp_dir().join("kaji-go-cache"))
+            .env("GOCACHE", std::env::temp_dir().join("poolster-go-cache"))
             .output()
             .unwrap();
         assert!(
@@ -2214,7 +2220,7 @@ func TestDistinctInputAndModelTypes(t *testing.T){
         let result = Command::new("go")
             .args(["test", "./..."])
             .current_dir(root.path().join("sdk"))
-            .env("GOCACHE", std::env::temp_dir().join("kaji-go-cache"))
+            .env("GOCACHE", std::env::temp_dir().join("poolster-go-cache"))
             .output()
             .unwrap();
         assert!(
@@ -2818,7 +2824,7 @@ func TestPoolsterURLPagerRejectsCrossOriginContinuation(t *testing.T) {
         assert!(client.contains(
             "func (client *Client) ListContactsPages(input *ListContactsRequest) *ListContactsPager"
         ));
-        assert!(client.contains("kajiPaginationArrayLen(response, \"$.items\")"));
+        assert!(client.contains("poolsterPaginationArrayLen(response, \"$.items\")"));
         tree.write_to(root.path()).unwrap();
         let status = Command::new("go")
             .args(["test", "./..."])
@@ -2846,7 +2852,7 @@ func TestPoolsterURLPagerRejectsCrossOriginContinuation(t *testing.T) {
         assert!(render_test_sdk(&contact_api(), "../escape", None).is_err());
         assert_eq!(go_package_name("Go API 2"), "goapi2");
         assert_eq!(go_type_name("x-request_id"), "XRequestID");
-        assert_eq!(go_module_name("Poolster Email API"), "kaji-email-api");
+        assert_eq!(go_module_name("Poolster Email API"), "poolster-email-api");
     }
 
     #[test]
@@ -2879,7 +2885,7 @@ func TestPoolsterURLPagerRejectsCrossOriginContinuation(t *testing.T) {
         let models = all_source(&tree);
         let client = all_source(&tree);
         assert!(models.contains("type APIError struct"));
-        assert!(client.contains("type kajiAPIError struct"));
+        assert!(client.contains("type poolsterAPIError struct"));
         assert!(
             client.contains(
                 "GetContact(ctx context.Context, input *GetContactRequest) (*any, error)"
@@ -3044,7 +3050,7 @@ func TestMiddleware(t *testing.T) {
             .unwrap();
         fs::write(
             root.path().join("sdk/page_test.go"),
-            include_str!("page_pagination_test.go.txt"),
+            include_str!("../tests/fixtures/pagination_test.go"),
         )
         .unwrap();
         assert!(
@@ -3227,7 +3233,7 @@ func TestFutureModels(t *testing.T) {
             .unwrap();
         fs::write(
             root.path().join("sdk/validation_test.go"),
-            include_str!("response_validation_test.go.txt"),
+            include_str!("../tests/fixtures/response_validation_test.go"),
         )
         .unwrap();
         assert!(
@@ -3309,7 +3315,7 @@ func TestDefaultMiddleware(t *testing.T) {
             ..Default::default()
         };
         write.annotations.insert(
-            "x-kaji-idempotency-resolved".into(),
+            "x-poolster-idempotency-resolved".into(),
             serde_json::json!({"header":"X-Key","parameter_name":"X-Key","auto_generate":true}),
         );
         let mut patch = write.clone();
@@ -3387,8 +3393,11 @@ func TestScopedKeys(t *testing.T) {
             .current_dir(root.path().join("sdk"))
             .env(
                 "GOCACHE",
-                std::env::var_os("GOCACHE")
-                    .unwrap_or_else(|| std::env::temp_dir().join("kaji-go-cache").into_os_string()),
+                std::env::var_os("GOCACHE").unwrap_or_else(|| {
+                    std::env::temp_dir()
+                        .join("poolster-go-cache")
+                        .into_os_string()
+                }),
             )
             .output()
             .unwrap();
@@ -3425,8 +3434,11 @@ func TestCancelBackoff(t *testing.T){
             .current_dir(root.path().join("sdk"))
             .env(
                 "GOCACHE",
-                std::env::var_os("GOCACHE")
-                    .unwrap_or_else(|| std::env::temp_dir().join("kaji-go-cache").into_os_string()),
+                std::env::var_os("GOCACHE").unwrap_or_else(|| {
+                    std::env::temp_dir()
+                        .join("poolster-go-cache")
+                        .into_os_string()
+                }),
             )
             .output()
             .unwrap();
@@ -3508,7 +3520,7 @@ func TestWholeQueryAndSequence(t *testing.T){
  client,err:=NewClient(ClientConfig{BaseURL:"https://example.test",HTTPClient:wireTransport{}});if err!=nil{t.Fatal(err)}
  values,err:=client.Events(context.Background(),&EventsRequest{Filter:map[string]any{"term":"space & plus+","zero":0,"flag":false}});if err!=nil||len(*values)!=3||(*values)[2]!=2{t.Fatal(values,err)}
  if err=client.SendEvents(context.Background(),&SendEventsRequest{Body:[]int64{0,2}});err!=nil{t.Fatal(err)}
- encoded,err:=kajiWholeQuery(map[string]any{"csv":[]int{1,2},"json":map[string]any{"flag":false}},"application/x-www-form-urlencoded",`{"encoding":{"csv":{"explode":false},"json":{"contentType":"application/json"}}}`);if err!=nil{t.Fatal(err)};parsed,_:=url.ParseQuery(encoded);if parsed.Get("csv")!="1,2"||parsed.Get("json")!=`{"flag":false}`{t.Fatal(encoded)}
+ encoded,err:=poolsterWholeQuery(map[string]any{"csv":[]int{1,2},"json":map[string]any{"flag":false}},"application/x-www-form-urlencoded",`{"encoding":{"csv":{"explode":false},"json":{"contentType":"application/json"}}}`);if err!=nil{t.Fatal(err)};parsed,_:=url.ParseQuery(encoded);if parsed.Get("csv")!="1,2"||parsed.Get("json")!=`{"flag":false}`{t.Fatal(encoded)}
  var sequence []int64;if err=client.decodeSequentialResponse(strings.NewReader("\x1e0\n\x1e2\n"),"application/json-seq",&sequence);err!=nil||len(sequence)!=2{t.Fatal(sequence,err)}
  for _,bad:=range []string{"1 2\n","{bad}\n"}{if err=client.decodeSequentialResponse(strings.NewReader(bad),"application/x-ndjson",&sequence);err==nil{t.Fatal("accepted malformed record")}}
  if err=client.decodeSequentialResponse(strings.NewReader("0\n"),"application/json-seq",&sequence);err==nil{t.Fatal("accepted missing separator")}

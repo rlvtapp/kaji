@@ -1,6 +1,6 @@
 
-// kajiPaginationValue traverses a validated core selector (JSON pointer or simple JSONPath).
-func kajiPaginationValue(value any,path string)(any,bool){
+// poolsterPaginationValue traverses a validated core selector (JSON pointer or simple JSONPath).
+func poolsterPaginationValue(value any,path string)(any,bool){
     encoded,err:=json.Marshal(value);if err!=nil{return nil,false}
     var current any;if err:=json.Unmarshal(encoded,&current);err!=nil{return nil,false}
     field:=func(name string)bool{
@@ -22,5 +22,5 @@ func kajiPaginationValue(value any,path string)(any,bool){
     }
     return current,true
 }
-func kajiPaginationString(value any,path string)(string,bool){current,ok:=kajiPaginationValue(value,path);if !ok{return "",false};text,ok:=current.(string);return text,ok&&text!=""}
-func kajiPaginationArrayLen(value any,path string)(int,bool){current,ok:=kajiPaginationValue(value,path);if !ok{return 0,false};array,ok:=current.([]any);return len(array),ok}
+func poolsterPaginationString(value any,path string)(string,bool){current,ok:=poolsterPaginationValue(value,path);if !ok{return "",false};text,ok:=current.(string);return text,ok&&text!=""}
+func poolsterPaginationArrayLen(value any,path string)(int,bool){current,ok:=poolsterPaginationValue(value,path);if !ok{return 0,false};array,ok:=current.([]any);return len(array),ok}

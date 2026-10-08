@@ -5,7 +5,7 @@ edition = "2024"
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "Native Go SDK generator for Kaji"
+description = "Native Go SDK generator for Poolster"
 publish = false
 
 [dependencies]

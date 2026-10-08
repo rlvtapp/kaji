@@ -17,7 +17,7 @@ impl Plugin<Go> for Webhooks {
         let package = go_package_name(cx.settings.package_name.as_deref().unwrap_or(&cx.api.name));
         cx.files.emit(GeneratedFile::new(
             "webhooks.go",
-            include_str!("webhooks.go.txt").replace("__PACKAGE__", &package),
+            include_str!("../templates/webhooks.go.tmpl").replace("__PACKAGE__", &package),
         )?)
     }
 }
@@ -45,7 +45,7 @@ mod tests {
         tree.write_to(dir.path()).unwrap();
         std::fs::write(
             dir.path().join("sdk/security_test.go"),
-            include_str!("security_test.go.txt")
+            include_str!("../tests/fixtures/security_test.go")
                 .replace("__PACKAGE__", &go_package_name("example.com/security")),
         )
         .unwrap();
@@ -58,8 +58,11 @@ mod tests {
             .args(["test", "-race", "./..."])
             .env(
                 "GOCACHE",
-                std::env::var_os("GOCACHE")
-                    .unwrap_or_else(|| std::env::temp_dir().join("kaji-go-cache").into_os_string()),
+                std::env::var_os("GOCACHE").unwrap_or_else(|| {
+                    std::env::temp_dir()
+                        .join("poolster-go-cache")
+                        .into_os_string()
+                }),
             )
             .current_dir(dir.path().join("sdk"))
             .output()

@@ -2,7 +2,7 @@ package email
 import("context";"errors";"fmt";"io";"net/http";"strings";"testing")
 func pageClient(t *testing.T,expectedLimit string,calls *[]string,reply func(string)string)*Client{
     t.Helper()
-    transport:=KajiHTTPClientFunc(func(request *http.Request)(*http.Response,error){
+    transport:=PoolsterHTTPClientFunc(func(request *http.Request)(*http.Response,error){
         page:=request.URL.Query().Get("page");*calls=append(*calls,page)
         if request.URL.Path!="/contacts"||request.Header.Get("Limit")!=expectedLimit{t.Fatalf("request encoding: %s %#v",request.URL,request.Header)}
         return &http.Response{StatusCode:200,Header:http.Header{},Body:io.NopCloser(strings.NewReader(reply(page)))},nil
@@ -44,7 +44,7 @@ func TestRequiredPageAndFailures(t *testing.T){
 }
 func TestPortableSelectorTraversal(t *testing.T){
     value:=map[string]any{"groups":[]any{map[string]any{"next":"first"},map[string]any{"next":"last"}},"a.b":map[string]any{"/key":[]any{1,2}}}
-    if text,ok:=kajiPaginationString(value,"$.groups[-1].next");!ok||text!="last"{t.Fatal(text,ok)}
-    if count,ok:=kajiPaginationArrayLen(value,"/a.b/~1key");!ok||count!=2{t.Fatal(count,ok)}
-    for _,selector:=range []string{"$.groups[20].next","$.groups[broken]","/a.b/missing","$.groups[-3]"}{if _,ok:=kajiPaginationValue(value,selector);ok{t.Fatal(fmt.Sprintf("invalid selector %s accepted",selector))}}
+    if text,ok:=poolsterPaginationString(value,"$.groups[-1].next");!ok||text!="last"{t.Fatal(text,ok)}
+    if count,ok:=poolsterPaginationArrayLen(value,"/a.b/~1key");!ok||count!=2{t.Fatal(count,ok)}
+    for _,selector:=range []string{"$.groups[20].next","$.groups[broken]","/a.b/missing","$.groups[-3]"}{if _,ok:=poolsterPaginationValue(value,selector);ok{t.Fatal(fmt.Sprintf("invalid selector %s accepted",selector))}}
 }

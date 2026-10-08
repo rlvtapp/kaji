@@ -279,16 +279,16 @@ mod tests {
         std::fs::write(root.path().join("sdk/registry_test.go"), r#"package probe
 import ("reflect"; "testing")
 func TestAllDescriptorChunks(t *testing.T) {
- if len(kajiResponseShapes) != 201 { t.Fatalf("missing descriptors: %d",len(kajiResponseShapes)) }
- for _, name := range []string{"Model0","Model100","Model200"} { if kajiResponseShapes[name].Kind != "string" { t.Fatalf("missing %s",name) } }
- if err := kajiValidateResponse("ok",reflect.TypeOf(Model200("")),"$",0); err != nil {t.Fatal(err)}
- if err := kajiValidateResponse(true,reflect.TypeOf(Model200("")),"$",0); err == nil {t.Fatal("validation lost across chunk boundary")}
+ if len(poolsterResponseShapes) != 201 { t.Fatalf("missing descriptors: %d",len(poolsterResponseShapes)) }
+ for _, name := range []string{"Model0","Model100","Model200"} { if poolsterResponseShapes[name].Kind != "string" { t.Fatalf("missing %s",name) } }
+ if err := poolsterValidateResponse("ok",reflect.TypeOf(Model200("")),"$",0); err != nil {t.Fatal(err)}
+ if err := poolsterValidateResponse(true,reflect.TypeOf(Model200("")),"$",0); err == nil {t.Fatal("validation lost across chunk boundary")}
 }
 "#).unwrap();
         assert!(
             Command::new("go")
                 .args(["test", "./..."])
-                .env("GOCACHE", "/private/tmp/kaji-go-cache")
+                .env("GOCACHE", "/private/tmp/poolster-go-cache")
                 .current_dir(root.path().join("sdk"))
                 .status()
                 .unwrap()

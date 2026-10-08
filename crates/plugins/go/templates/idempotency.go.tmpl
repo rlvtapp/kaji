@@ -1,9 +1,9 @@
 
 // Scoped retry permission is attached only by an opted-in generated operation.
-type kajiIdempotencyContextKey struct{}
-func kajiNewIdempotencyKey() (string, error) {
+type poolsterIdempotencyContextKey struct{}
+func poolsterNewIdempotencyKey() (string, error) {
     var bytes [16]byte
-    if _, err := rand.Read(bytes[:]); err != nil { return "", fmt.Errorf("kaji: generate idempotency key: %w", err) }
+    if _, err := rand.Read(bytes[:]); err != nil { return "", fmt.Errorf("poolster: generate idempotency key: %w", err) }
     bytes[6] = (bytes[6] & 0x0f) | 0x40
     bytes[8] = (bytes[8] & 0x3f) | 0x80
     return fmt.Sprintf("%x-%x-%x-%x-%x", bytes[:4], bytes[4:6], bytes[6:8], bytes[8:10], bytes[10:]), nil

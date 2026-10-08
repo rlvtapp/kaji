@@ -1,20 +1,20 @@
 
-// KajiCallOptions scopes headers and a logical-call deadline to a context.
+// PoolsterCallOptions scopes headers and a logical-call deadline to a context.
 // A zero Timeout keeps the caller's deadline. A positive timeout can shorten it.
 // Contexts reused for pagination share one deadline across all pages.
-type KajiCallOptions struct {
+type PoolsterCallOptions struct {
     Headers http.Header
     Timeout time.Duration
 }
-type kajiCallOptionsKey struct{}
+type poolsterCallOptionsKey struct{}
 
 // WithRequestOptions copies the headers; callers must defer the returned cancel.
 // Explicit scoped headers override generated headers and static credentials.
-func WithRequestOptions(ctx context.Context, options KajiCallOptions) (context.Context, context.CancelFunc, error) {
+func WithRequestOptions(ctx context.Context, options PoolsterCallOptions) (context.Context, context.CancelFunc, error) {
     if ctx == nil || options.Timeout < 0 {
-        return nil, nil, fmt.Errorf("kaji: invalid request context or timeout")
+        return nil, nil, fmt.Errorf("poolster: invalid request context or timeout")
     }
-    scoped := context.WithValue(ctx, kajiCallOptionsKey{}, options.Headers.Clone())
+    scoped := context.WithValue(ctx, poolsterCallOptionsKey{}, options.Headers.Clone())
     if options.Timeout > 0 {
         scoped, cancel := context.WithTimeout(scoped, options.Timeout)
         return scoped, cancel, nil
@@ -23,7 +23,7 @@ func WithRequestOptions(ctx context.Context, options KajiCallOptions) (context.C
     return scoped, cancel, nil
 }
 func applyCallHeaders(request *http.Request) {
-    headers, _ := request.Context().Value(kajiCallOptionsKey{}).(http.Header)
+    headers, _ := request.Context().Value(poolsterCallOptionsKey{}).(http.Header)
     for name, values := range headers {
         request.Header.Del(name)
         for _, value := range values { request.Header.Add(name, value) }

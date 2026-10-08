@@ -10,7 +10,7 @@ func TestScopedHeadersAndDeadline(t *testing.T) {
     client,err:=NewClient(ClientConfig{BaseURL:server.URL,APIKey:"default",HTTPClient:server.Client(),Retry:&RetryConfig{MaxAttempts:1}})
     if err!=nil {t.Fatal(err)}
     headers:=http.Header{"X-Call":[]string{"one"},"authorization":[]string{"Own token"}}
-    ctx,cancel,err:=WithRequestOptions(context.Background(),KajiCallOptions{Headers:headers,Timeout:time.Second})
+    ctx,cancel,err:=WithRequestOptions(context.Background(),PoolsterCallOptions{Headers:headers,Timeout:time.Second})
     if err!=nil {t.Fatal(err)};defer cancel()
     headers.Set("X-Call","mutated")
     if err:=client.GetThing(ctx);err!=nil{t.Fatal(err)}
@@ -19,13 +19,13 @@ func TestScopedHeadersAndDeadline(t *testing.T) {
     if err:=client.GetThing(context.Background());err!=nil{t.Fatal(err)}
     second:=<-seen
     if second.Get("X-Call")!=""||second.Get("Authorization")!="default"{t.Fatal(second)}
-    slow,stop,err:=WithRequestOptions(context.Background(),KajiCallOptions{Headers:http.Header{"X-Slow":[]string{"yes"}},Timeout:50*time.Millisecond})
+    slow,stop,err:=WithRequestOptions(context.Background(),PoolsterCallOptions{Headers:http.Header{"X-Slow":[]string{"yes"}},Timeout:50*time.Millisecond})
     if err!=nil{t.Fatal(err)};defer stop()
     start:=time.Now();err=client.GetThing(slow)
     if !errors.Is(err,context.DeadlineExceeded)||time.Since(start)>time.Second{t.Fatalf("deadline %v",err)}
     <-seen
     parent,done:=context.WithTimeout(context.Background(),20*time.Millisecond);defer done()
-    longer,end,err:=WithRequestOptions(parent,KajiCallOptions{Timeout:time.Hour});if err!=nil{t.Fatal(err)};defer end()
+    longer,end,err:=WithRequestOptions(parent,PoolsterCallOptions{Timeout:time.Hour});if err!=nil{t.Fatal(err)};defer end()
     a,_:=parent.Deadline();b,_:=longer.Deadline();if !a.Equal(b){t.Fatal("extended parent deadline")}
-    if _,_,err:=WithRequestOptions(context.Background(),KajiCallOptions{Timeout:-1});err==nil{t.Fatal("negative timeout accepted")}
+    if _,_,err:=WithRequestOptions(context.Background(),PoolsterCallOptions{Timeout:-1});err==nil{t.Fatal("negative timeout accepted")}
 }

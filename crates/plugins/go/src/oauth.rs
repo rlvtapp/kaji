@@ -36,7 +36,7 @@ impl Plugin<Go> for OAuth {
         let package = go_package_name(cx.settings.package_name.as_deref().unwrap_or(&cx.api.name));
         cx.files.emit(GeneratedFile::new(
             "oauth.go",
-            include_str!("oauth.go.txt").replace("__PACKAGE__", &package),
+            include_str!("../templates/oauth.go.tmpl").replace("__PACKAGE__", &package),
         )?)
     }
 }

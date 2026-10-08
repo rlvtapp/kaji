@@ -16,7 +16,7 @@ func TestMultipartUpload(t *testing.T) {
         if attempt==1{w.WriteHeader(503)}else{w.WriteHeader(204)}
     }));defer server.Close()
     client,err:=NewClient(ClientConfig{BaseURL:server.URL,HTTPClient:server.Client(),Retry:&RetryConfig{MaxAttempts:2,InitialDelay:time.Millisecond}});if err!=nil{t.Fatal(err)}
-    original:=[]byte{0,255,1};body:=&KajiMultipartBody{}
+    original:=[]byte{0,255,1};body:=&PoolsterMultipartBody{}
     body.AddFile("file","é.bin","application/octet-stream",original);original[0]=99
     body.AddText("name","é");body.AddText("items[]","0");if err:=body.AddJSON("flag",false);err!=nil{t.Fatal(err)};body.AddText("items[]","second")
     if err:=client.UploadFile(context.Background(),&UploadFileRequest{Body:body});err!=nil{t.Fatal(err)}
@@ -24,8 +24,8 @@ func TestMultipartUpload(t *testing.T) {
     mutex.Lock();a:=captures["/upload"];b:=captures["/create"];mutex.Unlock()
     if len(a)!=2||!bytes.Equal(a[0],a[1])||len(b)!=1{t.Fatal("retry bytes or safety")}
     if err:=client.UploadFile(context.Background(),&UploadFileRequest{Body:map[string]any{"value":false}});err!=nil{t.Fatal(err)}
-    invalid:=&KajiMultipartBody{Parts:[]KajiMultipartPart{{Name:"bad\r\ninjection",Data:[]byte("x")}}}
+    invalid:=&PoolsterMultipartBody{Parts:[]PoolsterMultipartPart{{Name:"bad\r\ninjection",Data:[]byte("x")}}}
     if _,_,err:=invalid.encode();err==nil{t.Fatal("header injection accepted")}
-    huge:=&KajiMultipartBody{Parts:[]KajiMultipartPart{{Name:"huge",Data:make([]byte,(64<<20)+1)}}}
+    huge:=&PoolsterMultipartBody{Parts:[]PoolsterMultipartPart{{Name:"huge",Data:make([]byte,(64<<20)+1)}}}
     if _,_,err:=huge.encode();err==nil{t.Fatal("body bound missing")}
 }

@@ -110,13 +110,13 @@ func (client *Client) {name}Pages(input *{request}) *{pager} {{
 func (pager *{pager}) Next(ctx context.Context) (*{response_type},error) {{
     if pager.nextError != nil {{ return nil,pager.nextError }}
     if pager.done {{ return nil,io.EOF }}
-    if pager.limit != nil && *pager.limit <= 0 {{ return nil,fmt.Errorf("kaji: page pagination limit must be positive") }}
+    if pager.limit != nil && *pager.limit <= 0 {{ return nil,fmt.Errorf("poolster: page pagination limit must be positive") }}
     {page_update}
     response,err := pager.client.{name}(ctx,pager.input); if err != nil {{ return nil,err }}
-    count,ok := kajiPaginationArrayLen(response,{selector:?})
-    if !ok {{ return nil,fmt.Errorf("kaji: page pagination results must be an array") }}
+    count,ok := poolsterPaginationArrayLen(response,{selector:?})
+    if !ok {{ return nil,fmt.Errorf("poolster: page pagination results must be an array") }}
     if count == 0 || (pager.limit != nil && int64(count) < *pager.limit) {{ pager.done = true; return response,nil }}
-    if pager.page == int64(^uint64(0)>>1) {{ pager.nextError = fmt.Errorf("kaji: page pagination number overflow"); return response,nil }}
+    if pager.page == int64(^uint64(0)>>1) {{ pager.nextError = fmt.Errorf("poolster: page pagination number overflow"); return response,nil }}
     pager.page++
     return response,nil
 }}

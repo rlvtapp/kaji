@@ -67,9 +67,9 @@ pub(super) fn render(api: &Api) -> String {
         .map(|schema| (go_type_name(&schema.name), shape(&schema.value, schemas)))
         .collect::<serde_json::Map<_, _>>();
     let literal = serde_json::to_string(&Value::Object(registry)).unwrap();
-    let mut output = include_str!("go_response_validation.txt").to_string();
+    let mut output = include_str!("../templates/response_validation.go.tmpl").to_string();
     output = output.replace(
-        "KAJI_SCHEMA_LITERAL",
+        "POOLSTER_SCHEMA_LITERAL",
         &serde_json::to_string(&literal).unwrap(),
     );
     output
@@ -97,22 +97,22 @@ pub(super) fn split_files(api: &Api) -> Vec<(String, String)> {
         chunks.push(current);
     }
     let mut registry = String::from(
-        "var kajiResponseShapes = func() map[string]kajiResponseShape {\nshapes := make(map[string]kajiResponseShape)\n",
+        "var poolsterResponseShapes = func() map[string]poolsterResponseShape {\nshapes := make(map[string]poolsterResponseShape)\n",
     );
     let mut files = Vec::new();
     for (index, chunk) in chunks.into_iter().enumerate() {
-        let name = format!("kajiResponseShapesChunk{index:04}");
+        let name = format!("poolsterResponseShapesChunk{index:04}");
         registry.push_str(&format!(
             "for name, shape := range {name}() {{ shapes[name] = shape }}\n"
         ));
         let literal = serde_json::to_string(&Value::Object(chunk)).unwrap();
         let escaped = serde_json::to_string(&literal).unwrap();
-        files.push((format!("response_shapes_{index:04}.go"), format!("func {name}() map[string]kajiResponseShape {{\nvar shapes map[string]kajiResponseShape\nif err := json.Unmarshal([]byte({escaped}), &shapes); err != nil {{ panic(\"kaji: invalid generated response descriptors\") }}\nreturn shapes\n}}\n")));
+        files.push((format!("response_shapes_{index:04}.go"), format!("func {name}() map[string]poolsterResponseShape {{\nvar shapes map[string]poolsterResponseShape\nif err := json.Unmarshal([]byte({escaped}), &shapes); err != nil {{ panic(\"poolster: invalid generated response descriptors\") }}\nreturn shapes\n}}\n")));
     }
     registry.push_str("return shapes\n}()\n");
-    let runtime = include_str!("go_response_validation.txt");
-    let start = runtime.find("var kajiResponseShapes =").unwrap();
-    let end = runtime.find("func kajiValidateResponse").unwrap();
+    let runtime = include_str!("../templates/response_validation.go.tmpl");
+    let start = runtime.find("var poolsterResponseShapes =").unwrap();
+    let end = runtime.find("func poolsterValidateResponse").unwrap();
     files.push((
         "response_validation.go".into(),
         format!("{}{}{}", &runtime[..start], registry, &runtime[end..]),

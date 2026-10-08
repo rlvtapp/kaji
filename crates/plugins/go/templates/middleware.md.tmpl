@@ -4,8 +4,8 @@
 The first configured wrapper is outermost. Import `net/http` for this example:
 
 ```go
-addHeader := func(next KajiHTTPClient) KajiHTTPClient {
-    return KajiHTTPClientFunc(func(request *http.Request) (*http.Response, error) {
+addHeader := func(next PoolsterHTTPClient) PoolsterHTTPClient {
+    return PoolsterHTTPClientFunc(func(request *http.Request) (*http.Response, error) {
         rewritten := request.Clone(request.Context())
         rewritten.Header.Set("X-Customer", "acme")
         return next.Do(rewritten)
@@ -13,7 +13,7 @@ addHeader := func(next KajiHTTPClient) KajiHTTPClient {
 }
 client, err := NewClient(ClientConfig{
     BaseURL: "https://api.example.com",
-    Middleware: []KajiMiddleware{addHeader},
+    Middleware: []PoolsterMiddleware{addHeader},
 })
 ```
 

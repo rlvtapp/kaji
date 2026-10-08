@@ -1,16 +1,17 @@
-# Kaji Go plugin
+# Poolster Go plugin
 
-`kaji-plugin-go` renders SDK packages from Kaji's neutral API model,
+`poolster-plugin-go` renders SDK packages from Poolster's neutral API model,
 using a standard-library HTTP client. All generation runs in Rust.
 
 ```rust
-use kaji::{go, prelude::*};
+use poolster::prelude::*;
+use poolster_plugin_go as go;
 
 let release = ProfileSet::new("sdk")
     .package(go::package("go")
         .name("email")
         .with(go::sdk()));
-let tree = kaji::generate(&api, release)?;
+let tree = poolster::generate(&api, release)?;
 tree.write_to("generated")?;
 ```
 
@@ -21,9 +22,9 @@ flat clients use direct operations such as `client.GetContact(ctx, input)`.
 Go always emits split model and operation files. Configure bounded rendering
 parallelism with `go::sdk().jobs(4)`; see [large specs](../../../docs/large-specs.md).
 
-When depending on this plugin without the `kaji` facade, import
-`kaji_plugin_go::PackageExt` and compose its package through
-`kaji_core::engine::Packages`. Supply a security catalog when your API
+When depending on this plugin without the `poolster` facade, import
+`poolster_plugin_go::PackageExt` and compose its package through
+`poolster_core::engine::Packages`. Supply a security catalog when your API
 declares named security schemes.
 
 See [configuration](../../../docs/configuration.md) for every generation option
@@ -70,13 +71,13 @@ reconnection after events have started is application policy.
 An operation with `x-kaji-pagination` (or `x-speakeasy-pagination`) configured
 as a cursor pager gets a typed `{Operation}Pages` constructor. It returns a
 pager whose `Next(ctx)` method yields normal response pages and then `io.EOF`.
-Kaji creates this surface for an optional string cursor parameter and a
+Poolster creates this surface for an optional string cursor parameter and a
 declared `outputs.nextCursor` object JSONPath. It also supports a cursor in a
 JSON request body when that body is a named object schema with an optional
 string cursor field. The pager clones that typed body before setting the next
 cursor, so the caller's request is never mutated.
 
-For `type: url`, Kaji follows a declared `outputs.nextUrl` continuation only
+For `type: url`, Poolster follows a declared `outputs.nextUrl` continuation only
 through a private, same-origin request path. It reuses the operation's HTTP
 method, generated header parameters, authentication, and JSON body encoding;
 cross-origin URLs are rejected. There is no public raw-URL override API.
@@ -93,11 +94,11 @@ for {
 
 ### Customer transport middleware
 
-`ClientConfig.Middleware` accepts `[]KajiMiddleware`. Each entry wraps a `KajiHTTPClient`; `KajiHTTPClientFunc` adapts ordinary functions to its `Do` interface. The first configured middleware is outermost, and the chain executes for each HTTP attempt, including retries, pagination and SSE establishment. Existing `HTTPClient` injection and telemetry hooks remain available.
+`ClientConfig.Middleware` accepts `[]PoolsterMiddleware`. Each entry wraps a `PoolsterHTTPClient`; `PoolsterHTTPClientFunc` adapts ordinary functions to its `Do` interface. The first configured middleware is outermost, and the chain executes for each HTTP attempt, including retries, pagination and SSE establishment. Existing `HTTPClient` injection and telemetry hooks remain available.
 
 ```go
-middleware := func(next KajiHTTPClient) KajiHTTPClient {
-    return KajiHTTPClientFunc(func(request *http.Request) (*http.Response, error) {
+middleware := func(next PoolsterHTTPClient) PoolsterHTTPClient {
+    return PoolsterHTTPClientFunc(func(request *http.Request) (*http.Response, error) {
         rewritten := request.Clone(request.Context())
         rewritten.Header.Set("X-Customer", "acme")
         return next.Do(rewritten)
@@ -105,7 +106,7 @@ middleware := func(next KajiHTTPClient) KajiHTTPClient {
 }
 client, err := NewClient(ClientConfig{
     BaseURL: "https://api.example.com",
-    Middleware: []KajiMiddleware{middleware},
+    Middleware: []PoolsterMiddleware{middleware},
 })
 ```
 
@@ -113,19 +114,19 @@ Middleware can rewrite requests/responses, recover or replace errors, or return 
 
 ### Bundle author middleware during generation
 
-The package builder's `.middleware(BundledMiddleware { path, contents, symbol, async_symbol: None })` ships and registers an author-supplied native Go wrapper automatically. Use a `.go` file beside the generated client, declaring the same package, and a symbol with the `KajiMiddleware` function ABI. Consumers need no `ClientConfig.Middleware` registration. Bundled defaults run before optional customer wrappers in configuration order. Source filenames/build constraints must not restrict compilation to a platform. Colliding paths, foreign package declarations and transports lacking the native registration boundary fail generation.
+The package builder's `.middleware(BundledMiddleware { path, contents, symbol, async_symbol: None })` ships and registers an author-supplied native Go wrapper automatically. Use a `.go` file beside the generated client, declaring the same package, and a symbol with the `PoolsterMiddleware` function ABI. Consumers need no `ClientConfig.Middleware` registration. Bundled defaults run before optional customer wrappers in configuration order. Source filenames/build constraints must not restrict compilation to a platform. Colliding paths, foreign package declarations and transports lacking the native registration boundary fail generation.
 
 Optional native operation smoke tests can be distributed with the generated SDK:
 
 ```rust
-kaji::go::package("go")
-    .with(kaji::go::sdk())
-    .with(kaji::go::operation_tests().max_operations(128))
+poolster::go::package("go")
+    .with(poolster::go::sdk())
+    .with(poolster::go::operation_tests().max_operations(128))
 ```
 
 The consumer resolves the typed Client/Operations contracts and emits executable
 `operation_generated_test.go`, a distributed `OPERATION_TESTS.md`, and
-`.kaji/operation-test-diagnostics.json`. Run `go test -v ./...` to see asserted
+`.poolster/operation-test-diagnostics.json`. Run `go test -v ./...` to see asserted
 wire cases and explicit skips. It uses bounded core samples and a fake native
 transport; supported public operations exercise path/query/header serialization,
 JSON request bodies, JSON response decoding, and void success statuses. It does

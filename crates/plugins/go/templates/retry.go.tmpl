@@ -8,44 +8,44 @@ type RetryConfig struct {
 	MaxDelay     time.Duration
 }
 
-// KajiRequestInfo is safe request metadata for lifecycle hooks. Request
+// PoolsterRequestInfo is safe request metadata for lifecycle hooks. Request
 // headers and bodies are deliberately omitted so observability integrations do
 // not accidentally receive credentials or customer data.
-type KajiRequestInfo struct {
+type PoolsterRequestInfo struct {
 	Method string
 	URL    string
 }
 
-// KajiResponseInfo describes the final HTTP response observed by a request.
+// PoolsterResponseInfo describes the final HTTP response observed by a request.
 // Intermediate retry responses are intentionally not reported.
-type KajiResponseInfo struct {
-	Request    KajiRequestInfo
+type PoolsterResponseInfo struct {
+	Request    PoolsterRequestInfo
 	StatusCode int
 	Headers    http.Header
 }
 
-// KajiClientHooks receives lifecycle events for one logical generated SDK
+// PoolsterClientHooks receives lifecycle events for one logical generated SDK
 // request. BeforeRequest, AfterResponse, and OnError run at most once each;
 // retries remain an implementation detail of the transport.
-type KajiClientHooks interface {
-	BeforeRequest(KajiRequestInfo)
-	AfterResponse(KajiResponseInfo)
-	OnError(KajiRequestInfo, error)
+type PoolsterClientHooks interface {
+	BeforeRequest(PoolsterRequestInfo)
+	AfterResponse(PoolsterResponseInfo)
+	OnError(PoolsterRequestInfo, error)
 }
 
-func (client *Client) beforeRequest(request KajiRequestInfo) {
+func (client *Client) beforeRequest(request PoolsterRequestInfo) {
 	if client.hooks != nil {
 		client.hooks.BeforeRequest(request)
 	}
 }
 
-func (client *Client) afterResponse(request KajiRequestInfo, response *http.Response) {
+func (client *Client) afterResponse(request PoolsterRequestInfo, response *http.Response) {
 	if client.hooks != nil {
-		client.hooks.AfterResponse(KajiResponseInfo{Request: request, StatusCode: response.StatusCode, Headers: response.Header.Clone()})
+		client.hooks.AfterResponse(PoolsterResponseInfo{Request: request, StatusCode: response.StatusCode, Headers: response.Header.Clone()})
 	}
 }
 
-func (client *Client) onError(request KajiRequestInfo, err error) {
+func (client *Client) onError(request PoolsterRequestInfo, err error) {
 	if client.hooks != nil {
 		client.hooks.OnError(request, err)
 	}
@@ -163,11 +163,11 @@ func replayRequest(request *http.Request) (*http.Request, error) {
 		if request.Body == nil || request.Body == http.NoBody {
 			return retry, nil
 		}
-		return nil, fmt.Errorf("kaji: cannot retry a request whose body cannot be replayed")
+		return nil, fmt.Errorf("poolster: cannot retry a request whose body cannot be replayed")
 	}
 	body, err := request.GetBody()
 	if err != nil {
-		return nil, fmt.Errorf("kaji: replay request body: %w", err)
+		return nil, fmt.Errorf("poolster: replay request body: %w", err)
 	}
 	retry.Body = body
 	return retry, nil
@@ -175,7 +175,7 @@ func replayRequest(request *http.Request) (*http.Request, error) {
 
 func (client *Client) doWithRetry(request *http.Request, destination any) error {
 	retryAllowed := canRetry(request)
-	requestInfo := KajiRequestInfo{Method: request.Method, URL: request.URL.String()}
+	requestInfo := PoolsterRequestInfo{Method: request.Method, URL: request.URL.String()}
 	client.beforeRequest(requestInfo)
     authRefreshed:=false
     managedAuth:=client.tokenProvider!=nil && request.Header.Get("Authorization")==""
@@ -184,7 +184,7 @@ func (client *Client) doWithRetry(request *http.Request, destination any) error 
         var err error
         authToken,err=client.tokenProvider.Token(request.Context(),"")
         if err!=nil{client.onError(requestInfo,err);return err}
-        if strings.TrimSpace(authToken)==""{err=fmt.Errorf("kaji: token provider returned an empty token");client.onError(requestInfo,err);return err}
+        if strings.TrimSpace(authToken)==""{err=fmt.Errorf("poolster: token provider returned an empty token");client.onError(requestInfo,err);return err}
         request.Header.Set("Authorization","Bearer "+authToken)
     }
 	for attempt := 1; ; attempt++ {
@@ -192,12 +192,12 @@ func (client *Client) doWithRetry(request *http.Request, destination any) error 
 		response, err := client.httpClient.Do(request)
 		if err != nil {
 			if !retryAllowed || attempt >= client.retry.maxAttempts || request.Context().Err() != nil {
-				result := fmt.Errorf("kaji: execute request: %w", err)
+				result := fmt.Errorf("poolster: execute request: %w", err)
 				client.onError(requestInfo, result)
 				return result
 			}
 			if err := waitForRetry(request.Context(), client.retry.delay(nil, attempt)); err != nil {
-				result := fmt.Errorf("kaji: execute request: %w", err)
+				result := fmt.Errorf("poolster: execute request: %w", err)
 				client.onError(requestInfo, result)
 				return result
 			}
@@ -216,7 +216,7 @@ func (client *Client) doWithRetry(request *http.Request, destination any) error 
             authRefreshed=true
             authToken,err=client.tokenProvider.Token(request.Context(),authToken)
             if err!=nil{client.onError(requestInfo,err);return err}
-            if strings.TrimSpace(authToken)==""{err=fmt.Errorf("kaji: token provider returned an empty token");client.onError(requestInfo,err);return err}
+            if strings.TrimSpace(authToken)==""{err=fmt.Errorf("poolster: token provider returned an empty token");client.onError(requestInfo,err);return err}
             request.Header.Set("Authorization","Bearer "+authToken)
             attempt-- // A single safe auth refresh has its own bounded replay budget.
             continue
@@ -230,20 +230,20 @@ func (client *Client) doWithRetry(request *http.Request, destination any) error 
 			}
 			if bytesDestination, ok := destination.(*[]byte); ok {
 				body, err := io.ReadAll(response.Body)
-				if err != nil { result := fmt.Errorf("kaji: read binary response: %w", err); client.onError(requestInfo, result); return result }
+				if err != nil { result := fmt.Errorf("poolster: read binary response: %w", err); client.onError(requestInfo, result); return result }
 				*bytesDestination = body
 				return nil
 			}
 			if textDestination, ok := destination.(*string); ok && !strings.Contains(response.Header.Get("Content-Type"), "json") {
 				body, err := io.ReadAll(response.Body)
-				if err != nil { result := fmt.Errorf("kaji: read text response: %w", err); client.onError(requestInfo, result); return result }
+				if err != nil { result := fmt.Errorf("poolster: read text response: %w", err); client.onError(requestInfo, result); return result }
 				*textDestination = string(body)
 				return nil
 			}
 			decode := client.decodeResponse
-			if kajiSequentialMedia(response.Header.Get("Content-Type")) {decode=func(body io.Reader,destination any) error {return client.decodeSequentialResponse(body,response.Header.Get("Content-Type"),destination)}}
+			if poolsterSequentialMedia(response.Header.Get("Content-Type")) {decode=func(body io.Reader,destination any) error {return client.decodeSequentialResponse(body,response.Header.Get("Content-Type"),destination)}}
 			if err := decode(response.Body, destination); err != nil {
-				result := fmt.Errorf("kaji: decode response: %w", err)
+				result := fmt.Errorf("poolster: decode response: %w", err)
 				client.onError(requestInfo, result)
 				return result
 			}
@@ -254,7 +254,7 @@ func (client *Client) doWithRetry(request *http.Request, destination any) error 
 			delay := client.retry.delay(response, attempt)
 			response.Body.Close()
 			if err := waitForRetry(request.Context(), delay); err != nil {
-				result := fmt.Errorf("kaji: execute request: %w", err)
+				result := fmt.Errorf("poolster: execute request: %w", err)
 				client.onError(requestInfo, result)
 				return result
 			}
@@ -269,7 +269,7 @@ func (client *Client) doWithRetry(request *http.Request, destination any) error 
 		body, _ := io.ReadAll(io.LimitReader(response.Body, 1<<20))
 		client.afterResponse(requestInfo, response)
 		response.Body.Close()
-		result := &kajiAPIError{StatusCode: response.StatusCode, Body: body, ContentType: response.Header.Get("Content-Type")}
+		result := &poolsterAPIError{StatusCode: response.StatusCode, Body: body, ContentType: response.Header.Get("Content-Type")}
 		client.onError(requestInfo, result)
 		return result
 	}
@@ -280,19 +280,19 @@ func (client *Client) doWithRetry(request *http.Request, destination any) error 
 // flowing, reconnect policy belongs to the consuming application.
 func (client *Client) stream(request *http.Request) (io.ReadCloser, error) {
 	retryAllowed := canRetry(request)
-	requestInfo := KajiRequestInfo{Method: request.Method, URL: request.URL.String()}
+	requestInfo := PoolsterRequestInfo{Method: request.Method, URL: request.URL.String()}
 	client.beforeRequest(requestInfo)
 	for attempt := 1; ; attempt++ {
 		if err := request.Context().Err(); err != nil { client.onError(requestInfo, err); return nil, err }
 		response, err := client.httpClient.Do(request)
 		if err != nil {
 			if !retryAllowed || attempt >= client.retry.maxAttempts || request.Context().Err() != nil {
-				result := fmt.Errorf("kaji: execute request: %w", err)
+				result := fmt.Errorf("poolster: execute request: %w", err)
 				client.onError(requestInfo, result)
 				return nil, result
 			}
 			if err := waitForRetry(request.Context(), client.retry.delay(nil, attempt)); err != nil {
-				result := fmt.Errorf("kaji: execute request: %w", err)
+				result := fmt.Errorf("poolster: execute request: %w", err)
 				client.onError(requestInfo, result)
 				return nil, result
 			}
@@ -308,7 +308,7 @@ func (client *Client) stream(request *http.Request) (io.ReadCloser, error) {
 			delay := client.retry.delay(response, attempt)
 			response.Body.Close()
 			if err := waitForRetry(request.Context(), delay); err != nil {
-				result := fmt.Errorf("kaji: execute request: %w", err)
+				result := fmt.Errorf("poolster: execute request: %w", err)
 				client.onError(requestInfo, result)
 				return nil, result
 			}
@@ -319,7 +319,7 @@ func (client *Client) stream(request *http.Request) (io.ReadCloser, error) {
 		body, _ := io.ReadAll(io.LimitReader(response.Body, 1<<20))
 		client.afterResponse(requestInfo, response)
 		response.Body.Close()
-		result := &kajiAPIError{StatusCode: response.StatusCode, Body: body, ContentType: response.Header.Get("Content-Type")}
+		result := &poolsterAPIError{StatusCode: response.StatusCode, Body: body, ContentType: response.Header.Get("Content-Type")}
 		client.onError(requestInfo, result)
 		return nil, result
 	}
