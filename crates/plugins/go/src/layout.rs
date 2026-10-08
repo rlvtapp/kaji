@@ -288,7 +288,6 @@ func TestAllDescriptorChunks(t *testing.T) {
         assert!(
             Command::new("go")
                 .args(["test", "./..."])
-                .env("GOCACHE", "/private/tmp/poolster-go-cache")
                 .current_dir(root.path().join("sdk"))
                 .status()
                 .unwrap()
