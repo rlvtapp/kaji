@@ -26,8 +26,11 @@ The shipped CLI exposes the providers compiled into its registry.
 
 GraphQL, AsyncAPI, Arazzo, Protobuf and Cap’n Proto providers publish native
 contracts. These retain queries, events, workflows and RPC streaming semantics.
-Their current outputs support inspection and tested documentation consumers;
-protocol-specific SDK generators require their own consumers.
+GraphQL also publishes Poolster-owned operation/selection contracts and has a
+working TypeScript package generator. The other native formats currently support
+inspection and tested documentation consumers; their usable SDK pipelines remain
+follow-up work. The [native support matrix](native-pipelines.md) records exact
+capabilities and transport boundaries.
 
 Existing HTTP SDKs consume `Api` and its security catalog. The bundled Go OpenAPI
 compiler produces local artifacts that Rust loads as `AdaptedApi`. An alternative
@@ -40,7 +43,10 @@ See [input providers](input-plugins.md) for supported formats and inspection.
 
 A release groups `Package<L>` instances, each with its own directory, settings and
 plugins. Contracts and handles are package-local. Declared requirements determine
-provider order; missing or ambiguous inputs and cycles fail before emission.
+provider order; missing or ambiguous required inputs and cycles fail before
+emission. Optional contracts let one plugin dispatch differently by input type.
+Native generation warns and skips packages with HTTP-only plugins; the CLI
+preserves their existing owned files and reports skipped outputs.
 
 TypeScript, Rust and Go expose independently selectable model, transport,
 operation and client providers. Their `sdk()` convenience plugins reuse maintained

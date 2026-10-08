@@ -59,6 +59,7 @@ mod generation_artifacts;
 mod generation_config;
 mod generation_direct;
 mod generation_lock;
+mod generation_native;
 mod mcp;
 mod migration;
 mod mock_http;
@@ -77,13 +78,14 @@ mod show_command;
 mod typescript_profile;
 mod update_command;
 
-const HELP: &str = "Poolster — native multi-language OpenAPI SDK generator
+const HELP: &str = "Poolster — native contract package generator
 
 Usage:
   poolster migrate [project-or-config] [--input <file>] [--output <new-directory>] [--strict]
   poolster init [--config <file>] [--input <openapi-file>] [--output <directory>]
   poolster generate                         # reads ./poolster.json
   poolster generate --config <file>
+  poolster generate <schema.graphql> --input-format graphql --operation <operations.graphql> --output <directory> --language typescript
   poolster generate <openapi-file> --output <directory> --language <target>...
   poolster generate --artifacts <directory> --output <directory> --language <target>...
   poolster mcp <openapi-file> --base-url <url>
@@ -113,6 +115,12 @@ Generate options (both modes):
       --format human|json              Change report format
   -o, --output <directory>             Output root (required)
   -l, --language <target,...>          Repeatable; use all for every SDK (required)
+      --input-format <format>         Native format; currently graphql generation
+      --provider <id>                 Registered native input provider
+      --operation <file>              Repeatable GraphQL operation documents
+      --import-root <directory>       Repeatable provider import roots
+      --broker-config <file>          Provider broker configuration as JSON
+      --workflow-source <name=path>   Provider workflow source resolution
       --name <name>                   API name (default: API)
       --sdk-version <version>         Generated package version (default: 0.1.0)
       --client-style <style>          namespaced (default) or flat

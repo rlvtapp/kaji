@@ -222,6 +222,11 @@ pub trait Plugin<L: Language>: Send + Sync + 'static {
     fn enforce(&self) -> Enforce {
         Enforce::Default
     }
+    /// Opt in when this plugin reads protocol contracts instead of the legacy HTTP context.
+    /// Native generation skips packages containing HTTP-only plugins before loading sources.
+    fn supports_native_input(&self) -> bool {
+        false
+    }
     fn requires(&self) -> Vec<Requirement> {
         Vec::new()
     }
@@ -693,6 +698,8 @@ impl<L: Language> Package<L> {
 trait ErasedPackage: Send + Sync {
     fn directory(&self) -> &str;
     fn validate(&self) -> Result<()>;
+    fn native_incompatibility(&self) -> Option<String>;
+    fn validate_native(&self) -> Result<()>;
     fn generate(
         &self,
         api: &Api,
@@ -707,6 +714,34 @@ impl<L: Language> ErasedPackage for Package<L> {
     fn validate(&self) -> Result<()> {
         self.resolve().map(|_| ())
     }
+    fn native_incompatibility(&self) -> Option<String> {
+        let plugins: Vec<_> = self
+            .plugins
+            .iter()
+            .enumerate()
+            .filter(|(_, plugin)| !plugin.supports_native_input())
+            .map(|(index, _)| self.label(index))
+            .collect();
+        if plugins.is_empty() {
+            None
+        } else {
+            Some(format!(
+                "{} requires an HTTP API and cannot consume native input contracts",
+                plugins.join(", ")
+            ))
+        }
+    }
+    fn validate_native(&self) -> Result<()> {
+        if !self.middleware.is_empty()
+            || (self.idempotency.defaults.is_some() || !self.idempotency.operations.is_empty())
+        {
+            bail!(
+                "native package {} cannot use HTTP middleware or idempotency policy",
+                self.dir
+            );
+        }
+        self.validate()
+    }
     fn generate(
         &self,
         api: &Api,
@@ -715,6 +750,18 @@ impl<L: Language> ErasedPackage for Package<L> {
     ) -> Result<GeneratedTree> {
         self.run(api, common, catalog)
     }
+}
+
+/// An incompatible native package is skipped without running its input provider.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativeSkip {
+    pub package: String,
+    pub reason: String,
+}
+#[derive(Debug)]
+pub struct NativeGeneration {
+    pub tree: GeneratedTree,
+    pub skipped: Vec<NativeSkip>,
 }
 
 #[derive(Default)]
@@ -736,6 +783,54 @@ impl Packages {
     }
     pub fn is_empty(&self) -> bool {
         self.packages.is_empty()
+    }
+    /// Generate from explicitly declared native protocol contracts.
+    /// The empty legacy HTTP context preserves the plugin ABI; native operations
+    /// are carried only by typed requirements and are never mapped into `Api`.
+    pub fn generate_native(&self) -> Result<GeneratedTree> {
+        let report = self.generate_native_report()?;
+        for skipped in &report.skipped {
+            eprintln!(
+                "warning: skipped native package {}: {}",
+                skipped.package, skipped.reason
+            );
+        }
+        Ok(report.tree)
+    }
+    /// A structured report lets callers surface skips without treating them as errors.
+    /// An empty tree must not replace existing generated output when every package skips.
+    pub fn generate_native_report(&self) -> Result<NativeGeneration> {
+        let mut skipped = Vec::new();
+        let mut active = Vec::new();
+        let mut dirs: Vec<PathBuf> = Vec::new();
+        for package in &self.packages {
+            let dir = checked_path(Path::new(package.directory()))?;
+            if let Some(other) = dirs
+                .iter()
+                .find(|other| dir.starts_with(other) || other.starts_with(&dir))
+            {
+                bail!(
+                    "package directories overlap: {} and {}",
+                    other.display(),
+                    dir.display()
+                );
+            }
+            dirs.push(dir);
+            if let Some(reason) = package.native_incompatibility() {
+                skipped.push(NativeSkip {
+                    package: package.directory().to_owned(),
+                    reason,
+                });
+            } else {
+                package.validate_native()?;
+                active.push(package);
+            }
+        }
+        let mut tree = GeneratedTree::default();
+        for package in active {
+            tree.append(package.generate(&Api::default(), &self.common, None)?)?;
+        }
+        Ok(NativeGeneration { tree, skipped })
     }
     pub fn generate(
         &self,

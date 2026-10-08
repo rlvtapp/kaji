@@ -1,0 +1,13 @@
+{
+  "name": "poolster-graphql-native-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "poolster generate --config poolster.json",
+    "build": "tsc -p generated/client/tsconfig.json",
+    "demo": "node run.mjs",
+    "server": "node server.mjs"
+  },
+  "dependencies": { "graphql": "16.14.2" },
+  "devDependencies": { "typescript": "5.9.3" }
+}

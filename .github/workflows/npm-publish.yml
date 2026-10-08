@@ -37,7 +37,7 @@ jobs:
         working-directory: openapi
         run: go test ./...
       - name: Run generated SDK contract suite
-        run: cargo test -p poolster --test sdk_to_mock_contract -- --ignored
+        run: cargo test -p poolster --features all-plugins --test sdk_to_mock_contract -- --ignored
       - name: Build Poolster and OpenAPI sidecar
         run: |
           cargo build -p poolster-cli --locked

@@ -1389,6 +1389,7 @@ version = "0.5.0"
 dependencies = [
  "anyhow",
  "poolster-core",
+ "poolster-input-graphql",
  "serde",
  "serde_json",
  "tempfile",

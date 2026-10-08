@@ -4,6 +4,9 @@ pub(super) fn generate(mut options: Generate) -> Result<()> {
     if let Some(config) = &options.config {
         return generate_from_config(config, options.color, options.check, options.json_changes);
     }
+    if options.native_input.is_some() {
+        return super::generation_native::generate(options);
+    }
     let reporter = Reporter::new(options.color);
     reporter.started();
     let temporary;

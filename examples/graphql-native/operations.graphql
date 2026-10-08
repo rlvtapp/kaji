@@ -1,0 +1,9 @@
+query PersonName($id: ID!) {
+  person(id: $id) { id name }
+}
+mutation RenamePerson($id: ID!, $name: String!) {
+  rename(id: $id, name: $name) { id name }
+}
+query PersonWithNickname($id: ID!) {
+  person(id: $id) { name nickname }
+}

@@ -65,6 +65,7 @@ pub(super) fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Act
         bail!("unknown command {:?}; run poolster --help", command)
     }
     let mut options = Generate {
+        native_input: None,
         source: None,
         config: None,
         config_packages: None,
@@ -86,6 +87,9 @@ pub(super) fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Act
         check: false,
         json_changes: false,
     };
+    let mut native_format = None;
+    let mut native_provider = None;
+    let mut native_options = poolster_core::input::InputOptions::default();
     while let Some(argument) = args.next() {
         let text = argument.to_string_lossy();
         if text == "--help" || text == "-h" {
@@ -121,7 +125,13 @@ pub(super) fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Act
         }
         if !matches!(
             flag,
-            "--output"
+            "--input-format"
+                | "--provider"
+                | "--operation"
+                | "--import-root"
+                | "--broker-config"
+                | "--workflow-source"
+                | "--output"
                 | "-o"
                 | "--language"
                 | "-l"
@@ -145,6 +155,51 @@ pub(super) fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Act
             .next()
             .with_context(|| format!("{flag} requires a value"))?;
         match flag {
+            "--input-format" => {
+                native_format = Some(
+                    value
+                        .into_string()
+                        .map_err(|_| anyhow::anyhow!("--input-format requires UTF-8"))?,
+                )
+            }
+            "--provider" => {
+                native_provider = Some(
+                    value
+                        .into_string()
+                        .map_err(|_| anyhow::anyhow!("--provider requires UTF-8"))?,
+                )
+            }
+            "--operation" => native_options.operation_files.push(value.into()),
+            "--import-root" => native_options.import_roots.push(value.into()),
+            "--broker-config" => {
+                let path = PathBuf::from(value);
+                native_options.broker = Some(
+                    serde_json::from_slice(
+                        &std::fs::read(&path)
+                            .with_context(|| format!("read broker config {}", path.display()))?,
+                    )
+                    .context("broker config must be JSON")?,
+                );
+            }
+            "--workflow-source" => {
+                let value = value
+                    .into_string()
+                    .map_err(|_| anyhow::anyhow!("--workflow-source requires UTF-8 name=path"))?;
+                let (name, path) = value
+                    .split_once('=')
+                    .context("--workflow-source requires name=path")?;
+                ensure!(
+                    !name.is_empty() && !path.is_empty(),
+                    "--workflow-source requires nonempty name=path"
+                );
+                ensure!(
+                    native_options
+                        .workflow_sources
+                        .insert(name.into(), PathBuf::from(path))
+                        .is_none(),
+                    "duplicate workflow source {name:?}"
+                );
+            }
             "--output" | "-o" => options.output = value.into(),
             "--artifacts" => options.artifacts = Some(value.into()),
             "--openapi-compiler" => options.compiler = Some(value.into()),
@@ -209,7 +264,24 @@ pub(super) fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Act
             }
         }
     }
-    let direct_mode = options.source.is_some()
+    if let Some(format) = native_format {
+        let path = match options.source.take() {
+            Some(OpenApiInput::Path(path)) => path,
+            _ => bail!("--input-format requires a native source file"),
+        };
+        options.native_input = Some(NativeInputConfig {
+            format,
+            provider: native_provider,
+            path,
+            options: native_options,
+        });
+    } else if native_provider.is_some()
+        || native_options != poolster_core::input::InputOptions::default()
+    {
+        bail!("provider and operation/import options require --input-format");
+    }
+    let direct_mode = options.native_input.is_some()
+        || options.source.is_some()
         || options.artifacts.is_some()
         || !options.output.as_os_str().is_empty()
         || !options.languages.is_empty()
@@ -233,7 +305,7 @@ pub(super) fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Act
     if options.languages.is_empty() {
         bail!("at least one --language is required")
     }
-    if options.source.is_some() == options.artifacts.is_some() {
+    if (options.source.is_some() || options.native_input.is_some()) == options.artifacts.is_some() {
         bail!("supply exactly one OpenAPI file or --artifacts directory")
     }
     if options.artifacts.is_some() && options.compiler.is_some() {

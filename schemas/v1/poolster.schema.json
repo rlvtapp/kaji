@@ -2,11 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/rlvtapp/poolster/main/schemas/v1/poolster.schema.json",
   "title": "Poolster configuration",
-  "description": "Configuration for Poolster's multi-language OpenAPI SDK generator.",
+  "description": "Configuration for Poolster native contract package generation.",
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "openapi",
     "output",
     "packages"
   ],
@@ -51,6 +50,9 @@
       "items": {
         "$ref": "#/$defs/package"
       }
+    },
+    "input": {
+      "$ref": "#/$defs/nativeInput"
     }
   },
   "$defs": {
@@ -369,6 +371,9 @@
         },
         {
           "$ref": "#/$defs/operationTestsPlugin"
+        },
+        {
+          "$ref": "#/$defs/graphqlPlugin"
         }
       ]
     },
@@ -1551,6 +1556,99 @@
           }
         }
       ]
+    },
+    "nativeInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "path"
+      ],
+      "properties": {
+        "format": {
+          "type": "string",
+          "minLength": 1
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "options": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "operation_files": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "import_roots": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "broker": {
+              "type": "object"
+            },
+            "workflow_sources": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    "graphqlPlugin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "const": "graphql"
+        },
+        "transport": {
+          "const": "fetch"
+        },
+        "subscriptions": {
+          "type": "boolean",
+          "default": false
+        }
+      }
     }
-  }
+  },
+  "oneOf": [
+    {
+      "required": [
+        "openapi"
+      ],
+      "not": {
+        "required": [
+          "input"
+        ]
+      }
+    },
+    {
+      "required": [
+        "input"
+      ],
+      "not": {
+        "required": [
+          "openapi"
+        ]
+      }
+    }
+  ]
 }

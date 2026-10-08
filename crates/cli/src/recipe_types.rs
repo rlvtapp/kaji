@@ -5,7 +5,9 @@ use super::*;
 pub(super) struct ProjectConfig {
     #[serde(rename = "$schema")]
     pub(super) _schema: Option<String>,
+    #[serde(default)]
     pub(super) openapi: OpenApiConfig,
+    pub(super) input: Option<NativeInputConfig>,
     pub(super) output: OutputConfig,
     #[serde(default)]
     pub(super) defaults: DefaultsConfig,
@@ -25,6 +27,29 @@ pub(super) struct OpenApiConfig {
     pub(super) compiler: Option<PathBuf>,
     #[serde(default)]
     pub(super) paths: PathSelection,
+}
+
+impl Default for OpenApiConfig {
+    fn default() -> Self {
+        Self {
+            input: None,
+            artifacts: None,
+            name: default_api_name(),
+            version: default_sdk_version(),
+            compiler: None,
+            paths: PathSelection::default(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct NativeInputConfig {
+    pub(super) format: String,
+    pub(super) provider: Option<String>,
+    pub(super) path: PathBuf,
+    #[serde(default)]
+    pub(super) options: poolster_core::input::InputOptions,
 }
 
 /// Path filters intentionally use the same small glob language as Poolster's
@@ -216,6 +241,7 @@ pub(super) struct PluginConfig {
     pub(super) open_unions: Option<bool>,
     pub(super) preserve_presence: Option<bool>,
     pub(super) transport: Option<String>,
+    pub(super) subscriptions: Option<bool>,
     pub(super) surface: Option<String>,
     pub(super) client_name: Option<String>,
     pub(super) group_by_tag: Option<bool>,

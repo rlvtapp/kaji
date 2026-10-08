@@ -44,3 +44,16 @@ PARTNER_OPENAPI_TOKEN=… npx poolster generate
 For local package-configuration experiments, retain compiler artifacts and set
 `openapi.artifacts` in your recipe. Artifacts are internal, versioned output;
 regenerate them when the contract or Poolster version changes.
+
+
+## Native GraphQL recipes
+
+Use top-level `input` instead of `openapi` to select a native source and provider.
+GraphQL operation documents are configured through `input.options.operation_files`;
+paths resolve relative to the recipe. Select the TypeScript `graphql` plugin.
+Unsupported format/output pairs warn, skip and preserve existing skipped outputs.
+Malformed sources and unsupported options for an otherwise supported pipeline fail.
+
+See the [native generation matrix and recipe](../native-pipelines.md) and
+[runnable local GraphQL example](../../examples/graphql-native/README.md).
+The existing OpenAPI recipe shape and behavior are unchanged.
