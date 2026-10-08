@@ -294,8 +294,8 @@ are grouped under `packages/internal`. The shared factory generator lives at
    If Unii is preferred, verify that the fully unpublished npm name can be
    claimed by our account; the remaining package split is the same.
 2. Review the coordinated npm, Cargo, PyPI, config, binary, example, docs, and
-   CI naming changes on `poolster-sdk-layout`. Source directories remain
-   stable. The [name map](poolster-name-map.json) records public old-to-new names.
+   CI naming changes and repository layout on `poolster-sdk-layout`.
+   The [name map](poolster-name-map.json) records public old-to-new names.
 3. Test CLI-only, SDK-only, and combined installs on every supported platform.
    Exercise JS + Rust input/output plugins together; run emitted SDK builds
    and cross-language runtime probes. Verify no plugin is activated by install.

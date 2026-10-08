@@ -88,10 +88,9 @@ later, after the npm/PyPI CLI distribution is established.
    modules are split.
 2. **Verify the slim Rust SDK facade.** Test Rust embedding with only one
    language and one input plugin installed.
-3. **Rename manifests and public commands together.** Update Cargo, npm, and
+3. **Review the implemented rename and layout.** Cargo, npm, and
    PyPI names, JS config discovery, environment variables, examples, docs, and
-   release metadata from one checked name map. Keep the current directories
-   initially.
+   release metadata follow the checked name map and repository layout.
 4. **Prepare only the Rust SDK for crates.io.** Add versioned publishable
    dependencies, test `cargo package`, and test a fresh consumer using
    `poolster` with one explicitly selected plugin. Keep the internal CLI crate
