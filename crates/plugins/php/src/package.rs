@@ -1,7 +1,7 @@
 //! Typed package integration for the existing complete Php generator.
 use anyhow::Result;
-use kaji_core::SdkClientStyle;
-use kaji_core::engine::{Language, Meta, Package, Plugin, PluginContext};
+use poolster_core::SdkClientStyle;
+use poolster_core::engine::{Language, Meta, Package, Plugin, PluginContext};
 
 pub struct Php;
 #[derive(Default)]
@@ -13,8 +13,8 @@ impl Language for Php {
     type Settings = Settings;
     type Workspace = ();
     fn bundle_middleware(
-        tree: &mut kaji_core::GeneratedTree,
-        middleware: &[kaji_core::customization::BundledMiddleware],
+        tree: &mut poolster_core::GeneratedTree,
+        middleware: &[poolster_core::customization::BundledMiddleware],
     ) -> Result<()> {
         crate::bundled_middleware::bundle(tree, middleware)
     }

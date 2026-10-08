@@ -1,11 +1,7 @@
 use super::*;
-use kaji_core::pagination::{PaginationPlan, normalize_pagination};
+use poolster_core::pagination::{PaginationPlan, normalize_pagination};
 pub(crate) fn plan(api: &Api, operation: &Operation) -> anyhow::Result<Option<PaginationPlan>> {
-    let Some(raw) = operation
-        .annotations
-        .get("x-kaji-pagination")
-        .or_else(|| operation.annotations.get("x-speakeasy-pagination"))
-    else {
+    let Some(raw) = pagination_annotation(operation) else {
         return Ok(None);
     };
     if raw.get("type").and_then(Value::as_str) != Some("page") {
@@ -65,7 +61,7 @@ pub(crate) fn render(api: &Api, operation: &Operation, named: &NamedTypes) -> Op
     let page_var = variable(operation, &page.name, &page.location);
     let state = if page.location == "requestBody" {
         format!(
-            "        $_kajiPage = self::kajiJsonPath($body, {}) ?? 1;\n        $_kajiBody = self::kajiWithBodyValue($body, {}, $_kajiPage);\n",
+            "        $_poolsterPage = self::poolsterJsonPath($body, {}) ?? 1;\n        $_poolsterBody = self::poolsterWithBodyValue($body, {}, $_poolsterPage);\n",
             php_string(&format!(
                 "/{}",
                 page.name.replace('~', "~0").replace('/', "~1")
@@ -73,15 +69,15 @@ pub(crate) fn render(api: &Api, operation: &Operation, named: &NamedTypes) -> Op
             php_string(&page.name)
         )
     } else {
-        format!("        $_kajiPage = ${page_var} ?? 1;\n")
+        format!("        $_poolsterPage = ${page_var} ?? 1;\n")
     };
     let invocation = arguments
         .iter()
         .map(|(variable, _)| {
             if page.location == "requestBody" && variable == "body" {
-                "$_kajiBody".into()
+                "$_poolsterBody".into()
             } else if page.location != "requestBody" && variable == &page_var {
-                "$_kajiPage".into()
+                "$_poolsterPage".into()
             } else {
                 format!("${variable}")
             }
@@ -92,7 +88,7 @@ pub(crate) fn render(api: &Api, operation: &Operation, named: &NamedTypes) -> Op
         .map(|input| {
             if input.location == "requestBody" {
                 format!(
-                    "self::kajiJsonPath($_kajiBody, {})",
+                    "self::poolsterJsonPath($_poolsterBody, {})",
                     php_string(&format!(
                         "/{}",
                         input.name.replace('~', "~0").replace('/', "~1")
@@ -105,14 +101,14 @@ pub(crate) fn render(api: &Api, operation: &Operation, named: &NamedTypes) -> Op
         .unwrap_or("null".into());
     let update = if page.location == "requestBody" {
         format!(
-            "            $_kajiBody = self::kajiWithBodyValue($_kajiBody, {}, $_kajiPage);\n",
+            "            $_poolsterBody = self::poolsterWithBodyValue($_poolsterBody, {}, $_poolsterPage);\n",
             php_string(&page.name)
         )
     } else {
         String::new()
     };
     Some(format!(
-        "    /** Yield declared page responses without mutating caller input. */\n    public function {name}Pages({declaration}): \\Generator\n    {{\n{state}        if (!is_int($_kajiPage) || $_kajiPage < 0) {{ throw new \\InvalidArgumentException('page must be a nonnegative integer'); }}\n        for ($_kajiCount = 0; $_kajiCount < 10000; $_kajiCount++) {{\n            $_kajiResponse = $this->{name}({invocation});\n            $_kajiResults = self::kajiJsonPath($_kajiResponse, {selector});\n            if (!is_array($_kajiResults) || !array_is_list($_kajiResults)) {{ throw new \\TypeError('pagination results must be an array'); }}\n            yield $_kajiResponse;\n            $_kajiLimit = {limit};\n            if ($_kajiResults === [] || (is_int($_kajiLimit) && $_kajiLimit > 0 && count($_kajiResults) < $_kajiLimit)) {{ return; }}\n            if ($_kajiPage === PHP_INT_MAX) {{ throw new \\OverflowException('page exceeds the integer range'); }}\n            $_kajiPage++;\n{update}        }}\n        throw new \\RuntimeException('pagination exceeded 10000 pages');\n    }}\n\n",
+        "    /** Yield declared page responses without mutating caller input. */\n    public function {name}Pages({declaration}): \\Generator\n    {{\n{state}        if (!is_int($_poolsterPage) || $_poolsterPage < 0) {{ throw new \\InvalidArgumentException('page must be a nonnegative integer'); }}\n        for ($_poolsterCount = 0; $_poolsterCount < 10000; $_poolsterCount++) {{\n            $_poolsterResponse = $this->{name}({invocation});\n            $_poolsterResults = self::poolsterJsonPath($_poolsterResponse, {selector});\n            if (!is_array($_poolsterResults) || !array_is_list($_poolsterResults)) {{ throw new \\TypeError('pagination results must be an array'); }}\n            yield $_poolsterResponse;\n            $_poolsterLimit = {limit};\n            if ($_poolsterResults === [] || (is_int($_poolsterLimit) && $_poolsterLimit > 0 && count($_poolsterResults) < $_poolsterLimit)) {{ return; }}\n            if ($_poolsterPage === PHP_INT_MAX) {{ throw new \\OverflowException('page exceeds the integer range'); }}\n            $_poolsterPage++;\n{update}        }}\n        throw new \\RuntimeException('pagination exceeded 10000 pages');\n    }}\n\n",
         name = method_name(&operation.id),
         selector = php_string(selector)
     ))

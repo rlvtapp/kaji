@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, bail};
-use kaji_core::customization::BundledMiddleware;
-use kaji_core::{GeneratedFile, GeneratedTree};
+use poolster_core::customization::BundledMiddleware;
+use poolster_core::{GeneratedFile, GeneratedTree};
 
 pub(crate) fn bundle(tree: &mut GeneratedTree, middleware: &[BundledMiddleware]) -> Result<()> {
     if middleware.is_empty() {
@@ -128,15 +128,15 @@ const DOCUMENTATION: &str = r#"Each configured .php source is required and enabl
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn api() -> kaji_core::Api {
-        kaji_core::Api {
+    fn api() -> poolster_core::Api {
+        poolster_core::Api {
             name: "Example".into(),
             version: "1.0.0".into(),
             ..Default::default()
         }
     }
     fn tree() -> GeneratedTree {
-        crate::render_sdk(&api(), ".", None, kaji_core::SdkClientStyle::Namespaced).unwrap()
+        crate::render_sdk(&api(), ".", None, poolster_core::SdkClientStyle::Namespaced).unwrap()
     }
     fn entry(path: &std::path::Path, symbol: &str) -> BundledMiddleware {
         BundledMiddleware {

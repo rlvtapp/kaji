@@ -1,7 +1,7 @@
 //! Opt-in bounded operation tests. Run with the SDK's normal native dependencies installed.
 use super::*;
 use anyhow::{bail, ensure};
-use kaji_core::engine::{Meta, Plugin, PluginContext};
+use poolster_core::engine::{Meta, Plugin, PluginContext};
 use serde_json::{Value, json};
 pub struct OperationTests {
     meta: Meta,
@@ -22,7 +22,7 @@ impl Plugin<crate::Php> for OperationTests {
             .package_name
             .clone()
             .filter(|name| !name.trim().is_empty())
-            .unwrap_or_else(|| format!("kaji/{}-sdk", package_slug(&cx.api.name)));
+            .unwrap_or_else(|| format!("poolster/{}-sdk", package_slug(&cx.api.name)));
         let module = namespace_for_package(&package);
         let mut api = crate::symbols::prepare(cx.api).into_owned();
         for schema in &mut api.schemas {
@@ -46,7 +46,7 @@ impl Plugin<crate::Php> for OperationTests {
             "tests/operation-fixtures.json",
             serde_json::to_string_pretty(&json!({"cases":cases}))?,
         )?)?;
-        cx.files.emit(GeneratedFile::new(".kaji/operation-test-diagnostics.json",serde_json::to_string_pretty(&json!({"scope":"bounded buffered JSON success and malformed JSON; native fake transport; not live acceptance", "covered_operations":cases.len(),"diagnostics":diagnostics}))?)?)?;
+        cx.files.emit(GeneratedFile::new(".poolster/operation-test-diagnostics.json",serde_json::to_string_pretty(&json!({"scope":"bounded buffered JSON success and malformed JSON; native fake transport; not live acceptance", "covered_operations":cases.len(),"diagnostics":diagnostics}))?)?)?;
         cx.files.emit(GeneratedFile::new(
             "tests/operations.php",
             include_str!("../templates/operation_tests.php.tmpl").replace("__MODULE__", &module),
@@ -66,7 +66,7 @@ fn sanitize(schema: &mut SchemaValue) {
             for field in fields {
                 sanitize(&mut field.value)
             }
-            if let kaji_core::AdditionalProperties::Schema { value } = additional_properties {
+            if let poolster_core::AdditionalProperties::Schema { value } = additional_properties {
                 sanitize(value)
             }
         }
@@ -123,7 +123,7 @@ fn supported(api: &Api, schema: &SchemaValue, seen: &mut Vec<String>) -> Result<
             for field in fields {
                 supported(api, &field.value, seen)?
             }
-            if let kaji_core::AdditionalProperties::Schema { value } = additional_properties {
+            if let poolster_core::AdditionalProperties::Schema { value } = additional_properties {
                 supported(api, value, seen)?
             }
         }
@@ -141,10 +141,10 @@ fn sample(api: &Api, schema: &SchemaValue) -> Result<Value> {
     supported(api, schema, &mut vec![])?;
     let mut clean = schema.clone();
     sanitize(&mut clean);
-    let report = kaji_core::samples::schema_samples(
+    let report = poolster_core::samples::schema_samples(
         api,
         &clean,
-        kaji_core::samples::SampleOptions {
+        poolster_core::samples::SampleOptions {
             max_samples: 16,
             max_depth: 12,
             max_array_items: 2,
@@ -160,7 +160,7 @@ fn sample(api: &Api, schema: &SchemaValue) -> Result<Value> {
         .into_iter()
         .find(|s| s.name == "full")
         .or_else(|| {
-            kaji_core::samples::schema_samples(api, &clean, Default::default())
+            poolster_core::samples::schema_samples(api, &clean, Default::default())
                 .samples
                 .into_iter()
                 .next()
@@ -175,9 +175,7 @@ fn case(api: &Api, operation: &Operation) -> Result<Value> {
         "HEAD has no buffered response"
     );
     ensure!(
-        !operation
-            .annotations
-            .contains_key("x-kaji-idempotency-resolved"),
+        idempotency_annotation(operation).is_none(),
         "auto idempotency requires replay-specific fixtures"
     );
     let responses = operation
@@ -308,8 +306,8 @@ fn case(api: &Api, operation: &Operation) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use kaji_core::engine::Packages;
-    use kaji_core::{
+    use poolster_core::engine::Packages;
+    use poolster_core::{
         AdditionalProperties, Field, HttpMethod, OperationParameter, OperationRequestBody,
         OperationResponse, Schema,
     };
@@ -404,7 +402,7 @@ mod tests {
         assert_eq!(value["cases"][1]["body_model"], "Contact");
         assert_eq!(value["cases"][1]["first_optional"], 1);
         let diagnostics = tree
-            .get("sdk/.kaji/operation-test-diagnostics.json")
+            .get("sdk/.poolster/operation-test-diagnostics.json")
             .unwrap();
         assert!(diagnostics.contains("streamContact"));
         assert!(diagnostics.contains("non-JSON/stream response unsupported"));

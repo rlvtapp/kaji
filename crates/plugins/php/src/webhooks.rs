@@ -1,5 +1,5 @@
 use super::*;
-use kaji_core::engine::{Meta, Plugin, PluginContext};
+use poolster_core::engine::{Meta, Plugin, PluginContext};
 /// Optional raw-body Standard Webhooks v1 verifier. Native requirements: PHP 8.2+ with hash and JSON extensions.
 pub struct Webhooks {
     meta: Meta,
@@ -20,7 +20,7 @@ impl Plugin<crate::Php> for Webhooks {
             .package_name
             .clone()
             .filter(|name| !name.trim().is_empty())
-            .unwrap_or_else(|| format!("kaji/{}-sdk", package_slug(&cx.api.name)));
+            .unwrap_or_else(|| format!("poolster/{}-sdk", package_slug(&cx.api.name)));
         let namespace = namespace_for_package(&package);
         cx.files.emit(GeneratedFile::new(
             "src/Webhooks.php",
@@ -32,7 +32,7 @@ impl Plugin<crate::Php> for Webhooks {
 mod tests {
     use super::*;
     fn generate() -> (tempfile::TempDir, String) {
-        use kaji_core::engine::Packages;
+        use poolster_core::engine::Packages;
         let tree = Packages::new()
             .package(crate::package("sdk").name("security-sdk").with(webhooks()))
             .generate(
@@ -61,7 +61,11 @@ mod tests {
     fn generated_webhook_verifier_executes_native_security_cases() {
         let (dir, _) = generate();
         let root = dir.path().join("sdk");
-        std::fs::write(root.join("probe.php"), include_str!("../tests/fixtures/webhooks_probe.php")).unwrap();
+        std::fs::write(
+            root.join("probe.php"),
+            include_str!("../tests/fixtures/webhooks_probe.php"),
+        )
+        .unwrap();
         let output = std::process::Command::new("php")
             .arg("probe.php")
             .current_dir(root)
