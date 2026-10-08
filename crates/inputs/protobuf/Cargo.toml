@@ -1,0 +1,17 @@
+[package]
+name = "kaji-input-protobuf"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Native protobuf input provider for Kaji"
+publish = false
+
+[dependencies]
+kaji-core = { path = "../../kaji-core" }
+anyhow = "1.0.102"
+protox = "0.9"
+
+[dev-dependencies]
+tempfile = "3.27.0"

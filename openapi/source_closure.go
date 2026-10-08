@@ -77,8 +77,12 @@ func collectSourceClosureWithOrigin(specPath string, root []byte, origin string,
 		if len(documents) >= 16384 {
 			return fmt.Errorf("local reference closure exceeds 16384 documents")
 		}
-		if len(data) > 16<<20 {
-			return fmt.Errorf("local reference document %s exceeds 16 MiB", path)
+		documentLimit := 16 << 20
+		if path == rootID {
+			documentLimit = 64 << 20
+		}
+		if len(data) > documentLimit {
+			return fmt.Errorf("source document %s exceeds %d MiB", path, documentLimit>>20)
 		}
 		totalBytes += len(data)
 		if totalBytes > 256<<20 {

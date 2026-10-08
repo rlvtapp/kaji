@@ -1,0 +1,29 @@
+[package]
+name = "kaji-inputs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Convenience bundle of native input providers for Kaji"
+publish = false
+
+[features]
+default = ["graphql", "asyncapi", "arazzo", "protobuf", "capnproto"]
+graphql = ["dep:kaji-input-graphql"]
+asyncapi = ["dep:kaji-input-asyncapi"]
+arazzo = ["dep:kaji-input-arazzo"]
+protobuf = ["dep:kaji-input-protobuf"]
+capnproto = ["dep:kaji-input-capnproto"]
+
+[dependencies]
+kaji-core = { path = "../kaji-core" }
+anyhow = "1.0.102"
+kaji-input-graphql = { path = "../inputs/graphql", optional = true }
+kaji-input-asyncapi = { path = "../inputs/asyncapi", optional = true }
+kaji-input-arazzo = { path = "../inputs/arazzo", optional = true }
+kaji-input-protobuf = { path = "../inputs/protobuf", optional = true }
+kaji-input-capnproto = { path = "../inputs/capnproto", optional = true }
+
+[dev-dependencies]
+tempfile = "3.27.0"

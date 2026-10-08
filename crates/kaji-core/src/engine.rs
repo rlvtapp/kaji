@@ -25,6 +25,7 @@ pub struct Common {
     pub client_name: Option<String>,
     pub client_style: Option<SdkClientStyle>,
     pub package_version: Option<String>,
+    pub layout: Option<crate::SourceLayout>,
 }
 
 impl Common {
@@ -40,6 +41,10 @@ impl Common {
         self.package_version = Some(version.into());
         self
     }
+    pub fn layout(mut self, layout: crate::SourceLayout) -> Self {
+        self.layout = Some(layout);
+        self
+    }
     pub fn overlay(&self, local: &Self) -> Self {
         Self {
             client_name: local
@@ -47,6 +52,7 @@ impl Common {
                 .clone()
                 .or_else(|| self.client_name.clone()),
             client_style: local.client_style.or(self.client_style),
+            layout: local.layout.clone().or_else(|| self.layout.clone()),
             package_version: local
                 .package_version
                 .clone()

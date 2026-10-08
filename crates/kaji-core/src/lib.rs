@@ -10,6 +10,7 @@ pub mod files;
 pub mod filters;
 pub mod httpmock;
 pub mod idempotency;
+pub mod input;
 pub mod manifest;
 pub mod mocking;
 pub mod openapi32;
@@ -17,6 +18,7 @@ pub mod pagination;
 pub mod release;
 pub mod samples;
 pub mod semantics;
+pub mod source_layout;
 pub mod style;
 pub mod vendor;
 
@@ -43,4 +45,5 @@ pub use semantics::{
     PaginationSource, RequestBodyKind, RetryClass, SdkSemantics, StreamingKind, analyze_operation,
     analyze_sdk_semantics,
 };
+pub use source_layout::{SourceLayout, SourceUnit};
 pub use style::SdkClientStyle;

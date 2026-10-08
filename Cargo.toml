@@ -1,9 +1,16 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/kaji-inputs",
+    "crates/inputs/graphql",
+    "crates/inputs/asyncapi",
+    "crates/inputs/arazzo",
+    "crates/inputs/protobuf",
+    "crates/inputs/capnproto",
     "crates/kaji-core",
     "crates/kaji",
     "crates/kaji-cli",
+    "crates/kaji-node",
     "crates/plugins/rust",
     "crates/plugins/typescript",
     "crates/plugins/typescript-cli",

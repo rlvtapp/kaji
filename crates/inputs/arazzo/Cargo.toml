@@ -1,0 +1,20 @@
+[package]
+name = "kaji-input-arazzo"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Native arazzo input provider for Kaji"
+publish = false
+
+[dependencies]
+kaji-core = { path = "../../kaji-core" }
+anyhow = "1.0.102"
+roas-arazzo = { version = "=0.3.0", default-features = false, features = ["v1_0", "v1_1"] }
+serde_json = "1.0.138"
+serde_yaml_ng = "0.10"
+enumset = "1.1.13"
+
+[dev-dependencies]
+tempfile = "3.27.0"

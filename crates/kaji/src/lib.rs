@@ -13,6 +13,7 @@ pub use kaji_core::customization::{
 };
 pub use kaji_core::engine::{Common, Enforce, Package, PluginPhase};
 pub use kaji_core::idempotency::{IdempotencyConfig, IdempotencyRule};
+pub use kaji_core::input;
 pub use kaji_core::release;
 /// First-party C# SDK generator.
 ///
@@ -44,6 +45,7 @@ pub mod prelude {
         Contract, Enforce, Handle, Language, Meta, Plugin, PluginContext, PluginPhase, Provision,
         Requirement,
     };
+    pub use kaji_core::input::{InputContract, InputPlugin, InputProvider, InputRegistry};
     pub use kaji_core::{GeneratedFile, SdkClientStyle};
     pub use kaji_plugin_csharp::PackageExt as _;
     pub use kaji_plugin_elixir::PackageExt as _;
@@ -114,6 +116,17 @@ pub fn generate_with_security_catalog(
     Ok(tree)
 }
 
+/// Generates HTTP SDK packages from the normalized API published by an input plugin.
+/// Native GraphQL/event/RPC inputs require consumers for their own typed contracts;
+/// they are never silently coerced into HTTP operations.
+pub fn generate_with_input(
+    input: &kaji_core::input::InputContract,
+    profiles: ProfileSet,
+) -> Result<GeneratedTree> {
+    let adapted = input.get::<AdaptedApi>()?;
+    generate_with_security_catalog(&adapted.api, profiles, Some(&adapted.security_schemes))
+}
+
 /// Generates packages from any source-format [`Adapter`].
 ///
 /// The adapter owns parsing and normalization; Kaji's language plugins only
@@ -179,5 +192,67 @@ mod tests {
         )
         .unwrap();
         assert!(tree.get("sdk/go/go.mod").is_some());
+    }
+    #[test]
+    fn registered_input_can_supply_normalized_api_to_existing_sdk_generators() {
+        use kaji_core::input::{InputContract, InputPlugin, InputRegistry, InputSummary};
+        struct JsonApiInput;
+        impl InputPlugin for JsonApiInput {
+            fn id(&self) -> &str {
+                "http.json"
+            }
+            fn format(&self) -> &str {
+                "http-json"
+            }
+            fn load(&self, path: &Path) -> Result<InputContract> {
+                let api: Api = serde_json::from_slice(&std::fs::read(path)?)?;
+                let mut input = InputContract::new(InputSummary {
+                    format: "http-json".into(),
+                    title: api.name.clone(),
+                    version: Some(api.version.clone()),
+                    types: vec![],
+                    operations: vec![],
+                });
+                input.publish(AdaptedApi::new(api, SecuritySchemeCatalog::default()))?;
+                Ok(input)
+            }
+        }
+        let source = tempfile::NamedTempFile::new().unwrap();
+        let api = Api {
+            name: "Inventory".into(),
+            version: "2.0.0".into(),
+            schemas: vec![kaji_core::Schema::new(
+                "InventoryItem",
+                kaji_core::SchemaValue::new(kaji_core::SchemaKind::String),
+            )],
+            ..Default::default()
+        };
+        std::fs::write(source.path(), serde_json::to_vec(&api).unwrap()).unwrap();
+        let mut registry = InputRegistry::new();
+        registry.register(JsonApiInput).unwrap();
+        let input = registry.load("http-json", None, source.path()).unwrap();
+        let tree = generate_with_input(
+            &input.contract,
+            ProfileSet::new("sdk").package(go::package("go").with(go::sdk())),
+        )
+        .unwrap();
+        assert!(
+            tree.iter()
+                .any(|(_, contents)| contents.contains("type InventoryItem"))
+        );
+        let native_only = InputContract::new(InputSummary {
+            format: "graphql".into(),
+            title: "Native".into(),
+            version: None,
+            types: vec![],
+            operations: vec![],
+        });
+        let error = generate_with_input(
+            &native_only,
+            ProfileSet::new("sdk").package(go::package("go").with(go::sdk())),
+        )
+        .err()
+        .unwrap();
+        assert!(error.to_string().contains("kaji.http-api"));
     }
 }

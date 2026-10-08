@@ -215,7 +215,7 @@ impl GeneratedTree {
             let contents = if npm {
                 match &existing {
                     Some(existing) => merge_npm_manifest(existing, generated)?,
-                    None => generated.clone(),
+                    None => merge_npm_manifest("{}", generated)?,
                 }
             } else {
                 generated.clone()
@@ -606,6 +606,51 @@ mod tests {
             super::merge_npm_manifest(&merged, generated).unwrap(),
             merged
         );
+    }
+
+    #[test]
+    fn fresh_npm_manifest_matches_repeat_bytes_and_preserves_user_additions() {
+        let root = tempfile::tempdir().unwrap();
+        let mut tree = GeneratedTree::default();
+        tree.insert(
+            GeneratedFile::new(
+                "ts/package.json",
+                r#"{
+  "name": "probe", "version": "1.0.0", "files": ["dist", "README.md"],
+  "scripts": {"build": "tsc"}, "dependencies": {"commander": "^13"}
+}"#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        tree.write_to(root.path()).unwrap();
+        let path = root.path().join("ts/package.json");
+        let fresh = fs::read_to_string(&path).unwrap();
+        assert!(tree.check(root.path()).unwrap().is_empty());
+        tree.write_to(root.path()).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), fresh);
+        let mut edited: serde_json::Value = serde_json::from_str(&fresh).unwrap();
+        edited["scripts"]["test"] = serde_json::json!("customer-test");
+        edited["dependencies"]["commander"] = serde_json::json!("^14");
+        edited["files"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!("custom.js"));
+        fs::write(&path, serde_json::to_string(&edited).unwrap()).unwrap();
+        tree.write_to(root.path()).unwrap();
+        let merged = fs::read_to_string(&path).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&merged).unwrap();
+        assert_eq!(value["scripts"]["test"], "customer-test");
+        assert_eq!(value["dependencies"]["commander"], "^14");
+        assert!(
+            value["files"]
+                .as_array()
+                .unwrap()
+                .contains(&serde_json::json!("custom.js"))
+        );
+        tree.write_to(root.path()).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), merged);
+        assert!(tree.check(root.path()).unwrap().is_empty());
     }
 
     #[test]

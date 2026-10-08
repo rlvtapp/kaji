@@ -21,6 +21,8 @@ use kaji_core::{Api, GeneratedFile, GeneratedTree};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+mod config_defaults;
+mod contract;
 mod credentials;
 mod eject;
 mod mcp;
@@ -43,6 +45,8 @@ Usage:
   kaji mcp <openapi-file> --base-url <url>
   kaji mcp generator
   kaji mock serve <openapi-file> [--port <port>]
+  kaji contract plugins [--format human|json]
+  kaji contract inspect <file> --input-format <format> [--provider <id>] [--format human|json]
   kaji check <openapi-file> [--format human|json]
   kaji show <openapi-file> [--include-path <pattern>] [--exclude-path <pattern>]
   kaji update [--output <directory>] [--force]
@@ -711,6 +715,7 @@ struct OutputConfig {
 #[serde(deny_unknown_fields)]
 struct DefaultsConfig {
     client_style: Option<String>,
+    layout: Option<kaji_core::SourceLayout>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -722,6 +727,7 @@ struct PackageConfig {
     version: Option<String>,
     release: Option<kaji_core::release::PackageMetadata>,
     client_style: Option<String>,
+    layout: Option<kaji_core::SourceLayout>,
     #[serde(default)]
     api_reference: bool,
     #[serde(default)]
@@ -825,7 +831,14 @@ struct PluginConfig {
     surface: Option<String>,
     client_name: Option<String>,
     group_by_tag: Option<bool>,
+    split_by_group: Option<bool>,
     max_operations_per_file: Option<usize>,
+    layout: Option<kaji_core::SourceLayout>,
+    include_operations: Option<Vec<String>>,
+    operation_kinds: Option<BTreeMap<String, String>>,
+    operation_names: Option<BTreeMap<String, String>>,
+    fixture_options: Option<kaji::ts::FixtureOptions>,
+    cypress_options: Option<kaji::ts::CypressOptions>,
     max_file_bytes: Option<usize>,
     throw_on_error: Option<bool>,
     jobs: Option<usize>,
@@ -873,6 +886,7 @@ fn default_sdk_version() -> String {
 enum Action {
     Eject(Vec<OsString>),
     Migrate(Vec<OsString>),
+    Contract(Vec<OsString>),
     Sdk(sdk_automation::Options),
     Help,
     Version,
@@ -950,6 +964,9 @@ fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Action> {
     }
     if command == "init" {
         return parse_init(args);
+    }
+    if command == "contract" {
+        return Ok(Action::Contract(args.collect()));
     }
     if command == "migrate" {
         return Ok(Action::Migrate(args.collect()));
@@ -1692,6 +1709,7 @@ fn package_common(style: SdkClientStyle) -> Common {
 fn configured_common(style: SdkClientStyle, package: &PackageConfig) -> Common {
     let mut common = package_common(style);
     common.package_version = package.version.clone();
+    common.layout = package.layout.clone();
     common
 }
 
@@ -1961,6 +1979,32 @@ fn typescript_profile(
         output = output.with(provider);
     }
     for plugin in &package.plugins {
+        let query_consumer = matches!(
+            plugin.name.as_str(),
+            "tanstack-react-query" | "tanstack-vue-query" | "swr"
+        );
+        let auxiliary_consumer =
+            matches!(plugin.name.as_str(), "zod" | "faker" | "msw" | "cypress");
+        ensure!(
+            plugin.layout.is_none() || query_consumer || auxiliary_consumer,
+            "layout applies to query and auxiliary consumers only"
+        );
+        ensure!(
+            query_consumer
+                || (plugin.include_operations.is_none()
+                    && plugin.operation_kinds.is_none()
+                    && plugin.operation_names.is_none()),
+            "operation selection/classification/names apply to query consumers only"
+        );
+        ensure!(
+            plugin.fixture_options.is_none()
+                || matches!(plugin.name.as_str(), "faker" | "msw" | "cypress"),
+            "fixture_options applies to Faker/MSW/Cypress only"
+        );
+        ensure!(
+            plugin.cypress_options.is_none() || plugin.name == "cypress",
+            "cypress_options applies to Cypress only"
+        );
         if plugin.max_file_bytes.is_some()
             && !matches!(plugin.name.as_str(), "zod" | "faker" | "msw" | "cypress")
         {
@@ -2050,6 +2094,25 @@ fn typescript_profile(
             if let Some(count) = plugin.max_operations_per_file {
                 query = query.max_operations_per_file(count);
             }
+            if let Some(layout) = &plugin.layout {
+                query = query.layout(layout.clone());
+            }
+            if let Some(ids) = &plugin.include_operations {
+                query = query.include_operations(ids.clone());
+            }
+            for (operation, kind) in plugin.operation_kinds.iter().flatten() {
+                query = query.operation_kind(
+                    operation,
+                    match kind.as_str() {
+                        "query" => composition::QueryKind::Query,
+                        "mutation" => composition::QueryKind::Mutation,
+                        _ => bail!("operation kind must be query or mutation"),
+                    },
+                );
+            }
+            for (operation, name) in plugin.operation_names.iter().flatten() {
+                query = query.operation_name(operation, name);
+            }
             if let Some(module) = &module {
                 query = query.output(module);
             }
@@ -2074,6 +2137,15 @@ fn typescript_profile(
             .label(id);
             if let Some(bytes) = plugin.max_file_bytes {
                 consumer = consumer.max_file_bytes(bytes);
+            }
+            if let Some(layout) = &plugin.layout {
+                consumer = consumer.layout(layout.clone());
+            }
+            if let Some(fixtures) = &plugin.fixture_options {
+                consumer = consumer.fixture_options(fixtures.clone());
+            }
+            if let Some(options) = &plugin.cypress_options {
+                consumer = consumer.cypress_options(options.clone());
             }
             if plugin.name == "cypress" && module.is_none() {
                 consumer = consumer.output("api.cy");
@@ -2565,7 +2637,8 @@ fn config_profiles(
                     if plugin.name == "collection" {
                         let mut collection = postman::collection()
                             .strict(plugin.strict.unwrap_or(true))
-                            .group_by_tag(plugin.group_by_tag.unwrap_or(true));
+                            .group_by_tag(plugin.group_by_tag.unwrap_or(true))
+                            .split_by_group(plugin.split_by_group.unwrap_or(false));
                         if let Some(output) = &plugin.output {
                             collection = collection.output(output);
                         }
@@ -2716,6 +2789,7 @@ fn generate_from_config(
         bail!("openapi must set exactly one of input or artifacts");
     }
     validate_path_selection(&config.openapi.paths)?;
+    config_defaults::apply(&mut config)?;
     let style = parse_style(config.defaults.client_style.as_deref())?;
     let output = config_path(base, config.output.path.clone());
     for package in &mut config.packages {
@@ -4553,6 +4627,7 @@ fn main() -> ExitCode {
         Action::Sdk(options) => sdk_automation::run(options),
         Action::Eject(arguments) => eject::run(arguments),
         Action::Migrate(arguments) => migration::run(arguments),
+        Action::Contract(arguments) => contract::run(arguments),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,

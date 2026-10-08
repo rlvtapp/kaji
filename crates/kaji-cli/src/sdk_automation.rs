@@ -2619,6 +2619,119 @@ mod tests {
     }
 
     #[test]
+    fn all_sdk_languages_receive_readable_checks_and_gated_publish_sources() {
+        let languages = [
+            "typescript",
+            "python",
+            "go",
+            "rust",
+            "java",
+            "csharp",
+            "swift",
+            "php",
+            "ruby",
+            "elixir",
+        ];
+        let packages = languages
+            .iter()
+            .map(|language| {
+                let mut metadata = PackageMetadata::new(format!("example-{language}"));
+                metadata.language = (*language).into();
+                metadata.version = "1.2.3".into();
+                metadata.build = vec![PackageCommand::new("native-build", [*language])];
+                metadata.test = vec![PackageCommand::new("native-test", [*language])];
+                metadata.publisher = Some(kaji_core::release::PackagePublisher {
+                    registry: match *language {
+                        "typescript" => "npm",
+                        "python" => "pypi",
+                        "rust" => "crates.io",
+                        "go" => "go",
+                        _ => "custom",
+                    }
+                    .into(),
+                    release_type: "simple".into(),
+                    commands: if ["typescript", "python", "rust", "go"].contains(language) {
+                        vec![]
+                    } else {
+                        vec![PackageCommand::new("reviewed-publish", [*language])]
+                    },
+                    extra_files: vec![],
+                });
+                LocatedPackage {
+                    path: (*language).into(),
+                    metadata,
+                }
+            })
+            .collect::<Vec<_>>();
+        let files = routed_scaffold(
+            "generated",
+            "kaji.json",
+            "example/sdk-{lang}",
+            "0.5.0",
+            &packages,
+            &WorkflowSettings::default(),
+        )
+        .unwrap();
+        for language in languages {
+            let prefix = format!(".kaji/sdk-repository-setup/example/sdk-{language}");
+            for helper in [
+                "check/action.yml",
+                "check/check.mjs",
+                "publish/action.yml",
+                "publish/publish.mjs",
+            ] {
+                assert!(
+                    files.contains_key(&PathBuf::from(format!(
+                        "{prefix}/.github/actions/kaji-{helper}"
+                    ))),
+                    "{language}/{helper}"
+                );
+            }
+            let release: Value = serde_json::from_str(
+                files[&PathBuf::from(format!("{prefix}/.github/workflows/kaji-sdk-release.yml"))]
+                    .strip_prefix(WORKFLOW_MARKER)
+                    .unwrap(),
+            )
+            .unwrap();
+            assert_eq!(release["permissions"]["contents"], "read");
+            assert!(release["jobs"]["check"]["permissions"]["id-token"].is_null());
+            assert_eq!(
+                release["jobs"]["publish"]["permissions"]["id-token"],
+                "write"
+            );
+            assert!(
+                release["jobs"]["publish"]["needs"]
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!("check"))
+            );
+            assert_eq!(
+                release["jobs"]["check"]["steps"][0]["with"]["ref"],
+                "${{ matrix.tag }}"
+            );
+            assert!(release["on"]["pull_request_target"].is_null());
+            let ci: Value = serde_json::from_str(
+                files[&PathBuf::from(format!("{prefix}/.github/workflows/kaji-sdk-ci.yml"))]
+                    .strip_prefix(WORKFLOW_MARKER)
+                    .unwrap(),
+            )
+            .unwrap();
+            assert_eq!(
+                ci["jobs"]["sdk"]["strategy"]["matrix"]["include"][0]["language"],
+                language
+            );
+            assert_eq!(
+                ci["jobs"]["sdk"]["strategy"]["matrix"]["include"][0]["runner"],
+                if language == "swift" {
+                    "macos-14"
+                } else {
+                    "ubuntu-latest"
+                }
+            );
+        }
+    }
+
+    #[test]
     fn repository_routing_isolates_workflows_packages_and_app_scope() {
         let packages = [
             ("typescript", "web"),
