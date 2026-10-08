@@ -9,8 +9,6 @@ being decided. Nothing in this document schedules a release.
 Use **Poolster** for the whole product in this worked scenario. The name describes
 the stable center that coordinates source inputs, generation plugins, and output
 packages. It is a normal Dutch word that is reasonably pronounceable in English.
-The Japanese word for a pole star is 北極星 (*hokkyokusei*); it is useful as a
-translation, but too long for the command and package family.
 
 Use one name consistently in the eventual public surface:
 
@@ -21,8 +19,8 @@ Use one name consistently in the eventual public surface:
 | npm CLI package | `poolster` |
 | npm Node SDK | `@relevate/poolster` |
 | JavaScript config | `poolster.config.mjs` or `poolster.config.ts` |
-| Rust CLI crate | `poolster` with a `poolster` binary |
-| Rust embedding crate | `poolster-sdk` |
+| Rust CLI workspace crate | `poolster-cli` with a `poolster` binary; kept off crates.io |
+| Rust embedding crate on crates.io | `poolster` |
 | PyPI CLI wheel | `poolster` with a `poolster` console command |
 | GitHub repository, when renamed | `rlvtapp/poolster` |
 
@@ -44,7 +42,7 @@ chosen instead, substitute these roots throughout the maps below:
 | npm CLI and SDK | `poolster`, `@relevate/poolster` | `unii`, `@relevate/unii` |
 | npm plugins and inputs | `@relevate/poolster-plugin-*`, `@relevate/poolster-input-*` | `@relevate/unii-plugin-*`, `@relevate/unii-input-*` |
 | npm native packages | `@relevate/poolster-cli-*`, `@relevate/poolster-node-*` | `@relevate/unii-cli-*`, `@relevate/unii-node-*` |
-| Rust CLI, Rust SDK, and PyPI | `poolster`, `poolster-sdk`, `poolster` | `unii`, `unii-sdk`, `unii` |
+| Rust CLI workspace crate, Rust SDK, and PyPI | `poolster-cli`, `poolster`, `poolster` | `unii-cli`, `unii`, `unii` |
 | Config | `poolster.config.mjs` | `unii.config.mjs` |
 
 Unii is shorter and easy to say across languages; its double `i` needs a little
@@ -146,15 +144,16 @@ requires each factory to appear in `plugins` or `input.plugin` in the config.
 The current crates all have `publish = false`. Rename them together for source
 coherence when the product rename actually happens; a crates.io migration is a
 separate decision. Paths can move independently from Cargo package names.
-If published, the CLI package uses the crates.io name `poolster`, so
-`cargo install poolster` installs the `poolster` command. The separate Rust
-embedding facade uses `poolster-sdk` because Cargo package names are unique.
+Reserve the crates.io name `poolster` for the embedding SDK. Keep the Rust CLI
+as an internal workspace crate named `poolster-cli`, producing the `poolster`
+executable bundled with the Go compiler in npm platform packages and PyPI
+wheels. Do not publish the CLI crate to crates.io in this plan.
 
 | Current | Proposed | Role |
 | --- | --- | --- |
-| `kaji` | `poolster-sdk` | Public-facing Rust embedding facade and profiles. |
+| `kaji` | `poolster` | Public-facing Rust embedding facade and profiles; future crates.io package. |
 | `kaji-core` | `poolster-core` | Engine, contracts, file ownership. |
-| `kaji-cli` | `poolster` | Rust command, with `[[bin]] name = "poolster"`. |
+| `kaji-cli` | `poolster-cli` | Internal Rust command crate, with `[[bin]] name = "poolster"`. |
 | `kaji-node` | `poolster-node` | Internal NAPI bridge. |
 | `kaji-inputs` | `poolster-inputs` | Native input bundle. |
 | `kaji-input-<format>` | `poolster-input-<format>` | The five native parsers listed above. |
@@ -178,8 +177,8 @@ poolster (CLI) ───────► its CLI platform binary
       │ compatible peer
 language / input / auxiliary packages and optional plugins bundle
 
-Rust poolster command ──► poolster-sdk facade
-Rust poolster-sdk facade ──► poolster-core + linked Rust plugins
+Rust poolster command ──► poolster SDK facade
+Rust poolster SDK facade ──► poolster-core + selected Rust plugins
 ```
 
 1. The SDK owns `defineConfig`, JS/TS types and JSDoc, `definePlugin`,
@@ -250,9 +249,10 @@ The snippets show the intended final experience; `poolster` and
 `createPoolster` are not current commands/APIs. A `.ts` config needs a defined
 loader strategy and tests on every supported Node version before being
 advertised. Plain `.mjs` plus JSDoc and exported types work without that step.
-The parallel installation names would be `pip install poolster` for Python
-users, `cargo install poolster` for the Rust CLI, and `cargo add poolster-sdk`
-for Rust embedding.
+The parallel installation names would be `npx poolster` for npm CLI users,
+`pip install poolster` for Python CLI users, and `cargo add poolster` for Rust
+embedding. Homebrew and a shell installer can be considered later. Neither is
+part of the first distribution plan.
 
 ## Suggested repository layout after a rename
 
