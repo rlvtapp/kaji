@@ -2,8 +2,8 @@ using System.Text.Json;
 using Poolster.ContractSdk;
 
 using var native = new HttpClient(new Policy { InnerHandler = new HttpClientHandler() });
-var client = new PoolsterClient(native, new PoolsterClientOptions { BaseUrl = Environment.GetEnvironmentVariable("KAJI_CONTRACT_URL")!, ApiKey = Environment.GetEnvironmentVariable("KAJI_CONTRACT_CASE") });
-using var document = JsonDocument.Parse(Environment.GetEnvironmentVariable("KAJI_CONTRACT_SCENARIO") ?? "{}");
+var client = new PoolsterClient(native, new PoolsterClientOptions { BaseUrl = Environment.GetEnvironmentVariable("POOLSTER_CONTRACT_URL")!, ApiKey = Environment.GetEnvironmentVariable("POOLSTER_CONTRACT_CASE") });
+using var document = JsonDocument.Parse(Environment.GetEnvironmentVariable("POOLSTER_CONTRACT_SCENARIO") ?? "{}");
 var scenario = document.RootElement;
 var action = scenario.TryGetProperty("action", out var actionValue) ? actionValue.GetString() : "getContact";
 var callerKey = scenario.TryGetProperty("caller_key", out var keyValue) ? keyValue.GetString() : null;

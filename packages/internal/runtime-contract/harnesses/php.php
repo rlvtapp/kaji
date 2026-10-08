@@ -30,8 +30,8 @@ final class Policy implements ClientInterface {
 $metadata = json_decode(file_get_contents('composer.json'), true, flags: JSON_THROW_ON_ERROR);
 $prefix = array_key_first($metadata['autoload']['psr-4']);
 $type = $prefix . 'Client';
-$client = new $type(new Policy(new NativeWire()), getenv('KAJI_CONTRACT_URL'), getenv('KAJI_CONTRACT_CASE'));
-$scenario = json_decode(getenv('KAJI_CONTRACT_SCENARIO') ?: '{}', true, flags: JSON_THROW_ON_ERROR);
+$client = new $type(new Policy(new NativeWire()), getenv('POOLSTER_CONTRACT_URL'), getenv('POOLSTER_CONTRACT_CASE'));
+$scenario = json_decode(getenv('POOLSTER_CONTRACT_SCENARIO') ?: '{}', true, flags: JSON_THROW_ON_ERROR);
 $action = $scenario['action'] ?? 'getContact';
 $callerKey = $scenario['caller_key'] ?? null;
 try {

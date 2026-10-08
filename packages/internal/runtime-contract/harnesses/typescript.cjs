@@ -1,6 +1,6 @@
-const {PoolsterContract} = require(process.env.KAJI_CONTRACT_COMPILED + '/index.js')
-const scenario=JSON.parse(process.env.KAJI_CONTRACT_SCENARIO??'{}')
-const client = new PoolsterContract({baseUrl:process.env.KAJI_CONTRACT_URL, auth:{Bearer:process.env.KAJI_CONTRACT_CASE},validateResponses:scenario.validate_responses??false,middleware:[async(request,next)=>next({...request,headers:{...request.headers,'x-contract-middleware':'yes'}})]})
+const {PoolsterContract} = require(process.env.POOLSTER_CONTRACT_COMPILED + '/index.js')
+const scenario=JSON.parse(process.env.POOLSTER_CONTRACT_SCENARIO??'{}')
+const client = new PoolsterContract({baseUrl:process.env.POOLSTER_CONTRACT_URL, auth:{Bearer:process.env.POOLSTER_CONTRACT_CASE},validateResponses:scenario.validate_responses??false,middleware:[async(request,next)=>next({...request,headers:{...request.headers,'x-contract-middleware':'yes'}})]})
 ;(async()=>{
  const options={throwOnError:true,...('caller_key'in scenario?{headers:{'X-Once':scenario.caller_key}}:{})}
  const actions={getContact:()=>client.contacts.get(options),createContact:()=>client.contacts.create(options),patchContact:()=>client.contacts.patch(options),unsafeCreateContact:()=>client.unsafe.createContact(options),unsafePatchContact:()=>client.unsafe.patchContact(options)}

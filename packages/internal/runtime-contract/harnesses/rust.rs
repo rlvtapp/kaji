@@ -10,10 +10,10 @@ impl Middleware for Policy {
 }
 #[tokio::main]
 async fn main() {
-    let scenario: serde_json::Value = serde_json::from_str(&std::env::var("KAJI_CONTRACT_SCENARIO").unwrap_or_else(|_| "{}".into())).unwrap();
+    let scenario: serde_json::Value = serde_json::from_str(&std::env::var("POOLSTER_CONTRACT_SCENARIO").unwrap_or_else(|_| "{}".into())).unwrap();
     let transport = MiddlewareTransport::new(Policy, DefaultTransport::default());
-    let client = Client::new(std::env::var("KAJI_CONTRACT_URL").unwrap())
-        .with_bearer_token(std::env::var("KAJI_CONTRACT_CASE").unwrap())
+    let client = Client::new(std::env::var("POOLSTER_CONTRACT_URL").unwrap())
+        .with_bearer_token(std::env::var("POOLSTER_CONTRACT_CASE").unwrap())
         .with_transport(std::sync::Arc::new(transport));
     let action = scenario["action"].as_str().unwrap_or("getContact");
     let key = scenario["caller_key"].as_str().map(str::to_owned);

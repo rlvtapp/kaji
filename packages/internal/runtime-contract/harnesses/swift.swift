@@ -5,13 +5,13 @@ import FoundationNetworking
 @main struct ContractProbe {
     static func main() async throws {
         let environment = ProcessInfo.processInfo.environment
-        let scenario = try JSONSerialization.jsonObject(with: Data((environment["KAJI_CONTRACT_SCENARIO"] ?? "{}").utf8)) as! [String: Any]
+        let scenario = try JSONSerialization.jsonObject(with: Data((environment["POOLSTER_CONTRACT_SCENARIO"] ?? "{}").utf8)) as! [String: Any]
         let policy = PoolsterMiddlewareTransport(inner: PoolsterURLSessionTransport()) { request, following in
             var rewritten = request
             rewritten.setValue("yes", forHTTPHeaderField: "X-Contract-Middleware")
             return try await following(rewritten)
         }
-        var options = PoolsterClientOptions(baseURL: URL(string: environment["KAJI_CONTRACT_URL"]!)!, headers: ["Authorization": "Bearer " + environment["KAJI_CONTRACT_CASE"]!])
+        var options = PoolsterClientOptions(baseURL: URL(string: environment["POOLSTER_CONTRACT_URL"]!)!, headers: ["Authorization": "Bearer " + environment["POOLSTER_CONTRACT_CASE"]!])
         options.maxAttempts = 3
         options.retryBaseDelay = 0
         options.retryMaxDelay = 0

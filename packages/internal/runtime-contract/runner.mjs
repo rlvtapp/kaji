@@ -72,18 +72,18 @@ export async function prepare(language,sdk,root,exec=execute){
         case 'rust':{
             await mkdir(join(sdk,'examples'),{recursive:true});await cp(join(harness,'rust.rs'),join(sdk,'examples','runtime_contract.rs'))
             const cargo=await readFile(join(sdk,'Cargo.toml'),'utf8');await writeFile(join(sdk,'Cargo.toml'),cargo+'\n[dev-dependencies]\ntokio = { version = "1", features = ["macros", "rt-multi-thread"] }\n')
-            const target=process.env.KAJI_RUNTIME_RUST_TARGET??join(root,'rust-target')
-            await exec('cargo',['build',...(process.env.KAJI_RUNTIME_OFFLINE==='1'?['--offline']:[]),'--example','runtime_contract'],{cwd:sdk,env:{CARGO_TARGET_DIR:target},timeout:300000})
+            const target=process.env.POOLSTER_RUNTIME_RUST_TARGET??join(root,'rust-target')
+            await exec('cargo',['build',...(process.env.POOLSTER_RUNTIME_OFFLINE==='1'?['--offline']:[]),'--example','runtime_contract'],{cwd:sdk,env:{CARGO_TARGET_DIR:target},timeout:300000})
             return [join(target,'debug','examples','runtime_contract'),[],{}]
         }
         case 'swift':{
             const binary=join(root,'swift-probe');await exec('swiftc',['-parse-as-library',...await files(join(sdk,'Sources'),'.swift'),join(harness,'swift.swift'),'-o',binary],{cwd:sdk,timeout:180000,env:{CLANG_MODULE_CACHE_PATH:join(root,'clang-cache'),SWIFTPM_MODULECACHE_OVERRIDE:join(root,'swift-cache')}});return [binary,[],{}]
         }
         case 'typescript':{
-            assert.ok(process.env.KAJI_TSC_JS,'TypeScript runner requires KAJI_TSC_JS')
-            const compiled=join(root,'compiled');await exec('node',[process.env.KAJI_TSC_JS,'--strict','--target','ES2022','--module','commonjs','--moduleResolution','node','--lib','ES2022,DOM,DOM.Iterable','--skipLibCheck','--outDir',compiled,'index.ts'],{cwd:sdk})
+            assert.ok(process.env.POOLSTER_TSC_JS,'TypeScript runner requires POOLSTER_TSC_JS')
+            const compiled=join(root,'compiled');await exec('node',[process.env.POOLSTER_TSC_JS,'--strict','--target','ES2022','--module','commonjs','--moduleResolution','node','--lib','ES2022,DOM,DOM.Iterable','--skipLibCheck','--outDir',compiled,'index.ts'],{cwd:sdk})
             await writeFile(join(compiled,'package.json'),'{"type":"commonjs"}')
-            return ['node',[join(harness,'typescript.cjs')],{KAJI_CONTRACT_COMPILED:compiled}]
+            return ['node',[join(harness,'typescript.cjs')],{POOLSTER_CONTRACT_COMPILED:compiled}]
         }
         case 'java':{
             const classpath=join(root,'java-classpath.txt')
@@ -123,7 +123,7 @@ export async function run(language,source){
         const [program,args,environment]=await prepare(language,sdk,root)
         server=await wireServer()
         for(const scenario of manifest.scenarios.filter(s=>manifest.coverage[language].supported.includes(s.id))){
-            const stdout=await execute(program,args,{cwd:sdk,env:{...environment,KAJI_CONTRACT_URL:server.url,KAJI_CONTRACT_CASE:scenario.id,KAJI_CONTRACT_SCENARIO:JSON.stringify(scenario)},timeout:30000})
+            const stdout=await execute(program,args,{cwd:sdk,env:{...environment,POOLSTER_CONTRACT_URL:server.url,POOLSTER_CONTRACT_CASE:scenario.id,POOLSTER_CONTRACT_SCENARIO:JSON.stringify(scenario)},timeout:30000})
             const result=JSON.parse(stdout.trim().split('\n').at(-1));assert.equal(result.outcome,scenario.outcome,`${language}/${scenario.id}: outcome`)
             if(scenario.outcome==='success')assert.equal(result.id,scenario.contact_id,`${language}/${scenario.id}: model`)
             assert.equal(server.counts.get(scenario.id),scenario.requests,`${language}/${scenario.id}: HTTP attempt count`)

@@ -1,6 +1,6 @@
 policy = fn request, following -> following.(%{request | headers: [{"x-contract-middleware", "yes"} | request.headers]}) end
-{:ok, client} = Contractsdk.Client.new(base_url: System.fetch_env!("KAJI_CONTRACT_URL"), api_key: System.fetch_env!("KAJI_CONTRACT_CASE"), middleware: [policy])
-scenario = Jason.decode!(System.get_env("KAJI_CONTRACT_SCENARIO") || "{}")
+{:ok, client} = Contractsdk.Client.new(base_url: System.fetch_env!("POOLSTER_CONTRACT_URL"), api_key: System.fetch_env!("POOLSTER_CONTRACT_CASE"), middleware: [policy])
+scenario = Jason.decode!(System.get_env("POOLSTER_CONTRACT_SCENARIO") || "{}")
 action = Map.get(scenario, "action", "getContact")
 options = if Map.has_key?(scenario, "caller_key"), do: [x_once: scenario["caller_key"]], else: []
 invoke = fn ->

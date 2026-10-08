@@ -1,8 +1,8 @@
 require 'json'
 require 'contractsdk'
-scenario = JSON.parse(ENV.fetch('KAJI_CONTRACT_SCENARIO', '{}'))
+scenario = JSON.parse(ENV.fetch('POOLSTER_CONTRACT_SCENARIO', '{}'))
 policy = ->(request, following) { request['X-Contract-Middleware'] = 'yes'; following.call(request) }
-client = Contractsdk::Client.new(base_url: ENV.fetch('KAJI_CONTRACT_URL'), bearer_token: ENV.fetch('KAJI_CONTRACT_CASE'), middleware: [policy], max_attempts: 3, retry_base_delay: 0, retry_max_delay: 0, validate_responses: scenario.fetch('validate_responses', false))
+client = Contractsdk::Client.new(base_url: ENV.fetch('POOLSTER_CONTRACT_URL'), bearer_token: ENV.fetch('POOLSTER_CONTRACT_CASE'), middleware: [policy], max_attempts: 3, retry_base_delay: 0, retry_max_delay: 0, validate_responses: scenario.fetch('validate_responses', false))
 begin
   action = scenario.fetch('action', 'getContact')
   if action == 'echoWire'

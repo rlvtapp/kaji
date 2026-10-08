@@ -5,7 +5,7 @@ This suite generates one neutral API and drives its public read, mutation, pagin
 Generate all fixtures from the repository root:
 
 ```sh
-KAJI_RUNTIME_EXPORT=/tmp/poolster-runtime-fixture cargo test -p poolster --test runtime_conformance
+POOLSTER_RUNTIME_EXPORT=/tmp/poolster-runtime-fixture cargo test -p poolster --test runtime_conformance
 node packages/internal/runtime-contract/runner.mjs go /tmp/poolster-runtime-fixture/sdk/go
 node packages/internal/runtime-contract/runner.mjs python /tmp/poolster-runtime-fixture/sdk/python
 ```
@@ -31,19 +31,19 @@ node packages/internal/runtime-contract/runner.mjs python /tmp/poolster-runtime-
 
 This corpus covers a small neutral API. It does not establish exhaustive SSE, multipart, date, union, wide-integer or authentication coverage. Unknown fields are accepted; preservation is not asserted in every language. Dedicated native probes additionally cover middleware, cancellation, OAuth refresh concurrency, nested models and pagination. A passing suite does not claim complete runtime parity.
 
-TypeScript requires `KAJI_TSC_JS` pointing at an installed TypeScript compiler. Other targets need their native compiler/runtime and the generated package's dependencies. See `.github/workflows/ci.yml` for the pinned matrix setup.
+TypeScript requires `POOLSTER_TSC_JS` pointing at an installed TypeScript compiler. Other targets need their native compiler/runtime and the generated package's dependencies. See `.github/workflows/ci.yml` for the pinned matrix setup.
 
 Run package-level runner tests with `node --test packages/internal/runtime-contract/test.mjs`. These validate manifest coverage, child failure handling and the shared server itself.
 
-For CI, export the fixture once, upload `sdk/` as an artifact, and run each language's probe in the existing native toolchain matrix. Each job needs Node for the orchestrator in addition to its language toolchain. Install the TypeScript compiler explicitly and set `KAJI_TSC_JS`; initialize Hex for Elixir. Maven/Composer/Mix/Cargo builds may download the generated package's declared dependencies. Set `KAJI_RUNTIME_OFFLINE=1` to require Cargo's existing module cache; `KAJI_RUNTIME_RUST_TARGET` and `GOCACHE` may point to reusable CI caches. Unsupported scenarios print their reasons, and missing native tools fail rather than silently skip.
+For CI, export the fixture once, upload `sdk/` as an artifact, and run each language's probe in the existing native toolchain matrix. Each job needs Node for the orchestrator in addition to its language toolchain. Install the TypeScript compiler explicitly and set `POOLSTER_TSC_JS`; initialize Hex for Elixir. Maven/Composer/Mix/Cargo builds may download the generated package's declared dependencies. Set `POOLSTER_RUNTIME_OFFLINE=1` to require Cargo's existing module cache; `POOLSTER_RUNTIME_RUST_TARGET` and `GOCACHE` may point to reusable CI caches. Unsupported scenarios print their reasons, and missing native tools fail rather than silently skip.
 
 ## Installed TypeScript package
 
 Test the artifact a customer actually installs, including ESM root/subpath exports and NodeNext consumer types:
 
 ```sh
-KAJI_PACKAGE_FIXTURE=/tmp/poolster-runtime-fixture/sdk/typescript \
-KAJI_TSC_JS=/path/to/typescript/lib/tsc.js \
+POOLSTER_PACKAGE_FIXTURE=/tmp/poolster-runtime-fixture/sdk/typescript \
+POOLSTER_TSC_JS=/path/to/typescript/lib/tsc.js \
 node --test packages/internal/runtime-contract/package-consumer.test.mjs
 ```
 

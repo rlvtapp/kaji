@@ -27,10 +27,10 @@ class RuntimeContract {
         public Optional<Executor> executor(){return next.executor();}
     }
     public static void main(String[] args) throws Exception {
-        var config = new ClientConfig(System.getenv("KAJI_CONTRACT_URL"),System.getenv("KAJI_CONTRACT_CASE"),"Authorization","Bearer",Map.of(),new Policy(),Duration.ofSeconds(10),null,null);
+        var config = new ClientConfig(System.getenv("POOLSTER_CONTRACT_URL"),System.getenv("POOLSTER_CONTRACT_CASE"),"Authorization","Bearer",Map.of(),new Policy(),Duration.ofSeconds(10),null,null);
         var client = new Client(config);
         var mapper = new ObjectMapper();
-        var scenario = mapper.readTree(Optional.ofNullable(System.getenv("KAJI_CONTRACT_SCENARIO")).orElse("{}"));
+        var scenario = mapper.readTree(Optional.ofNullable(System.getenv("POOLSTER_CONTRACT_SCENARIO")).orElse("{}"));
         var action = scenario.path("action").asText("getContact");
         String callerKey = scenario.hasNonNull("caller_key") ? scenario.get("caller_key").asText() : null;
         try {

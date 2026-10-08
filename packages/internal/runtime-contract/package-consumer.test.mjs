@@ -6,8 +6,8 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {execute} from './runner.mjs';
 
-const fixture=process.env.KAJI_PACKAGE_FIXTURE;
-const compiler=process.env.KAJI_TSC_JS;
+const fixture=process.env.POOLSTER_PACKAGE_FIXTURE;
+const compiler=process.env.POOLSTER_TSC_JS;
 test('installed TypeScript ESM package exposes executable root/subpath exports and customer types', {skip:!fixture||!compiler}, async t=>{
   const root=await mkdtemp(join(tmpdir(),'poolster-installed-consumer-'));
   t.after(()=>rm(root,{recursive:true,force:true}));

@@ -1,11 +1,11 @@
 import json, os
 from contractsdk import Client
 
-scenario = json.loads(os.environ.get('KAJI_CONTRACT_SCENARIO', '{}'))
+scenario = json.loads(os.environ.get('POOLSTER_CONTRACT_SCENARIO', '{}'))
 def policy(request, following):
     request.add_header('X-Contract-Middleware', 'yes')
     return following(request)
-client = Client(os.environ['KAJI_CONTRACT_URL'], api_key=os.environ['KAJI_CONTRACT_CASE'], middleware=(policy,), validate_responses=scenario.get('validate_responses', False), retry_initial_delay=0, retry_max_delay=0)
+client = Client(os.environ['POOLSTER_CONTRACT_URL'], api_key=os.environ['POOLSTER_CONTRACT_CASE'], middleware=(policy,), validate_responses=scenario.get('validate_responses', False), retry_initial_delay=0, retry_max_delay=0)
 try:
     action = scenario.get('action', 'getContact')
     if action == 'echoWire':
