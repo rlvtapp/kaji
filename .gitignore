@@ -23,7 +23,7 @@ examples/typescript-cli/generated/
 examples/cli-multi-package/generated/
 examples/rust-embedded/.poolster/
 examples/rust-embedded/generated/
-examples/node-embedded/.kaji/
+examples/node-embedded/.poolster/
 examples/node-embedded/generated/
 examples/node-embedded/generated-filtered/
 examples/node-embedded/generated-from-config/

@@ -8,7 +8,7 @@ from the recipe directory, not the shell's current directory.
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/v1/poolster.schema.json",
+  "$schema": "https://raw.githubusercontent.com/rlvtapp/poolster/main/schemas/v1/poolster.schema.json",
   "openapi": { "input": "./openapi.yaml", "name": "Pet Store", "version": "1.0.0" },
   "output": { "path": "./generated" },
   "packages": [

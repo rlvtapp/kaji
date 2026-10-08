@@ -25,7 +25,7 @@ for review without publishing them. Before a release, align the Cargo CLI versio
 CLI and SDK package versions and their optional dependency versions.
 Test the tarballs on their platforms, then publish the platform packages before
 the CLI and SDK packages. The CLI package is `poolster`; it installs the `poolster`
-command. The SDK package is `@relevate/poolster`; import `@relevate/poolster/sdk`.
+command. The SDK package is `@relevate/poolster`; import `@relevate/poolster`.
 
 `@relevate/poolster@0.4.x` was a CLI package. Starting with the planned 0.5 npm
 layout, CLI users must replace it with `poolster`. The `@relevate/poolster` name is

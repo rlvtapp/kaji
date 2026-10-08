@@ -44,7 +44,7 @@ Check generated Fetch SDK consumers with a locally installed TypeScript compiler
 (Node is required; this test does not download dependencies):
 
 ```sh
-KAJI_TSC_JS=/path/to/typescript/lib/tsc.js \
+POOLSTER_TSC_JS=/path/to/typescript/lib/tsc.js \
   cargo test -p poolster-plugin-typescript generated_fetch_consumer_compiles_with_strict_typescript -- --ignored
 ```
 

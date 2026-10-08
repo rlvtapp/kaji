@@ -164,7 +164,7 @@ jobs:
       - name: Revoke SDK token
         if: ${{ always() && steps.sdk-token.outputs.token != '' }}
         env:
-          KAJI_INSTALLATION_TOKEN: ${{ steps.sdk-token.outputs.token }}
+          POOLSTER_INSTALLATION_TOKEN: ${{ steps.sdk-token.outputs.token }}
         run: node .github/actions/poolster-token/client.mjs --revoke
 ```
 

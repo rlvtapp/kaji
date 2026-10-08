@@ -29,9 +29,9 @@ recent calls, including the matched operation ID, scenario name, status code, an
 request body. This keeps diagnosis useful for people and agents without shipping a
 separate dashboard.
 
-The earlier `/_kaji/health` and `/_kaji/requests` routes remain available for
+The earlier `/_poolster/health` and `/_poolster/requests` routes remain available for
 existing integrations. New contracts should use `x-poolster-mock`; the compiler
-also accepts `x-kaji-mock` as a compatibility key.
+also accepts `x-poolster-mock` as a compatibility key.
 
 Unless an `x-poolster-mock` scenario matches, unconstrained schema fields vary for every
 request: strings, IDs, emails, numbers, dates, arrays, and objects are generated from
@@ -70,7 +70,7 @@ The mock package is written to `generated/sdk/mock-server` and contains a `Docke
 
 ```sh
 cd generated/sdk/mock-server
-cp .env.example .env # optional: set KAJI_MOCK_PORT
+cp .env.example .env # optional: set POOLSTER_MOCK_PORT
 docker compose up --build
 # or: sh ./run.sh
 ```

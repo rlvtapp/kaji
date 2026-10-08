@@ -50,7 +50,7 @@ needs provider-authored workflow, safety, and product guidance.
 ## Authentication and customization
 
 `auth set-token` stores a local bearer token and `<COMMAND>_TOKEN` supplies an ephemeral
-token in CI. Poolster creates `src/kaji_extension.rs` and `src/kaji_auth.rs` only once, so
+token in CI. Poolster creates `src/poolster_extension.rs` and `src/poolster_auth.rs` only once, so
 both are preserved when the CLI is regenerated. The latter's `ExtensionV1` contract is
 versioned.
 
@@ -59,7 +59,7 @@ versioned.
 Implement `pre_authenticate` to add custom OAuth, SSO, keychain, or signing credentials,
 then return `AuthenticationResult::Handled`; return `AuthenticationResult::Fallback` to
 retain Poolster's environment/profile token lookup. `before_request` and `after_response` in
-`kaji_extension.rs` are available for logging, tracing, and audit events.
+`poolster_extension.rs` are available for logging, tracing, and audit events.
 
 Existing `authenticate` implementations returning an optional bearer token remain
 supported. The generated `auth login` command delegates to `login`.

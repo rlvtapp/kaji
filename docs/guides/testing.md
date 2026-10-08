@@ -100,7 +100,7 @@ page iteration and exact path/query/body serialization.
 Consult its coverage table and unsupported-scenario manifest. Reproduce a check:
 
 ```sh
-KAJI_RUNTIME_EXPORT=/tmp/poolster-runtime-fixture cargo test -p poolster --test runtime_conformance
+POOLSTER_RUNTIME_EXPORT=/tmp/poolster-runtime-fixture cargo test -p poolster --test runtime_conformance
 node packages/internal/runtime-contract/runner.mjs go /tmp/poolster-runtime-fixture/sdk/go
 node --test packages/internal/runtime-contract/test.mjs packages/internal/sdk-delivery-test/test/*.mjs
 ```
@@ -125,12 +125,12 @@ target.
 Generate all ten SDKs from two immutable official Open-Meteo contracts:
 
 ```sh
-export KAJI_PUBLIC_CONTRACT_ROOT=/tmp/poolster-public-contracts
+export POOLSTER_PUBLIC_CONTRACT_ROOT=/tmp/poolster-public-contracts
 bash scripts/test-public-contracts.sh generate
 bash scripts/test-public-contracts.sh check LANGUAGE
 ```
 
-Use `KAJI_PUBLIC_SPEC_DIR` for a local cache. Exact SHA-256 verification still
+Use `POOLSTER_PUBLIC_SPEC_DIR` for a local cache. Exact SHA-256 verification still
 runs; pins live in `scripts/fixtures/public-contracts.json` and require deliberate
 review when changed.
 

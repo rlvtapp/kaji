@@ -90,7 +90,7 @@ later, after the npm/PyPI CLI distribution is established.
    language and one input plugin installed.
 3. **Review the implemented rename and layout.** Cargo, npm, and
    PyPI names, JS config discovery, environment variables, examples, docs, and
-   release metadata follow the checked name map and repository layout.
+   release metadata follow the package naming plan and repository layout.
 4. **Prepare only the Rust SDK for crates.io.** Add versioned publishable
    dependencies, test `cargo package`, and test a fresh consumer using
    `poolster` with one explicitly selected plugin. Keep the internal CLI crate

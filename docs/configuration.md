@@ -249,11 +249,8 @@ the supported JSON fields and direct-mode flags.
 
 ## Idempotency keys
 
-Use `x-poolster-*` OpenAPI extensions in new contracts. The compiler also accepts
-the earlier `x-kaji-*` keys for existing specifications; when both forms are
-present, the Poolster form wins. Directly constructed Rust API models may still
-need the legacy key for a language plugin until their extension handling is
-updated.
+Use `x-poolster-*` OpenAPI extensions. The compiler and Rust plugins use the
+same canonical keys without legacy extension fallbacks.
 
 Idempotency is opt-in. An operation may declare `x-poolster-idempotency: true`, or
 an object such as `{ "header": "Idempotency-Key", "auto_generate": true }`.

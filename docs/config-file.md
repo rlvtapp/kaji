@@ -12,14 +12,14 @@ and mock/documentation output in source control.
 
 ## Editor autocomplete
 
-Poolster's [JSON Schema](https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/v1/poolster.schema.json)
+Poolster's [JSON Schema](https://raw.githubusercontent.com/rlvtapp/poolster/main/schemas/v1/poolster.schema.json)
 gives VS Code, JetBrains IDEs, and other JSON Schema-aware editors completion,
 descriptions, enum choices, and inline validation. `poolster init` adds it for you.
 For an existing file, add this as the first property:
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/v1/poolster.schema.json"
+  "$schema": "https://raw.githubusercontent.com/rlvtapp/poolster/main/schemas/v1/poolster.schema.json"
 }
 ```
 
@@ -228,7 +228,7 @@ Then use `{ "profile": "github" }` wherever a secret value is accepted:
 ```
 
 `poolster auth status` never exposes token values; `poolster auth logout github`
-removes the mapping. Set `KAJI_CONFIG_HOME` to relocate this local profile
+removes the mapping. Set `POOLSTER_CONFIG_HOME` to relocate this local profile
 store, for example in a sandboxed agent workspace.
 
 Use `headers` for API-key schemes or nonstandard authentication, for example

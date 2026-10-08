@@ -1,10 +1,9 @@
 # Poolster: name and package structure proposal
 
 Status: **selected plan, implemented in source on `poolster-sdk-layout`** ·
-2026-10-08. Publication remains disabled. The GitHub repository is still
-`rlvtapp/kaji`; its URL remains until a separate repository move.
-Source folders follow the layout below. This document retains the original naming tradeoffs and
-release checklist.
+2026-10-08. Publication remains disabled. Repository references target
+`rlvtapp/poolster`. Source folders follow the layout below. This document
+records the selected package structure and release checklist.
 
 ## Selected name: Poolster
 
@@ -29,9 +28,9 @@ Use one name consistently in the eventual public surface:
 The CLI and SDK remain separate installs. `poolster` contains the command
 launcher and its native executable. `@relevate/poolster` contains the embedding
 API and NAPI runtime. Neither package depends on the other for its basic use.
-The root import `@relevate/poolster` is the canonical SDK entry point; `/sdk`
-can be retained as a harmless alias if migration experience calls for it. Do not
-create a second npm package named `poolster-sdk`.
+The root import `@relevate/poolster` is the SDK entry point; factory helpers use
+`@relevate/poolster/plugins`. There are no migration aliases. Do not create a
+second npm package named `poolster-sdk`.
 
 ### Earlier naming alternative: Unii
 
@@ -69,12 +68,12 @@ installing one never activates it.
 
 ### CLI, SDK, and platform binaries
 
-| Current | Proposed | Responsibility |
-| --- | --- | --- |
-| `kajicli` | `poolster` | Thin command launcher; binary name `poolster`. No SDK dependency for native or static-config use. |
-| `@relevate/kaji` | `@relevate/poolster` | Node SDK, config types, JS plugin engine, NAPI binding loader, `createPoolster`/`generate`. No public executable. |
-| `@relevate/kajicli-<platform>` | `@relevate/poolster-cli-<platform>` | Native Rust CLI and its OpenAPI compiler for one platform. Optional dependency of `poolster`. |
-| `@relevate/kaji-<platform>` | `@relevate/poolster-node-<platform>` | NAPI addon and its OpenAPI compiler for one platform. Optional dependency of `@relevate/poolster`. |
+| Proposed | Responsibility |
+| --- | --- |
+| `poolster` | Thin command launcher; binary name `poolster`. No SDK dependency for native or static-config use. |
+| `@relevate/poolster` | Node SDK, config types, JS plugin engine, NAPI binding loader, `createPoolster`/`generate`. No public executable. |
+| `@relevate/poolster-cli-<platform>` | Native Rust CLI and its OpenAPI compiler for one platform. Optional dependency of `poolster`. |
+| `@relevate/poolster-node-<platform>` | NAPI addon and its OpenAPI compiler for one platform. Optional dependency of `@relevate/poolster`. |
 
 `<platform>` initially means `darwin-arm64`, `darwin-x64`,
 `linux-x64-gnu`, or `win32-x64-msvc`, matching the current build matrix.
@@ -84,7 +83,7 @@ installs both may get two OpenAPI compiler copies under this initial layout.
 Extracting a shared compiler package is worth considering only after measuring
 that cost against the extra release and resolution complexity.
 
-The former `@relevate/kaji` exposed `kaji-sdk`. The renamed `poolster` command
+The `poolster` command
 discovers `poolster.config.mjs`, `.cjs`, and `.js` for JavaScript recipes; the
 Rust CLI reads `poolster.json` for static configuration. A TypeScript config
 loader remains deferred until its runtime strategy and supported Node versions
@@ -95,9 +94,9 @@ also works directly without installing the CLI.
 
 Each language keeps its own installable package and exported factory:
 
-| Current prefix | Proposed prefix | Exact suffixes |
-| --- | --- | --- |
-| `@relevate/kaji-plugin-` | `@relevate/poolster-plugin-` | `typescript`, `rust`, `go`, `python`, `php`, `java`, `csharp`, `elixir`, `ruby`, `swift` |
+| Proposed prefix | Exact suffixes |
+| --- | --- |
+| `@relevate/poolster-plugin-` | `typescript`, `rust`, `go`, `python`, `php`, `java`, `csharp`, `elixir`, `ruby`, `swift` |
 
 For example, `@relevate/poolster-plugin-typescript` exports
 `pluginTypeScript()` and is selected in the config. Plugin packages declare a
@@ -106,9 +105,9 @@ generation as an install side effect.
 
 ### Input plugins
 
-| Current prefix | Proposed prefix | Exact suffixes |
-| --- | --- | --- |
-| `@relevate/kaji-input-` | `@relevate/poolster-input-` | `graphql`, `asyncapi`, `arazzo`, `protobuf`, `capnproto` |
+| Proposed prefix | Exact suffixes |
+| --- | --- |
+| `@relevate/poolster-input-` | `graphql`, `asyncapi`, `arazzo`, `protobuf`, `capnproto` |
 
 Input plugins remain a separate role from output plugins. The config selects
 one input provider and then selects output plugins. A native input that only
@@ -120,8 +119,8 @@ renderers. The package documentation must state this capability boundary.
 
 | Current prefix/name | Proposed prefix/name | Exact suffixes or role |
 | --- | --- | --- |
-| `@relevate/kaji-plugin-` | `@relevate/poolster-plugin-` | `zod`, `faker`, `msw`, `cypress`, `react-query`, `vue-query`, `swr` |
-| `@relevate/kaji-plugins` | `@relevate/poolster-plugins` | Optional factory bundle for the 10 languages, 5 inputs, and 7 auxiliaries. |
+| `@relevate/poolster-plugin-` | `@relevate/poolster-plugin-` | `zod`, `faker`, `msw`, `cypress`, `react-query`, `vue-query`, `swr` |
+| `@relevate/poolster-plugins` | `@relevate/poolster-plugins` | Optional factory bundle for the 10 languages, 5 inputs, and 7 auxiliaries. |
 
 Keep the bundle because it offers the requested “install all, select manually”
 workflow. It exports factories only. Individual packages remain the documented
@@ -130,35 +129,34 @@ requires each factory to appear in `plugins` or `input.plugin` in the config.
 
 ### Integrations and internal tooling
 
-| Current | Proposed | Publication |
-| --- | --- | --- |
-| `@relevate/unplugin-kaji` | `@relevate/unplugin-poolster` | Public bundler adapter; peer or executable lookup follows the new CLI. |
-| PyPI `kaji-cli` in `packages/python` | `poolster` | Platform wheels for Python users; console command and Python module `poolster`. No Node dependency. |
-| GitHub Action in `packages/integrations/github` | Poolster action and inputs | Repository action, not an npm SDK dependency. |
-| GitLab template in `packages/integrations/gitlab` | Poolster template and command | Template, not an npm SDK dependency. |
-| `@relevate/kaji-spec-sync-action` | `@relevate/poolster-spec-sync-action` | Keep private unless there is a separate reason to publish. |
-| `@relevate/kaji-sdk-publish-action` | `@relevate/poolster-sdk-publish-action` | Keep private unless there is a separate reason to publish. |
-| `@kaji/runtime-contract`, `@kaji/postman-execute`, `@kaji/github-app-broker` | `@poolster/...` | Internal test or service packages; keep `private: true`. |
+| Proposed | Publication |
+| --- | --- |
+| `@relevate/unplugin-poolster` | Public bundler adapter; peer or executable lookup follows the new CLI. |
+| `poolster` | Platform wheels for Python users; console command and Python module `poolster`. No Node dependency. |
+| Poolster action and inputs | Repository action, not an npm SDK dependency. |
+| Poolster template and command | Template, not an npm SDK dependency. |
+| `@relevate/poolster-spec-sync-action` | Keep private unless there is a separate reason to publish. |
+| `@relevate/poolster-sdk-publish-action` | Keep private unless there is a separate reason to publish. |
+| `@poolster/...` | Internal test or service packages; keep `private: true`. |
 
 ## Rust workspace names
 
-The current crates all have `publish = false`. Rename them together for source
-coherence when the product rename actually happens; a crates.io migration is a
-separate decision. Paths can move independently from Cargo package names.
+The current crates all have `publish = false`. Their package names and source
+folders follow this plan. Publication is a separate decision.
 Reserve the crates.io name `poolster` for the embedding SDK. Keep the Rust CLI
 as an internal workspace crate named `poolster-cli`, producing the `poolster`
 executable bundled with the Go compiler in npm platform packages and PyPI
 wheels. Do not publish the CLI crate to crates.io in this plan.
 
-| Current | Proposed | Role |
-| --- | --- | --- |
-| `kaji` | `poolster` | Public-facing Rust embedding facade and profiles; future crates.io package. |
-| `kaji-core` | `poolster-core` | Engine, contracts, file ownership. |
-| `kaji-cli` | `poolster-cli` | Internal Rust command crate, with `[[bin]] name = "poolster"`. |
-| `kaji-node` | `poolster-node` | Internal NAPI bridge. |
-| `kaji-inputs` | `poolster-inputs` | Native input bundle. |
-| `kaji-input-<format>` | `poolster-input-<format>` | The five native parsers listed above. |
-| `kaji-plugin-<name>` | `poolster-plugin-<name>` | `rust`, `typescript`, `typescript-cli`, `rust-cli`, `go`, `python`, `php`, `symfony`, `terraform`, `postman`, `java`, `csharp`, `dotnet`, `elixir`, `ruby`, `swift`. |
+| Proposed | Role |
+| --- | --- |
+| `poolster` | Public-facing Rust embedding facade and profiles; future crates.io package. |
+| `poolster-core` | Engine, contracts, file ownership. |
+| `poolster-cli` | Internal Rust command crate, with `[[bin]] name = "poolster"`. |
+| `poolster-node` | Internal NAPI bridge. |
+| `poolster-inputs` | Native input bundle. |
+| `poolster-input-<format>` | The five native parsers listed above. |
+| `poolster-plugin-<name>` | `rust`, `typescript`, `typescript-cli`, `rust-cli`, `go`, `python`, `php`, `symfony`, `terraform`, `postman`, `java`, `csharp`, `dotnet`, `elixir`, `ruby`, `swift`. |
 
 Rust crate names and npm names need not have one-to-one publication. In
 particular, `poolster-plugin-typescript-cli`, `-rust-cli`, `-symfony`,
@@ -198,7 +196,7 @@ Rust poolster SDK facade ──► poolster-core + selected Rust plugins
    JavaScript launcher exactly.
 
 **Native modularity caveat.** Today the individual npm packages are lightweight
-selectors for Rust implementations compiled into the single Kaji NAPI addon.
+selectors for Rust implementations compiled into the single Poolster NAPI addon.
 Installing only the TypeScript factory does **not** make the SDK binary contain
 only TypeScript. A future design for true per-language native packages needs a
 versioned boundary where each addon accepts a normalized input contract and
@@ -295,14 +293,12 @@ are grouped under `packages/internal`. The shared factory generator lives at
    claimed by our account; the remaining package split is the same.
 2. Review the coordinated npm, Cargo, PyPI, config, binary, example, docs, and
    CI naming changes and repository layout on `poolster-sdk-layout`.
-   The [name map](poolster-name-map.json) records public old-to-new names.
+   Poolster is the sole supported name; no migration aliases are retained.
 3. Test CLI-only, SDK-only, and combined installs on every supported platform.
    Exercise JS + Rust input/output plugins together; run emitted SDK builds
    and cross-language runtime probes. Verify no plugin is activated by install.
-4. Decide how the existing published `@relevate/kaji@0.4.x` CLI is migrated.
-   The pre-rename plan proposed `@relevate/kaji` as an SDK at 0.5;
-   that is a breaking npm change even without the Poolster rename. Write one
-   explicit migration path rather than two successive public renames.
+4. Use only Poolster names, config files, environment variables and extensions.
+   Keep the unreleased API and package graph consistent without legacy aliases.
 5. Publish native platform packages before their launchers only after the
    entire package graph and migration notes are approved. Keep release jobs
    gated until then.

@@ -26,9 +26,9 @@ Until the crates are published, use paths to a Poolster clone:
 ```toml
 [dependencies]
 anyhow = "1"
-poolster = { path = "../kaji/crates/facade" }
-poolster-core = { path = "../kaji/crates/core" }
-poolster-plugin-typescript = { path = "../kaji/crates/plugins/typescript" }
+poolster = { path = "../poolster/crates/facade" }
+poolster-core = { path = "../poolster/crates/core" }
+poolster-plugin-typescript = { path = "../poolster/crates/plugins/typescript" }
 ```
 
 Use the Rust version declared by the workspace (currently Rust 1.85 or newer).
@@ -63,7 +63,7 @@ fn main() -> Result<()> {
             .name("@acme/email").with(ts::sdk().fetch().client_name("Email")));
 
     let tree = poolster::generate_openapi(
-        Path::new("../kaji/.poolster/openapi"),
+        Path::new("../poolster/.poolster/openapi"),
         "Email",
         "1.0.0",
         release,

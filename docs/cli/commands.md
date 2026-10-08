@@ -106,7 +106,7 @@ poolster auth status
 
 Reference that profile in `poolster.json` with
 `"token": { "profile": "github" }`, then use `poolster auth logout github` to
-remove the mapping. `KAJI_CONFIG_HOME` overrides the profile-store directory.
+remove the mapping. `POOLSTER_CONFIG_HOME` overrides the profile-store directory.
 
 See [the complete CLI reference](../cli.md) for every option and source-build
 instructions.

@@ -79,7 +79,7 @@ poolster-inputs = { path = "../poolster-inputs", default-features = false, featu
 
 ```rust
 use std::path::Path;
-use kaji_inputs::{default_registry, graphql::GraphqlDocument};
+use poolster_inputs::{default_registry, graphql::GraphqlDocument};
 
 let registry = default_registry()?;
 let loaded = registry.load("graphql", Some("graphql.apollo"), Path::new("schema.graphql"))?;
@@ -110,7 +110,7 @@ when the consumer was registered first.
 
 ```rust
 use std::sync::Arc;
-use kaji_inputs::{default_registry, graphql::GraphqlDocument, InputProvider};
+use poolster_inputs::{default_registry, graphql::GraphqlDocument, InputProvider};
 
 let input = InputProvider::<GraphqlDocument>::new(
     Arc::new(default_registry()?), "graphql", "schema.graphql",

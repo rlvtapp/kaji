@@ -10,7 +10,7 @@ install the published npm launcher, so CI needs Node but not Rust or Go.
 ```yaml
 steps:
   - uses: actions/checkout@v4
-  - uses: rlvtapp/kaji/packages/integrations/github@main
+  - uses: rlvtapp/poolster/packages/integrations/github@main
     with:
       config: api/poolster.json
 ```
@@ -23,7 +23,7 @@ and npm `version` to a release in production. See the
 
 ```yaml
 include:
-  - remote: 'https://raw.githubusercontent.com/rlvtapp/kaji/<poolster-release-tag>/packages/integrations/gitlab/poolster.yml'
+  - remote: 'https://raw.githubusercontent.com/rlvtapp/poolster/<poolster-release-tag>/packages/integrations/gitlab/poolster.yml'
 
 generate-sdk:
   extends: .poolster:generate

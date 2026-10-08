@@ -178,12 +178,12 @@ runs real Terraform CLI validation, apply, update, import, no-change plans and
 destroy against an ephemeral loopback mock, including a data-source read:
 
 ```sh
-KAJI_TERRAFORM_BIN=/path/to/terraform \
+POOLSTER_TERRAFORM_BIN=/path/to/terraform \
   cargo test -p poolster-plugin-terraform terraform_cli_local_mock_lifecycle -- --ignored
 ```
 
 This was verified with Terraform 1.13.4 and pinned Framework dependencies. Go
-modules must be available in `KAJI_TERRAFORM_GOMODCACHE` (default
+modules must be available in `POOLSTER_TERRAFORM_GOMODCACHE` (default
 `/tmp/poolster-tf-mod-cache`); the harness builds offline and uses provider development
 overrides, without registry installation/publication. Local mocks verify the
 generated boundary, not your live API’s lifecycle semantics. Test real API
@@ -275,8 +275,8 @@ Run the gated probe with Go, cached Framework dependencies and an explicitly
 selected Terraform executable:
 
 ```sh
-KAJI_TERRAFORM_BIN=/path/to/terraform \
-KAJI_TERRAFORM_GOMODCACHE=/path/to/go/pkg/mod \
+POOLSTER_TERRAFORM_BIN=/path/to/terraform \
+POOLSTER_TERRAFORM_GOMODCACHE=/path/to/go/pkg/mod \
 cargo test -p poolster-plugin-terraform terraform_cli_local_mock_lifecycle -- --ignored
 ```
 

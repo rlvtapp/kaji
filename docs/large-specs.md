@@ -119,15 +119,15 @@ because its root document depends on local files. The fetcher verifies the archi
 before extraction and rejects traversal, symlinks and oversized inputs.
 
 ```sh
-KAJI_PUBLIC_CONTRACT_MANIFEST="$PWD/scripts/fixtures/large-contracts.json" \
-KAJI_PUBLIC_CONTRACTS=openai \
-KAJI_PUBLIC_LANGUAGES=go \
-KAJI_PUBLIC_CONTRACT_ROOT=/tmp/poolster-public-check \
+POOLSTER_PUBLIC_CONTRACT_MANIFEST="$PWD/scripts/fixtures/large-contracts.json" \
+POOLSTER_PUBLIC_CONTRACTS=openai \
+POOLSTER_PUBLIC_LANGUAGES=go \
+POOLSTER_PUBLIC_CONTRACT_ROOT=/tmp/poolster-public-check \
 bash scripts/test-public-contracts.sh generate
 
-KAJI_PUBLIC_CONTRACT_MANIFEST="$PWD/scripts/fixtures/large-contracts.json" \
-KAJI_PUBLIC_CONTRACTS=openai \
-KAJI_PUBLIC_CONTRACT_ROOT=/tmp/poolster-public-check \
+POOLSTER_PUBLIC_CONTRACT_MANIFEST="$PWD/scripts/fixtures/large-contracts.json" \
+POOLSTER_PUBLIC_CONTRACTS=openai \
+POOLSTER_PUBLIC_CONTRACT_ROOT=/tmp/poolster-public-check \
 bash scripts/test-public-contracts.sh check go
 ```
 

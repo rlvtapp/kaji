@@ -22,7 +22,7 @@
       "largest_source_bytes": 129954,
       "largest_source_files": [
         {
-          "path": "clients/_kaji_json_refs_0002.ts",
+          "path": "clients/_poolster_json_refs_0002.ts",
           "bytes": 129954
         }
       ],
@@ -142,7 +142,7 @@
       "largest_source_bytes": 174205,
       "largest_source_files": [
         {
-          "path": "Sources/PublicContractSdk/KajiOperations007.swift",
+          "path": "Sources/PublicContractSdk/PoolsterOperations007.swift",
           "bytes": 174205
         }
       ],

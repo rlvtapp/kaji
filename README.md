@@ -153,7 +153,7 @@ Bundle HTTP middleware or add, replace and patch package source through a recipe
 [Why Poolster?](docs/why-poolster.md) · [Comparisons](docs/comparison.md) ·
 [Changelog](CHANGELOG.md) · [AI context](docs/ai.md)
 
-Questions or a bug? [Open an issue](https://github.com/rlvtapp/kaji/issues/new)
+Questions or a bug? [Open an issue](https://github.com/rlvtapp/poolster/issues/new)
 with your version, command and a small reproducible example.
 
 ## Ask AI about Poolster
@@ -163,7 +163,7 @@ with your version, command and a small reproducible example.
 
 ```text
 Help me use Poolster to [my goal] for [language]. I am using version [version].
-Read https://github.com/rlvtapp/kaji/blob/main/docs/ai.md, then use the docs
+Read https://github.com/rlvtapp/poolster/blob/main/docs/ai.md, then use the docs
 and source matching my version. Give me a minimal working recipe,
 verification steps, and any documented limitations.
 ```

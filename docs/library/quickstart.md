@@ -10,9 +10,9 @@ Until registry publishing is available, use paths from a Poolster clone:
 ```toml
 [dependencies]
 anyhow = "1"
-poolster = { path = "../kaji/crates/facade" }
-poolster-plugin-typescript = { path = "../kaji/crates/plugins/typescript" }
-poolster-plugin-go = { path = "../kaji/crates/plugins/go" }
+poolster = { path = "../poolster/crates/facade" }
+poolster-plugin-typescript = { path = "../poolster/crates/plugins/typescript" }
+poolster-plugin-go = { path = "../poolster/crates/plugins/go" }
 ```
 
 ## Compile and generate

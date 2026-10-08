@@ -1909,7 +1909,7 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate typescript-sdk (typescript): multiple generators emitted __package/models/DateRange.ts"
+          "diagnostic": "poolster: generate typescript-sdk (typescript): multiple generators emitted __package/models/DateRange.ts"
         },
         {
           "contract": "bigoven-com",
@@ -1944,7 +1944,7 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate typescript-sdk (typescript): multiple generators emitted __package/models/automationRules/ListRules.ts"
+          "diagnostic": "poolster: generate typescript-sdk (typescript): multiple generators emitted __package/models/automationRules/ListRules.ts"
         },
         {
           "contract": "cpy-re",
@@ -1965,7 +1965,7 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate typescript-sdk (typescript): multiple generators emitted __package/models/EndpointGetUsers.ts"
+          "diagnostic": "poolster: generate typescript-sdk (typescript): multiple generators emitted __package/models/EndpointGetUsers.ts"
         },
         {
           "contract": "digitalocean",
@@ -1979,7 +1979,7 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate typescript-sdk (typescript): multiple generators emitted __package/models/AccountPasswordRules.ts"
+          "diagnostic": "poolster: generate typescript-sdk (typescript): multiple generators emitted __package/models/AccountPasswordRules.ts"
         },
         {
           "contract": "envoice-in",
@@ -2028,7 +2028,7 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate typescript-sdk (typescript): multiple generators emitted __package/models/Address.ts"
+          "diagnostic": "poolster: generate typescript-sdk (typescript): multiple generators emitted __package/models/Address.ts"
         },
         {
           "contract": "loket",
@@ -2077,7 +2077,7 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate typescript-sdk (typescript): multiple generators emitted __package/models/Discount.ts"
+          "diagnostic": "poolster: generate typescript-sdk (typescript): multiple generators emitted __package/models/Discount.ts"
         },
         {
           "contract": "rudder-example-local",
@@ -2091,14 +2091,14 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate typescript-sdk (typescript): multiple generators emitted __package/models/Metadata.ts"
+          "diagnostic": "poolster: generate typescript-sdk (typescript): multiple generators emitted __package/models/Metadata.ts"
         },
         {
           "contract": "snyk-io",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate typescript-sdk (typescript): multiple generators emitted __package/models/AggregatedProjectIssues.ts"
+          "diagnostic": "poolster: generate typescript-sdk (typescript): multiple generators emitted __package/models/AggregatedProjectIssues.ts"
         },
         {
           "contract": "spoonacular-com",
@@ -2119,7 +2119,7 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate typescript-sdk (typescript): multiple generators emitted __package/models/GetFavStarIdsSchema.ts"
+          "diagnostic": "poolster: generate typescript-sdk (typescript): multiple generators emitted __package/models/GetFavStarIdsSchema.ts"
         },
         {
           "contract": "telematicssdk-com",
@@ -2133,7 +2133,7 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate typescript-sdk (typescript): multiple generators emitted __package/models/Error.ts"
+          "diagnostic": "poolster: generate typescript-sdk (typescript): multiple generators emitted __package/models/Error.ts"
         },
         {
           "contract": "tfl-gov-uk",
@@ -2330,511 +2330,511 @@
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations000.java:[249,13] reference to Queue is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations000.java:[249,13] reference to Queue is ambiguous"
         },
         {
           "contract": "alertersystem",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate java-sdk (java): java model 'AlertLog.jsonld-get' properties '@id' and 'id' collide as native identifier 'id'"
+          "diagnostic": "poolster: generate java-sdk (java): java model 'AlertLog.jsonld-get' properties '@id' and 'id' collide as native identifier 'id'"
         },
         {
           "contract": "apache-org",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations000.java:[1524,23] reference to Error is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations000.java:[1524,23] reference to Error is ambiguous"
         },
         {
           "contract": "apacta-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations001.java:[38,20] record component drivingTypeId is already defined in record io.kaji.publiccontract.internal.Operations001.GetDrivingTypesDrivingTypeIdRequest"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations001.java:[38,20] record component drivingTypeId is already defined in record io.poolster.publiccontract.internal.Operations001.GetDrivingTypesDrivingTypeIdRequest"
         },
         {
           "contract": "api2cart-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations000.java:[986,20] record component accessToken is already defined in record io.kaji.publiccontract.internal.Operations000.CartCreateRequest"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations000.java:[986,20] record component accessToken is already defined in record io.poolster.publiccontract.internal.Operations000.CartCreateRequest"
         },
         {
           "contract": "apicurio-local",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations000.java:[1392,23] reference to Error is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations000.java:[1392,23] reference to Error is ambiguous"
         },
         {
           "contract": "appcenter",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/ClientBase.java:[81,13] reference to Thread is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/ClientBase.java:[81,13] reference to Thread is ambiguous"
         },
         {
           "contract": "appwrite-io",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations000.java:[387,12] reference to Collection is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations000.java:[387,12] reference to Collection is ambiguous"
         },
         {
           "contract": "aws-ec2",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations018.java:[1222,13] reference to String is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations018.java:[1222,13] reference to String is ambiguous"
         },
         {
           "contract": "bbc-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate java-sdk (java): multiple generators emitted src/main/java/io/kaji/publiccontract/model/DateRange.java"
+          "diagnostic": "poolster: generate java-sdk (java): multiple generators emitted src/main/java/io/poolster/publiccontract/model/DateRange.java"
         },
         {
           "contract": "biapi-pro",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/resources/UsersManagementResourcePart000.java:[13,21] reference to Client is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/resources/UsersManagementResourcePart000.java:[13,21] reference to Client is ambiguous"
         },
         {
           "contract": "bitbucket-org",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/resources/UsersResourcePart000.java:[21,12] reference to Error is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/resources/UsersResourcePart000.java:[21,12] reference to Error is ambiguous"
         },
         {
           "contract": "bkk-hu",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations000.java:[598,20] record component ifModifiedSince is already defined in record io.kaji.publiccontract.internal.Operations000.GetTicketingDataRequest"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations000.java:[598,20] record component ifModifiedSince is already defined in record io.poolster.publiccontract.internal.Operations000.GetTicketingDataRequest"
         },
         {
           "contract": "box",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations000.java:[273,12] reference to Collections is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations000.java:[273,12] reference to Collections is ambiguous"
         },
         {
           "contract": "circuitsandbox-net",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations001.java:[745,13] reference to String is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations001.java:[745,13] reference to String is ambiguous"
         },
         {
           "contract": "clever-cloud-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations000.java:[1091,23] reference to Error is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations000.java:[1091,23] reference to Error is ambiguous"
         },
         {
           "contract": "clicksend-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations000.java:[304,17] method listRules() is already defined in class io.kaji.publiccontract.internal.Operations000"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations000.java:[304,17] method listRules() is already defined in class io.poolster.publiccontract.internal.Operations000"
         },
         {
           "contract": "codat",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate java-sdk (java): Multipart root must be an object or union of closed objects"
+          "diagnostic": "poolster: generate java-sdk (java): Multipart root must be an object or union of closed objects"
         },
         {
           "contract": "combell-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations001.java:[196,20] record component domainName is already defined in record io.kaji.publiccontract.internal.Operations001.GetWindowsHostingRequest"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations001.java:[196,20] record component domainName is already defined in record io.poolster.publiccontract.internal.Operations001.GetWindowsHostingRequest"
         },
         {
           "contract": "configcat-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/model/JsonNode.java:[8,1] io.kaji.publiccontract.model.JsonNode is already defined in this compilation unit"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/model/JsonNode.java:[8,1] io.poolster.publiccontract.model.JsonNode is already defined in this compilation unit"
         },
         {
           "contract": "contract-p-fit",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations001.java:[565,13] reference to Dictionary is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations001.java:[565,13] reference to Dictionary is ambiguous"
         },
         {
           "contract": "cpy-re",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate java-sdk (java): Multipart root must be an object or union of closed objects"
+          "diagnostic": "poolster: generate java-sdk (java): Multipart root must be an object or union of closed objects"
         },
         {
           "contract": "daniweb-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate java-sdk (java): multiple generators emitted src/main/java/io/kaji/publiccontract/model/EndpointGetUsers.java"
+          "diagnostic": "poolster: generate java-sdk (java): multiple generators emitted src/main/java/io/poolster/publiccontract/model/EndpointGetUsers.java"
         },
         {
           "contract": "dnd5eapi-co",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/resources/ClassValueResourcePart000.java:[17,12] reference to ClassValue is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/resources/ClassValueResourcePart000.java:[17,12] reference to ClassValue is ambiguous"
         },
         {
           "contract": "docusign",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate java-sdk (java): multiple generators emitted src/main/java/io/kaji/publiccontract/model/AccountPasswordRules.java"
+          "diagnostic": "poolster: generate java-sdk (java): multiple generators emitted src/main/java/io/poolster/publiccontract/model/AccountPasswordRules.java"
         },
         {
           "contract": "e-conomic-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations000.java:[1373,23] reference to Error is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations000.java:[1373,23] reference to Error is ambiguous"
         },
         {
           "contract": "envoice-in",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/resources/WorkTypeResourcePart000.java:[13,21] reference to Client is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/resources/WorkTypeResourcePart000.java:[13,21] reference to Client is ambiguous"
         },
         {
           "contract": "flat-io",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations000.java:[571,12] reference to Collection is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations000.java:[571,12] reference to Collection is ambiguous"
         },
         {
           "contract": "formapi-io",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations000.java:[768,23] reference to Error is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations000.java:[768,23] reference to Error is ambiguous"
         },
         {
           "contract": "gerermesaffaires-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate java-sdk (java): Multipart root must be an object or union of closed objects"
+          "diagnostic": "poolster: generate java-sdk (java): Multipart root must be an object or union of closed objects"
         },
         {
           "contract": "github",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate java-sdk (java): java model 'reaction-rollup' properties '+1' and '-1' collide as native identifier 'value1'"
+          "diagnostic": "poolster: generate java-sdk (java): java model 'reaction-rollup' properties '+1' and '-1' collide as native identifier 'value1'"
         },
         {
           "contract": "google-compute",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/model/HTTPHealthCheck.java:[16,8] class HttpHealthCheck is public, should be declared in a file named HttpHealthCheck.java"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/model/HTTPHealthCheck.java:[16,8] class HttpHealthCheck is public, should be declared in a file named HttpHealthCheck.java"
         },
         {
           "contract": "gsmtasks",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/resources/WorkingStateResourcePart000.java:[13,21] reference to Client is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/resources/WorkingStateResourcePart000.java:[13,21] reference to Client is ambiguous"
         },
         {
           "contract": "influxdata-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations002.java:[226,12] reference to Stack is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations002.java:[226,12] reference to Stack is ambiguous"
         },
         {
           "contract": "iqualify-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations000.java:[1329,23] reference to Error is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations000.java:[1329,23] reference to Error is ambiguous"
         },
         {
           "contract": "ix-api-net",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations001.java:[352,26] record component id is already defined in record io.kaji.publiccontract.internal.Operations001.RolesReadRequest"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations001.java:[352,26] record component id is already defined in record io.poolster.publiccontract.internal.Operations001.RolesReadRequest"
         },
         {
           "contract": "jira",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate java-sdk (java): Multipart root must be an object or union of closed objects"
+          "diagnostic": "poolster: generate java-sdk (java): Multipart root must be an object or union of closed objects"
         },
         {
           "contract": "just-eat-co-uk",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate java-sdk (java): multiple generators emitted src/main/java/io/kaji/publiccontract/model/Address.java"
+          "diagnostic": "poolster: generate java-sdk (java): multiple generators emitted src/main/java/io/poolster/publiccontract/model/Address.java"
         },
         {
           "contract": "loket",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate java-sdk (java): Multipart root must be an object or union of closed objects"
+          "diagnostic": "poolster: generate java-sdk (java): Multipart root must be an object or union of closed objects"
         },
         {
           "contract": "maif-local",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations001.java:[13,29] reference to ClientConfig is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations001.java:[13,29] reference to ClientConfig is ambiguous"
         },
         {
           "contract": "mastodon-local",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations001.java:[684,13] reference to List is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations001.java:[684,13] reference to List is ambiguous"
         },
         {
           "contract": "meshery-local",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate java-sdk (java): multipart operation 'idPostDeployApplicationFile' has an unsupported part name"
+          "diagnostic": "poolster: generate java-sdk (java): multipart operation 'idPostDeployApplicationFile' has an unsupported part name"
         },
         {
           "contract": "mist",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate java-sdk (java): java model 'AssetOfInterest' properties '_id' and 'id' collide as native identifier 'id'"
+          "diagnostic": "poolster: generate java-sdk (java): java model 'AssetOfInterest' properties '_id' and 'id' collide as native identifier 'id'"
         },
         {
           "contract": "motaword-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations000.java:[1177,23] reference to Error is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations000.java:[1177,23] reference to Error is ambiguous"
         },
         {
           "contract": "netbox",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/resources/DcimResourcePart002.java:[76,12] reference to Module is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/resources/DcimResourcePart002.java:[76,12] reference to Module is ambiguous"
         },
         {
           "contract": "noosh-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate java-sdk (java): Multipart root must be an object or union of closed objects"
+          "diagnostic": "poolster: generate java-sdk (java): Multipart root must be an object or union of closed objects"
         },
         {
           "contract": "ote-godaddy-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations000.java:[1269,23] reference to Error is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations000.java:[1269,23] reference to Error is ambiguous"
         },
         {
           "contract": "phantauth-net",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/resources/UserResourcePart000.java:[13,21] reference to Client is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/resources/UserResourcePart000.java:[13,21] reference to Client is ambiguous"
         },
         {
           "contract": "probely-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/model/UserName.java:[12,8] class Username is public, should be declared in a file named Username.java"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/model/UserName.java:[12,8] class Username is public, should be declared in a file named Username.java"
         },
         {
           "contract": "rebilly-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate java-sdk (java): multiple generators emitted src/main/java/io/kaji/publiccontract/model/Discount.java"
+          "diagnostic": "poolster: generate java-sdk (java): multiple generators emitted src/main/java/io/poolster/publiccontract/model/Discount.java"
         },
         {
           "contract": "sendgrid-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate java-sdk (java): multiple generators emitted src/main/java/io/kaji/publiccontract/model/Metadata.java"
+          "diagnostic": "poolster: generate java-sdk (java): multiple generators emitted src/main/java/io/poolster/publiccontract/model/Metadata.java"
         },
         {
           "contract": "shutterstock-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations001.java:[133,12] reference to Collection is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations001.java:[133,12] reference to Collection is ambiguous"
         },
         {
           "contract": "snyk-io",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate java-sdk (java): multiple generators emitted src/main/java/io/kaji/publiccontract/model/AggregatedProjectIssues.java"
+          "diagnostic": "poolster: generate java-sdk (java): multiple generators emitted src/main/java/io/poolster/publiccontract/model/AggregatedProjectIssues.java"
         },
         {
           "contract": "spoonacular-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate java-sdk (java): Multipart root must be an object or union of closed objects"
+          "diagnostic": "poolster: generate java-sdk (java): Multipart root must be an object or union of closed objects"
         },
         {
           "contract": "sportsdata-io",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/model/TeamGame.java:[531,12] too many parameters"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/model/TeamGame.java:[531,12] too many parameters"
         },
         {
           "contract": "stripe",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate java-sdk (java): Multipart encoding style requires an adapter"
+          "diagnostic": "poolster: generate java-sdk (java): Multipart encoding style requires an adapter"
         },
         {
           "contract": "superset-apache-local",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate java-sdk (java): multiple generators emitted src/main/java/io/kaji/publiccontract/model/GetFavStarIdsSchema.java"
+          "diagnostic": "poolster: generate java-sdk (java): multiple generators emitted src/main/java/io/poolster/publiccontract/model/GetFavStarIdsSchema.java"
         },
         {
           "contract": "telnyx-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate java-sdk (java): multiple generators emitted src/main/java/io/kaji/publiccontract/model/Error.java"
+          "diagnostic": "poolster: generate java-sdk (java): multiple generators emitted src/main/java/io/poolster/publiccontract/model/Error.java"
         },
         {
           "contract": "tfl-gov-uk",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations000.java:[685,20] record component postcode is already defined in record io.kaji.publiccontract.internal.Operations000.PlaceGetStreetsByPostCodeRequest"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations000.java:[685,20] record component postcode is already defined in record io.poolster.publiccontract.internal.Operations000.PlaceGetStreetsByPostCodeRequest"
         },
         {
           "contract": "trakt-tv",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/model/List.java:[6,1] io.kaji.publiccontract.model.List is already defined in this compilation unit"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/model/List.java:[6,1] io.poolster.publiccontract.model.List is already defined in this compilation unit"
         },
         {
           "contract": "trello-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate java-sdk (java): java model 'boards' properties 'prefs/background' and 'prefs_background' collide as native identifier 'prefsBackground'"
+          "diagnostic": "poolster: generate java-sdk (java): java model 'boards' properties 'prefs/background' and 'prefs_background' collide as native identifier 'prefsBackground'"
         },
         {
           "contract": "truora-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations000.java:[481,23] reference to Error is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations000.java:[481,23] reference to Error is ambiguous"
         },
         {
           "contract": "twilio-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations000.java:[968,20] record component dateCreated is already defined in record io.kaji.publiccontract.internal.Operations000.ListCallRecordingRequest"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations000.java:[968,20] record component dateCreated is already defined in record io.poolster.publiccontract.internal.Operations000.ListCallRecordingRequest"
         },
         {
           "contract": "twinehealth-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/resources/CalendarEventResponseResourcePart000.java:[18,50] incompatible types: io.kaji.publiccontract.internal.Operations000.CreateCalendarEventResponseRequest cannot be converted to io.kaji.publiccontract.model.CreateCalendarEventResponseRequest"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/resources/CalendarEventResponseResourcePart000.java:[18,50] incompatible types: io.poolster.publiccontract.internal.Operations000.CreateCalendarEventResponseRequest cannot be converted to io.poolster.publiccontract.model.CreateCalendarEventResponseRequest"
         },
         {
           "contract": "twitter-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations000.java:[286,13] reference to List is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations000.java:[286,13] reference to List is ambiguous"
         },
         {
           "contract": "unicourt",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations000.java:[1451,23] reference to Exception is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations000.java:[1451,23] reference to Exception is ambiguous"
         },
         {
           "contract": "vimeo-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations000.java:[1561,23] reference to Error is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations000.java:[1561,23] reference to Error is ambiguous"
         },
         {
           "contract": "visualstudio-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations001.java:[213,13] reference to NetworkSettingsResource is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations001.java:[213,13] reference to NetworkSettingsResource is ambiguous"
         },
         {
           "contract": "walletobjects-googleapis-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations000.java:[2050,13] reference to JwtResource is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations000.java:[2050,13] reference to JwtResource is ambiguous"
         },
         {
           "contract": "webflow-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations000.java:[1333,23] reference to Error is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations000.java:[1333,23] reference to Error is ambiguous"
         },
         {
           "contract": "xero-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/internal/Operations001.java:[278,13] reference to Currency is ambiguous"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/internal/Operations001.java:[278,13] reference to Currency is ambiguous"
         },
         {
           "contract": "xtrf-eu",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "[ERROR] java/src/main/java/io/kaji/publiccontract/model/FileDTO.java:[16,8] class FileDto is public, should be declared in a file named FileDto.java"
+          "diagnostic": "[ERROR] java/src/main/java/io/poolster/publiccontract/model/FileDTO.java:[16,8] class FileDto is public, should be declared in a file named FileDto.java"
         },
         {
           "contract": "zoom",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate java-sdk (java): Multipart root must be an object or union of closed objects"
+          "diagnostic": "poolster: generate java-sdk (java): Multipart root must be an object or union of closed objects"
         }
       ]
     },
@@ -2971,21 +2971,21 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate csharp-sdk (csharp): csharp model 'AlertLog.jsonld-get' properties '@id' and 'id' collide as native identifier 'Id'"
+          "diagnostic": "poolster: generate csharp-sdk (csharp): csharp model 'AlertLog.jsonld-get' properties '@id' and 'id' collide as native identifier 'Id'"
         },
         {
           "contract": "anchore-io",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/KajiClient.cs(380,70): error CS0120: An object reference is required for the non-static field, method, or property 'KajiClient.System' [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/PoolsterClient.cs(380,70): error CS0120: An object reference is required for the non-static field, method, or property 'PoolsterClient.System' [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "apache-org",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/KajiClient.cs(180,24): error CS1983: The return type of an async method must be void, Task, Task<T>, a task-like type, IAsyncEnumerable<T>, or IAsyncEnumerator<T> [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/PoolsterClient.cs(180,24): error CS1983: The return type of an async method must be void, Task, Task<T>, a task-like type, IAsyncEnumerable<T>, or IAsyncEnumerator<T> [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "apacta-com",
@@ -3006,7 +3006,7 @@
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/KajiClient.cs(359,70): error CS0120: An object reference is required for the non-static field, method, or property 'KajiClient.System' [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/PoolsterClient.cs(359,70): error CS0120: An object reference is required for the non-static field, method, or property 'PoolsterClient.System' [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "appcenter",
@@ -3020,21 +3020,21 @@
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/KajiClient.cs(178,63): error CS1501: No overload for method 'Max' takes 2 arguments [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/PoolsterClient.cs(178,63): error CS1501: No overload for method 'Max' takes 2 arguments [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "asana-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations001.cs(2219,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations001.cs(2219,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "bbc-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Models/DateRange_00047_7d407438531e24bf.cs(11,22): error CS0101: The namespace 'Kaji.PublicContractSdk' already contains a definition for 'DateRange' [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Models/DateRange_00047_7d407438531e24bf.cs(11,22): error CS0101: The namespace 'Poolster.PublicContractSdk' already contains a definition for 'DateRange' [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "beezup-com",
@@ -3048,161 +3048,161 @@
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations000.cs(429,252): error CS0100: The parameter name 'idConnection' is a duplicate [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations000.cs(429,252): error CS0100: The parameter name 'idConnection' is a duplicate [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "bigoven-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations000.cs(264,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations000.cs(264,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "bkk-hu",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations000.cs(416,136): error CS0100: The parameter name 'ifModifiedSince' is a duplicate [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations000.cs(416,136): error CS0100: The parameter name 'ifModifiedSince' is a duplicate [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "box",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/KajiClient.cs(321,24): error CS1983: The return type of an async method must be void, Task, Task<T>, a task-like type, IAsyncEnumerable<T>, or IAsyncEnumerator<T> [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/PoolsterClient.cs(321,24): error CS1983: The return type of an async method must be void, Task, Task<T>, a task-like type, IAsyncEnumerable<T>, or IAsyncEnumerator<T> [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "bungie",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/KajiClient.cs(100,12): error CS0246: The type or namespace name 'DefaultValueResource' could not be found (are you missing a using directive or an assembly reference?) [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/PoolsterClient.cs(100,12): error CS0246: The type or namespace name 'DefaultValueResource' could not be found (are you missing a using directive or an assembly reference?) [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "circuitsandbox-net",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations000.cs(1564,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations000.cs(1564,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "clicksend-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations000.cs(253,23): error CS0111: Type 'KajiClient' already defines a member called 'ListRulesAsync' with the same parameter types [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations000.cs(253,23): error CS0111: Type 'PoolsterClient' already defines a member called 'ListRulesAsync' with the same parameter types [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "codat",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate csharp-sdk (csharp): Multipart root must be an object or union of closed objects"
+          "diagnostic": "poolster: generate csharp-sdk (csharp): Multipart root must be an object or union of closed objects"
         },
         {
           "contract": "combell-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations000.cs(57,76): error CS0100: The parameter name 'accountId' is a duplicate [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations000.cs(57,76): error CS0100: The parameter name 'accountId' is a duplicate [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "cpy-re",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate csharp-sdk (csharp): Multipart root must be an object or union of closed objects"
+          "diagnostic": "poolster: generate csharp-sdk (csharp): Multipart root must be an object or union of closed objects"
         },
         {
           "contract": "daniweb-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Models/EndpointGetUsers_00032_bfdc5610f4d27f7e.cs(10,22): error CS0101: The namespace 'Kaji.PublicContractSdk' already contains a definition for 'EndpointGetUsers' [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Models/EndpointGetUsers_00032_bfdc5610f4d27f7e.cs(10,22): error CS0101: The namespace 'Poolster.PublicContractSdk' already contains a definition for 'EndpointGetUsers' [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "digitalocean",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations001.cs(517,31): error CS0037: Cannot convert null to 'bool' because it is a non-nullable value type [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations001.cs(517,31): error CS0037: Cannot convert null to 'bool' because it is a non-nullable value type [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "docker-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/KajiClient.cs(174,24): error CS1983: The return type of an async method must be void, Task, Task<T>, a task-like type, IAsyncEnumerable<T>, or IAsyncEnumerator<T> [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/PoolsterClient.cs(174,24): error CS1983: The return type of an async method must be void, Task, Task<T>, a task-like type, IAsyncEnumerable<T>, or IAsyncEnumerator<T> [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "docusign",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Models/AccountPasswordRules_00109_57df758073cce2a8.cs(10,22): error CS0101: The namespace 'Kaji.PublicContractSdk' already contains a definition for 'AccountPasswordRules' [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Models/AccountPasswordRules_00109_57df758073cce2a8.cs(10,22): error CS0101: The namespace 'Poolster.PublicContractSdk' already contains a definition for 'AccountPasswordRules' [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "dodo-ac",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations000.cs(23,28): error CS0037: Cannot convert null to 'Guid' because it is a non-nullable value type [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations000.cs(23,28): error CS0037: Cannot convert null to 'Guid' because it is a non-nullable value type [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "drchrono-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/KajiClient.cs(138,24): error CS1983: The return type of an async method must be void, Task, Task<T>, a task-like type, IAsyncEnumerable<T>, or IAsyncEnumerator<T> [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/PoolsterClient.cs(138,24): error CS1983: The return type of an async method must be void, Task, Task<T>, a task-like type, IAsyncEnumerable<T>, or IAsyncEnumerator<T> [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "envoice-in",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations000.cs(267,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations000.cs(267,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "formapi-io",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations000.cs(571,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations000.cs(571,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "gerermesaffaires-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate csharp-sdk (csharp): Multipart root must be an object or union of closed objects"
+          "diagnostic": "poolster: generate csharp-sdk (csharp): Multipart root must be an object or union of closed objects"
         },
         {
           "contract": "gettyimages-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations000.cs(431,142): error CS1001: Identifier expected [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations000.cs(431,142): error CS1001: Identifier expected [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "github",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate csharp-sdk (csharp): csharp model 'reaction-rollup' properties '+1' and '-1' collide as native identifier 'V1'"
+          "diagnostic": "poolster: generate csharp-sdk (csharp): csharp model 'reaction-rollup' properties '+1' and '-1' collide as native identifier 'V1'"
         },
         {
           "contract": "goog-io",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations000.cs(43,99): error CS0841: Cannot use local variable 'query' before it is declared [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations000.cs(43,99): error CS0841: Cannot use local variable 'query' before it is declared [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "gsmtasks",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations001.cs(1091,21294): error CS0100: The parameter name 'ordererId' is a duplicate [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations001.cs(1091,21294): error CS0100: The parameter name 'ordererId' is a duplicate [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "here",
@@ -3223,175 +3223,175 @@
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations000.cs(18,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations000.cs(18,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "influxdata-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/KajiClient.cs(216,24): error CS1983: The return type of an async method must be void, Task, Task<T>, a task-like type, IAsyncEnumerable<T>, or IAsyncEnumerator<T> [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/PoolsterClient.cs(216,24): error CS1983: The return type of an async method must be void, Task, Task<T>, a task-like type, IAsyncEnumerable<T>, or IAsyncEnumerator<T> [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "ix-api-net",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations000.cs(2369,69): error CS0100: The parameter name 'id' is a duplicate [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations000.cs(2369,69): error CS0100: The parameter name 'id' is a duplicate [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "jellyfin",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations002.cs(1691,64): error CS1001: Identifier expected [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations002.cs(1691,64): error CS1001: Identifier expected [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "jira",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate csharp-sdk (csharp): Multipart root must be an object or union of closed objects"
+          "diagnostic": "poolster: generate csharp-sdk (csharp): Multipart root must be an object or union of closed objects"
         },
         {
           "contract": "jumpseller-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations000.cs(1861,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations000.cs(1861,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "just-eat-co-uk",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Models/Address_00553_1737f69e334c12b3.cs(10,22): error CS0101: The namespace 'Kaji.PublicContractSdk' already contains a definition for 'Address' [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Models/Address_00553_1737f69e334c12b3.cs(10,22): error CS0101: The namespace 'Poolster.PublicContractSdk' already contains a definition for 'Address' [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "loket",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate csharp-sdk (csharp): Multipart root must be an object or union of closed objects"
+          "diagnostic": "poolster: generate csharp-sdk (csharp): Multipart root must be an object or union of closed objects"
         },
         {
           "contract": "mailchimp",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations002.cs(708,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations002.cs(708,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "meshery-local",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate csharp-sdk (csharp): multipart operation 'idPostDeployApplicationFile' has an unsupported part name"
+          "diagnostic": "poolster: generate csharp-sdk (csharp): multipart operation 'idPostDeployApplicationFile' has an unsupported part name"
         },
         {
           "contract": "mist",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate csharp-sdk (csharp): csharp model 'AssetOfInterest' properties '_id' and 'id' collide as native identifier 'Id'"
+          "diagnostic": "poolster: generate csharp-sdk (csharp): csharp model 'AssetOfInterest' properties '_id' and 'id' collide as native identifier 'Id'"
         },
         {
           "contract": "monarchinitiative-org",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations001.cs(545,99): error CS0841: Cannot use local variable 'query' before it is declared [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations001.cs(545,99): error CS0841: Cannot use local variable 'query' before it is declared [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "motaword-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations001.cs(1743,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations001.cs(1743,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "noosh-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate csharp-sdk (csharp): Multipart root must be an object or union of closed objects"
+          "diagnostic": "poolster: generate csharp-sdk (csharp): Multipart root must be an object or union of closed objects"
         },
         {
           "contract": "openchannel-io",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations000.cs(18,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations000.cs(18,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "optimade-local",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Resources/LinksResource000.cs(11,29): error CS0101: The namespace 'Kaji.PublicContractSdk' already contains a definition for 'LinksResource' [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Resources/LinksResource000.cs(11,29): error CS0101: The namespace 'Poolster.PublicContractSdk' already contains a definition for 'LinksResource' [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "orbit-love",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations000.cs(144,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations000.cs(144,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "orthanc-server-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/KajiClient.cs(356,70): error CS0120: An object reference is required for the non-static field, method, or property 'KajiClient.System' [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/PoolsterClient.cs(356,70): error CS0120: An object reference is required for the non-static field, method, or property 'PoolsterClient.System' [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "ote-godaddy-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations000.cs(282,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations000.cs(282,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "quotes-rest",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations000.cs(538,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations000.cs(538,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "rebilly-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Models/Discount_00446_c02af77859334f1e.cs(11,22): error CS0101: The namespace 'Kaji.PublicContractSdk' already contains a definition for 'Discount' [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Models/Discount_00446_c02af77859334f1e.cs(11,22): error CS0101: The namespace 'Poolster.PublicContractSdk' already contains a definition for 'Discount' [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "reverb-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations000.cs(18,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations000.cs(18,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "rudder-example-local",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/KajiClient.cs(392,70): error CS0120: An object reference is required for the non-static field, method, or property 'KajiClient.System' [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/PoolsterClient.cs(392,70): error CS0120: An object reference is required for the non-static field, method, or property 'PoolsterClient.System' [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "rumble-run",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/KajiClient.cs(147,24): error CS1983: The return type of an async method must be void, Task, Task<T>, a task-like type, IAsyncEnumerable<T>, or IAsyncEnumerator<T> [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/PoolsterClient.cs(147,24): error CS1983: The return type of an async method must be void, Task, Task<T>, a task-like type, IAsyncEnumerable<T>, or IAsyncEnumerator<T> [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "salesloft-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/KajiClient.cs(300,24): error CS1983: The return type of an async method must be void, Task, Task<T>, a task-like type, IAsyncEnumerable<T>, or IAsyncEnumerator<T> [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/PoolsterClient.cs(300,24): error CS1983: The return type of an async method must be void, Task, Task<T>, a task-like type, IAsyncEnumerable<T>, or IAsyncEnumerator<T> [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "sendgrid-com",
@@ -3405,35 +3405,35 @@
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations000.cs(544,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations000.cs(544,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "signl4-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/KajiClient.cs(299,77): error CS0117: 'Encoding' does not contain a definition for 'UTF8' [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/PoolsterClient.cs(299,77): error CS0117: 'Encoding' does not contain a definition for 'UTF8' [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "slack-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations000.cs(272,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations000.cs(272,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "snyk-io",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Models/AggregatedProjectIssues_00005_12f7b6c4e719ac37.cs(10,22): error CS0101: The namespace 'Kaji.PublicContractSdk' already contains a definition for 'AggregatedProjectIssues' [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Models/AggregatedProjectIssues_00005_12f7b6c4e719ac37.cs(10,22): error CS0101: The namespace 'Poolster.PublicContractSdk' already contains a definition for 'AggregatedProjectIssues' [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "spoonacular-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate csharp-sdk (csharp): Multipart root must be an object or union of closed objects"
+          "diagnostic": "poolster: generate csharp-sdk (csharp): Multipart root must be an object or union of closed objects"
         },
         {
           "contract": "squareup",
@@ -3447,70 +3447,70 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate csharp-sdk (csharp): Multipart encoding style requires an adapter"
+          "diagnostic": "poolster: generate csharp-sdk (csharp): Multipart encoding style requires an adapter"
         },
         {
           "contract": "superset-apache-local",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Models/GetFavStarIdsSchema_00173_4d9c0356d565b4e3.cs(11,22): error CS0101: The namespace 'Kaji.PublicContractSdk' already contains a definition for 'GetFavStarIdsSchema' [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Models/GetFavStarIdsSchema_00173_4d9c0356d565b4e3.cs(11,22): error CS0101: The namespace 'Poolster.PublicContractSdk' already contains a definition for 'GetFavStarIdsSchema' [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "telnyx-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Models/Error_00509_9f7452dd75d54d31.cs(10,22): error CS0101: The namespace 'Kaji.PublicContractSdk' already contains a definition for 'Error' [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Models/Error_00509_9f7452dd75d54d31.cs(10,22): error CS0101: The namespace 'Poolster.PublicContractSdk' already contains a definition for 'Error' [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "tfl-gov-uk",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations000.cs(294,136): error CS0100: The parameter name 'startDate' is a duplicate [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations000.cs(294,136): error CS0100: The parameter name 'startDate' is a duplicate [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "threatjammer-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations000.cs(1604,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations000.cs(1604,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "trakt-tv",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations000.cs(1044,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations000.cs(1044,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "trello-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate csharp-sdk (csharp): csharp model 'boards' properties 'prefs/background' and 'prefs_background' collide as native identifier 'PrefsBackground'"
+          "diagnostic": "poolster: generate csharp-sdk (csharp): csharp model 'boards' properties 'prefs/background' and 'prefs_background' collide as native identifier 'PrefsBackground'"
         },
         {
           "contract": "twilio-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations000.cs(475,232): error CS0100: The parameter name 'startTime' is a duplicate [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations000.cs(475,232): error CS0100: The parameter name 'startTime' is a duplicate [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "twinehealth-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Resources/ActionResource000.cs(11,29): error CS0101: The namespace 'Kaji.PublicContractSdk' already contains a definition for 'ActionResource' [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Resources/ActionResource000.cs(11,29): error CS0101: The namespace 'Poolster.PublicContractSdk' already contains a definition for 'ActionResource' [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "twitter-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/KajiClient.cs(190,66): error CS1503: Argument 1: cannot convert from 'System.Net.HttpStatusCode' to 'Kaji.PublicContractSdk.HttpStatusCode' [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/PoolsterClient.cs(190,66): error CS1503: Argument 1: cannot convert from 'System.Net.HttpStatusCode' to 'Poolster.PublicContractSdk.HttpStatusCode' [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "unicourt",
@@ -3524,14 +3524,14 @@
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations000.cs(787,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations000.cs(787,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "vimeo-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations000.cs(68,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations000.cs(68,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "visma-com",
@@ -3545,42 +3545,42 @@
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Resources/NetworkSettingsResource000.cs(11,29): error CS0101: The namespace 'Kaji.PublicContractSdk' already contains a definition for 'NetworkSettingsResource' [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Resources/NetworkSettingsResource000.cs(11,29): error CS0101: The namespace 'Poolster.PublicContractSdk' already contains a definition for 'NetworkSettingsResource' [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "vocadb-net",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Operations/KajiClientOperations000.cs(38,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Operations/PoolsterClientOperations000.cs(38,13): error CS0136: A local or parameter named 'query' cannot be declared in this scope because that name is used in an enclosing local scope to define a local or parameter [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "walletobjects-googleapis-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/Resources/JwtResource000.cs(11,29): error CS0101: The namespace 'Kaji.PublicContractSdk' already contains a definition for 'JwtResource' [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/Resources/JwtResource000.cs(11,29): error CS0101: The namespace 'Poolster.PublicContractSdk' already contains a definition for 'JwtResource' [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "wiremock-org",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/KajiClient.cs(344,70): error CS0120: An object reference is required for the non-static field, method, or property 'KajiClient.System' [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/PoolsterClient.cs(344,70): error CS0120: An object reference is required for the non-static field, method, or property 'PoolsterClient.System' [csharp/PublicContractSdk.csproj]"
         },
         {
           "contract": "zoom",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate csharp-sdk (csharp): Multipart root must be an object or union of closed objects"
+          "diagnostic": "poolster: generate csharp-sdk (csharp): Multipart root must be an object or union of closed objects"
         },
         {
           "contract": "zuora",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "csharp/KajiClient.cs(384,24): error CS1983: The return type of an async method must be void, Task, Task<T>, a task-like type, IAsyncEnumerable<T>, or IAsyncEnumerator<T> [csharp/PublicContractSdk.csproj]"
+          "diagnostic": "csharp/PoolsterClient.cs(384,24): error CS1983: The return type of an async method must be void, Task, Task<T>, a task-like type, IAsyncEnumerable<T>, or IAsyncEnumerator<T> [csharp/PublicContractSdk.csproj]"
         }
       ]
     },
@@ -4172,7 +4172,7 @@
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
         },
         {
           "contract": "adyen-com",
@@ -4186,35 +4186,35 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): swift model 'AlertLog.jsonld-get' properties '@id' and 'id' collide as native identifier 'id'"
+          "diagnostic": "poolster: generate swift-sdk (swift): swift model 'AlertLog.jsonld-get' properties '@id' and 'id' collide as native identifier 'id'"
         },
         {
           "contract": "anchore-io",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "apache-org",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
         },
         {
           "contract": "apacta-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "api-video",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object; open/union roots require an adapter"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object; open/union roots require an adapter"
         },
         {
           "contract": "api2cart-com",
@@ -4228,21 +4228,21 @@
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
         },
         {
           "contract": "apigee-net",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "appcenter",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "apple-com",
@@ -4256,14 +4256,14 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "appwrite-io",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "art19-com",
@@ -4277,7 +4277,7 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object; open/union roots require an adapter"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object; open/union roots require an adapter"
         },
         {
           "contract": "aws-ec2",
@@ -4291,14 +4291,14 @@
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
         },
         {
           "contract": "bbc-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): multiple generators emitted ./Sources/PublicContractSdk/Models/DateRange.swift"
+          "diagnostic": "poolster: generate swift-sdk (swift): multiple generators emitted ./Sources/PublicContractSdk/Models/DateRange.swift"
         },
         {
           "contract": "beezup-com",
@@ -4312,14 +4312,14 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "bitbucket-org",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
         },
         {
           "contract": "bkk-hu",
@@ -4340,7 +4340,7 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "britbox-co-uk",
@@ -4354,14 +4354,14 @@
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
         },
         {
           "contract": "callfire-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "chaingateway",
@@ -4382,7 +4382,7 @@
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
         },
         {
           "contract": "clicksend-com",
@@ -4396,7 +4396,7 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "combell-com",
@@ -4410,91 +4410,91 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "cpy-re",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "daniweb-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "discourse-local",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "docker-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:65:17: error: invalid redeclaration of 'session'"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:65:17: error: invalid redeclaration of 'session'"
         },
         {
           "contract": "docusign",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "dracoon",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "drchrono-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:177:22: error: type 'Task' has no member 'checkCancellation'"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:177:22: error: type 'Task' has no member 'checkCancellation'"
         },
         {
           "contract": "e-conomic-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
         },
         {
           "contract": "ebay-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
         },
         {
           "contract": "exavault-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "figshare-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "files-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "flat-io",
@@ -4508,7 +4508,7 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "gambitcomm-local",
@@ -4522,7 +4522,7 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "getpostman-com",
@@ -4536,14 +4536,14 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "github",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): swift model 'reaction-rollup' properties '+1' and '-1' collide as native identifier 'kaji1'"
+          "diagnostic": "poolster: generate swift-sdk (swift): swift model 'reaction-rollup' properties '+1' and '-1' collide as native identifier 'poolster1'"
         },
         {
           "contract": "google-compute",
@@ -4557,28 +4557,28 @@
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:166:60: error: cannot assign value of type 'PublicContractSdk.Locale' to type 'Foundation.Locale'"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:166:60: error: cannot assign value of type 'PublicContractSdk.Locale' to type 'Foundation.Locale'"
         },
         {
           "contract": "gsmtasks",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart operation 'accounts_partial_update' supports multipart/form-data with one optional JSON alternative"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart operation 'accounts_partial_update' supports multipart/form-data with one optional JSON alternative"
         },
         {
           "contract": "here",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:47:13: error: cannot convert return expression of type '(Foundation.Data, Foundation.URLResponse)' to return type '(PublicContractSdk.Data, Foundation.URLResponse)'"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:47:13: error: cannot convert return expression of type '(Foundation.Data, Foundation.URLResponse)' to return type '(PublicContractSdk.Data, Foundation.URLResponse)'"
         },
         {
           "contract": "id4i-de",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "ideal-postcodes-co-uk",
@@ -4592,21 +4592,21 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object; open/union roots require an adapter"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object; open/union roots require an adapter"
         },
         {
           "contract": "influxdata-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
         },
         {
           "contract": "iqualify-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
         },
         {
           "contract": "ix-api-net",
@@ -4627,21 +4627,21 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "jumpseller-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:67:17: error: invalid redeclaration of 'hooks'"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:67:17: error: invalid redeclaration of 'hooks'"
         },
         {
           "contract": "just-eat-co-uk",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): multiple generators emitted ./Sources/PublicContractSdk/Models/Address.swift"
+          "diagnostic": "poolster: generate swift-sdk (swift): multiple generators emitted ./Sources/PublicContractSdk/Models/Address.swift"
         },
         {
           "contract": "keycloak-local",
@@ -4655,14 +4655,14 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "linqr-app",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "listennotes-com",
@@ -4676,35 +4676,35 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "mastodon-local",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
         },
         {
           "contract": "meshery-local",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): swift model 'Panel' properties 'x-axis' and 'xAxis' collide as native identifier 'xAxis'"
+          "diagnostic": "poolster: generate swift-sdk (swift): swift model 'Panel' properties 'x-axis' and 'xAxis' collide as native identifier 'xAxis'"
         },
         {
           "contract": "mist",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): swift model 'AssetOfInterest' properties '_id' and 'id' collide as native identifier 'id'"
+          "diagnostic": "poolster: generate swift-sdk (swift): swift model 'AssetOfInterest' properties '_id' and 'id' collide as native identifier 'id'"
         },
         {
           "contract": "motaword-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object; open/union roots require an adapter"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object; open/union roots require an adapter"
         },
         {
           "contract": "mux-com",
@@ -4725,28 +4725,28 @@
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
         },
         {
           "contract": "noosh-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "nordigen-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart operation 'create EUA v2' supports multipart/form-data with one optional JSON alternative"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart operation 'create EUA v2' supports multipart/form-data with one optional JSON alternative"
         },
         {
           "contract": "openai-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object; open/union roots require an adapter"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object; open/union roots require an adapter"
         },
         {
           "contract": "openbanking-org-uk",
@@ -4760,14 +4760,14 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart operation 'initiatePayment' supports multipart/form-data with one optional JSON alternative"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart operation 'initiatePayment' supports multipart/form-data with one optional JSON alternative"
         },
         {
           "contract": "openchannel-io",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "optimade-local",
@@ -4781,7 +4781,7 @@
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
         },
         {
           "contract": "pandascore-co",
@@ -4795,21 +4795,21 @@
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
         },
         {
           "contract": "plaid",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:92:45: error: value of type 'URL' (aka 'String') has no member 'port'"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:92:45: error: value of type 'URL' (aka 'String') has no member 'port'"
         },
         {
           "contract": "presalytics-io",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "probely-com",
@@ -4823,14 +4823,14 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "rebilly-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): multiple generators emitted ./Sources/PublicContractSdk/Models/Discount.swift"
+          "diagnostic": "poolster: generate swift-sdk (swift): multiple generators emitted ./Sources/PublicContractSdk/Models/Discount.swift"
         },
         {
           "contract": "rubrik",
@@ -4844,42 +4844,42 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "rumble-run",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:92:45: error: value of type 'URL' has no member 'port'"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:92:45: error: value of type 'URL' has no member 'port'"
         },
         {
           "contract": "salesloft-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:177:22: error: type 'Task' has no member 'checkCancellation'"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:177:22: error: type 'Task' has no member 'checkCancellation'"
         },
         {
           "contract": "sendgrid-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): multiple generators emitted ./Sources/PublicContractSdk/Models/Metadata.swift"
+          "diagnostic": "poolster: generate swift-sdk (swift): multiple generators emitted ./Sources/PublicContractSdk/Models/Metadata.swift"
         },
         {
           "contract": "shipengine-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
         },
         {
           "contract": "shutterstock-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
         },
         {
           "contract": "sinao-app",
@@ -4893,70 +4893,70 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): multiple generators emitted ./Sources/PublicContractSdk/Models/AggregatedProjectIssues.swift"
+          "diagnostic": "poolster: generate swift-sdk (swift): multiple generators emitted ./Sources/PublicContractSdk/Models/AggregatedProjectIssues.swift"
         },
         {
           "contract": "spoonacular-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "squareup",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
         },
         {
           "contract": "stackexchange-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
         },
         {
           "contract": "stream-io-api-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root cannot be nullable"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root cannot be nullable"
         },
         {
           "contract": "stripe",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "superset-apache-local",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "telegram-org",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "telnyx-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object; open/union roots require an adapter"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object; open/union roots require an adapter"
         },
         {
           "contract": "telstra-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
         },
         {
           "contract": "tfl-gov-uk",
@@ -4970,21 +4970,21 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object; open/union roots require an adapter"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object; open/union roots require an adapter"
         },
         {
           "contract": "trello-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): swift model 'boards' properties 'prefs/background' and 'prefs_background' collide as native identifier 'prefsBackground'"
+          "diagnostic": "poolster: generate swift-sdk (swift): swift model 'boards' properties 'prefs/background' and 'prefs_background' collide as native identifier 'prefsBackground'"
         },
         {
           "contract": "truora-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object; open/union roots require an adapter"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object; open/union roots require an adapter"
         },
         {
           "contract": "twilio-com",
@@ -5005,7 +5005,7 @@
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
         },
         {
           "contract": "unicourt",
@@ -5019,14 +5019,14 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object; open/union roots require an adapter"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object; open/union roots require an adapter"
         },
         {
           "contract": "vimeo-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
         },
         {
           "contract": "visma",
@@ -5054,28 +5054,28 @@
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:16:88: error: default argument value of type 'Int' cannot be converted to type 'TimeInterval'"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:16:88: error: default argument value of type 'Int' cannot be converted to type 'TimeInterval'"
         },
         {
           "contract": "webflow-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
         },
         {
           "contract": "xero-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "swift/Sources/PublicContractSdk/KajiClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
+          "diagnostic": "swift/Sources/PublicContractSdk/PoolsterClient.swift:27:10: error: enum with raw type cannot have cases with arguments"
         },
         {
           "contract": "xtrf-eu",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object; open/union roots require an adapter"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object; open/union roots require an adapter"
         },
         {
           "contract": "yodlee-com",
@@ -5089,14 +5089,14 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         },
         {
           "contract": "zuora",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate swift-sdk (swift): Swift multipart root must be a named closed object"
+          "diagnostic": "poolster: generate swift-sdk (swift): Swift multipart root must be a named closed object"
         }
       ]
     },
@@ -5615,21 +5615,21 @@
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 124,
-          "diagnostic": "Fatal error: Cannot use Kaji\\Public\\Contract\\Sdk\\Models\\String as String because 'String' is a special class name in src/Resources/ActionDescribeInstanceConnectEndpointsResourceOperations000.php on line 11"
+          "diagnostic": "Fatal error: Cannot use Poolster\\Public\\Contract\\Sdk\\Models\\String as String because 'String' is a special class name in src/Resources/ActionDescribeInstanceConnectEndpointsResourceOperations000.php on line 11"
         },
         {
           "contract": "bbc-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate php-sdk (php): multiple generators emitted src/Models/DateRange.php"
+          "diagnostic": "poolster: generate php-sdk (php): multiple generators emitted src/Models/DateRange.php"
         },
         {
           "contract": "biapi-pro",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 124,
-          "diagnostic": "Fatal error: Cannot use Kaji\\Public\\Contract\\Sdk\\Models\\Client as Client because the name is already in use in src/Resources/AdministrationResourceOperations000.php on line 9"
+          "diagnostic": "Fatal error: Cannot use Poolster\\Public\\Contract\\Sdk\\Models\\Client as Client because the name is already in use in src/Resources/AdministrationResourceOperations000.php on line 9"
         },
         {
           "contract": "bitbucket-org",
@@ -5650,21 +5650,21 @@
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 124,
-          "diagnostic": "Fatal error: Cannot redefine class constant Kaji\\Public\\Contract\\Sdk\\Models\\Schema7::Value1 in src/Models/Schema7.php on line 20"
+          "diagnostic": "Fatal error: Cannot redefine class constant Poolster\\Public\\Contract\\Sdk\\Models\\Schema7::Value1 in src/Models/Schema7.php on line 20"
         },
         {
           "contract": "circuitsandbox-net",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 124,
-          "diagnostic": "Fatal error: Cannot use Kaji\\Public\\Contract\\Sdk\\Models\\String as String because 'String' is a special class name in src/Resources/ConversationsResourceOperations000.php on line 13"
+          "diagnostic": "Fatal error: Cannot use Poolster\\Public\\Contract\\Sdk\\Models\\String as String because 'String' is a special class name in src/Resources/ConversationsResourceOperations000.php on line 13"
         },
         {
           "contract": "clicksend-com",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 124,
-          "diagnostic": "Fatal error: Cannot redeclare Kaji\\Public\\Contract\\Sdk\\Resources\\AutomationRulesResourceOperations000::listRules() in src/Resources/AutomationRulesResourceOperations000.php on line 89"
+          "diagnostic": "Fatal error: Cannot redeclare Poolster\\Public\\Contract\\Sdk\\Resources\\AutomationRulesResourceOperations000::listRules() in src/Resources/AutomationRulesResourceOperations000.php on line 89"
         },
         {
           "contract": "codat",
@@ -5678,7 +5678,7 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate php-sdk (php): multiple generators emitted src/Models/EndpointGetUsers.php"
+          "diagnostic": "poolster: generate php-sdk (php): multiple generators emitted src/Models/EndpointGetUsers.php"
         },
         {
           "contract": "dnd5eapi-co",
@@ -5692,14 +5692,14 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate php-sdk (php): multiple generators emitted src/Models/AccountPasswordRules.php"
+          "diagnostic": "poolster: generate php-sdk (php): multiple generators emitted src/Models/AccountPasswordRules.php"
         },
         {
           "contract": "gitea-io",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 124,
-          "diagnostic": "Fatal error: Cannot redeclare Kaji\\Public\\Contract\\Sdk\\Resources\\UserResourceOperations000::userGetOAuth2Application() in src/Resources/UserResourceOperations000.php on line 45"
+          "diagnostic": "Fatal error: Cannot redeclare Poolster\\Public\\Contract\\Sdk\\Resources\\UserResourceOperations000::userGetOAuth2Application() in src/Resources/UserResourceOperations000.php on line 45"
         },
         {
           "contract": "github",
@@ -5713,21 +5713,21 @@
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 124,
-          "diagnostic": "Fatal error: Cannot use Kaji\\Public\\Contract\\Sdk\\Models\\Client as Client because the name is already in use in src/Resources/ClientsResourceOperations000.php on line 8"
+          "diagnostic": "Fatal error: Cannot use Poolster\\Public\\Contract\\Sdk\\Models\\Client as Client because the name is already in use in src/Resources/ClientsResourceOperations000.php on line 8"
         },
         {
           "contract": "just-eat-co-uk",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate php-sdk (php): multiple generators emitted src/Models/Address.php"
+          "diagnostic": "poolster: generate php-sdk (php): multiple generators emitted src/Models/Address.php"
         },
         {
           "contract": "loket",
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 124,
-          "diagnostic": "Fatal error: Cannot redeclare Kaji\\Public\\Contract\\Sdk\\Client::emailtemplates() in src/Client.php on line 721"
+          "diagnostic": "Fatal error: Cannot redeclare Poolster\\Public\\Contract\\Sdk\\Client::emailtemplates() in src/Client.php on line 721"
         },
         {
           "contract": "mastodon-local",
@@ -5776,7 +5776,7 @@
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 124,
-          "diagnostic": "Fatal error: Cannot redeclare Kaji\\Public\\Contract\\Sdk\\Client::request() in src/Client.php on line 174"
+          "diagnostic": "Fatal error: Cannot redeclare Poolster\\Public\\Contract\\Sdk\\Client::request() in src/Client.php on line 174"
         },
         {
           "contract": "pandascore-co",
@@ -5797,21 +5797,21 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate php-sdk (php): multiple generators emitted src/Models/Discount.php"
+          "diagnostic": "poolster: generate php-sdk (php): multiple generators emitted src/Models/Discount.php"
         },
         {
           "contract": "sendgrid-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate php-sdk (php): multiple generators emitted src/Models/Metadata.php"
+          "diagnostic": "poolster: generate php-sdk (php): multiple generators emitted src/Models/Metadata.php"
         },
         {
           "contract": "snyk-io",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate php-sdk (php): multiple generators emitted src/Models/AggregatedProjectIssues.php"
+          "diagnostic": "poolster: generate php-sdk (php): multiple generators emitted src/Models/AggregatedProjectIssues.php"
         },
         {
           "contract": "squareup",
@@ -5825,14 +5825,14 @@
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate php-sdk (php): multiple generators emitted src/Models/GetFavStarIdsSchema.php"
+          "diagnostic": "poolster: generate php-sdk (php): multiple generators emitted src/Models/GetFavStarIdsSchema.php"
         },
         {
           "contract": "telnyx-com",
           "phase": "generation",
           "classification": "generation_failed",
           "exit_code": 1,
-          "diagnostic": "kaji: generate php-sdk (php): multiple generators emitted src/Models/Error.php"
+          "diagnostic": "poolster: generate php-sdk (php): multiple generators emitted src/Models/Error.php"
         },
         {
           "contract": "thebluealliance-com",
@@ -6291,7 +6291,7 @@
           "phase": "native",
           "classification": "native_failed",
           "exit_code": 1,
-          "diagnostic": "** (ArgumentError) @enforce_keys required keys ([:value_1]) that are not defined in defstruct: [value_1: nil, value_1: nil, confused: nil, eyes: nil, heart: nil, hooray: nil, laugh: nil, rocket: nil, total_count: nil, url: nil, kaji_present_fields: nil, additional_properties: %{}]"
+          "diagnostic": "** (ArgumentError) @enforce_keys required keys ([:value_1]) that are not defined in defstruct: [value_1: nil, value_1: nil, confused: nil, eyes: nil, heart: nil, hooray: nil, laugh: nil, rocket: nil, total_count: nil, url: nil, poolster_present_fields: nil, additional_properties: %{}]"
         },
         {
           "contract": "gsmtasks",

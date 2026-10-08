@@ -82,8 +82,8 @@ Run native probes for the transport and bundled policy you ship.
 See [native providers](native-sdk-providers.md) and [shared fixtures](shared-sdk-fixtures.md).
 
 Ignored tests state their prerequisites. Select probes by name after installing
-those tools. TypeScript middleware probes require `KAJI_TSC_JS` and
-`KAJI_AXIOS_NODE_MODULES` pointing to installed dependencies.
+those tools. TypeScript middleware probes require `POOLSTER_TSC_JS` and
+`POOLSTER_AXIOS_NODE_MODULES` pointing to installed dependencies.
 
 ### Live contract mock
 
@@ -109,7 +109,7 @@ node --test packages/internal/sdk-check/test/*.mjs packages/internal/sdk-publish
 | Requirement | Used by |
 | --- | --- |
 | Local port | Broker integration and loopback tests |
-| Python 3.11+ or `KAJI_TEST_PYTHON` | Publisher archive-reader probe |
+| Python 3.11+ or `POOLSTER_TEST_PYTHON` | Publisher archive-reader probe |
 | Native toolchain/dependencies | Generated SDK compilation and execution |
 | Configured repository, App and registry trust | A real delivery trial |
 
