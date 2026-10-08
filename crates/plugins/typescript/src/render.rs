@@ -26,6 +26,8 @@ pub struct ArtifactOptions {
     /// Import prefix from the generated artifact to the operation modules.
     pub clients_import: String,
     pub group_by_tag: bool,
+    /// Split auxiliary output at declaration boundaries near this byte budget.
+    pub max_file_bytes: usize,
 }
 impl Default for ArtifactOptions {
     fn default() -> Self {
@@ -37,6 +39,7 @@ impl Default for ArtifactOptions {
             title: None,
             clients_import: "./clients".into(),
             group_by_tag: true,
+            max_file_bytes: 128 * 1024,
         }
     }
 }
@@ -327,7 +330,7 @@ fn operation_identifier(name: &str, config: &ArtifactOptions) -> String {
     let mut result = match config.naming {
         Naming::PascalCase => identifier(name, true),
         Naming::SnakeCase => snake_case(name),
-        Naming::CamelCase => identifier(name, false),
+        Naming::CamelCase => crate::symbols::camel(name),
     };
     if reserved(&result) {
         result.push_str("Operation");
@@ -445,7 +448,7 @@ fn reserved(value: &str) -> bool {
     )
 }
 
-fn js_string(value: &str) -> String {
+pub(crate) fn js_string(value: &str) -> String {
     serde_json::to_string(value).expect("string serialization is infallible")
 }
 
@@ -464,6 +467,8 @@ impl TypeScriptZod {
     }
 
     pub fn generate(&self, api: &Api, config: &ArtifactOptions) -> Result<Vec<GeneratedFile>> {
+        let prepared = crate::auxiliary_layout::prepare(api);
+        let api = &prepared;
         let mut output = format!("{NOTICE}\nimport {{ z }} from 'zod';\n\n");
         for schema in &api.schemas {
             let name = type_identifier(&schema.name);
@@ -479,6 +484,10 @@ impl TypeScriptZod {
         }
         render_zod_operation_schemas(&mut output, api);
         render_zod_registry(&mut output, api);
+        anyhow::ensure!(config.max_file_bytes > 0, "max_file_bytes must be positive");
+        if output.len() > config.max_file_bytes || crate::auxiliary_layout::has_cycles(api) {
+            return crate::auxiliary_layout::zod(api, config);
+        }
         Ok(vec![GeneratedFile::new(
             extra_output_path(config, "typescript", "zod.ts"),
             output,
@@ -489,7 +498,7 @@ impl TypeScriptZod {
 /// Exposes media-specific schemas rather than guessing which representation a
 /// caller will send or receive. This makes the generated module usable from a
 /// hook or wrapper without coupling the generated SDK runtime to Zod.
-fn render_zod_operation_schemas(output: &mut String, api: &Api) {
+pub(crate) fn render_zod_operation_schemas(output: &mut String, api: &Api) {
     for operation in &api.operations {
         let name = type_identifier(&operation.id);
         if let Some(body) = &operation.request_body {
@@ -555,7 +564,7 @@ fn render_zod_operation_schemas(output: &mut String, api: &Api) {
 /// want to opt into validation. Zod 4 schema values implement Standard Schema
 /// V1, so callers can use either Zod's `parse`/`safeParse` API or a Standard
 /// Schema-aware integration without a second validation dependency.
-fn render_zod_registry(output: &mut String, api: &Api) {
+pub(crate) fn render_zod_registry(output: &mut String, api: &Api) {
     output.push_str(
         "/**\n * Component schemas keyed by their OpenAPI component name.\n *\n * Every value is a Zod 4 schema and therefore implements Standard Schema V1.\n */\nexport const kajiSchemas = {\n",
     );
@@ -563,7 +572,14 @@ fn render_zod_registry(output: &mut String, api: &Api) {
         let _ = writeln!(
             output,
             "  {}: {}Schema,",
-            js_string(&schema.name),
+            js_string(
+                schema
+                    .value
+                    .extensions
+                    .get("kaji.aux.schema_name")
+                    .and_then(Value::as_str)
+                    .unwrap_or(&schema.name)
+            ),
             type_identifier(&schema.name)
         );
     }
@@ -574,9 +590,16 @@ fn render_zod_registry(output: &mut String, api: &Api) {
         "export const getKajiSchema = <Name extends KajiSchemaName>(name: Name): (typeof kajiSchemas)[Name] => kajiSchemas[name];\n\n",
     );
 
+    render_zod_operation_registry(output, api, "kajiOperationSchemas");
+    output.push_str("export type KajiOperationId = keyof typeof kajiOperationSchemas;\n");
+    output.push_str("export type KajiOperationSchemas = typeof kajiOperationSchemas;\n");
     output.push_str(
-        "/**\n * Request-body and response schemas keyed by operation id, status, and media type.\n * Entries are omitted when the OpenAPI operation does not declare a schema.\n */\nexport const kajiOperationSchemas = {\n",
+        "export const getKajiOperationSchemas = <Operation extends KajiOperationId>(operation: Operation): KajiOperationSchemas[Operation] => kajiOperationSchemas[operation];\n",
     );
+}
+
+pub(crate) fn render_zod_operation_registry(output: &mut String, api: &Api, registry: &str) {
+    let _ = writeln!(output, "export const {registry} = {{");
     for operation in &api.operations {
         let name = type_identifier(&operation.id);
         let request = operation
@@ -589,7 +612,17 @@ fn render_zod_registry(output: &mut String, api: &Api) {
                 .iter()
                 .any(|media| media.schema.is_some())
         });
-        let _ = writeln!(output, "  {}: {{", js_string(&operation.id));
+        let _ = writeln!(
+            output,
+            "  {}: {{",
+            js_string(
+                operation
+                    .annotations
+                    .get("kaji.aux.operation_id")
+                    .and_then(Value::as_str)
+                    .unwrap_or(&operation.id)
+            )
+        );
         if request {
             let _ = writeln!(output, "    request: {name}RequestBodySchemas,");
         }
@@ -599,11 +632,6 @@ fn render_zod_registry(output: &mut String, api: &Api) {
         output.push_str("  },\n");
     }
     output.push_str("} as const;\n\n");
-    output.push_str("export type KajiOperationId = keyof typeof kajiOperationSchemas;\n");
-    output.push_str("export type KajiOperationSchemas = typeof kajiOperationSchemas;\n");
-    output.push_str(
-        "export const getKajiOperationSchemas = <Operation extends KajiOperationId>(operation: Operation): KajiOperationSchemas[Operation] => kajiOperationSchemas[operation];\n",
-    );
 }
 
 /// Emits TanStack React Query keys and query/mutation hooks over generated operation functions.
@@ -660,6 +688,8 @@ impl TypeScriptFaker {
     }
 
     pub fn generate(&self, api: &Api, config: &ArtifactOptions) -> Result<Vec<GeneratedFile>> {
+        let prepared = crate::auxiliary_layout::prepare(api);
+        let api = &prepared;
         let mut output = format!(
             "{NOTICE}\nimport {{ faker }} from '@faker-js/faker';\n{}
 ",
@@ -675,6 +705,10 @@ impl TypeScriptFaker {
             );
             output.push_str("}\n\n");
         }
+        anyhow::ensure!(config.max_file_bytes > 0, "max_file_bytes must be positive");
+        if output.len() > config.max_file_bytes || crate::auxiliary_layout::has_cycles(api) {
+            return crate::auxiliary_layout::faker(api, config);
+        }
         Ok(vec![GeneratedFile::new(
             extra_output_path(config, "typescript", "faker.ts"),
             output,
@@ -688,11 +722,22 @@ pub struct TypeScriptMsw;
 
 impl TypeScriptMsw {
     pub fn generate(&self, api: &Api, config: &ArtifactOptions) -> Result<Vec<GeneratedFile>> {
+        let prepared = crate::auxiliary_layout::prepare(api);
+        let api = &prepared;
         let mut output = format!(
             "{NOTICE}\nimport {{ http, HttpResponse }} from 'msw';\n\nexport const handlers = [\n"
         );
         for operation in &api.operations {
-            if matches!(operation.method, kaji_core::HttpMethod::Custom(_)) {
+            if !matches!(
+                operation.method,
+                kaji_core::HttpMethod::Get
+                    | kaji_core::HttpMethod::Post
+                    | kaji_core::HttpMethod::Put
+                    | kaji_core::HttpMethod::Patch
+                    | kaji_core::HttpMethod::Delete
+                    | kaji_core::HttpMethod::Head
+                    | kaji_core::HttpMethod::Options
+            ) {
                 let _ = writeln!(
                     output,
                     "  http.all({}, ({{ request }}) => request.method === {} ? HttpResponse.json({{}}) : undefined),",
@@ -709,6 +754,10 @@ impl TypeScriptMsw {
             );
         }
         output.push_str("];\n");
+        anyhow::ensure!(config.max_file_bytes > 0, "max_file_bytes must be positive");
+        if output.len() > config.max_file_bytes {
+            return crate::auxiliary_layout::msw(api, config);
+        }
         Ok(vec![GeneratedFile::new(
             extra_output_path(config, "typescript", "msw.ts"),
             output,
@@ -723,8 +772,10 @@ pub struct TypeScriptCypress;
 
 impl TypeScriptCypress {
     pub fn generate(&self, api: &Api, config: &ArtifactOptions) -> Result<Vec<GeneratedFile>> {
+        let prepared = crate::auxiliary_layout::prepare(api);
+        let api = &prepared;
         let mut output = format!(
-            "{NOTICE}\n/// <reference types=\"cypress\" />\n\nconst baseUrl = Cypress.env('API_BASE_URL') ?? 'http://localhost:3000';\n\ndescribe({}, () => {{\n",
+            "{NOTICE}\n/// <reference types=\"cypress\" />\nexport {{}};\n\nconst baseUrl = Cypress.env('API_BASE_URL') ?? 'http://localhost:3000';\n\ndescribe({}, () => {{\n",
             js_string(&format!("{} API", api.name))
         );
         for operation in &api.operations {
@@ -746,6 +797,10 @@ impl TypeScriptCypress {
             output.push_str("  });\n");
         }
         output.push_str("});\n");
+        anyhow::ensure!(config.max_file_bytes > 0, "max_file_bytes must be positive");
+        if output.len() > config.max_file_bytes {
+            return crate::auxiliary_layout::cypress(api, config);
+        }
         Ok(vec![GeneratedFile::new(
             extra_output_path(config, "cypress/e2e", "api.cy.ts"),
             output,
@@ -810,7 +865,11 @@ impl McpToolManifest {
     }
 }
 
-fn extra_output_path(config: &ArtifactOptions, default_directory: &str, file: &str) -> String {
+pub(crate) fn extra_output_path(
+    config: &ArtifactOptions,
+    default_directory: &str,
+    file: &str,
+) -> String {
     if config.output_dir.is_some() {
         output_path(config, file)
     } else {
@@ -840,7 +899,7 @@ fn artifact_literal(literal: &Value, schema: &SchemaValue) -> Option<String> {
     ts_literal(literal)
 }
 
-fn render_zod(value: &SchemaValue) -> String {
+pub(crate) fn render_zod(value: &SchemaValue) -> String {
     let primitive = match &value.kind {
         SchemaKind::Any => "z.unknown()".to_owned(),
         SchemaKind::Null => "z.null()".to_owned(),
@@ -947,12 +1006,84 @@ fn render_zod(value: &SchemaValue) -> String {
     }
 }
 
+pub(crate) fn query_exports(
+    api: &Api,
+    options: &ArtifactOptions,
+    swr: bool,
+) -> (Vec<String>, Vec<String>) {
+    let mut values = Vec::new();
+    let mut types = Vec::new();
+    for operation in &api.operations {
+        let name = operation_identifier(&operation.id, options);
+        let pascal = type_identifier(&operation.id);
+        if operation.method == kaji_core::HttpMethod::Get {
+            values.extend([format!("{name}QueryKey"), format!("use{pascal}")]);
+            if !swr {
+                values.push(format!("{name}QueryOptions"));
+                types.push(format!("{pascal}QueryOverrides"));
+            }
+        } else if !swr {
+            values.extend([
+                format!("{name}MutationKey"),
+                format!("{name}MutationOptions"),
+                format!("use{pascal}"),
+            ]);
+            types.push(format!("{pascal}MutationOverrides"));
+        }
+    }
+    (values, types)
+}
+
 fn render_hooks(api: &Api, options: &ArtifactOptions, framework: &str, swr: bool) -> String {
+    let mut prepared = crate::symbols::prepare(api);
+    for (original, operation) in api.operations.iter().zip(&mut prepared.operations) {
+        operation
+            .annotations
+            .entry("kaji.query.operation_id".into())
+            .or_insert_with(|| json!(original.id));
+    }
+    let api = &prepared;
     let mut output = if swr {
-        format!("{NOTICE}\nimport useSWR from 'swr';\n")
+        format!("{NOTICE}\nimport useSWR, {{ type SWRConfiguration }} from 'swr';\n")
     } else {
-        format!("{NOTICE}\nimport {{ useMutation, useQuery }} from '{framework}';\n")
+        format!(
+            "{NOTICE}\nimport {{ useMutation, useQuery, type QueryObserverOptions, type MutationObserverOptions, type QueryFunctionContext }} from '{framework}';\n"
+        )
     };
+    if !swr && framework == "@tanstack/vue-query" {
+        output.push_str(
+            "import type { UseQueryOptions, UseMutationReturnType } from '@tanstack/vue-query';\n",
+        );
+    }
+    output.push_str(
+        r#"
+/** Set an explicit cache scope for tenants/origins whose responses differ. */
+export type KajiQueryScope = string | readonly unknown[];
+const __kajiInputs = (options: unknown) => {
+  const value = (options ?? {}) as Record<string, unknown>;
+  return { path: value.path, query: value.query, querystring: value.querystring, body: value.body };
+};
+"#,
+    );
+    if !swr {
+        output.push_str(r#"
+const __kajiQueryCall = async <T, R>(options: T, signal: AbortSignal, call: (options: T) => Promise<R>): Promise<R> => {
+  const value = (options ?? {}) as Record<string, unknown>;
+  const request = (value.requestOptions ?? {}) as { signal?: AbortSignal };
+  const controller = new AbortController();
+  const signals = [signal, request.signal].filter((item): item is AbortSignal => item !== undefined);
+  const listeners = signals.map((item) => {
+    const abort = () => controller.abort(item.reason);
+    if (item.aborted) abort(); else item.addEventListener('abort', abort, { once: true });
+    return () => item.removeEventListener('abort', abort);
+  });
+  try {
+    controller.signal.throwIfAborted();
+    return await call({ ...value, requestOptions: { ...request, signal: controller.signal } } as T);
+  } finally { for (const remove of listeners) remove(); }
+};
+"#);
+    }
     for operation in &api.operations {
         let read = matches!(operation.method, kaji_core::HttpMethod::Get);
         if swr && !read {
@@ -961,6 +1092,11 @@ fn render_hooks(api: &Api, options: &ArtifactOptions, framework: &str, swr: bool
         let function = crate::sdk::lower_camel_identifier(&operation.id);
         let name = operation_identifier(&operation.id, options);
         let pascal = type_identifier(&operation.id);
+        let identity = operation
+            .annotations
+            .get("kaji.query.operation_id")
+            .and_then(Value::as_str)
+            .unwrap_or(&operation.id);
         let group = if options.group_by_tag {
             format!("{}/", crate::sdk::operation_group(operation))
         } else {
@@ -978,31 +1114,48 @@ fn render_hooks(api: &Api, options: &ArtifactOptions, framework: &str, swr: bool
         if read {
             let _ = writeln!(
                 output,
-                "export const {name}QueryKey = (options: Parameters<typeof {function}>[0]) => [{}, options] as const;",
-                js_string(&operation.id)
+                "export const {name}QueryKey = (options: Parameters<typeof {function}>[0], scope: KajiQueryScope = 'default') => [{}, scope, __kajiInputs(options)] as const;",
+                js_string(identity)
             );
-            let hook = if swr {
-                format!("useSWR({name}QueryKey(options), () => {function}(options))")
+            if swr {
+                let _ = writeln!(
+                    output,
+                    "export function use{pascal}(options: Parameters<typeof {function}>[0], config: SWRConfiguration<Awaited<ReturnType<typeof {function}>>, Error> = {{}}, scope: KajiQueryScope = 'default') {{ return useSWR({name}QueryKey(options, scope), () => {function}(options), config); }}\n"
+                );
             } else {
+                let query_type = if framework == "@tanstack/vue-query" {
+                    format!(
+                        "Extract<UseQueryOptions<Awaited<ReturnType<typeof {function}>>, Error, TData, Awaited<ReturnType<typeof {function}>>, ReturnType<typeof {name}QueryKey>>, {{ queryKey?: unknown }}>"
+                    )
+                } else {
+                    format!(
+                        "QueryObserverOptions<Awaited<ReturnType<typeof {function}>>, Error, TData, Awaited<ReturnType<typeof {function}>>, ReturnType<typeof {name}QueryKey>>"
+                    )
+                };
+                let _ = writeln!(
+                    output,
+                    "export type {pascal}QueryOverrides<TData = Awaited<ReturnType<typeof {function}>>> = Omit<{query_type}, 'queryKey' | 'queryFn'>;\nexport function {name}QueryOptions<TData = Awaited<ReturnType<typeof {function}>>>(options: Parameters<typeof {function}>[0], query: {pascal}QueryOverrides<TData> = {{}}, scope: KajiQueryScope = 'default'): {pascal}QueryOverrides<TData> & {{ queryKey: ReturnType<typeof {name}QueryKey>; queryFn: (context: QueryFunctionContext<ReturnType<typeof {name}QueryKey>>) => Promise<Awaited<ReturnType<typeof {function}>>> }} {{\n  return {{ ...query, queryKey: {name}QueryKey(options, scope), queryFn: (context: QueryFunctionContext<ReturnType<typeof {name}QueryKey>>) => __kajiQueryCall(options, context.signal, {function}) }};\n}}\nexport function use{pascal}<TData = Awaited<ReturnType<typeof {function}>>>(options: Parameters<typeof {function}>[0], query: {pascal}QueryOverrides<TData> = {{}}, scope: KajiQueryScope = 'default') {{ return useQuery({name}QueryOptions(options, query, scope)); }}\n"
+                );
+            }
+        } else {
+            let hook_return = if framework == "@tanstack/vue-query" {
                 format!(
-                    "useQuery({{ queryKey: {name}QueryKey(options), queryFn: () => {function}(options) }})"
+                    ": UseMutationReturnType<Awaited<ReturnType<typeof {function}>>, Error, Parameters<typeof {function}>[0], TContext>"
                 )
+            } else {
+                String::new()
             };
             let _ = writeln!(
                 output,
-                "export function use{pascal}(options: Parameters<typeof {function}>[0]) {{ return {hook}; }}\n"
-            );
-        } else {
-            let _ = writeln!(
-                output,
-                "export function use{pascal}() {{ return useMutation({{ mutationFn: (options: Parameters<typeof {function}>[0]) => {function}(options) }}); }}\n"
+                "export const {name}MutationKey = () => [{}] as const;\nexport type {pascal}MutationOverrides<TContext = unknown> = Omit<MutationObserverOptions<Awaited<ReturnType<typeof {function}>>, Error, Parameters<typeof {function}>[0], TContext>, 'mutationFn'>;\nexport function {name}MutationOptions<TContext = unknown>(mutation: {pascal}MutationOverrides<TContext> = {{}}): {pascal}MutationOverrides<TContext> & {{ mutationKey: readonly unknown[]; mutationFn: (options: Parameters<typeof {function}>[0]) => ReturnType<typeof {function}> }} {{ return {{ ...mutation, mutationKey: mutation.mutationKey ?? {name}MutationKey(), mutationFn: (options: Parameters<typeof {function}>[0]) => {function}(options) }}; }}\nexport function use{pascal}<TContext = unknown>(mutation: {pascal}MutationOverrides<TContext> = {{}}){hook_return} {{ return useMutation({name}MutationOptions(mutation)); }}\n",
+                js_string(identity)
             );
         }
     }
     output
 }
 
-fn render_faker(value: &SchemaValue) -> String {
+pub(crate) fn render_faker(value: &SchemaValue) -> String {
     if let Some(constant) = value
         .const_value
         .as_ref()

@@ -825,6 +825,8 @@ struct PluginConfig {
     surface: Option<String>,
     client_name: Option<String>,
     group_by_tag: Option<bool>,
+    max_operations_per_file: Option<usize>,
+    max_file_bytes: Option<usize>,
     throw_on_error: Option<bool>,
     jobs: Option<usize>,
     output: Option<String>,
@@ -1959,6 +1961,19 @@ fn typescript_profile(
         output = output.with(provider);
     }
     for plugin in &package.plugins {
+        if plugin.max_file_bytes.is_some()
+            && !matches!(plugin.name.as_str(), "zod" | "faker" | "msw" | "cypress")
+        {
+            bail!("max_file_bytes applies to auxiliary consumers only");
+        }
+        if plugin.max_operations_per_file.is_some()
+            && !matches!(
+                plugin.name.as_str(),
+                "tanstack-react-query" | "tanstack-vue-query" | "swr"
+            )
+        {
+            bail!("max_operations_per_file applies to query consumers only");
+        }
         let id = plugin.id.as_deref().unwrap_or(&plugin.name);
         let module = plugin.output.as_deref().map(|directory| {
             let stem = match plugin.name.as_str() {
@@ -2032,6 +2047,9 @@ fn typescript_profile(
                 _ => composition::swr(),
             }
             .label(id);
+            if let Some(count) = plugin.max_operations_per_file {
+                query = query.max_operations_per_file(count);
+            }
             if let Some(module) = &module {
                 query = query.output(module);
             }
@@ -2054,6 +2072,9 @@ fn typescript_profile(
                 _ => composition::cypress(),
             }
             .label(id);
+            if let Some(bytes) = plugin.max_file_bytes {
+                consumer = consumer.max_file_bytes(bytes);
+            }
             if plugin.name == "cypress" && module.is_none() {
                 consumer = consumer.output("api.cy");
             }
@@ -2829,6 +2850,7 @@ fn artifact_options(package: &PackageConfig, plugin: &PluginConfig) -> ArtifactO
     };
     ArtifactOptions {
         output_dir: Some(output_dir),
+        max_file_bytes: plugin.max_file_bytes.unwrap_or(128 * 1024),
         clients_import: plugin
             .clients_import
             .clone()

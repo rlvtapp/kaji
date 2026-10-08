@@ -522,6 +522,17 @@
             }
           },
           "description": "Select a named provider; unbound roles require one unambiguous compatible provider."
+        },
+        "max_file_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Auxiliary module byte budget (Zod, Faker, MSW, Cypress); declarations remain atomic. Default: 131072."
+        },
+        "max_operations_per_file": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 50,
+          "description": "React Query, Vue Query and SWR helper module operation budget; stable aggregate entrypoint is retained."
         }
       }
     },

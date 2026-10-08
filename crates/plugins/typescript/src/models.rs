@@ -682,6 +682,7 @@ fn render_object(
 fn render_operation(operation: &Operation, options: &ModelOptions, notice: &str) -> String {
     struct MediaResponse {
         content_type: String,
+        suffix: String,
         value: String,
         description: Option<String>,
         doc_type: Option<String>,
@@ -737,12 +738,19 @@ fn render_operation(operation: &Operation, options: &ModelOptions, notice: &str)
         .responses
         .iter()
         .map(|response| {
-            let name = format!("{identifier}Status{}", type_identifier(&response.status));
+            let status = if response.status.chars().all(|c| c.is_ascii_digit()) {
+                response.status.clone()
+            } else {
+                type_identifier(&response.status)
+            };
+            let name = format!("{identifier}Status{status}");
+            let aliases = media_aliases(&response.media_types);
             let media = response
                 .media_types
                 .iter()
                 .map(|media| MediaResponse {
                     content_type: media.content_type.clone(),
+                    suffix: aliases[&media.content_type].clone(),
                     value: if media
                         .content_type
                         .to_ascii_lowercase()
@@ -771,10 +779,12 @@ fn render_operation(operation: &Operation, options: &ModelOptions, notice: &str)
         .request_body
         .as_ref()
         .map(|body| {
+            let aliases = media_aliases(&body.media_types);
             body.media_types
                 .iter()
                 .map(|media| MediaResponse {
                     content_type: media.content_type.clone(),
+                    suffix: aliases[&media.content_type].clone(),
                     value: media
                         .schema
                         .as_ref()
@@ -818,11 +828,7 @@ fn render_operation(operation: &Operation, options: &ModelOptions, notice: &str)
                 .media
                 .iter()
                 .map(|media| {
-                    let name = format!(
-                        "{}{}",
-                        response.name,
-                        media_type_identifier(&media.content_type)
-                    );
+                    let name = format!("{}{}", response.name, media.suffix);
                     let _ = writeln!(source, "export type {name} = {}\n", media.value);
                     name
                 })
@@ -846,10 +852,7 @@ fn render_operation(operation: &Operation, options: &ModelOptions, notice: &str)
         let media_names = body_media
             .iter()
             .map(|media| {
-                let name = format!(
-                    "{identifier}Body{}",
-                    media_type_identifier(&media.content_type)
-                );
+                let name = format!("{identifier}Body{}", media.suffix);
                 let _ = writeln!(source, "export type {name} = {}\n", media.value);
                 name
             })
@@ -903,11 +906,7 @@ fn render_operation(operation: &Operation, options: &ModelOptions, notice: &str)
         if response.media.len() > 1 {
             let _ = writeln!(source, "  {}:", response_status_key(&response.status));
             for media in &response.media {
-                let media_name = format!(
-                    "{}{}",
-                    response.name,
-                    media_type_identifier(&media.content_type)
-                );
+                let media_name = format!("{}{}", response.name, media.suffix);
                 let _ = writeln!(
                     source,
                     "    | {{\n        contentType: {}\n        data: {media_name}\n      }}",
@@ -1038,10 +1037,34 @@ fn render_operation_value(value: &SchemaValue, options: &ModelOptions) -> String
     }
 }
 
+fn media_aliases(media: &[kaji_core::OperationMediaType]) -> BTreeMap<String, String> {
+    let content_types = media
+        .iter()
+        .map(|m| m.content_type.clone())
+        .collect::<BTreeSet<_>>();
+    let mut used = BTreeSet::new();
+    content_types
+        .into_iter()
+        .map(|content_type| {
+            let base = media_type_identifier(&content_type);
+            let mut name = base.clone();
+            let mut index = 2;
+            while !used.insert(name.to_ascii_lowercase()) {
+                name = format!("{base}{index}");
+                index += 1;
+            }
+            (content_type, name)
+        })
+        .collect()
+}
+
 fn media_type_identifier(content_type: &str) -> String {
     match content_type {
         "application/json" => return "Json".into(),
-        "application/xml" | "text/xml" => return "Xml".into(),
+        "application/xml" => return "Xml".into(),
+        "text/xml" => return "TextXml".into(),
+        "*/*" => return "AnyMedia".into(),
+        "" => return "UnspecifiedMedia".into(),
         "multipart/form-data" => return "FormData".into(),
         _ => {}
     }
@@ -1090,7 +1113,14 @@ fn render_value(value: &SchemaValue, options: &ModelOptions) -> String {
             SchemaKind::Number => "number".into(),
             SchemaKind::String => "string".into(),
             SchemaKind::Array { items } => match options.array_type {
-                ArrayType::Array => format!("{}[]", render_value(items, options)),
+                ArrayType::Array => {
+                    let item = render_value(items, options);
+                    if item.contains(" | ") || item.contains(" & ") {
+                        format!("({item})[]")
+                    } else {
+                        format!("{item}[]")
+                    }
+                }
                 ArrayType::Generic => format!("Array<{}>", render_value(items, options)),
             },
             SchemaKind::Reference { reference } => value
@@ -1242,34 +1272,11 @@ fn stable_hash(value: &str) -> u64 {
 }
 
 fn type_identifier(value: &str) -> String {
-    let mut output = String::new();
-    let mut uppercase = true;
-    for character in value.chars() {
-        if character.is_ascii_alphanumeric() {
-            if uppercase {
-                output.extend(character.to_uppercase());
-            } else {
-                output.push(character);
-            }
-            uppercase = false;
-        } else {
-            uppercase = true;
-        }
-    }
-    if output.is_empty() {
-        "Type".into()
-    } else {
-        output
-    }
+    crate::symbols::identifier(value)
 }
 
 fn lower_camel_identifier(value: &str) -> String {
-    let pascal = type_identifier(value);
-    let mut characters = pascal.chars();
-    match characters.next() {
-        Some(first) => first.to_lowercase().collect::<String>() + characters.as_str(),
-        None => "type".into(),
-    }
+    crate::symbols::camel(value)
 }
 
 #[cfg(test)]

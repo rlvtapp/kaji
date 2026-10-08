@@ -75,10 +75,28 @@ fn value_object_required(value: &SchemaValue) -> Vec<&str> {
         vec![]
     }
 }
-pub(crate) fn operation_plan(
+#[cfg(test)]
+fn operation_plan(
     api: &Api,
     operation: &kaji_core::Operation,
     options: &ModelOptions,
+) -> Option<Value> {
+    operation_plan_impl(api, operation, options, true)
+}
+
+pub(crate) fn operation_inline_plan(
+    api: &Api,
+    operation: &kaji_core::Operation,
+    options: &ModelOptions,
+) -> Option<Value> {
+    operation_plan_impl(api, operation, options, false)
+}
+
+fn operation_plan_impl(
+    api: &Api,
+    operation: &kaji_core::Operation,
+    options: &ModelOptions,
+    include_refs: bool,
 ) -> Option<Value> {
     let schemas = api
         .schemas
@@ -114,6 +132,11 @@ pub(crate) fn operation_plan(
             )
         })
         .collect::<serde_json::Map<_, _>>();
+    if !include_refs {
+        return Some(
+            json!({"lossless":options.integer_as_string || options.int64_type != Int64Type::Number,"refs":null,"requests":requests,"responses":responses}),
+        );
+    }
     fn collect(value: &Value, names: &mut std::collections::BTreeSet<String>) {
         match value {
             Value::Object(values) => {
@@ -149,6 +172,63 @@ pub(crate) fn operation_plan(
     Some(
         json!({"lossless":options.integer_as_string || options.int64_type != Int64Type::Number,"refs":refs,"requests":requests,"responses":responses}),
     )
+}
+
+/// Schema definitions are emitted once per operation provider rather than
+/// repeating their complete transitive closure in every operation module.
+pub(crate) fn shared_refs(
+    api: &Api,
+    options: &ModelOptions,
+) -> anyhow::Result<Vec<(String, String)>> {
+    const CHUNK_BYTES: usize = 128 * 1024;
+    let shape = RUNTIME
+        .lines()
+        .find(|line| line.starts_with("export type JsonShape"))
+        .unwrap();
+    let mut files = Vec::new();
+    let mut chunk = serde_json::Map::new();
+    let mut bytes = 0;
+    for schema in &api.schemas {
+        let descriptor = plan(&schema.value, options);
+        let size = serde_json::to_string(&descriptor)?.len() + schema.name.len() + 4;
+        if bytes + size > CHUNK_BYTES && !chunk.is_empty() {
+            let name = format!("_kaji_json_refs_{:04}", files.len() + 1);
+            files.push((
+                name,
+                format!(
+                    "{shape}\nexport const refs: Record<string, JsonShape | null> = {}\n",
+                    serde_json::to_string(&chunk)?
+                ),
+            ));
+            chunk.clear();
+            bytes = 0;
+        }
+        chunk.insert(schema.name.clone(), descriptor);
+        bytes += size;
+    }
+    if !chunk.is_empty() {
+        let name = format!("_kaji_json_refs_{:04}", files.len() + 1);
+        files.push((
+            name,
+            format!(
+                "{shape}\nexport const refs: Record<string, JsonShape | null> = {}\n",
+                serde_json::to_string(&chunk)?
+            ),
+        ));
+    }
+    let mut root = format!("{shape}\n");
+    for (index, (name, _)) in files.iter().enumerate() {
+        root.push_str(&format!(
+            "import {{ refs as chunk{index} }} from './{name}'\n"
+        ));
+    }
+    root.push_str("export const kajiJsonRefs: Record<string, JsonShape | null> = {\n");
+    for index in 0..files.len() {
+        root.push_str(&format!("  ...chunk{index},\n"));
+    }
+    root.push_str("}\n");
+    files.push(("_kaji_json_refs".into(), root));
+    Ok(files)
 }
 
 pub(crate) const RUNTIME: &str = r#"
@@ -325,12 +405,23 @@ export const stringifyJson = (value: unknown, shape?: JsonShape | null, refs: Js
   return encode(value, shape) ?? 'null'
 }
 const eventStreamStatus = (value: unknown): number => value instanceof Response ? value.status : value && typeof value === 'object' && 'status' in value ? Number(value.status) : 200
-const requestJsonShape = (plan: JsonPlan | undefined, contentType: string | undefined) => plan?.requests[(contentType ?? 'application/json').split(';')[0].trim()]
+const mediaJsonShape = (schemas: Record<string, JsonShape | null> | undefined, contentType: string): JsonShape | null | undefined => {
+  if (!schemas) return undefined
+  const value = contentType.trim().toLowerCase()
+  const exact = Object.entries(schemas).find(([key]) => key.trim().toLowerCase() === value)
+  if (exact) return exact[1]
+  const media = value.split(';')[0].trim()
+  const matches = Object.entries(schemas).filter(([key]) => key.split(';')[0].trim().toLowerCase() === media).map(([, shape]) => shape)
+  if (matches.length === 1) return matches[0]
+  if (matches.length > 1) return { kind: 'union', variants: matches }
+  return schemas[`${media.split('/')[0]}/*`] ?? schemas['*/*']
+}
+const requestJsonShape = (plan: JsonPlan | undefined, contentType: string | undefined) => mediaJsonShape(plan?.requests, contentType ?? 'application/json')
 const responseJsonShape = (plan: JsonPlan | undefined, status: number, contentType: string) => {
   const statusSchemas = plan?.responses[String(status)] ?? plan?.responses[`${Math.floor(status / 100)}XX`] ?? plan?.responses.default
-  const media = contentType.split(';')[0].trim().toLowerCase()
-  return Object.entries(statusSchemas ?? {}).find(([key]) => key.toLowerCase() === media)?.[1] ?? statusSchemas?.[`${media.split('/')[0]}/*`] ?? statusSchemas?.['*/*']
+  return mediaJsonShape(statusSchemas, contentType)
 }
+
 "#;
 
 pub(crate) fn visit_api(api: &mut Api, visitor: &mut impl FnMut(&mut SchemaValue)) {
@@ -486,6 +577,30 @@ mod tests {
         let plan = operation_plan(&api, &api.operations[0], &ModelOptions::default()).unwrap();
         assert!(plan["responses"]["200"]["application/json"].is_object());
         assert!(plan["refs"].as_object().unwrap().contains_key("Record"));
+    }
+
+    #[test]
+    fn operation_count_does_not_multiply_shared_schema_descriptors() {
+        let mut api = api();
+        for index in 0..50 {
+            let mut operation = api.operations[0].clone();
+            operation.id = format!("echoRecord{index}");
+            api.operations.push(operation);
+        }
+        let tree = Packages::new()
+            .package(crate::package("ts").with(crate::sdk().raw().group_by_tag(false)))
+            .generate(&api, None)
+            .unwrap();
+        let shared = tree.get("ts/clients/_kaji_json_refs_0001.ts").unwrap();
+        assert!(shared.contains("\"Record\""));
+        assert!(shared.contains("\"integer\""));
+        for (path, source) in tree.iter() {
+            if path.starts_with("ts/clients") && source.contains("jsonPlan:") {
+                assert!(source.contains("kajiJsonRefs"), "{}", path.display());
+                assert!(!source.contains("\"integer\""), "{}", path.display());
+                assert!(source.len() < 4_000, "{}: {}", path.display(), source.len());
+            }
+        }
     }
 
     #[test]

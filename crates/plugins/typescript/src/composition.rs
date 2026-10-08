@@ -209,11 +209,12 @@ impl Plugin<TypeScript> for Provider {
                 "selected TypeScript transport does not support schema-directed lossless JSON; select a compatible transport or numeric model representation"
             );
         }
+        let prepared_api = crate::symbols::prepare(cx.api);
         let mut tree = kaji_core::GeneratedTree::default();
         match self.part {
             Part::Models => {
                 for file in crate::models::ModelRenderer.generate(
-                    cx.api,
+                    &prepared_api,
                     &crate::models::ModelRenderOptions {
                         output_dir: "__package/models".into(),
                         schema_output_dir: None,
@@ -227,7 +228,7 @@ impl Plugin<TypeScript> for Provider {
                 tree.insert(GeneratedFile::new(
                     "__package/package.json",
                     sdk::kaji_package(
-                        cx.api,
+                        &prepared_api,
                         sdk::SdkTransport::Fetch,
                         cx.settings.package_name.as_deref(),
                     )?,
@@ -242,7 +243,7 @@ impl Plugin<TypeScript> for Provider {
             }
             Part::Operations => {
                 for file in crate::clients::generate_operations(
-                    cx.api,
+                    &prepared_api,
                     &crate::clients::ClientRenderOptions {
                         model_options: Some(config.model_options.clone()),
                         output_dir: "__package/clients".into(),
@@ -264,7 +265,7 @@ impl Plugin<TypeScript> for Provider {
                     .clone()
                     .unwrap_or_else(|| sdk::sdk_client_name(&cx.api.name));
                 for file in sdk::kaji_sdk_client(
-                    cx.api,
+                    &prepared_api,
                     &name,
                     false,
                     config.client_style,
@@ -288,11 +289,15 @@ impl Plugin<TypeScript> for Provider {
                 Part::Transport => path == Path::new(".kaji/client.ts"),
                 Part::Operations => {
                     path.starts_with("clients")
-                        && cx.api.operations.iter().any(|o| {
-                            path.file_stem().is_some_and(|s| {
-                                s == crate::clients::operation_file_identifier(&o.id).as_str()
-                            })
-                        })
+                        && (path
+                            .file_stem()
+                            .and_then(|s| s.to_str())
+                            .is_some_and(|s| s.starts_with("_kaji_json_refs"))
+                            || prepared_api.operations.iter().any(|o| {
+                                path.file_stem().is_some_and(|s| {
+                                    s == crate::clients::operation_file_identifier(&o.id).as_str()
+                                })
+                            }))
                 }
                 Part::Client => path == Path::new("client.ts") || path.starts_with("resources"),
             };
@@ -314,39 +319,57 @@ impl Plugin<TypeScript> for Provider {
                 let original = module_import(Path::new(".kaji/client"), path)?;
                 contents = contents.replace(&format!("'{original}'"), &format!("'{import}'"));
             }
+            if matches!(self.part, Part::Operations)
+                && path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .is_some_and(|s| s.starts_with("_kaji_json_refs"))
+            {
+                cx.files.emit(GeneratedFile::new(target, contents)?)?;
+                continue;
+            }
             if let Part::Operations = self.part {
                 let operation = cx
                     .api
                     .operations
                     .iter()
-                    .find(|o| {
+                    .zip(&prepared_api.operations)
+                    .find(|(_, o)| {
                         path.file_stem().is_some_and(|s| {
                             s == crate::clients::operation_file_identifier(&o.id).as_str()
                         })
                     })
+                    .map(|(original, _)| original)
                     .context("operation module has no contract operation")?;
                 let models = cx.inputs.get::<Models>()?;
                 let model = models
                     .operation_modules
                     .get(&operation.id)
                     .context("model provider omitted operation")?;
+                let rendered = &prepared_api.operations[cx
+                    .api
+                    .operations
+                    .iter()
+                    .position(|o| o.id == operation.id)
+                    .unwrap()];
                 let old = format!(
                     "'../models/{}'",
-                    crate::models::operation_model_file_identifier(&operation.id)
+                    crate::models::operation_model_file_identifier(&rendered.id)
                 );
                 contents = contents.replace(&old, &format!("'{}'", module_import(model, &target)?));
                 functions.insert(
                     operation.id.clone(),
                     cx.workspace.declare(
                         target.with_extension(""),
-                        &sdk::lower_camel_identifier(&operation.id),
+                        &sdk::lower_camel_identifier(&rendered.id),
                         self.kind(),
                     )?,
                 );
             }
             if let Part::Client = self.part {
                 let operations = cx.inputs.get::<Operations>()?;
-                for operation in &cx.api.operations {
+                for (operation, rendered) in cx.api.operations.iter().zip(&prepared_api.operations)
+                {
                     let symbol = operations
                         .functions
                         .get(&operation.id)
@@ -356,14 +379,14 @@ impl Plugin<TypeScript> for Provider {
                         module_import(
                             Path::new(&format!(
                                 "clients/{}",
-                                crate::clients::operation_file_identifier(&operation.id)
+                                crate::clients::operation_file_identifier(&rendered.id)
                             )),
                             path
                         )?
                     );
                     contents =
                         contents.replace(&old, &format!("'{}'", symbol.import_from(&target)?));
-                    let original = sdk::lower_camel_identifier(&operation.id);
+                    let original = sdk::lower_camel_identifier(&rendered.id);
                     if symbol.name != original {
                         contents = contents.replace(
                             &format!("import {{ {original} }}"),
@@ -373,24 +396,36 @@ impl Plugin<TypeScript> for Provider {
                 }
             }
             if let Part::Models = self.part {
-                if let Some(schema) = cx.api.schemas.iter().find(|schema| {
-                    target.file_stem().is_some_and(|stem| {
-                        stem == crate::models::schema_file_identifier(&schema.name).as_str()
+                if let Some((schema, rendered)) = cx
+                    .api
+                    .schemas
+                    .iter()
+                    .zip(&prepared_api.schemas)
+                    .find(|(_, schema)| {
+                        target.file_stem().is_some_and(|stem| {
+                            stem == crate::models::schema_file_identifier(&schema.name).as_str()
+                        })
                     })
-                }) {
-                    let name = crate::models::model_type_name(schema, &config.model_options);
+                {
+                    let name = crate::models::model_type_name(rendered, &config.model_options);
                     schema_symbols.insert(
                         schema.name.clone(),
                         cx.workspace
                             .declare(target.with_extension(""), &name, self.kind())?,
                     );
                 }
-                if let Some(operation) = cx.api.operations.iter().find(|operation| {
-                    target.file_stem().is_some_and(|stem| {
-                        stem == crate::models::operation_model_file_identifier(&operation.id)
-                            .as_str()
+                if let Some((operation, _)) = cx
+                    .api
+                    .operations
+                    .iter()
+                    .zip(&prepared_api.operations)
+                    .find(|(_, operation)| {
+                        target.file_stem().is_some_and(|stem| {
+                            stem == crate::models::operation_model_file_identifier(&operation.id)
+                                .as_str()
+                        })
                     })
-                }) {
+                {
                     operation_modules.insert(operation.id.clone(), target.with_extension(""));
                 }
             }
@@ -476,6 +511,7 @@ pub struct Query {
     framework: QueryFramework,
     provider: Option<Handle<Operations>>,
     output: String,
+    operations_per_file: Option<usize>,
 }
 pub fn react_query() -> Query {
     Query {
@@ -483,6 +519,7 @@ pub fn react_query() -> Query {
         framework: QueryFramework::React,
         provider: None,
         output: "react-query".into(),
+        operations_per_file: Some(50),
     }
 }
 pub fn vue_query() -> Query {
@@ -508,6 +545,16 @@ impl Query {
         self.provider = Some(handle);
         self
     }
+    /// Bound generated helper modules; zero is rejected during generation.
+    pub fn max_operations_per_file(mut self, count: usize) -> Self {
+        self.operations_per_file = Some(count);
+        self
+    }
+    /// Preserve one aggregate helper module for callers that explicitly prefer it.
+    pub fn single_file(mut self) -> Self {
+        self.operations_per_file = None;
+        self
+    }
     pub fn output(mut self, module: impl Into<String>) -> Self {
         self.output = module.into();
         self
@@ -529,52 +576,114 @@ impl Plugin<TypeScript> for Query {
             group_by_tag: false,
             ..Default::default()
         };
-        let (files, dependency, version) = match self.framework {
-            QueryFramework::React => (
-                render::TypeScriptReactQuery.generate(cx.api, &config)?,
-                "@tanstack/react-query",
-                "^5.0.0",
-            ),
-            QueryFramework::Vue => (
-                render::TypeScriptVueQuery.generate(cx.api, &config)?,
-                "@tanstack/vue-query",
-                "^5.0.0",
-            ),
-            QueryFramework::Swr => (
-                render::TypeScriptSwr.generate(cx.api, &config)?,
-                "swr",
-                "^2.0.0",
-            ),
+        let (dependency, version) = match self.framework {
+            QueryFramework::React => ("@tanstack/react-query", "^5.0.0"),
+            QueryFramework::Vue => ("@tanstack/vue-query", "^5.0.0"),
+            QueryFramework::Swr => ("swr", "^2.0.0"),
         };
-        let target = GeneratedFile::new(format!("{}.ts", self.output), "")?.path;
+        if let Some(count) = self.operations_per_file {
+            anyhow::ensure!(count > 0, "max_operations_per_file must be positive");
+        }
+        let mut prepared = crate::symbols::prepare(cx.api);
+        for (original, native) in cx.api.operations.iter().zip(&mut prepared.operations) {
+            native.annotations.insert(
+                "kaji.query.operation_id".into(),
+                serde_json::json!(original.id),
+            );
+        }
+        let selected = prepared
+            .operations
+            .iter()
+            .filter(|operation| {
+                !matches!(self.framework, QueryFramework::Swr)
+                    || operation.method == kaji_core::HttpMethod::Get
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        let count = self.operations_per_file.unwrap_or(usize::MAX);
+        let split = selected.len() > count;
         let operations = cx.inputs.get::<Operations>()?;
-        for file in files {
-            let mut contents = file.contents;
-            for operation in &cx.api.operations {
-                if matches!(self.framework, QueryFramework::Swr)
-                    && operation.method != kaji_core::HttpMethod::Get
-                {
-                    continue;
+        let mut barrel = String::new();
+        // Emit an empty aggregate module as well, so package exports remain valid.
+        let groups = if selected.is_empty() {
+            vec![selected.as_slice()]
+        } else {
+            selected.chunks(count).collect::<Vec<_>>()
+        };
+        for (index, chunk) in groups.into_iter().enumerate() {
+            let mut group = prepared.clone();
+            group.operations = chunk.to_vec();
+            let files = match self.framework {
+                QueryFramework::React => render::TypeScriptReactQuery.generate(&group, &config)?,
+                QueryFramework::Vue => render::TypeScriptVueQuery.generate(&group, &config)?,
+                QueryFramework::Swr => render::TypeScriptSwr.generate(&group, &config)?,
+            };
+            let module = if split {
+                format!("{}_chunks/chunk_{index:04}", self.output)
+            } else {
+                self.output.clone()
+            };
+            let target = GeneratedFile::new(format!("{module}.ts"), "")?.path;
+            for file in files {
+                let mut contents = file.contents;
+                for (operation, native) in cx.api.operations.iter().zip(&prepared.operations) {
+                    if !chunk.iter().any(|item| item.id == native.id) {
+                        continue;
+                    }
+                    let symbol = operations
+                        .functions
+                        .get(&operation.id)
+                        .context("query plugin requires operation symbol")?;
+                    let function = sdk::lower_camel_identifier(&native.id);
+                    let old = serde_json::to_string(&format!(
+                        "{}/{function}",
+                        config.clients_import.trim_end_matches('/')
+                    ))?;
+                    contents = contents
+                        .replace(&old, &serde_json::to_string(&symbol.import_from(&target)?)?);
+                    if symbol.name != function {
+                        contents = contents.replace(
+                            &format!("import {{ {function} }}"),
+                            &format!("import {{ {} as {function} }}", symbol.name),
+                        );
+                    }
                 }
-                let symbol = operations
-                    .functions
-                    .get(&operation.id)
-                    .context("query plugin requires operation symbol")?;
-                let function = sdk::lower_camel_identifier(&operation.id);
-                let old = serde_json::to_string(&format!(
-                    "{}/{function}",
-                    config.clients_import.trim_end_matches('/')
-                ))?;
-                contents =
-                    contents.replace(&old, &serde_json::to_string(&symbol.import_from(&target)?)?);
-                if symbol.name != function {
-                    contents = contents.replace(
-                        &format!("import {{ {function} }}"),
-                        &format!("import {{ {} as {function} }}", symbol.name),
-                    );
+                cx.files.emit(GeneratedFile::new(&target, contents)?)?;
+            }
+            if split {
+                let specifier = Symbol {
+                    module: PathBuf::from(&module),
+                    name: String::new(),
+                }
+                .import_from(format!("{}.ts", self.output))?;
+                let (values, types) = render::query_exports(
+                    &group,
+                    &config,
+                    matches!(self.framework, QueryFramework::Swr),
+                );
+                if !values.is_empty() {
+                    barrel.push_str(&format!(
+                        "export {{ {} }} from {};\n",
+                        values.join(", "),
+                        serde_json::to_string(&specifier)?
+                    ));
+                }
+                let mut types = types;
+                if index == 0 {
+                    types.push("KajiQueryScope".into());
+                }
+                if !types.is_empty() {
+                    barrel.push_str(&format!(
+                        "export type {{ {} }} from {};\n",
+                        types.join(", "),
+                        serde_json::to_string(&specifier)?
+                    ));
                 }
             }
-            cx.files.emit(GeneratedFile::new(&target, contents)?)?;
+        }
+        if split {
+            cx.files
+                .emit(GeneratedFile::new(format!("{}.ts", self.output), barrel)?)?;
         }
         cx.workspace.peer_dependency(dependency, version)?;
         cx.workspace
@@ -589,6 +698,7 @@ pub struct Auxiliary {
     output: String,
     models: Option<Handle<Models>>,
     operations: Option<Handle<Operations>>,
+    max_file_bytes: usize,
 }
 enum AuxiliaryKind {
     Zod,
@@ -603,6 +713,7 @@ fn auxiliary(kind: AuxiliaryKind, output: &str) -> Auxiliary {
         output: output.into(),
         models: None,
         operations: None,
+        max_file_bytes: 128 * 1024,
     }
 }
 pub fn zod() -> Auxiliary {
@@ -618,6 +729,11 @@ pub fn cypress() -> Auxiliary {
     auxiliary(AuxiliaryKind::Cypress, "cypress")
 }
 impl Auxiliary {
+    /// Splits large auxiliary modules at declaration boundaries.
+    pub fn max_file_bytes(mut self, bytes: usize) -> Self {
+        self.max_file_bytes = bytes;
+        self
+    }
     pub fn label(mut self, label: impl Into<String>) -> Self {
         self.meta = self.meta.label(label);
         self
@@ -659,61 +775,114 @@ impl Plugin<TypeScript> for Auxiliary {
         let target = GeneratedFile::new(format!("{}.ts", self.output), "")?.path;
         let config = render::ArtifactOptions {
             output_dir: Some(".".into()),
+            max_file_bytes: self.max_file_bytes,
             ..Default::default()
         };
+        let mut api = crate::symbols::prepare(cx.api);
+        for (prepared, original) in api.schemas.iter_mut().zip(&cx.api.schemas) {
+            prepared
+                .value
+                .extensions
+                .insert("kaji.aux.schema_name".into(), original.name.clone().into());
+        }
+        for (prepared, original) in api.operations.iter_mut().zip(&cx.api.operations) {
+            prepared
+                .annotations
+                .insert("kaji.aux.operation_id".into(), original.id.clone().into());
+        }
         let (files, dependency, version) = match self.kind {
             AuxiliaryKind::Zod => (
-                render::TypeScriptZod.generate_with_models(cx.api, &config, &models.options)?,
+                render::TypeScriptZod.generate_with_models(&api, &config, &models.options)?,
                 "zod",
                 "^4.0.0",
             ),
             AuxiliaryKind::Faker => (
-                render::TypeScriptFaker.generate_with_models(cx.api, &config, &models.options)?,
+                render::TypeScriptFaker.generate_with_models(&api, &config, &models.options)?,
                 "@faker-js/faker",
                 "^9.0.0",
             ),
             AuxiliaryKind::Msw => (
-                render::TypeScriptMsw.generate(cx.api, &config)?,
+                render::TypeScriptMsw.generate(&api, &config)?,
                 "msw",
                 "^2.0.0",
             ),
             AuxiliaryKind::Cypress => (
-                render::TypeScriptCypress.generate(cx.api, &config)?,
+                render::TypeScriptCypress.generate(&api, &config)?,
                 "cypress",
                 "^15.0.0",
             ),
         };
+        let kind = match self.kind {
+            AuxiliaryKind::Zod => "zod",
+            AuxiliaryKind::Faker => "faker",
+            AuxiliaryKind::Msw => "msw",
+            AuxiliaryKind::Cypress => "cypress",
+        };
+        let paths = files
+            .iter()
+            .map(|file| {
+                let path = file.path.to_string_lossy();
+                let relocated = if path.contains(&format!("{kind}_chunks/")) {
+                    PathBuf::from(path.replace(
+                        &format!("{kind}_chunks/"),
+                        &format!("{}_chunks/", self.output),
+                    ))
+                } else {
+                    target.clone()
+                };
+                (file.path.clone(), relocated)
+            })
+            .collect::<BTreeMap<_, _>>();
         for file in files {
+            let target = &paths[&file.path];
             let mut source = file.contents;
-            if matches!(self.kind, AuxiliaryKind::Faker) {
-                let mut imports = String::new();
-                for schema in &cx.api.schemas {
-                    let symbol = models
-                        .schemas
-                        .get(&schema.name)
-                        .context("model provider omitted schema")?;
-                    let local = render::type_identifier(&schema.name);
-                    imports.push_str(&format!(
-                        "import type {{ {}{} }} from {};\n",
-                        symbol.name,
-                        if symbol.name == local {
-                            String::new()
-                        } else {
-                            format!(" as {local}")
-                        },
-                        serde_json::to_string(&symbol.import_from(&target)?)?
-                    ));
-                }
-                // The legacy renderer emits one consolidated model import;
-                // the native consumer imports each actual provider symbol.
+            for (old, new) in &paths {
+                let old_import = module_import(&old.with_extension(""), &file.path)?;
+                let new_import = module_import(&new.with_extension(""), target)?;
                 source = source
-                    .lines()
-                    .filter(|line| {
-                        !(line.starts_with("import type {") && line.ends_with("from './models';"))
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                source = format!("{imports}{source}\n");
+                    .replace(&format!("'{old_import}'"), &format!("'{new_import}'"))
+                    .replace(
+                        &serde_json::to_string(&old_import)?,
+                        &serde_json::to_string(&new_import)?,
+                    );
+            }
+            if matches!(self.kind, AuxiliaryKind::Faker | AuxiliaryKind::Zod) {
+                let mut rewritten = String::new();
+                for line in source.lines() {
+                    if line.starts_with("import type {")
+                        && (line.ends_with("from './models';")
+                            || line.ends_with("from '../models';"))
+                    {
+                        let names = line.split('{').nth(1).unwrap().split('}').next().unwrap();
+                        for entry in names.split(',').map(str::trim).filter(|x| !x.is_empty()) {
+                            let (local, alias) = entry.split_once(" as ").unwrap_or((entry, entry));
+                            let index = api
+                                .schemas
+                                .iter()
+                                .position(|schema| render::type_identifier(&schema.name) == local)
+                                .context("auxiliary model import has no provider schema")?;
+                            let original = &cx.api.schemas[index].name;
+                            let symbol = models
+                                .schemas
+                                .get(original)
+                                .context("model provider omitted schema")?;
+                            rewritten.push_str(&format!(
+                                "import type {{ {}{} }} from {};\n",
+                                symbol.name,
+                                if symbol.name == alias {
+                                    String::new()
+                                } else {
+                                    format!(" as {alias}")
+                                },
+                                serde_json::to_string(&symbol.import_from(target)?)?
+                            ));
+                        }
+                    } else {
+                        rewritten.push_str(line);
+                        rewritten.push('\n');
+                    }
+                }
+                source = rewritten;
             }
             if matches!(self.kind, AuxiliaryKind::Msw | AuxiliaryKind::Cypress) {
                 let operations = cx.inputs.get::<Operations>()?;
@@ -725,7 +894,7 @@ impl Plugin<TypeScript> for Auxiliary {
                     );
                 }
             }
-            cx.files.emit(GeneratedFile::new(&target, source)?)?;
+            cx.files.emit(GeneratedFile::new(target, source)?)?;
         }
         if matches!(self.kind, AuxiliaryKind::Cypress) {
             cx.workspace.dev_dependency(dependency, version)?;
@@ -756,6 +925,65 @@ mod tests {
             }],
             ..Default::default()
         }
+    }
+    #[test]
+    fn auxiliary_chunks_relocate_and_cleanup_when_output_shrinks() {
+        let mut spec = api();
+        spec.schemas = vec![
+            kaji_core::Schema::new(
+                "Leaf",
+                kaji_core::SchemaValue::new(kaji_core::SchemaKind::String),
+            ),
+            kaji_core::Schema::new(
+                "Branch",
+                kaji_core::SchemaValue::reference("#/components/schemas/Leaf"),
+            ),
+        ];
+        let build = |budget| {
+            Packages::new()
+                .package(
+                    crate::package("ts")
+                        .with(models().output("domain/models"))
+                        .with(transport())
+                        .with(operations())
+                        .with(zod().output("validation/schemas").max_file_bytes(budget))
+                        .with(faker().output("fixtures/factories").max_file_bytes(budget))
+                        .with(msw().output("fixtures/handlers").max_file_bytes(budget))
+                        .with(cypress().output("tests/smoke").max_file_bytes(budget)),
+                )
+                .generate(&spec, None)
+                .unwrap()
+        };
+        let directory =
+            std::env::temp_dir().join(format!("kaji-ts-aux-shrink-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&directory);
+        build(1).write_to(&directory).unwrap();
+        for chunk in [
+            "validation/schemas_chunks/schemas_0001.ts",
+            "fixtures/factories_chunks/chunk_0001.ts",
+            "fixtures/handlers_chunks/chunk_0000.ts",
+            "tests/smoke_chunks/chunk_0000.ts",
+        ] {
+            assert!(directory.join("ts").join(chunk).exists(), "missing {chunk}");
+        }
+        std::fs::write(
+            directory.join("ts/custom.ts"),
+            "export const custom = true;",
+        )
+        .unwrap();
+        build(100_000).write_to(&directory).unwrap();
+        assert!(
+            !directory
+                .join("ts/validation/schemas_chunks/schemas_0001.ts")
+                .exists()
+        );
+        assert!(
+            !directory
+                .join("ts/tests/smoke_chunks/chunk_0000.ts")
+                .exists()
+        );
+        assert!(directory.join("ts/custom.ts").exists());
+        std::fs::remove_dir_all(directory).unwrap();
     }
     struct CustomTransport {
         meta: Meta,
@@ -900,6 +1128,79 @@ mod tests {
         assert!(format!("{error:#}").contains("Select a provider handle explicitly"));
     }
     #[test]
+    fn invalid_query_partition_budget_fails_before_output() {
+        let error = Packages::new()
+            .package(
+                crate::package("ts")
+                    .with(crate::sdk().raw())
+                    .with(react_query().max_operations_per_file(0)),
+            )
+            .generate(&api(), None)
+            .unwrap_err();
+        assert!(format!("{error:#}").contains("max_operations_per_file must be positive"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[ignore = "requires KAJI_TSC_JS and KAJI_TS_NODE_MODULES with framework dependencies"]
+    fn query_factories_cache_callbacks_and_abort_execute_natively() {
+        let root = tempfile::tempdir().unwrap();
+        let mut source = api();
+        source.operations.push(Operation {
+            id: "createContact".into(),
+            method: HttpMethod::Post,
+            path: "/contacts".into(),
+            ..Operation::default()
+        });
+        Packages::new()
+            .package(
+                crate::package("ts")
+                    .with(crate::sdk().raw())
+                    .with(react_query().max_operations_per_file(1).output("ui/react"))
+                    .with(vue_query().max_operations_per_file(1).output("ui/vue"))
+                    .with(swr().output("ui/swr")),
+            )
+            .generate(&source, None)
+            .unwrap()
+            .write_to(root.path())
+            .unwrap();
+        let package = root.path().join("ts");
+        std::os::unix::fs::symlink(
+            std::env::var_os("KAJI_TS_NODE_MODULES").unwrap(),
+            package.join("node_modules"),
+        )
+        .unwrap();
+        std::fs::write(
+            package.join("query_probe.ts"),
+            include_str!("query_probe.ts.txt"),
+        )
+        .unwrap();
+        let compile = std::process::Command::new("node")
+            .arg(std::env::var_os("KAJI_TSC_JS").unwrap())
+            .args(["-p", "tsconfig.json"])
+            .current_dir(&package)
+            .output()
+            .unwrap();
+        assert!(
+            compile.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&compile.stdout),
+            String::from_utf8_lossy(&compile.stderr)
+        );
+        let output = std::process::Command::new("node")
+            .arg("dist/query_probe.js")
+            .current_dir(&package)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
     #[ignore = "requires KAJI_TSC_JS and KAJI_TS_NODE_MODULES"]
     fn custom_transport_and_relocated_query_consumer_compile() {
         let compiler = std::env::var("KAJI_TSC_JS").unwrap();
@@ -974,6 +1275,40 @@ mod tests {
             "200",
             kaji_core::SchemaValue::reference("#/components/schemas/Contact"),
         )];
+        api.schemas.push(kaji_core::Schema::new(
+            "Node",
+            kaji_core::SchemaValue::new(kaji_core::SchemaKind::Object {
+                fields: vec![kaji_core::Field {
+                    name: "child".into(),
+                    value: kaji_core::SchemaValue::reference("#/components/schemas/Node"),
+                    required: false,
+                    annotations: Default::default(),
+                }],
+                additional_properties: Default::default(),
+            }),
+        ));
+        for (name, reference) in [("NodeA", "NodeB"), ("NodeB", "NodeA")] {
+            api.schemas.push(kaji_core::Schema::new(
+                name,
+                kaji_core::SchemaValue::new(kaji_core::SchemaKind::Object {
+                    fields: vec![kaji_core::Field {
+                        name: "child".into(),
+                        value: kaji_core::SchemaValue::reference(format!(
+                            "#/components/schemas/{reference}"
+                        )),
+                        required: false,
+                        annotations: Default::default(),
+                    }],
+                    additional_properties: Default::default(),
+                }),
+            ));
+        }
+        for index in 0..24 {
+            let mut operation = api.operations[0].clone();
+            operation.id = format!("listContacts{index}");
+            operation.path = format!("/contacts/{index}");
+            api.operations.push(operation);
+        }
         let tree = Packages::new()
             .package(
                 crate::package("ts")
@@ -992,10 +1327,10 @@ mod tests {
                     .with(react_query().output("hooks/react"))
                     .with(vue_query().output("hooks/vue"))
                     .with(swr().output("hooks/swr"))
-                    .with(zod().output("validation/schemas"))
-                    .with(faker().output("fixtures/factories"))
-                    .with(msw().output("fixtures/handlers"))
-                    .with(cypress().output("tests/smoke")),
+                    .with(zod().output("validation/schemas").max_file_bytes(1100))
+                    .with(faker().output("fixtures/factories").max_file_bytes(1100))
+                    .with(msw().output("fixtures/handlers").max_file_bytes(1100))
+                    .with(cypress().output("tests/smoke").max_file_bytes(1100)),
             )
             .generate(&api, None)
             .unwrap();
@@ -1029,7 +1364,7 @@ mod tests {
             "{\"type\":\"commonjs\"}",
         )
         .unwrap();
-        std::fs::write(directory.join("ts/test.cjs"),"const assert = require('node:assert/strict'); const {ContactSchema} = require('./compiled/validation/schemas.js'); const {createContact} = require('./compiled/fixtures/factories.js'); const contact = createContact(); assert.equal(typeof contact.id,'bigint'); assert.equal(ContactSchema.parse(contact).id,contact.id); assert.throws(()=>ContactSchema.parse({...contact,id:'1'}));").unwrap();
+        std::fs::write(directory.join("ts/test.cjs"),"const assert = require('node:assert/strict'); const {ContactSchema} = require('./compiled/validation/schemas.js'); const {createContact} = require('./compiled/fixtures/factories.js'); const contact = createContact(); assert.equal(typeof contact.id,'bigint'); assert.equal(ContactSchema.parse(contact).id,contact.id); assert.throws(()=>ContactSchema.parse({...contact,id:'1'})); const {NodeSchema,kajiSchemas,kajiOperationSchemas} = require('./compiled/validation/schemas.js'); NodeSchema.parse({child:{child:{}}}); NodeSchema.parse(require('./compiled/fixtures/factories.js').createNode()); assert.equal(kajiSchemas.Node,NodeSchema); const validators = require('./compiled/validation/schemas.js'); validators.NodeASchema.parse({child:{child:{}}}); validators.NodeASchema.parse(require('./compiled/fixtures/factories.js').createNodeA()); assert.equal(Object.keys(kajiOperationSchemas).length,25); const {handlers} = require('./compiled/fixtures/handlers.js'); assert.equal(handlers.length,25); const calls = []; global.Cypress={env:()=>undefined}; global.describe=(_name,body)=>body(); global.it=(_name,body)=>body(); global.cy={request:options=>{calls.push(options);return {its:()=>({should:()=>{}})}}}; require('./compiled/tests/smoke.js'); assert.equal(calls.length,25);").unwrap();
         let result = std::process::Command::new("node")
             .arg(directory.join("ts/test.cjs"))
             .output()

@@ -56,7 +56,7 @@ pub(crate) fn generate_operations(
     let throw_on_error = config.throw_on_error;
     let group_by_tag = config.group_by_tag;
 
-    api.operations
+    let mut files = api.operations
         .iter()
         .map(|operation| {
             let module = operation_file_identifier(&operation.id);
@@ -84,9 +84,14 @@ pub(crate) fn generate_operations(
             if let Some(plan) = config
                 .model_options
                 .as_ref()
-                .and_then(|options| crate::json::operation_plan(api, operation, options))
+                .and_then(|options| crate::json::operation_inline_plan(api, operation, options))
             {
-                let plan = serde_json::to_string(&plan)?;
+                let plan = format!("{{ lossless: {}, refs: kajiJsonRefs, requests: {}, responses: {} }}",
+                    serde_json::to_string(&plan["lossless"])?,
+                    serde_json::to_string(&plan["requests"])?,
+                    serde_json::to_string(&plan["responses"])?);
+                let prefix = if grouped_directory(operation, config, group_by_tag).is_some() { "../" } else { "./" };
+                source = format!("import {{ kajiJsonRefs }} from '{prefix}_kaji_json_refs'\n{source}");
                 source = source.replace(
                     "      ...config,",
                     &format!("      jsonPlan: {plan},\n      ...config,"),
@@ -97,7 +102,16 @@ pub(crate) fn generate_operations(
             }
             GeneratedFile::new(path, rewrite_import_paths(source, operation, config))
         })
-        .collect()
+        .collect::<Result<Vec<_>>>()?;
+    if let Some(options) = &config.model_options {
+        for (name, source) in crate::json::shared_refs(api, options)? {
+            files.push(GeneratedFile::new(
+                format!("{output_dir}/{name}.ts"),
+                source,
+            )?);
+        }
+    }
+    Ok(files)
 }
 
 fn rewrite_import_paths(
@@ -513,34 +527,11 @@ fn is_event_stream(operation: &Operation) -> bool {
 }
 
 fn pascal_identifier(value: &str) -> String {
-    let mut output = String::new();
-    let mut uppercase = true;
-    for character in value.chars() {
-        if character.is_ascii_alphanumeric() {
-            if uppercase {
-                output.extend(character.to_uppercase());
-            } else {
-                output.push(character);
-            }
-            uppercase = false;
-        } else {
-            uppercase = true;
-        }
-    }
-    if output.is_empty() {
-        "Operation".into()
-    } else {
-        output
-    }
+    crate::symbols::identifier(value)
 }
 
 fn lower_camel_identifier(value: &str) -> String {
-    let pascal = pascal_identifier(value);
-    let mut characters = pascal.chars();
-    match characters.next() {
-        Some(first) => first.to_lowercase().collect::<String>() + characters.as_str(),
-        None => "operation".into(),
-    }
+    crate::symbols::camel(value)
 }
 
 /// Stable, filesystem-safe module name for an operation. Public function names

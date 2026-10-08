@@ -87,7 +87,7 @@ fn generate_typescript_sdk(
     // Kaji's tag-directory layout otherwise puts every untagged operation in
     // `default`. Kaji's SDK surface uses the first meaningful path segment as
     // a stable resource namespace, matching the native targets.
-    let mut sdk_api = api.clone();
+    let mut sdk_api = crate::symbols::prepare(api);
     if profile.group_by_tag {
         for operation in &mut sdk_api.operations {
             if operation_tag_directory_if_present(operation).is_none() {
@@ -230,7 +230,7 @@ fn kaji_barrels(
     let schema_paths = api
         .schemas
         .iter()
-        .map(|schema| format!("./{}", pascal_identifier(&schema.name)))
+        .map(|schema| format!("./{}", crate::models::schema_file_identifier(&schema.name)))
         .collect::<Vec<_>>();
     let schema_chunks = render_barrel_chunks(
         &mut files,
@@ -1238,7 +1238,7 @@ export interface ClientConfig { timeoutMs?: number; baseUrl?: string; apiKey?: s
 export type ParameterStyle = { contentType?: string; style?: 'simple' | 'label' | 'matrix' | 'form' | 'spaceDelimited' | 'pipeDelimited' | 'deepObject'; explode?: boolean }
 export type ParameterStyles = Partial<Record<'path' | 'query' | 'header' | 'cookie', Record<string, ParameterStyle>>>
 export type FormPartHeader = { required?: boolean; style?: ParameterStyle['style']; explode?: boolean; allowReserved?: boolean; schema_definition?: unknown; example_json?: string }
-export type FormEncoding = { contentType?: string; headers?: Record<string, FormPartHeader>; style?: 'form' | 'spaceDelimited' | 'pipeDelimited'; explode?: boolean; allowReserved?: boolean; encoding?: Record<string, FormEncoding>; prefixEncoding?: FormEncoding[]; itemEncoding?: FormEncoding }
+export type FormEncoding = { contentType?: string; headers?: Record<string, FormPartHeader>; style?: 'form' | 'spaceDelimited' | 'pipeDelimited' | 'deepObject'; explode?: boolean; allowReserved?: boolean; encoding?: Record<string, FormEncoding>; prefixEncoding?: FormEncoding[]; itemEncoding?: FormEncoding }
 export type FormEncodings = Record<string, Record<string, FormEncoding>>
 export type FormPartHeaders = Record<string, Record<string, Record<string, unknown>>>
 export type MultipartPart = { name: string; value: string | Blob; contentType?: string; headers?: Record<string, string> }
@@ -1355,6 +1355,7 @@ const validate = async (validator: Validator | undefined, value: unknown) => { i
 const formEntries = (name: string, value: unknown, encoding: FormEncoding = {}): Array<[string, string | Blob]> => {
   if (value === undefined || value === null) return []
   const style = encoding.style ?? 'form'; const explode = encoding.explode ?? true
+  if (style === 'deepObject' && isRecord(value)) return Object.entries(value).flatMap(([key, item]) => formEntries(`${name}[${key}]`, item, { ...encoding, explode: false }))
   if (isRecord(value)) { if (explode) return Object.entries(value).flatMap(([key, item]) => formEntries(key, item, { ...encoding, explode: false })); const separator = style === 'spaceDelimited' ? ' ' : style === 'pipeDelimited' ? '|' : ','; return [[name, Object.entries(value).flatMap(([key, item]) => [key, String(item)]).join(separator)]] }
   if (Array.isArray(value)) { const separator = style === 'spaceDelimited' ? ' ' : style === 'pipeDelimited' ? '|' : ','; return explode ? value.flatMap((item) => formEntries(name, item, { ...encoding, explode: false })) : [[name, value.map(String).join(separator)]] }
   return [[name, value instanceof Blob ? value : String(value)]]
@@ -1548,7 +1549,7 @@ export interface ClientConfig { timeoutMs?: number; baseUrl?: string; apiKey?: s
 export type ParameterStyle = { contentType?: string; style?: 'simple' | 'label' | 'matrix' | 'form' | 'spaceDelimited' | 'pipeDelimited' | 'deepObject'; explode?: boolean }
 export type ParameterStyles = Partial<Record<'path' | 'query' | 'header' | 'cookie', Record<string, ParameterStyle>>>
 export type FormPartHeader = { required?: boolean; style?: ParameterStyle['style']; explode?: boolean; allowReserved?: boolean; schema_definition?: unknown; example_json?: string }
-export type FormEncoding = { contentType?: string; headers?: Record<string, FormPartHeader>; style?: 'form' | 'spaceDelimited' | 'pipeDelimited'; explode?: boolean; allowReserved?: boolean; encoding?: Record<string, FormEncoding>; prefixEncoding?: FormEncoding[]; itemEncoding?: FormEncoding }
+export type FormEncoding = { contentType?: string; headers?: Record<string, FormPartHeader>; style?: 'form' | 'spaceDelimited' | 'pipeDelimited' | 'deepObject'; explode?: boolean; allowReserved?: boolean; encoding?: Record<string, FormEncoding>; prefixEncoding?: FormEncoding[]; itemEncoding?: FormEncoding }
 export type FormEncodings = Record<string, Record<string, FormEncoding>>
 export type FormPartHeaders = Record<string, Record<string, Record<string, unknown>>>
 export type MultipartPart = { name: string; value: unknown; contentType?: string; headers?: Record<string, string> }
@@ -1635,6 +1636,7 @@ const validate = async (validator: Validator | undefined, value: unknown) => { i
 const formEntries = (name: string, value: unknown, encoding: FormEncoding = {}): Array<[string, unknown]> => {
   if (value === undefined || value === null) return []
   const style = encoding.style ?? 'form'; const explode = encoding.explode ?? true
+  if (style === 'deepObject' && isRecord(value)) return Object.entries(value).flatMap(([key, item]) => formEntries(`${name}[${key}]`, item, { ...encoding, explode: false }))
   if (isRecord(value)) { if (explode) return Object.entries(value).flatMap(([key, item]) => formEntries(key, item, { ...encoding, explode: false })); const separator = style === 'spaceDelimited' ? ' ' : style === 'pipeDelimited' ? '|' : ','; return [[name, Object.entries(value).flatMap(([key, item]) => [key, String(item)]).join(separator)]] }
   if (Array.isArray(value)) { const separator = style === 'spaceDelimited' ? ' ' : style === 'pipeDelimited' ? '|' : ','; return explode ? value.flatMap((item) => formEntries(name, item, { ...encoding, explode: false })) : [[name, value.map(String).join(separator)]] }
   return [[name, value]]
@@ -1870,34 +1872,11 @@ fn render_security_types(security_schemes: Option<&SecuritySchemeCatalog>) -> St
 }
 
 fn pascal_identifier(value: &str) -> String {
-    let mut output = String::new();
-    let mut uppercase = true;
-    for character in value.chars() {
-        if character.is_ascii_alphanumeric() {
-            if uppercase {
-                output.extend(character.to_uppercase());
-            } else {
-                output.push(character);
-            }
-            uppercase = false;
-        } else {
-            uppercase = true;
-        }
-    }
-    if output.is_empty() {
-        "Operation".into()
-    } else {
-        output
-    }
+    crate::symbols::identifier(value)
 }
 
 pub(crate) fn lower_camel_identifier(value: &str) -> String {
-    let pascal = pascal_identifier(value);
-    let mut characters = pascal.chars();
-    match characters.next() {
-        Some(first) => first.to_lowercase().collect::<String>() + characters.as_str(),
-        None => "operation".into(),
-    }
+    crate::symbols::camel(value)
 }
 
 fn package_slug(value: &str) -> String {

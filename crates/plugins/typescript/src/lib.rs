@@ -3,6 +3,7 @@ mod oauth;
 pub use oauth::{OAuth, oauth};
 mod webhooks;
 pub use webhooks::{Webhooks, webhooks};
+mod auxiliary_layout;
 mod bundled_middleware;
 mod clients;
 pub mod composition;
@@ -14,6 +15,7 @@ mod models;
 mod render;
 mod request_control;
 mod sdk;
+mod symbols;
 mod workspace;
 pub use models::{
     ArrayType, EnumConstCasing, EnumKeyCasing, EnumType, Int64Type, ModelOptions, OptionalType,
@@ -179,6 +181,7 @@ impl Plugin<TypeScript> for Sdk {
                 cx.files.emit(file)?;
             }
         }
+        let prepared_api = symbols::prepare(cx.api);
         let mut schemas = std::collections::BTreeMap::new();
         let mut operation_modules = std::collections::BTreeMap::new();
         let mut functions = std::collections::BTreeMap::new();
@@ -186,15 +189,22 @@ impl Plugin<TypeScript> for Sdk {
             .api
             .schemas
             .iter()
-            .map(|schema| (models::schema_file_identifier(&schema.name), schema))
+            .zip(&prepared_api.schemas)
+            .map(|(schema, rendered)| {
+                (
+                    models::schema_file_identifier(&rendered.name),
+                    (schema, rendered),
+                )
+            })
             .collect::<std::collections::BTreeMap<_, _>>();
         let operation_types = cx
             .api
             .operations
             .iter()
-            .map(|operation| {
+            .zip(&prepared_api.operations)
+            .map(|(operation, rendered)| {
                 (
-                    models::operation_model_file_identifier(&operation.id),
+                    models::operation_model_file_identifier(&rendered.id),
                     operation,
                 )
             })
@@ -203,18 +213,24 @@ impl Plugin<TypeScript> for Sdk {
             .api
             .operations
             .iter()
-            .map(|operation| (clients::operation_file_identifier(&operation.id), operation))
+            .zip(&prepared_api.operations)
+            .map(|(operation, rendered)| {
+                (
+                    clients::operation_file_identifier(&rendered.id),
+                    (operation, rendered),
+                )
+            })
             .collect::<std::collections::BTreeMap<_, _>>();
         for (path, _) in tree.iter() {
             let relative = path.strip_prefix("__package")?;
             let stem = relative.file_stem().and_then(|s| s.to_str()).unwrap_or("");
             if relative.starts_with("models") {
-                if let Some(schema) = schema_files.get(stem) {
+                if let Some((schema, rendered)) = schema_files.get(stem) {
                     schemas.insert(
                         schema.name.clone(),
                         cx.workspace.declare(
                             relative.with_extension(""),
-                            &models::model_type_name(schema, &options.model_options),
+                            &models::model_type_name(rendered, &options.model_options),
                             self.kind(),
                         )?,
                     );
@@ -224,12 +240,12 @@ impl Plugin<TypeScript> for Sdk {
                 }
             }
             if relative.starts_with("clients") {
-                if let Some(operation) = operation_files.get(stem) {
+                if let Some((operation, rendered)) = operation_files.get(stem) {
                     functions.insert(
                         operation.id.clone(),
                         cx.workspace.declare(
                             relative.with_extension(""),
-                            &sdk::lower_camel_identifier(&operation.id),
+                            &sdk::lower_camel_identifier(&rendered.id),
                             self.kind(),
                         )?,
                     );
@@ -557,6 +573,11 @@ mod tests {
 
     fn response_contract_tree() -> kaji_core::GeneratedTree {
         let mut api = api();
+        // Require a body field so structural TypeScript assignability cannot
+        // mistake an open object schema with only optional fields for an envelope.
+        if let SchemaKind::Object { fields, .. } = &mut api.schemas[0].value.kind {
+            fields[0].required = true;
+        }
         api.operations[0].responses.push(OperationResponse::json(
             "400",
             SchemaValue::new(SchemaKind::String),

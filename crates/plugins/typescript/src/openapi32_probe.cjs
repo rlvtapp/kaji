@@ -12,6 +12,11 @@ const client = process.env.KAJI_CONTROL_AXIOS
   assert.deepEqual(result.data, [{ value: 1 }, { value: 2 }]);
   await client({ method: 'POST', url: '/records', body: [{ value: 7 }, null], contentType: { request: 'application/json-seq' } });
   assert.equal(seen.body ?? seen.data, '\x1e{"value":7}\n\x1enull\n');
+  await client({ method: 'POST', url: '/form', body: { metadata: { label: 'a b', nested: { active: false } } }, contentType: { request: 'application/x-www-form-urlencoded' }, formEncodings: { 'application/x-www-form-urlencoded': { metadata: { style: 'deepObject', explode: true } } } });
+  const form = new URLSearchParams(seen.body ?? seen.data);
+  assert.equal(form.get('metadata[label]'), 'a b');
+  assert.equal(form.get('metadata[nested][active]'), 'false');
+  assert.equal(form.has('label'), false);
   await client({ method: 'POST', url: '/mixed', body: [{ value: 9 }, ['nested', null]], contentType: { request: 'multipart/mixed' }, multipartPlan: { content_type: 'multipart/mixed', prefix_encoding: [{ contentType: 'application/json' }, { contentType: 'multipart/mixed', prefixEncoding: [{ contentType: 'text/plain' }, { contentType: 'application/json' }] }] } });
   const multipart = seen.body ?? seen.data;
   assert(multipart instanceof Blob);
@@ -30,6 +35,10 @@ const client = process.env.KAJI_CONTROL_AXIOS
   const headers = new Headers(seen.headers);
   assert.equal(headers.get('condition'), '{"id":1}');
   assert.equal(decodeURIComponent(headers.get('cookie')), 'preferences={"id":2}');
+  media = 'application/json; charset=utf-8'; body = '{"count":"wrong"}';
+  const typed = createClient({ validateResponses: true, middleware: [async () => ({status:200, contentType:'application/json', data:{count:'wrong'}})] });
+  const parameterized = { refs:{}, requests:{}, responses:{'200':{'application/json;charset=utf-8':{kind:'object', required:['count'], fields:{count:{kind:'integer'}}}}} };
+  await assert.rejects(typed({method:'GET',url:'/typed',jsonPlan:parameterized}), error => error.name === 'ResponseDecodeError' && error.path.includes('count'));
   media = 'application/json-seq'; body = '\x1e9223372036854775807\n';
   const shape = { kind: 'array', items: { kind: 'integer', integer: 'bigint' } };
   const jsonPlan = { lossless: true, refs: {}, requests: { 'application/json-seq': shape }, responses: { '200': { 'application/json-seq': shape } } };
