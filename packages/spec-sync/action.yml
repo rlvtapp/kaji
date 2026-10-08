@@ -15,7 +15,7 @@ inputs:
     required: true
   branch:
     description: Existing or new review branch; commits are preserved without force pushes.
-    default: poolster/spec-sync
+    default: codex/poolster-spec-sync
   base:
     description: Destination pull-request base branch.
     default: main

@@ -54,9 +54,9 @@ test('new branch starts at base and opens a PR without force pushing', async t =
   const input = await fixture(t), api = mock({ branch: false });
   await syncSpec(input, api);
   assert.deepEqual(api.calls.find(call => call.url.endsWith('/git/commits') && call.method === 'POST').body.parents, ['base']);
-  assert.deepEqual(api.calls.find(call => call.url.endsWith('/git/refs')).body, { ref: 'refs/heads/poolster/spec-sync', sha: 'new-commit' });
+  assert.deepEqual(api.calls.find(call => call.url.endsWith('/git/refs')).body, { ref: 'refs/heads/codex/poolster-spec-sync', sha: 'new-commit' });
   const pr = api.calls.find(call => call.url.endsWith('/pulls') && call.method === 'POST');
-  assert.equal(pr.body.base, 'main'); assert.equal(pr.body.head, 'poolster/spec-sync');
+  assert.equal(pr.body.base, 'main'); assert.equal(pr.body.head, 'codex/poolster-spec-sync');
 });
 test('identical source and provenance do not create another commit', async t => {
   const input = await fixture(t);

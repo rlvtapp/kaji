@@ -74,7 +74,7 @@ export async function syncSpec(input, dependencies = {}) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(sourceRepository)) throw new Error('Source repository must be owner/name');
   const sourceSha = text(input.sourceSha, 'source SHA');
   if (!/^[a-f0-9]{40}$/i.test(sourceSha)) throw new Error('Source SHA must be a full Git commit SHA');
-  const branch = branchName(input.branch ?? 'poolster/spec-sync');
+  const branch = branchName(input.branch ?? 'codex/poolster-spec-sync');
   const base = branchName(input.base ?? 'main');
   if (branch === base) throw new Error('Review branch must differ from the base branch');
   const target = safePath(input.targetPath, 'target-path');

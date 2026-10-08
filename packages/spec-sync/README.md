@@ -12,7 +12,7 @@ The action and `sync.mjs` are readable and editable. Copy this directory into yo
 | `source-path` | Checkout-relative local `.yaml`, `.yml` or JSON OpenAPI file. |
 | `target-path` | Repository-relative destination spec path. It cannot address `.github`, `.git` or `.poolster`. |
 | `token` | GitHub App installation or fine-grained token for the destination, with **Contents: write** and **Pull requests: write**. |
-| `branch` | Review branch; default `poolster/spec-sync`. Existing commits are preserved. |
+| `branch` | Review branch; default `codex/poolster-spec-sync`. Existing commits are preserved. |
 | `base` | Destination PR base; default `main`. Must differ from the review branch. |
 
 Outputs are `pull-request-url` (empty when there is no difference requiring a PR) and `changed` (whether this run committed file updates).
@@ -26,7 +26,7 @@ After checking out the API source commit and obtaining a destination-scoped toke
     source-path: api/openapi.yaml
     target-path: specs/openapi.yaml
     token: ${{ secrets.SDK_SPEC_SYNC_TOKEN }}
-    branch: poolster/spec-sync
+    branch: codex/poolster-spec-sync
     base: main
 ```
 

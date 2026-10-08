@@ -48,7 +48,7 @@ GitHub Marketplace: Marketplace actions require one `action.yml` at the root of
 a public action repository.
 
 When Poolster is ready to publish a Marketplace action,
-create a small dedicated public repository (for example `rlvtapp/kaji-action`)
+create a small dedicated public repository (for example `rlvtapp/poolster-action`)
 whose root contains this action, release it under a stable tag, and publish that
 release from GitHub.
 Do not add a root action metadata file to this monorepo
