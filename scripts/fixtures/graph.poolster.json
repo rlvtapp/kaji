@@ -16,7 +16,7 @@
     {
       "language": "typescript",
       "path": "typescript",
-      "name": "@kaji/microsoft-graph",
+      "name": "@poolster/microsoft-graph",
       "plugins": [
         {
           "name": "sdk",

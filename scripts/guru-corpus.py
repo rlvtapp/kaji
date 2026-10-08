@@ -108,7 +108,7 @@ def output_statistics(package, warning_bytes=0):
         if path.is_file():
             relative = path.relative_to(package)
             files.append((relative.as_posix(), path.stat().st_size,
-                          '.kaji' in relative.parts, path.suffix in SOURCE_SUFFIXES))
+                          '.poolster' in relative.parts, path.suffix in SOURCE_SUFFIXES))
     source = sorted(((name, size) for name, size, metadata, is_source in files
                      if is_source and not metadata), key=lambda item: (-item[1], item[0]))
     oversized = sorted(((name, size) for name, size, metadata, _ in files
@@ -152,10 +152,10 @@ def run_case(contract, language, manifest, root, environment, timeout, keep_gene
               'status': 'failed', 'generation': None, 'native': None}
     with tempfile.TemporaryDirectory(prefix=name + '-', dir=root / 'work') as temporary:
         scratch = Path(temporary)
-        env = {**environment, 'KAJI_PUBLIC_CONTRACT_MANIFEST': str(manifest),
-               'KAJI_PUBLIC_CONTRACTS': name, 'KAJI_PUBLIC_LANGUAGES': language,
-               'KAJI_PUBLIC_SPEC_DIR': str(root / 'specs'),
-               'KAJI_PUBLIC_CONTRACT_ROOT': str(scratch)}
+        env = {**environment, 'POOLSTER_PUBLIC_CONTRACT_MANIFEST': str(manifest),
+               'POOLSTER_PUBLIC_CONTRACTS': name, 'POOLSTER_PUBLIC_LANGUAGES': language,
+               'POOLSTER_PUBLIC_SPEC_DIR': str(root / 'specs'),
+               'POOLSTER_PUBLIC_CONTRACT_ROOT': str(scratch)}
         logs = root / 'logs' / name / language
         report['generation'] = run_logged(['bash', str(PROJECT / 'scripts/test-public-contracts.sh'),
                                           'generate'], env, logs / 'generate.log', timeout)
@@ -176,7 +176,7 @@ def run_case(contract, language, manifest, root, environment, timeout, keep_gene
                                           'check', language], env, logs / 'native.log', timeout)
             if report['native']['exit_code'] == 0 and report.get('regeneration', {}).get('status', 'passed') == 'passed':
                 report['status'] = 'passed'
-        for metadata in (sdk_root / '.kaji', sdk_root / language / '.kaji'):
+        for metadata in (sdk_root / '.poolster', sdk_root / language / '.poolster'):
             if metadata.is_dir():
                 relative = metadata.relative_to(sdk_root)
                 shutil.copytree(metadata, root / 'metadata' / name / language / relative,
@@ -219,7 +219,7 @@ def main(arguments=None):
         parser.error('--file-warning-bytes cannot be negative')
     manifest = args.manifest.resolve()
     if args.contracts:
-        os.environ['KAJI_PUBLIC_CONTRACTS'] = args.contracts
+        os.environ['POOLSTER_PUBLIC_CONTRACTS'] = args.contracts
     selected = public.contracts(manifest)
     if not selected:
         parser.error('no contracts selected')

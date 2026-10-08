@@ -132,8 +132,8 @@ jobs:
       - name: Validate generated SDK
         working-directory: generated-sdk-fixture/${{ matrix.path }}
         env:
-          CLANG_MODULE_CACHE_PATH: ${{ runner.temp }}/kaji-swift-cache/clang
-          SWIFTPM_MODULECACHE_OVERRIDE: ${{ runner.temp }}/kaji-swift-cache/swiftpm
+          CLANG_MODULE_CACHE_PATH: ${{ runner.temp }}/poolster-swift-cache/clang
+          SWIFTPM_MODULECACHE_OVERRIDE: ${{ runner.temp }}/poolster-swift-cache/swiftpm
         run: |
           case "${{ matrix.language }}" in
             Rust) cargo test ;;

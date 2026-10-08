@@ -3,11 +3,11 @@
 set -euo pipefail
 project_root="$(cd "$(dirname "$0")/.." && pwd)"
 mode="${1:-generate}"
-contract_root="${KAJI_PUBLIC_CONTRACT_ROOT:?Set KAJI_PUBLIC_CONTRACT_ROOT to a disposable output directory}"
-manifest="${KAJI_PUBLIC_CONTRACT_MANIFEST:-$project_root/scripts/fixtures/public-contracts.json}"
+contract_root="${POOLSTER_PUBLIC_CONTRACT_ROOT:?Set POOLSTER_PUBLIC_CONTRACT_ROOT to a disposable output directory}"
+manifest="${POOLSTER_PUBLIC_CONTRACT_MANIFEST:-$project_root/scripts/fixtures/public-contracts.json}"
 if [[ "$mode" == generate ]]; then
   mkdir -p "$contract_root/specs"
-  python3 "$project_root/scripts/public-contracts.py" fetch "$manifest" "$contract_root/specs" "${KAJI_PUBLIC_SPEC_DIR:-}"
+  python3 "$project_root/scripts/public-contracts.py" fetch "$manifest" "$contract_root/specs" "${POOLSTER_PUBLIC_SPEC_DIR:-}"
   if [[ -z "${POOLSTER_BINARY:-}" ]]; then
     cargo build --manifest-path "$project_root/Cargo.toml" --locked -p poolster-cli
   fi
@@ -15,7 +15,7 @@ if [[ "$mode" == generate ]]; then
   listing="$(python3 "$project_root/scripts/public-contracts.py" list "$manifest" "$contract_root/specs")"
   while IFS=$'\t' read -r contract source_path; do
     "$poolster_binary" generate "$source_path" --output "$contract_root/$contract" \
-      --language "${KAJI_PUBLIC_LANGUAGES:-rust,typescript,go,python,php,java,csharp,elixir,ruby,swift}" \
+      --language "${POOLSTER_PUBLIC_LANGUAGES:-rust,typescript,go,python,php,java,csharp,elixir,ruby,swift}" \
       --name 'Public Contract' --color never
   done <<< "$listing"
 elif [[ "$mode" == check ]]; then
@@ -32,7 +32,7 @@ elif [[ "$mode" == check ]]; then
       case "$language" in
         rust) cargo check --quiet ;;
         typescript)
-          if [[ -n "${KAJI_TSC_JS:-}" ]]; then node "$KAJI_TSC_JS" -p tsconfig.json
+          if [[ -n "${POOLSTER_TSC_JS:-}" ]]; then node "$POOLSTER_TSC_JS" -p tsconfig.json
           else npm install --ignore-scripts && npm run build; fi ;;
         go) go test ./... ;;
         python) "${POOLSTER_TEST_PYTHON:-python3}" -m compileall -q src && PYTHONPATH=src "${POOLSTER_TEST_PYTHON:-python3}" -c 'import public_contract_sdk' ;;

@@ -94,11 +94,11 @@ class CorpusTests(unittest.TestCase):
             sentinel.write_text('preserve me')
             def run(command, env, log, timeout):
                 if command[-1] == 'generate':
-                    sdk = Path(env['KAJI_PUBLIC_CONTRACT_ROOT']) / 'sample'
+                    sdk = Path(env['POOLSTER_PUBLIC_CONTRACT_ROOT']) / 'sample'
                     (sdk / 'go').mkdir(parents=True)
                     (sdk / 'go/client.go').write_text('package sdk')
-                    (sdk / '.kaji').mkdir()
-                    (sdk / '.kaji/generation.lock.json').write_text('{}')
+                    (sdk / '.poolster').mkdir()
+                    (sdk / '.poolster/generation.lock.json').write_text('{}')
                     return {'exit_code': 0}
                 return {'exit_code': 42}
             with patch.object(corpus, 'run_logged', side_effect=run):
@@ -106,7 +106,7 @@ class CorpusTests(unittest.TestCase):
             self.assertEqual(result['status'], 'failed')
             self.assertEqual(result['native']['exit_code'], 42)
             self.assertEqual(result['generated_files'], 1)
-            self.assertTrue((root / 'metadata/sample/go/.kaji/generation.lock.json').exists())
+            self.assertTrue((root / 'metadata/sample/go/.poolster/generation.lock.json').exists())
             self.assertEqual(sentinel.read_text(), 'preserve me')
             self.assertEqual(list((root / 'work').iterdir()), [])
 
@@ -135,8 +135,8 @@ class CorpusTests(unittest.TestCase):
     def test_sizes_keep_metadata_and_assets_distinct_with_stable_top_paths(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / '.kaji').mkdir()
-            (root / '.kaji/source.ts').write_bytes(b'x' * 40)
+            (root / '.poolster').mkdir()
+            (root / '.poolster/source.ts').write_bytes(b'x' * 40)
             (root / 'z.ts').write_bytes(b'x' * 12)
             (root / 'a.ts').write_bytes(b'x' * 12)
             (root / 'collection.json').write_bytes(b'x' * 15)
@@ -192,18 +192,18 @@ class CorpusTests(unittest.TestCase):
     def test_fingerprint_catches_hidden_runtime_changes_and_stale_chunks(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / '.kaji').mkdir()
-            (root / '.kaji/runtime.ts').write_text('export const value=1')
+            (root / '.poolster').mkdir()
+            (root / '.poolster/runtime.ts').write_text('export const value=1')
             (root / 'old_chunk.ts').write_text('old')
-            lock = root / '.kaji/generation.lock.json'
+            lock = root / '.poolster/generation.lock.json'
             lock.write_text('first timestamp')
             before = corpus.output_fingerprint(root)
             lock.write_text('second timestamp')
             self.assertEqual(corpus.compare_fingerprints(before, corpus.output_fingerprint(root))['status'], 'passed')
-            (root / '.kaji/runtime.ts').write_text('export const value=2')
+            (root / '.poolster/runtime.ts').write_text('export const value=2')
             (root / 'old_chunk.ts').unlink()
             result = corpus.compare_fingerprints(before, corpus.output_fingerprint(root))
-            self.assertEqual(result['changed_paths'], ['.kaji/runtime.ts', 'old_chunk.ts'])
+            self.assertEqual(result['changed_paths'], ['.poolster/runtime.ts', 'old_chunk.ts'])
 
     def test_regeneration_drift_fails_case_even_when_native_compile_passes(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -212,7 +212,7 @@ class CorpusTests(unittest.TestCase):
             generations = []
             def run(command, env, log, timeout):
                 if command[-1] == 'generate':
-                    package = Path(env['KAJI_PUBLIC_CONTRACT_ROOT']) / 'sample/go'
+                    package = Path(env['POOLSTER_PUBLIC_CONTRACT_ROOT']) / 'sample/go'
                     package.mkdir(parents=True, exist_ok=True)
                     generations.append(True)
                     (package / 'client.go').write_text('package sdk' + str(len(generations)))

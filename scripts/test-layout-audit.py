@@ -52,7 +52,7 @@ class LayoutAuditTests(unittest.TestCase):
         source = root / 'source.yaml'
         source.write_text('openapi: 3.1.0')
         with patch.object(audit.corpus, 'run_logged', side_effect=run):
-            return audit.audit_case(source, 'sample', 'go', root, Path('/kaji'), {}, 10, 10)
+            return audit.audit_case(source, 'sample', 'go', root, Path('/poolster'), {}, 10, 10)
 
     def test_repeat_generation_keeps_overlay_and_compares_worker_counts(self):
         with tempfile.TemporaryDirectory() as directory:

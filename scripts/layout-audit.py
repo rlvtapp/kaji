@@ -177,7 +177,7 @@ def main(arguments=None):
     sources = []
     provenance = {}
     if args.contracts:
-        os.environ['KAJI_PUBLIC_CONTRACTS'] = args.contracts
+        os.environ['POOLSTER_PUBLIC_CONTRACTS'] = args.contracts
         corpus.public.fetch(args.manifest, root / 'specs', args.spec_cache)
         for contract in corpus.public.contracts(args.manifest):
             sources.append((contract['name'], corpus.public.source_path(root / 'specs', contract)))

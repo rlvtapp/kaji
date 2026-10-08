@@ -21,7 +21,7 @@ class PublicContractRunnerTests(unittest.TestCase):
                 (cache / f"{name}.yml").write_text("unexpected contract revision")
             output = root / "output"
             result = subprocess.run(["bash", str(SCRIPT), "generate"], env={**os.environ,
-                "KAJI_PUBLIC_CONTRACT_ROOT": str(output), "KAJI_PUBLIC_SPEC_DIR": str(cache),
+                "POOLSTER_PUBLIC_CONTRACT_ROOT": str(output), "POOLSTER_PUBLIC_SPEC_DIR": str(cache),
                 "POOLSTER_BINARY": str(root / "must-not-execute")}, capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("checksum mismatch", result.stderr)
@@ -31,7 +31,7 @@ class PublicContractRunnerTests(unittest.TestCase):
     def test_unknown_language_is_rejected_before_entering_a_package(self):
         with tempfile.TemporaryDirectory() as temp:
             result = subprocess.run(["bash", str(SCRIPT), "check", "../unsupported"],
-                env={**os.environ, "KAJI_PUBLIC_CONTRACT_ROOT": temp}, capture_output=True, text=True)
+                env={**os.environ, "POOLSTER_PUBLIC_CONTRACT_ROOT": temp}, capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("Unsupported language", result.stderr)
 
@@ -60,8 +60,8 @@ class PublicContractRunnerTests(unittest.TestCase):
     def test_unknown_contract_selection_fails_in_check_mode(self):
         with tempfile.TemporaryDirectory() as temp:
             result = subprocess.run(["bash", str(SCRIPT), "check", "go"],
-                env={**os.environ, "KAJI_PUBLIC_CONTRACT_ROOT": temp,
-                     "KAJI_PUBLIC_CONTRACTS": "not-in-manifest"}, capture_output=True, text=True)
+                env={**os.environ, "POOLSTER_PUBLIC_CONTRACT_ROOT": temp,
+                     "POOLSTER_PUBLIC_CONTRACTS": "not-in-manifest"}, capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("Unknown selected contract", result.stderr)
 

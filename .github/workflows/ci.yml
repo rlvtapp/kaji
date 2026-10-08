@@ -45,8 +45,8 @@ jobs:
         run: PYTHONPATH=packages/python/src python -m unittest discover -s packages/python/tests -v
       - name: Test workspace release version updates
         run: |
-          npm install --prefix "$RUNNER_TEMP/kaji-release-check" --ignore-scripts --no-audit --no-fund release-please@17.6.0
-          NODE_PATH="$RUNNER_TEMP/kaji-release-check/node_modules" node --test scripts/release-config.test.cjs
+          npm install --prefix "$RUNNER_TEMP/poolster-release-check" --ignore-scripts --no-audit --no-fund release-please@17.6.0
+          NODE_PATH="$RUNNER_TEMP/poolster-release-check/node_modules" node --test scripts/release-config.test.cjs
       - name: Build OpenAPI compiler for CLI integration tests
         working-directory: openapi
         run: go build -o ../target/debug/poolster-openapi .
@@ -61,10 +61,10 @@ jobs:
           cargo test -p poolster-cli --test migration -- --ignored
       - name: Verify generated TypeScript middleware and response decoding
         run: |
-          npm install --prefix "$RUNNER_TEMP/kaji-ts-runtime" --no-audit --no-fund typescript@5.9.3 axios@1.20.0
-          export KAJI_TSC_JS="$RUNNER_TEMP/kaji-ts-runtime/node_modules/typescript/lib/tsc.js"
-          export KAJI_AXIOS_NODE_MODULES="$RUNNER_TEMP/kaji-ts-runtime/node_modules"
-          export KAJI_TS_AXIOS_NODE_MODULES="$RUNNER_TEMP/kaji-ts-runtime/node_modules"
+          npm install --prefix "$RUNNER_TEMP/poolster-ts-runtime" --no-audit --no-fund typescript@5.9.3 axios@1.20.0
+          export POOLSTER_TSC_JS="$RUNNER_TEMP/poolster-ts-runtime/node_modules/typescript/lib/tsc.js"
+          export POOLSTER_AXIOS_NODE_MODULES="$RUNNER_TEMP/poolster-ts-runtime/node_modules"
+          export POOLSTER_TS_AXIOS_NODE_MODULES="$RUNNER_TEMP/poolster-ts-runtime/node_modules"
           cargo test -p poolster-plugin-typescript generated_middleware_fetch_and_axios_execute -- --ignored
           cargo test -p poolster-plugin-typescript generated_idempotency_fetch_and_axios_execute -- --ignored
           cargo test -p poolster-plugin-typescript bundled_middleware_is_enabled_without_customer_registration -- --ignored
@@ -81,10 +81,10 @@ jobs:
         env:
           CYPRESS_INSTALL_BINARY: '0'
         run: |
-          npm install --prefix "$RUNNER_TEMP/kaji-ts-framework" --no-audit --no-fund typescript@5.9.3 @types/node@22.20.5 commander@13.1.0 react@19.3.0 @types/react@19.3.0 vue@3.5.43 @tanstack/react-query@5.104.1 @tanstack/vue-query@5.104.1 swr@2.5.1 zod@3.25.76 @faker-js/faker@9.9.0 msw@2.15.0 cypress@15.21.1
-          export KAJI_TSC_JS="$RUNNER_TEMP/kaji-ts-framework/node_modules/typescript/lib/tsc.js"
-          export KAJI_TS_NODE_MODULES="$RUNNER_TEMP/kaji-ts-framework/node_modules"
-          export KAJI_TS_CLI_NODE_MODULES="$KAJI_TS_NODE_MODULES"
+          npm install --prefix "$RUNNER_TEMP/poolster-ts-framework" --no-audit --no-fund typescript@5.9.3 @types/node@22.20.5 commander@13.1.0 react@19.3.0 @types/react@19.3.0 vue@3.5.43 @tanstack/react-query@5.104.1 @tanstack/vue-query@5.104.1 swr@2.5.1 zod@3.25.76 @faker-js/faker@9.9.0 msw@2.15.0 cypress@15.21.1
+          export POOLSTER_TSC_JS="$RUNNER_TEMP/poolster-ts-framework/node_modules/typescript/lib/tsc.js"
+          export POOLSTER_TS_NODE_MODULES="$RUNNER_TEMP/poolster-ts-framework/node_modules"
+          export POOLSTER_TS_CLI_NODE_MODULES="$POOLSTER_TS_NODE_MODULES"
           cargo test -p poolster-plugin-typescript query_factories_cache_callbacks_and_abort_execute_natively -- --ignored
           cargo test -p poolster-plugin-typescript namespaced_and_auxiliary_consumers_compile_and_validate_selected_models -- --ignored
           cargo test -p poolster-plugin-typescript custom_transport_and_relocated_query_consumer_compile -- --ignored
@@ -128,12 +128,12 @@ jobs:
         run: node packages/internal/sdk-delivery-test/delivery.mjs --mode local --binary "$GITHUB_WORKSPACE/target/debug/poolster"
       - name: Export shared native runtime contract fixture
         env:
-          KAJI_RUNTIME_EXPORT: ${{ runner.temp }}/runtime-contract-fixture
+          POOLSTER_RUNTIME_EXPORT: ${{ runner.temp }}/runtime-contract-fixture
         run: cargo test -p poolster --test runtime_conformance --locked
       - name: Verify installed TypeScript ESM package and consumer types
         env:
-          KAJI_PACKAGE_FIXTURE: ${{ runner.temp }}/runtime-contract-fixture/sdk/typescript
-          KAJI_TSC_JS: ${{ runner.temp }}/kaji-ts-runtime/node_modules/typescript/lib/tsc.js
+          POOLSTER_PACKAGE_FIXTURE: ${{ runner.temp }}/runtime-contract-fixture/sdk/typescript
+          POOLSTER_TSC_JS: ${{ runner.temp }}/poolster-ts-runtime/node_modules/typescript/lib/tsc.js
         run: node --test packages/internal/runtime-contract/package-consumer.test.mjs
       - uses: actions/upload-artifact@v7
         with:
@@ -152,7 +152,7 @@ jobs:
       - name: Generate checksum-pinned public contracts for every SDK target
         env:
           POOLSTER_BINARY: ${{ github.workspace }}/target/debug/poolster
-          KAJI_PUBLIC_CONTRACT_ROOT: ${{ runner.temp }}/public-contract-fixtures
+          POOLSTER_PUBLIC_CONTRACT_ROOT: ${{ runner.temp }}/public-contract-fixtures
         run: bash scripts/test-public-contracts.sh generate
       - uses: actions/upload-artifact@v7
         with:
@@ -234,8 +234,8 @@ jobs:
       - name: Install explicit TypeScript compiler for the runtime probe
         if: matrix.language == 'TypeScript'
         run: |
-          npm install --prefix "$RUNNER_TEMP/kaji-runtime-ts" --no-audit --no-fund typescript@5.9.3
-          echo "KAJI_TSC_JS=$RUNNER_TEMP/kaji-runtime-ts/node_modules/typescript/lib/tsc.js" >> "$GITHUB_ENV"
+          npm install --prefix "$RUNNER_TEMP/poolster-runtime-ts" --no-audit --no-fund typescript@5.9.3
+          echo "POOLSTER_TSC_JS=$RUNNER_TEMP/poolster-runtime-ts/node_modules/typescript/lib/tsc.js" >> "$GITHUB_ENV"
       - uses: actions/setup-go@v7
         if: matrix.language == 'Go' || matrix.language == 'Swift'
         with:
@@ -276,15 +276,15 @@ jobs:
           path: ${{ runner.temp }}/public-contract-fixtures
       - name: Compile pinned public contracts with the native language toolchain
         env:
-          KAJI_PUBLIC_CONTRACT_ROOT: ${{ runner.temp }}/public-contract-fixtures
-          CLANG_MODULE_CACHE_PATH: ${{ runner.temp }}/kaji-swift-cache/clang
-          SWIFTPM_MODULECACHE_OVERRIDE: ${{ runner.temp }}/kaji-swift-cache/swiftpm
+          POOLSTER_PUBLIC_CONTRACT_ROOT: ${{ runner.temp }}/public-contract-fixtures
+          CLANG_MODULE_CACHE_PATH: ${{ runner.temp }}/poolster-swift-cache/clang
+          SWIFTPM_MODULECACHE_OVERRIDE: ${{ runner.temp }}/poolster-swift-cache/swiftpm
         run: bash scripts/test-public-contracts.sh check "${{ matrix.path }}"
       - name: Validate generated SDK
         working-directory: ${{ runner.temp }}/generated-sdk-fixture/${{ matrix.path }}
         env:
-          CLANG_MODULE_CACHE_PATH: ${{ runner.temp }}/kaji-swift-cache/clang
-          SWIFTPM_MODULECACHE_OVERRIDE: ${{ runner.temp }}/kaji-swift-cache/swiftpm
+          CLANG_MODULE_CACHE_PATH: ${{ runner.temp }}/poolster-swift-cache/clang
+          SWIFTPM_MODULECACHE_OVERRIDE: ${{ runner.temp }}/poolster-swift-cache/swiftpm
         run: |
           case "${{ matrix.language }}" in
             Rust) cargo test ;;
@@ -333,14 +333,14 @@ jobs:
       - name: Verify all native PHP probes
         if: matrix.language == 'PHP'
         env:
-          KAJI_PHP_AUTOLOAD: ${{ runner.temp }}/generated-sdk-fixture/php/vendor/autoload.php
+          POOLSTER_PHP_AUTOLOAD: ${{ runner.temp }}/generated-sdk-fixture/php/vendor/autoload.php
         run: |
           composer install --working-dir="$RUNNER_TEMP/generated-sdk-fixture/php" --no-interaction --no-progress
           cargo test -p poolster-plugin-php -- --ignored
       - name: Verify all native Elixir probes
         if: matrix.language == 'Elixir'
         env:
-          KAJI_ELIXIR_NATIVE_PROJECT: ${{ runner.temp }}/generated-sdk-fixture/elixir
+          POOLSTER_ELIXIR_NATIVE_PROJECT: ${{ runner.temp }}/generated-sdk-fixture/elixir
         run: cargo test -p poolster-plugin-elixir -- --ignored
       - name: Verify native Swift middleware models pagination and cancellation
         if: matrix.language == 'Swift'

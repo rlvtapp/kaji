@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/v1/check-baseline.schema.json",
-  "title": "Kaji contract-check baseline",
-  "description": "Known Kaji check diagnostics to suppress while a contract is gradually brought into compliance.",
+  "$id": "https://raw.githubusercontent.com/rlvtapp/poolster/main/schemas/v1/check-baseline.schema.json",
+  "title": "Poolster contract-check baseline",
+  "description": "Known Poolster check diagnostics to suppress while a contract is gradually brought into compliance.",
   "type": "object",
   "additionalProperties": false,
   "required": ["version", "diagnostics"],
@@ -10,7 +10,7 @@
     "$schema": {
       "type": "string",
       "format": "uri",
-      "description": "Optional schema association written by Kaji."
+      "description": "Optional schema association written by Poolster."
     },
     "version": {
       "const": 1,

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/rlvtapp/kaji/main/schemas/v1/poolster.schema.json",
+  "$id": "https://raw.githubusercontent.com/rlvtapp/poolster/main/schemas/v1/poolster.schema.json",
   "title": "Poolster configuration",
   "description": "Configuration for Poolster's multi-language OpenAPI SDK generator.",
   "type": "object",
@@ -64,7 +64,7 @@
       "description": "Namespaced resource client or direct operation methods."
     },
     "secret": {
-      "description": "Literal value, environment-variable reference, or named Kaji auth profile. Prefer an environment or profile reference for credentials.",
+      "description": "Literal value, environment-variable reference, or named Poolster auth profile. Prefer an environment or profile reference for credentials.",
       "oneOf": [
         {
           "type": "string"
@@ -177,7 +177,7 @@
         "artifacts": {
           "type": "string",
           "minLength": 1,
-          "description": "Existing Kaji compiler artifact directory."
+          "description": "Existing Poolster compiler artifact directory."
         },
         "name": {
           "type": "string",
@@ -189,7 +189,7 @@
         },
         "compiler": {
           "type": "string",
-          "description": "Optional replacement kaji-openapi executable."
+          "description": "Optional replacement poolster-openapi executable."
         },
         "paths": {
           "$ref": "#/$defs/pathSelection"
@@ -321,7 +321,7 @@
         },
         "idempotency": {
           "$ref": "#/$defs/idempotencyConfig",
-          "description": "Opt-in package-local idempotency. Absent policies are disabled. Defaults override operation x-kaji-idempotency extensions; operation rules override defaults. Automatic key generation is disabled unless requested."
+          "description": "Opt-in package-local idempotency. Absent policies are disabled. Defaults override operation x-poolster-idempotency extensions; operation rules override defaults. Automatic key generation is disabled unless requested."
         },
         "layout": {
           "$ref": "#/$defs/sourceLayout",
@@ -1007,7 +1007,7 @@
             "source": {
               "type": "string",
               "minLength": 1,
-              "description": "UTF-8 source file relative to the Kaji config."
+              "description": "UTF-8 source file relative to the Poolster config."
             }
           }
         },
@@ -1031,7 +1031,7 @@
             "source": {
               "type": "string",
               "minLength": 1,
-              "description": "UTF-8 source file relative to the Kaji config."
+              "description": "UTF-8 source file relative to the Poolster config."
             }
           }
         },
@@ -1056,7 +1056,7 @@
             "source": {
               "type": "string",
               "minLength": 1,
-              "description": "UTF-8 source file relative to the Kaji config."
+              "description": "UTF-8 source file relative to the Poolster config."
             },
             "find": {
               "type": "string",
@@ -1079,7 +1079,7 @@
         "source": {
           "type": "string",
           "minLength": 1,
-          "description": "UTF-8 middleware source relative to the Kaji config."
+          "description": "UTF-8 middleware source relative to the Poolster config."
         },
         "path": {
           "type": "string",

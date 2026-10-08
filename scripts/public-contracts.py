@@ -12,7 +12,7 @@ import zipfile
 
 def contracts(manifest):
     values = json.loads(Path(manifest).read_text())["contracts"]
-    requested = os.environ.get("KAJI_PUBLIC_CONTRACTS", "").split(",")
+    requested = os.environ.get("POOLSTER_PUBLIC_CONTRACTS", "").split(",")
     requested = [name for name in requested if name]
     known = {value["name"] for value in values}
     if len(known) != len(values) or any(not re.fullmatch(r"[a-z][a-z0-9-]*", name) for name in known):
