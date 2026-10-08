@@ -35,7 +35,7 @@ jobs:
           node-version: 22
       - run: node packages/node-plugins/generate.mjs --check
       - run: node packages/cli/sdk/scripts/build-native.mjs
-      - run: go build -o ../target/debug/kaji-openapi .
+      - run: go build -o ../target/debug/poolster-openapi .
         working-directory: openapi
       - uses: actions/setup-node@v7
         with:

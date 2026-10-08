@@ -15,19 +15,19 @@ jobs:
           - runner: macos-14
             platform: darwin-arm64
             target: aarch64-apple-darwin
-            compiler: kaji-openapi
+            compiler: poolster-openapi
           - runner: macos-15-intel
             platform: darwin-x64
             target: x86_64-apple-darwin
-            compiler: kaji-openapi
+            compiler: poolster-openapi
           - runner: ubuntu-22.04
             platform: linux-x64-gnu
             target: x86_64-unknown-linux-gnu
-            compiler: kaji-openapi
+            compiler: poolster-openapi
           - runner: windows-latest
             platform: win32-x64-msvc
             target: x86_64-pc-windows-msvc
-            compiler: kaji-openapi.exe
+            compiler: poolster-openapi.exe
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
@@ -44,24 +44,24 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - run: cargo test -p kaji-cli --locked
+      - run: cargo test -p poolster-cli --locked
       - run: node --test packages/cli/test/launcher.test.cjs
       - run: node packages/cli/scripts/build-platform.mjs ${{ matrix.platform }}
       - run: node packages/cli/scripts/smoke-native.mjs ${{ matrix.platform }}
       - run: node packages/cli/sdk/scripts/build-native.mjs
       - run: npm test --prefix packages/cli/sdk
         env:
-          KAJI_OPENAPI_BIN: ${{ github.workspace }}/packages/cli/npm/${{ matrix.platform }}/${{ matrix.compiler }}
+          POOLSTER_OPENAPI_BIN: ${{ github.workspace }}/packages/cli/npm/${{ matrix.platform }}/${{ matrix.compiler }}
       - name: Compile generated TypeScript with Rust add-ons
         if: matrix.platform == 'linux-x64-gnu'
         env:
-          KAJI_OPENAPI_BIN: ${{ github.workspace }}/packages/cli/npm/${{ matrix.platform }}/${{ matrix.compiler }}
-          KAJI_EXAMPLE_OUTPUT: ${{ runner.temp }}/kaji-node-mixed
+          POOLSTER_OPENAPI_BIN: ${{ github.workspace }}/packages/cli/npm/${{ matrix.platform }}/${{ matrix.compiler }}
+          POOLSTER_EXAMPLE_OUTPUT: ${{ runner.temp }}/poolster-node-mixed
         run: |
           node examples/node-embedded/native-contracts.mjs
-          npm install --prefix "$KAJI_EXAMPLE_OUTPUT/web" --ignore-scripts --no-audit --no-fund
-          npm run build --prefix "$KAJI_EXAMPLE_OUTPUT/web"
-          node packages/cli/sdk/test-support/assert-generated-runtime.mjs "$KAJI_EXAMPLE_OUTPUT/web"
+          npm install --prefix "$POOLSTER_EXAMPLE_OUTPUT/web" --ignore-scripts --no-audit --no-fund
+          npm run build --prefix "$POOLSTER_EXAMPLE_OUTPUT/web"
+          node packages/cli/sdk/test-support/assert-generated-runtime.mjs "$POOLSTER_EXAMPLE_OUTPUT/web"
       - run: node packages/cli/sdk/scripts/build-platform.mjs ${{ matrix.platform }}
       - run: node packages/cli/sdk/scripts/smoke-platform.mjs ${{ matrix.platform }}
       - run: node packages/cli/scripts/smoke-split.mjs ${{ matrix.platform }}
@@ -74,15 +74,15 @@ jobs:
         run: npm pack --ignore-scripts
       - uses: actions/upload-artifact@v7
         with:
-          name: kaji-${{ matrix.platform }}
+          name: poolster-${{ matrix.platform }}
           path: packages/cli/npm/${{ matrix.platform }}/*.tgz
       - uses: actions/upload-artifact@v7
         with:
-          name: kaji-sdk-${{ matrix.platform }}
+          name: poolster-sdk-${{ matrix.platform }}
           path: packages/cli/sdk/npm/${{ matrix.platform }}/*.tgz
       - uses: actions/upload-artifact@v7
         with:
-          name: kaji-python-${{ matrix.platform }}
+          name: poolster-python-${{ matrix.platform }}
           path: packages/python/dist/*.whl
   launcher:
     runs-on: ubuntu-latest
@@ -108,7 +108,7 @@ jobs:
           done
       - uses: actions/upload-artifact@v7
         with:
-          name: kaji-node-launchers
+          name: poolster-node-launchers
           path: |
             packages/cli/*.tgz
             packages/cli/sdk/*.tgz

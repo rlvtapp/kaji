@@ -28,6 +28,8 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
+      - name: Check authored source size ratchet
+        run: python scripts/layout-audit.py --check-source-size
       - name: Test CI integration templates
         run: |
           node --test packages/github-action/test/*.test.cjs packages/gitlab-ci/test/*.test.cjs
@@ -47,34 +49,34 @@ jobs:
           NODE_PATH="$RUNNER_TEMP/kaji-release-check/node_modules" node --test scripts/release-config.test.cjs
       - name: Build OpenAPI compiler for CLI integration tests
         working-directory: openapi
-        run: go build -o ../target/debug/kaji-openapi .
+        run: go build -o ../target/debug/poolster-openapi .
       - name: Verify Rust workspace
         run: |
           cargo fmt --all --check
           cargo clippy --workspace --all-targets -- -D warnings
           cargo test --workspace --locked
-          cargo test -p kaji-cli combined_optional_recipe_validates_actual_json_schema -- --ignored
-          cargo test -p kaji-cli eject::tests::rebuilt_ejected_renderer_consumes_custom_source -- --ignored
-          cargo test -p kaji-cli --test local_references -- --ignored
-          cargo test -p kaji-cli --test migration -- --ignored
+          cargo test -p poolster-cli combined_optional_recipe_validates_actual_json_schema -- --ignored
+          cargo test -p poolster-cli eject::tests::rebuilt_ejected_renderer_consumes_custom_source -- --ignored
+          cargo test -p poolster-cli --test local_references -- --ignored
+          cargo test -p poolster-cli --test migration -- --ignored
       - name: Verify generated TypeScript middleware and response decoding
         run: |
           npm install --prefix "$RUNNER_TEMP/kaji-ts-runtime" --no-audit --no-fund typescript@5.9.3 axios@1.20.0
           export KAJI_TSC_JS="$RUNNER_TEMP/kaji-ts-runtime/node_modules/typescript/lib/tsc.js"
           export KAJI_AXIOS_NODE_MODULES="$RUNNER_TEMP/kaji-ts-runtime/node_modules"
           export KAJI_TS_AXIOS_NODE_MODULES="$RUNNER_TEMP/kaji-ts-runtime/node_modules"
-          cargo test -p kaji-plugin-typescript generated_middleware_fetch_and_axios_execute -- --ignored
-          cargo test -p kaji-plugin-typescript generated_idempotency_fetch_and_axios_execute -- --ignored
-          cargo test -p kaji-plugin-typescript bundled_middleware_is_enabled_without_customer_registration -- --ignored
-          cargo test -p kaji-plugin-typescript generated_lossless_fetch_axios_and_sse_round_trip -- --ignored
-          cargo test -p kaji-plugin-typescript generated_page_pagination_executes_defaults_and_selectors -- --ignored
-          cargo test -p kaji-plugin-typescript native_generated_fetch_and_axios_operation_tests_execute -- --ignored
-          cargo test -p kaji-plugin-typescript native_standard_webhook_vectors_execute -- --ignored
-          cargo test -p kaji-plugin-typescript native_oauth_singleflight_replay_cancellation_and_redaction -- --ignored
-          cargo test -p kaji-plugin-typescript native_fetch_and_axios_per_call -- --ignored
-          cargo test -p kaji-plugin-typescript native_whole_query_and_json_sequences -- --ignored
-          cargo test -p kaji-plugin-typescript native_open_enum_types_accept_future_values_and_preserve_wire -- --ignored
-          cargo test -p kaji-cli --test openapi32 -- --ignored
+          cargo test -p poolster-plugin-typescript generated_middleware_fetch_and_axios_execute -- --ignored
+          cargo test -p poolster-plugin-typescript generated_idempotency_fetch_and_axios_execute -- --ignored
+          cargo test -p poolster-plugin-typescript bundled_middleware_is_enabled_without_customer_registration -- --ignored
+          cargo test -p poolster-plugin-typescript generated_lossless_fetch_axios_and_sse_round_trip -- --ignored
+          cargo test -p poolster-plugin-typescript generated_page_pagination_executes_defaults_and_selectors -- --ignored
+          cargo test -p poolster-plugin-typescript native_generated_fetch_and_axios_operation_tests_execute -- --ignored
+          cargo test -p poolster-plugin-typescript native_standard_webhook_vectors_execute -- --ignored
+          cargo test -p poolster-plugin-typescript native_oauth_singleflight_replay_cancellation_and_redaction -- --ignored
+          cargo test -p poolster-plugin-typescript native_fetch_and_axios_per_call -- --ignored
+          cargo test -p poolster-plugin-typescript native_whole_query_and_json_sequences -- --ignored
+          cargo test -p poolster-plugin-typescript native_open_enum_types_accept_future_values_and_preserve_wire -- --ignored
+          cargo test -p poolster-cli --test openapi32 -- --ignored
       - name: Verify framework factories and split auxiliary/CLI modules
         env:
           CYPRESS_INSTALL_BINARY: '0'
@@ -83,32 +85,32 @@ jobs:
           export KAJI_TSC_JS="$RUNNER_TEMP/kaji-ts-framework/node_modules/typescript/lib/tsc.js"
           export KAJI_TS_NODE_MODULES="$RUNNER_TEMP/kaji-ts-framework/node_modules"
           export KAJI_TS_CLI_NODE_MODULES="$KAJI_TS_NODE_MODULES"
-          cargo test -p kaji-plugin-typescript query_factories_cache_callbacks_and_abort_execute_natively -- --ignored
-          cargo test -p kaji-plugin-typescript namespaced_and_auxiliary_consumers_compile_and_validate_selected_models -- --ignored
-          cargo test -p kaji-plugin-typescript custom_transport_and_relocated_query_consumer_compile -- --ignored
-          cargo test -p kaji-plugin-typescript-cli split_commands_compile_and_show_last_chunk_in_help -- --ignored
-          cargo test -p kaji-plugin-rust-cli split_commands_compile_and_show_last_chunk_in_help -- --ignored
+          cargo test -p poolster-plugin-typescript query_factories_cache_callbacks_and_abort_execute_natively -- --ignored
+          cargo test -p poolster-plugin-typescript namespaced_and_auxiliary_consumers_compile_and_validate_selected_models -- --ignored
+          cargo test -p poolster-plugin-typescript custom_transport_and_relocated_query_consumer_compile -- --ignored
+          cargo test -p poolster-plugin-typescript-cli split_commands_compile_and_show_last_chunk_in_help -- --ignored
+          cargo test -p poolster-plugin-rust-cli split_commands_compile_and_show_last_chunk_in_help -- --ignored
       - name: Verify generated Postman exports against the official schema
-        run: cargo test -p kaji-plugin-postman validates_actual_official_draft04_schema -- --ignored
+        run: cargo test -p poolster-plugin-postman validates_actual_official_draft04_schema -- --ignored
       - name: Verify exported collections with Newman against a local mock
         run: |
           npm ci --prefix packages/postman-execute --ignore-scripts --no-audit --no-fund
           node --test packages/postman-execute/test/*.test.mjs
-          cargo test -p kaji-plugin-postman generated_collection_executes_with_newman_local_mock -- --ignored
+          cargo test -p poolster-plugin-postman generated_collection_executes_with_newman_local_mock -- --ignored
       - name: Verify generated Terraform lifecycle with native Framework state
         run: |
-          cargo test -p kaji-plugin-terraform generated_provider_executes_native_framework_lifecycle -- --ignored
-          cargo test -p kaji-plugin-terraform generated_nested_provider_executes_native_framework_lifecycle -- --ignored
-          cargo test -p kaji-plugin-terraform generated_composite_provider_executes_native_framework_lifecycle -- --ignored
-          cargo test -p kaji-plugin-terraform generated_polling_provider_executes_native_framework_lifecycle -- --ignored
+          cargo test -p poolster-plugin-terraform generated_provider_executes_native_framework_lifecycle -- --ignored
+          cargo test -p poolster-plugin-terraform generated_nested_provider_executes_native_framework_lifecycle -- --ignored
+          cargo test -p poolster-plugin-terraform generated_composite_provider_executes_native_framework_lifecycle -- --ignored
+          cargo test -p poolster-plugin-terraform generated_polling_provider_executes_native_framework_lifecycle -- --ignored
       - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: '1.13.4'
           terraform_wrapper: false
       - name: Verify Terraform CLI lifecycle against a local mock API
         run: |
-          cargo test -p kaji-plugin-terraform terraform_cli_local_mock_lifecycle -- --ignored
-          cargo test -p kaji-plugin-terraform terraform_cli_polling_local_mock_lifecycle -- --ignored
+          cargo test -p poolster-plugin-terraform terraform_cli_local_mock_lifecycle -- --ignored
+          cargo test -p poolster-plugin-terraform terraform_cli_polling_local_mock_lifecycle -- --ignored
       - name: Verify standalone typed plugin authoring example
         run: |
           cargo test --manifest-path examples/custom-plugin/Cargo.toml --locked
@@ -117,17 +119,17 @@ jobs:
         working-directory: openapi
         run: go test ./...
       - name: Run generated SDK contract suite
-        run: cargo test -p kaji --test sdk_to_mock_contract -- --ignored
-      - name: Build Kaji once
+        run: cargo test -p poolster --test sdk_to_mock_contract -- --ignored
+      - name: Build Poolster once
         run: |
-          cargo build -p kaji-cli --locked
-          (cd openapi && go build -o ../target/debug/kaji-openapi .)
+          cargo build -p poolster-cli --locked
+          (cd openapi && go build -o ../target/debug/poolster-openapi .)
       - name: Verify local delivery generation drift and previews
-        run: node packages/sdk-delivery-test/delivery.mjs --mode local --binary "$GITHUB_WORKSPACE/target/debug/kaji"
+        run: node packages/sdk-delivery-test/delivery.mjs --mode local --binary "$GITHUB_WORKSPACE/target/debug/poolster"
       - name: Export shared native runtime contract fixture
         env:
           KAJI_RUNTIME_EXPORT: ${{ runner.temp }}/runtime-contract-fixture
-        run: cargo test -p kaji --test runtime_conformance --locked
+        run: cargo test -p poolster --test runtime_conformance --locked
       - name: Verify installed TypeScript ESM package and consumer types
         env:
           KAJI_PACKAGE_FIXTURE: ${{ runner.temp }}/runtime-contract-fixture/sdk/typescript
@@ -141,15 +143,15 @@ jobs:
           retention-days: 1
       - name: Verify portable API artifacts
         run: |
-          target/debug/kaji generate --config examples/api-artifacts/kaji.json
+          target/debug/poolster generate --config examples/api-artifacts/poolster.json
           KAJI_COLLECTION=examples/api-artifacts/generated/postman/widgets.postman_collection.json KAJI_ENVIRONMENT=examples/api-artifacts/generated/postman/widgets.postman_environment.json python packages/postman-check/check.py
           (cd examples/api-artifacts/generated/terraform && go mod tidy && go test ./... && go build ./...)
-          target/debug/kaji generate --config examples/api-artifacts/kaji.json --check --format json
+          target/debug/poolster generate --config examples/api-artifacts/poolster.json --check --format json
       - name: Verify release examples
         run: python scripts/check-release-examples.py
       - name: Generate checksum-pinned public contracts for every SDK target
         env:
-          KAJI_BINARY: ${{ github.workspace }}/target/debug/kaji
+          POOLSTER_BINARY: ${{ github.workspace }}/target/debug/poolster
           KAJI_PUBLIC_CONTRACT_ROOT: ${{ runner.temp }}/public-contract-fixtures
         run: bash scripts/test-public-contracts.sh generate
       - uses: actions/upload-artifact@v7
@@ -160,7 +162,7 @@ jobs:
           retention-days: 1
       - name: Generate cross-language SDK fixture once
         run: >-
-          target/debug/kaji generate crates/kaji-cli/tests/fixtures/pets.yaml
+          target/debug/poolster generate crates/kaji-cli/tests/fixtures/pets.yaml
           --output "$RUNNER_TEMP/generated-sdk-fixture"
           --language rust,typescript,go,python,php,java,csharp,elixir,ruby,swift
           --name "CI Pets" --sdk-version 1.0.0 --color never
@@ -302,66 +304,66 @@ jobs:
         if: matrix.language == 'Python'
         run: |
           python -m pip install --disable-pip-version-check 'httpx==0.28.1'
-          KAJI_TEST_PYTHON=python3 cargo test -p kaji-plugin-python native_multipart_sync_async_preserve_mime_and_retry_bytes -- --ignored
+          POOLSTER_TEST_PYTHON=python3 cargo test -p poolster-plugin-python native_multipart_sync_async_preserve_mime_and_retry_bytes -- --ignored
       - name: Verify generated Java retry parsers
         if: matrix.language == 'Java'
         run: |
-          cargo test -p kaji-plugin-java generated_retry_parsers_execute_with_jdk -- --ignored
-          cargo test -p kaji-plugin-java native_webhook_verification_executes_canonical_vectors -- --ignored
-          cargo test -p kaji-plugin-java native_generated_operation_tests_execute -- --ignored
-          cargo test -p kaji-plugin-java native_models_preserve_alias_union_and_unknown_enum_wire_values -- --ignored
-          cargo test -p kaji-plugin-java native_omitted_and_null_presence_roundtrip -- --ignored
-          cargo test -p kaji-plugin-java native_multipart_http_bytes_preserve_unicode_falsy_and_binary -- --ignored
-          cargo test -p kaji-plugin-java native_multipart_complex_json_and_repeated_arrays -- --ignored
-          cargo test -p kaji-plugin-java native_oauth_cache_singleflight_replay_origin_and_interruption -- --ignored
-          cargo test -p kaji-plugin-java native_call_scopes_preserve_headers_timeouts_and_original_client -- --ignored
+          cargo test -p poolster-plugin-java generated_retry_parsers_execute_with_jdk -- --ignored
+          cargo test -p poolster-plugin-java native_webhook_verification_executes_canonical_vectors -- --ignored
+          cargo test -p poolster-plugin-java native_generated_operation_tests_execute -- --ignored
+          cargo test -p poolster-plugin-java native_models_preserve_alias_union_and_unknown_enum_wire_values -- --ignored
+          cargo test -p poolster-plugin-java native_omitted_and_null_presence_roundtrip -- --ignored
+          cargo test -p poolster-plugin-java native_multipart_http_bytes_preserve_unicode_falsy_and_binary -- --ignored
+          cargo test -p poolster-plugin-java native_multipart_complex_json_and_repeated_arrays -- --ignored
+          cargo test -p poolster-plugin-java native_oauth_cache_singleflight_replay_origin_and_interruption -- --ignored
+          cargo test -p poolster-plugin-java native_call_scopes_preserve_headers_timeouts_and_original_client -- --ignored
       - name: Verify generated C# retry parser
         if: matrix.language == 'C#'
         run: |
-          cargo test -p kaji-plugin-csharp generated_retry_parser_executes_with_dotnet -- --ignored
-          cargo test -p kaji-plugin-csharp generated_sse_framing_executes_with_dotnet -- --ignored
-          cargo test -p kaji-plugin-csharp native_webhook_verification_executes_canonical_vectors -- --ignored
-          cargo test -p kaji-plugin-csharp native_generated_operation_tests_execute -- --ignored
-          cargo test -p kaji-plugin-csharp native_models_preserve_alias_union_and_unknown_enum_wire_values -- --ignored
-          cargo test -p kaji-plugin-csharp native_omitted_and_null_presence_roundtrip -- --ignored
-          cargo test -p kaji-plugin-csharp native_multipart_http_bytes_preserve_unicode_falsy_and_binary -- --ignored
-          cargo test -p kaji-plugin-csharp native_multipart_complex_json_and_repeated_arrays -- --ignored
-          cargo test -p kaji-plugin-csharp native_oauth_cache_singleflight_replay_origin_and_cancellation -- --ignored
-          cargo test -p kaji-plugin-csharp native_call_scopes_preserve_headers_and_cancel_timeout_without_mutation -- --ignored
+          cargo test -p poolster-plugin-csharp generated_retry_parser_executes_with_dotnet -- --ignored
+          cargo test -p poolster-plugin-csharp generated_sse_framing_executes_with_dotnet -- --ignored
+          cargo test -p poolster-plugin-csharp native_webhook_verification_executes_canonical_vectors -- --ignored
+          cargo test -p poolster-plugin-csharp native_generated_operation_tests_execute -- --ignored
+          cargo test -p poolster-plugin-csharp native_models_preserve_alias_union_and_unknown_enum_wire_values -- --ignored
+          cargo test -p poolster-plugin-csharp native_omitted_and_null_presence_roundtrip -- --ignored
+          cargo test -p poolster-plugin-csharp native_multipart_http_bytes_preserve_unicode_falsy_and_binary -- --ignored
+          cargo test -p poolster-plugin-csharp native_multipart_complex_json_and_repeated_arrays -- --ignored
+          cargo test -p poolster-plugin-csharp native_oauth_cache_singleflight_replay_origin_and_cancellation -- --ignored
+          cargo test -p poolster-plugin-csharp native_call_scopes_preserve_headers_and_cancel_timeout_without_mutation -- --ignored
       - name: Verify all native PHP probes
         if: matrix.language == 'PHP'
         env:
           KAJI_PHP_AUTOLOAD: ${{ runner.temp }}/generated-sdk-fixture/php/vendor/autoload.php
         run: |
           composer install --working-dir="$RUNNER_TEMP/generated-sdk-fixture/php" --no-interaction --no-progress
-          cargo test -p kaji-plugin-php -- --ignored
+          cargo test -p poolster-plugin-php -- --ignored
       - name: Verify all native Elixir probes
         if: matrix.language == 'Elixir'
         env:
           KAJI_ELIXIR_NATIVE_PROJECT: ${{ runner.temp }}/generated-sdk-fixture/elixir
-        run: cargo test -p kaji-plugin-elixir -- --ignored
+        run: cargo test -p poolster-plugin-elixir -- --ignored
       - name: Verify native Swift middleware models pagination and cancellation
         if: matrix.language == 'Swift'
-        run: cargo test -p kaji-plugin-swift -- --ignored
+        run: cargo test -p poolster-plugin-swift -- --ignored
       - name: Verify complex OpenAPI contract through native Swift SDK
         if: matrix.language == 'Swift'
         env:
-          KAJI_OPENAPI_BIN: ${{ github.workspace }}/target/debug/kaji-openapi
+          POOLSTER_OPENAPI_BIN: ${{ github.workspace }}/target/debug/poolster-openapi
         run: |
-          (cd openapi && go build -o ../target/debug/kaji-openapi .)
-          cargo test -p kaji --test complex_contract -- --ignored
+          (cd openapi && go build -o ../target/debug/poolster-openapi .)
+          cargo test -p poolster --test complex_contract -- --ignored
       - name: Verify native C# URL pagination
         if: matrix.language == 'C#'
-        run: cargo test -p kaji-plugin-csharp native_url_pages_reject_unsafe_origins_preserve_auth_and_cancel_lazily -- --ignored
+        run: cargo test -p poolster-plugin-csharp native_url_pages_reject_unsafe_origins_preserve_auth_and_cancel_lazily -- --ignored
       - name: Verify generated Rust operation tests
         if: matrix.language == 'Rust'
         run: |
-          cargo test -p kaji-plugin-rust native_generated_rust_operation_tests_execute -- --ignored
-          cargo test -p kaji-plugin-rust native_url_pages_preserve_origin_auth_and_raw_error_responses -- --ignored
-          cargo test -p kaji-plugin-rust native_standard_webhook_vectors_execute -- --ignored
-          cargo test -p kaji-plugin-rust native_oauth_singleflight_replay_and_dropped_refresh_are_safe -- --ignored
-          cargo test -p kaji-plugin-rust native_unknown_union_roundtrips_and_default_decoding_remains_strict -- --ignored
-          cargo test -p kaji-plugin-rust native_nested_future_enum_absent_null_and_unknown_fields_roundtrip -- --ignored
-          cargo test -p kaji-plugin-rust native_multipart_buffered_parts_preserve_bytes_and_safe_retries -- --ignored
+          cargo test -p poolster-plugin-rust native_generated_rust_operation_tests_execute -- --ignored
+          cargo test -p poolster-plugin-rust native_url_pages_preserve_origin_auth_and_raw_error_responses -- --ignored
+          cargo test -p poolster-plugin-rust native_standard_webhook_vectors_execute -- --ignored
+          cargo test -p poolster-plugin-rust native_oauth_singleflight_replay_and_dropped_refresh_are_safe -- --ignored
+          cargo test -p poolster-plugin-rust native_unknown_union_roundtrips_and_default_decoding_remains_strict -- --ignored
+          cargo test -p poolster-plugin-rust native_nested_future_enum_absent_null_and_unknown_fields_roundtrip -- --ignored
+          cargo test -p poolster-plugin-rust native_multipart_buffered_parts_preserve_bytes_and_safe_retries -- --ignored
       - name: Execute generated public operations against shared runtime scenarios
         run: node packages/runtime-contract/runner.mjs "${{ matrix.path }}" "$RUNNER_TEMP/runtime-contract-fixture/sdk/${{ matrix.path }}"

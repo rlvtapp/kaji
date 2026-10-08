@@ -37,11 +37,11 @@ jobs:
         working-directory: openapi
         run: go test ./...
       - name: Run generated SDK contract suite
-        run: cargo test -p kaji --test sdk_to_mock_contract -- --ignored
-      - name: Build Kaji and OpenAPI sidecar
+        run: cargo test -p poolster --test sdk_to_mock_contract -- --ignored
+      - name: Build Poolster and OpenAPI sidecar
         run: |
-          cargo build -p kaji-cli --locked
-          (cd openapi && go build -o ../target/debug/kaji-openapi .)
+          cargo build -p poolster-cli --locked
+          (cd openapi && go build -o ../target/debug/poolster-openapi .)
       - name: Verify Node embedding and plugins
         run: |
           node packages/cli/sdk/scripts/build-native.mjs
@@ -49,17 +49,17 @@ jobs:
           npm test --prefix packages/cli/sdk
       - name: Compile generated TypeScript with Rust add-ons
         env:
-          KAJI_EXAMPLE_OUTPUT: ${{ runner.temp }}/kaji-node-mixed
+          POOLSTER_EXAMPLE_OUTPUT: ${{ runner.temp }}/poolster-node-mixed
         run: |
           node examples/node-embedded/native-contracts.mjs
-          npm install --prefix "$KAJI_EXAMPLE_OUTPUT/web" --ignore-scripts --no-audit --no-fund
-          npm run build --prefix "$KAJI_EXAMPLE_OUTPUT/web"
-          node packages/cli/sdk/test-support/assert-generated-runtime.mjs "$KAJI_EXAMPLE_OUTPUT/web"
+          npm install --prefix "$POOLSTER_EXAMPLE_OUTPUT/web" --ignore-scripts --no-audit --no-fund
+          npm run build --prefix "$POOLSTER_EXAMPLE_OUTPUT/web"
+          node packages/cli/sdk/test-support/assert-generated-runtime.mjs "$POOLSTER_EXAMPLE_OUTPUT/web"
       - name: Verify release examples
         run: python scripts/check-release-examples.py
       - name: Generate cross-language SDK fixture
         run: >-
-          target/debug/kaji generate crates/kaji-cli/tests/fixtures/pets.yaml
+          target/debug/poolster generate crates/kaji-cli/tests/fixtures/pets.yaml
           --output "$RUNNER_TEMP/generated-sdk-fixture"
           --language rust,typescript,go,python,php,java,csharp,elixir,ruby,swift
           --name "CI Pets" --sdk-version 1.0.0 --color never
@@ -182,7 +182,7 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - run: cargo test -p kaji-cli --locked
+      - run: cargo test -p poolster-cli --locked
       - run: node --test packages/cli/test/launcher.test.cjs
       - run: node packages/cli/scripts/build-platform.mjs ${{ matrix.platform }}
       - run: node packages/cli/scripts/smoke-native.mjs ${{ matrix.platform }}
@@ -256,6 +256,7 @@ jobs:
   publish:
     name: Publish to npm
     needs: [verify, generated-sdk, native, launchers]
+    if: vars.POOLSTER_RELEASE_ENABLED == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -317,6 +318,7 @@ jobs:
   publish-python:
     name: Publish to PyPI
     needs: [verify, generated-sdk, native, launchers]
+    if: vars.POOLSTER_RELEASE_ENABLED == 'true'
     runs-on: ubuntu-latest
     permissions:
       id-token: write

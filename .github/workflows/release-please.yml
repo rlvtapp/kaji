@@ -1,4 +1,4 @@
-name: Kaji release PR
+name: Poolster release PR
 on:
   push:
     branches: [main]
@@ -6,7 +6,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: kaji-release-please
+  group: poolster-release-please
   cancel-in-progress: false
 jobs:
   release:
@@ -38,7 +38,7 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
           # Release PRs can be prepared while publication remains disabled.
-          skip-github-release: ${{ vars.KAJI_RELEASE_ENABLED != 'true' }}
+          skip-github-release: ${{ vars.POOLSTER_RELEASE_ENABLED != 'true' }}
       - name: Run CI for a release PR created with the default token
         if: steps.release.outputs.pr != '' && steps.app.outputs.token == '' && env.HAS_RELEASE_TOKEN != 'true'
         env:

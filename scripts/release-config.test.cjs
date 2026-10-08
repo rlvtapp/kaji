@@ -54,12 +54,15 @@ test('release updates inherited workspace and lock versions without changing dep
 
 test('CLI native tests build the compiler first and releases require explicit enablement', () => {
   const ci = read('.github/workflows/ci.yml');
-  const build = ci.indexOf('go build -o ../target/debug/kaji-openapi .');
-  const probe = ci.indexOf('cargo test -p kaji-cli --test local_references');
+  const build = ci.indexOf('go build -o ../target/debug/poolster-openapi .');
+  const probe = ci.indexOf('cargo test -p poolster-cli --test local_references');
   assert.ok(build >= 0 && probe > build);
   const release = read('.github/workflows/release-please.yml');
-  assert.match(release, /skip-github-release: \$\{\{ vars\.KAJI_RELEASE_ENABLED != 'true' \}\}/);
+  assert.match(release, /skip-github-release: \$\{\{ vars\.POOLSTER_RELEASE_ENABLED != 'true' \}\}/);
   assert.match(release, /on:\n  push:\n    branches: \[main\]/);
+  const publish = read('.github/workflows/npm-publish.yml');
+  assert.match(publish, /publish:\n    name: Publish to npm\n    needs: \[verify, generated-sdk, native, launchers\]\n    if: vars\.POOLSTER_RELEASE_ENABLED == 'true'/);
+  assert.match(publish, /publish-python:\n    name: Publish to PyPI\n    needs: \[verify, generated-sdk, native, launchers\]\n    if: vars\.POOLSTER_RELEASE_ENABLED == 'true'/);
 });
 
 test('feature releases advance minor versions before 1.0', () => {

@@ -83,12 +83,12 @@ jobs:
         run: mix local.hex --force && mix local.rebar --force
       - name: Build generator and compiler
         run: |
-          (cd openapi && go build -o ../target/debug/kaji-openapi .)
-          cargo build --locked -p kaji-cli
+          (cd openapi && go build -o ../target/debug/poolster-openapi .)
+          cargo build --locked -p poolster-cli
       - name: Generate and compile every selected document
         env:
-          KAJI_BINARY: ${{ github.workspace }}/target/debug/kaji
-          KAJI_OPENAPI_BIN: ${{ github.workspace }}/target/debug/kaji-openapi
+          POOLSTER_BINARY: ${{ github.workspace }}/target/debug/poolster
+          POOLSTER_OPENAPI_BIN: ${{ github.workspace }}/target/debug/poolster-openapi
           CORPUS_CONTRACTS: ${{ inputs.contracts }}
           CLANG_MODULE_CACHE_PATH: ${{ runner.temp }}/swift-clang
           SWIFTPM_MODULECACHE_OVERRIDE: ${{ runner.temp }}/swift-modules

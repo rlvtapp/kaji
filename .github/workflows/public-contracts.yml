@@ -97,10 +97,10 @@ jobs:
         if: matrix.language == 'Elixir'
         run: mix local.hex --force && mix local.rebar --force
       - name: Build generator
-        run: cargo build --locked -p kaji-cli
+        run: cargo build --locked -p poolster-cli
       - name: Generate and compile pinned public contract
         env:
-          KAJI_BINARY: ${{ github.workspace }}/target/debug/kaji
+          POOLSTER_BINARY: ${{ github.workspace }}/target/debug/poolster
           KAJI_PUBLIC_CONTRACT_MANIFEST: ${{ github.workspace }}/scripts/fixtures/large-contracts.json
           KAJI_PUBLIC_CONTRACT_ROOT: ${{ runner.temp }}/large-contract
           KAJI_PUBLIC_CONTRACTS: ${{ inputs.contract }}
