@@ -207,6 +207,26 @@ fn relative_path(value: &str) -> Result<()> {
     Ok(())
 }
 
+/// Git revision:path expressions always use slash-separated repository paths,
+/// independent of the host filesystem's native separator.
+fn git_tree_path(path: &Path) -> Result<String> {
+    let mut parts = Vec::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir if !parts.is_empty() => {
+                parts.pop();
+            }
+            std::path::Component::Normal(part) => {
+                parts.push(part.to_str().context("non-UTF8 Git tree path")?)
+            }
+            _ => bail!("Git tree path must stay relative to its repository"),
+        }
+    }
+    ensure!(!parts.is_empty(), "Git tree path cannot be empty");
+    Ok(parts.join("/"))
+}
+
 fn repository(value: &str) -> Result<()> {
     let parts = value.split('/').collect::<Vec<_>>();
     ensure!(
@@ -445,10 +465,7 @@ fn release_matrix(
             &["check-ref-format", &format!("refs/tags/{tag}")],
         )?;
         let metadata_path = Path::new(&path).join(PACKAGE_METADATA_PATH);
-        let metadata_path = metadata_path
-            .to_str()
-            .context("non-UTF8 metadata path")?
-            .trim_start_matches("./");
+        let metadata_path = git_tree_path(&metadata_path)?;
         let source = captured(
             cwd,
             "git",
@@ -1177,7 +1194,7 @@ fn recipe_diff(cwd: &Path, config: &str, recipe: &Value, options: &Options) -> R
         .parent()
         .unwrap_or(Path::new(""))
         .join(input);
-    let input = input.to_str().context("OpenAPI path is not UTF8")?;
+    let input = git_tree_path(&input)?;
     let before = options
         .values
         .get("--base-spec-ref")
@@ -1453,15 +1470,15 @@ fn adopt_release_only_changes(destination: &Path) -> Result<()> {
         }
         let canonical_file = fs::canonicalize(&file)?;
         let canonical_repository = fs::canonicalize(&repository_root)?;
-        let relative = canonical_file
-            .strip_prefix(&canonical_repository)
-            .context("destination must stay in its repository")?
-            .to_str()
-            .context("non-UTF8 manifest path")?;
+        let relative = git_tree_path(
+            canonical_file
+                .strip_prefix(&canonical_repository)
+                .context("destination must stay in its repository")?,
+        )?;
         let revisions = captured(
             &repository_root,
             "git",
-            &["log", "-32", "--format=%H", "--", relative],
+            &["log", "-32", "--format=%H", "--", &relative],
         )?;
         for revision in revisions.lines() {
             let before = captured(
@@ -2505,14 +2522,33 @@ mod tests {
     }
 
     #[test]
+    fn git_tree_paths_use_repository_separators_and_reject_escape() {
+        let path = Path::new(".")
+            .join("sdk")
+            .join(".poolster")
+            .join("package.json");
+        assert_eq!(git_tree_path(&path).unwrap(), "sdk/.poolster/package.json");
+        assert_eq!(
+            git_tree_path(&Path::new("rust").join("Cargo.toml")).unwrap(),
+            "rust/Cargo.toml"
+        );
+        assert_eq!(
+            git_tree_path(Path::new("configs/../schema.yaml")).unwrap(),
+            "schema.yaml"
+        );
+        assert!(git_tree_path(Path::new("../outside")).is_err());
+        assert!(git_tree_path(Path::new("")).is_err());
+    }
+
+    #[test]
     fn package_arguments_are_passed_without_shell_expansion() {
         let dir = tempfile::tempdir().unwrap();
         let mut metadata = PackageMetadata::new("literal");
         metadata.language = "custom".into();
         metadata.version = "1".into();
         metadata.test = vec![PackageCommand::new(
-            "/usr/bin/printf",
-            ["%s", "$(touch SHOULD_NOT_EXIST)"],
+            "git",
+            ["rev-parse", "--sq-quote", "$(touch SHOULD_NOT_EXIST)"],
         )];
         run_commands(
             dir.path(),

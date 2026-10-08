@@ -62,6 +62,15 @@ test('release updates inherited workspace and lock versions without changing dep
   assert.match(updated.get('packages/python/setup.py'), /version="0\.5\.1"/);
 });
 
+test('Python prerelease markers update completely when returning to stable releases', () => {
+  const source = read('packages/python/setup.py');
+  const prerelease = new Generic({ version: Version.parse('0.5.0-alpha.2') }).updateContent(source);
+  assert.match(prerelease, /version="0\.5\.0-alpha\.2"/);
+  const stable = new Generic({ version }).updateContent(prerelease);
+  assert.match(stable, /version="0\.5\.1"/);
+  assert.doesNotMatch(stable, /version="0\.5\.1(?:a|b|rc|-)\d/);
+});
+
 test('CLI native tests build the compiler first and publication requires a release tag', () => {
   const ci = read('.github/workflows/ci.yml');
   const build = ci.indexOf('go build -o ../target/debug/poolster-openapi .');

@@ -33,6 +33,12 @@ jobs:
           cargo fmt --all --check
           cargo clippy --workspace --all-targets -- -D warnings
           cargo test --workspace --locked
+      - name: Compile and execute generated GraphQL packages
+        run: |
+          npm install --prefix "$RUNNER_TEMP/poolster-graphql-runtime" --no-audit --no-fund typescript@5.9.3 graphql@16.14.2
+          export POOLSTER_TSC_JS="$RUNNER_TEMP/poolster-graphql-runtime/node_modules/typescript/lib/tsc.js"
+          export POOLSTER_GRAPHQL_JS="$RUNNER_TEMP/poolster-graphql-runtime/node_modules/graphql/index.js"
+          cargo test -p poolster-plugin-typescript --test graphql_native --locked -- --include-ignored
       - name: Test embedded OpenAPI compiler
         working-directory: openapi
         run: go test ./...
