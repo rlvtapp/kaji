@@ -99,7 +99,7 @@ impl Plugin<Java> for OperationTests {
                 }
             }
         }
-        let source = include_str!("operation_driver.java.txt")
+        let source = include_str!("../tests/fixtures/operation_driver.java")
             .replace("__PACKAGE__", &sdk.namespace)
             .replace("__CASES__", &code);
         cx.files.emit(GeneratedFile::new(

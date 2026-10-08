@@ -180,7 +180,7 @@ fn render_sdk_with_policy(
         &mut tree,
         &root,
         &format!("src/main/java/{package_path}/ClientCallOptions.java"),
-        include_str!("call_options.java.txt").replace("__PACKAGE__", &package),
+        include_str!("../templates/call_options.java.tmpl").replace("__PACKAGE__", &package),
     )?;
     multipart::emit(api, &root, &package, &mut tree)?;
     for (index, schema) in api.schemas.iter().enumerate() {

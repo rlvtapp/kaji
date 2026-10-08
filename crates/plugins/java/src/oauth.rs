@@ -21,8 +21,8 @@ impl Plugin<Java> for OAuth {
                 .unwrap_or(&format!("io.poolster.{}", package_segment(&cx.api.name))),
         );
         for (name, source) in [
-            ("OAuthClientCredentials", include_str!("oauth.java.txt")),
-            ("OAuthHttpClient", include_str!("oauth_http.java.txt")),
+            ("OAuthClientCredentials", include_str!("../templates/oauth.java.tmpl")),
+            ("OAuthHttpClient", include_str!("../templates/oauth_http.java.tmpl")),
         ] {
             cx.files.emit(GeneratedFile::new(
                 format!(
@@ -61,7 +61,7 @@ mod tests {
         std::fs::create_dir_all(cwd.join("src/test/java/io/poolster/oauth")).unwrap();
         std::fs::write(
             cwd.join("src/test/java/io/poolster/oauth/OAuthProbe.java"),
-            include_str!("oauth_probe.java.txt"),
+            include_str!("../tests/fixtures/oauth_probe.java"),
         )
         .unwrap();
         let output = std::process::Command::new("mvn")

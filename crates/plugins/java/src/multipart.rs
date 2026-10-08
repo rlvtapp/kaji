@@ -323,11 +323,11 @@ pub(crate) fn emit(api: &Api, root: &str, package: &str, tree: &mut GeneratedTre
     );
     tree.insert(GeneratedFile::new(
         format!("{prefix}src/main/java/{path}/MultipartBody.java"),
-        include_str!("multipart.java.txt").replace("__PACKAGE__", package),
+        include_str!("../templates/multipart.java.tmpl").replace("__PACKAGE__", package),
     )?)?;
     tree.insert(GeneratedFile::new(
         format!("{prefix}src/main/java/{path}/OrderedMultipart.java"),
-        include_str!("ordered_multipart.java.txt").replace("__PACKAGE__", package),
+        include_str!("../templates/ordered_multipart.java.tmpl").replace("__PACKAGE__", package),
     )?)?;
     for op in api.operations.iter().filter(|op| selected(op)) {
         let name = body_name(op);
@@ -580,15 +580,15 @@ mod tests {
             .unwrap();
         let dir = tempfile::tempdir().unwrap();
         tree.write_to(dir.path()).unwrap();
-        let mut source = include_str!("operation_driver.java.txt")
+        let mut source = include_str!("../tests/fixtures/operation_driver.java")
             .replace("__PACKAGE__", "io.poolster.multipart")
-            .replace("__CASES__", include_str!("multipart_probe_main.java.txt"));
+            .replace("__CASES__", include_str!("../tests/fixtures/multipart_probe_main.java"));
         let start = source.find("        void assertRequest(").unwrap();
         let end = source[start..]
             .find("        public <T> HttpResponse<T> send(")
             .unwrap()
             + start;
-        source.replace_range(start..end, include_str!("multipart_probe_assert.java.txt"));
+        source.replace_range(start..end, include_str!("../tests/fixtures/multipart_probe_assert.java"));
         std::fs::write(
             dir.path()
                 .join("sdk/src/test/java/io/poolster/multipart/PoolsterOperationTests.java"),
@@ -673,8 +673,8 @@ mod tests {
             .unwrap();
         let dir = tempfile::tempdir().unwrap();
         tree.write_to(dir.path()).unwrap();
-        let main=include_str!("multipart_probe_main.java.txt").replace("file,null);","file,null,MAPPER.valueToTree(Map.of(\"type\",\"server_vad\",\"label\",\"café雪\",\"threshold\",0.5)),List.of(\"word\",\"segment\"),List.of(file,file),Map.of(\"extra\",Map.of(\"snow\",\"雪\")));");
-        let mut source = include_str!("operation_driver.java.txt")
+        let main=include_str!("../tests/fixtures/multipart_probe_main.java").replace("file,null);","file,null,MAPPER.valueToTree(Map.of(\"type\",\"server_vad\",\"label\",\"café雪\",\"threshold\",0.5)),List.of(\"word\",\"segment\"),List.of(file,file),Map.of(\"extra\",Map.of(\"snow\",\"雪\")));");
+        let mut source = include_str!("../tests/fixtures/operation_driver.java")
             .replace("__PACKAGE__", "io.poolster.multipart")
             .replace("__CASES__", &main);
         let start = source.find("        void assertRequest(").unwrap();
@@ -684,7 +684,7 @@ mod tests {
                 .unwrap();
         source.replace_range(
             start..end,
-            include_str!("multipart_complex_assert.java.txt"),
+            include_str!("../tests/fixtures/multipart_complex_assert.java"),
         );
         std::fs::write(
             dir.path()

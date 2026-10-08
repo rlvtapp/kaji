@@ -169,8 +169,8 @@ pub(super) fn render_client_base(api: &Api, package: &str) -> String {
     // they stay package-internal to generated SDK consumers.
     output.truncate(output.len() - 2);
     output.push_str(sse_parser());
-    output.push_str(include_str!("sequential_json.java.txt"));
-    output.push_str(include_str!("call_options_methods.java.txt"));
+    output.push_str(include_str!("../templates/sequential_json.java.tmpl"));
+    output.push_str(include_str!("../templates/call_options_methods.java.tmpl"));
     output.push_str("}\n");
     let output = output.replace("    private ", "    protected ").replace(
         "protected record QueryParameter",

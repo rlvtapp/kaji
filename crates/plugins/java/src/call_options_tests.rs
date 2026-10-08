@@ -28,11 +28,11 @@ fn native_call_scopes_preserve_headers_timeouts_and_original_client() {
         .unwrap();
     let dir = tempfile::tempdir().unwrap();
     tree.write_to(dir.path()).unwrap();
-    let mut source = include_str!("operation_driver.java.txt")
+    let mut source = include_str!("../tests/fixtures/operation_driver.java")
         .replace("__PACKAGE__", "io.poolster.callscope")
         .replace(
             "__CASES__",
-            include_str!("call_options_probe_main.java.txt"),
+            include_str!("../tests/fixtures/call_options_probe_main.java"),
         );
     let start = source.find("        void assertRequest(").unwrap();
     let end = start
@@ -41,7 +41,7 @@ fn native_call_scopes_preserve_headers_timeouts_and_original_client() {
             .unwrap();
     source.replace_range(
         start..end,
-        include_str!("call_options_probe_assert.java.txt"),
+        include_str!("../tests/fixtures/call_options_probe_assert.java"),
     );
     std::fs::write(
         dir.path()

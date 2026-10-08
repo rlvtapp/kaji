@@ -25,8 +25,8 @@ fn retry_headers_preserve_zero_precedence_dates_and_bounds() {
 fn generated_retry_parsers_execute_with_jdk() {
     use std::process::Command;
     let client = super::render_client_base(&contact_api(), "example")
-        .replace(include_str!("../call_options_methods.java.txt"), "")
-        .replace(include_str!("../sequential_json.java.txt"), "");
+        .replace(include_str!("../../templates/call_options_methods.java.tmpl"), "")
+        .replace(include_str!("../../templates/sequential_json.java.tmpl"), "");
     let start = client
         .find("    protected static long retryAfterMillisDelay(")
         .unwrap();

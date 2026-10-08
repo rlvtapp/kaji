@@ -25,7 +25,7 @@ impl Plugin<Java> for Webhooks {
                 "src/main/java/{}/StandardWebhooks.java",
                 namespace.replace('.', "/")
             ),
-            include_str!("webhooks.java.txt").replace("__PACKAGE__", &namespace),
+            include_str!("../templates/webhooks.java.tmpl").replace("__PACKAGE__", &namespace),
         )?)
     }
 }
@@ -57,12 +57,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(
             dir.path().join("StandardWebhooks.java"),
-            include_str!("webhooks.java.txt").replace("__PACKAGE__", "probe"),
+            include_str!("../templates/webhooks.java.tmpl").replace("__PACKAGE__", "probe"),
         )
         .unwrap();
         std::fs::write(
             dir.path().join("Probe.java"),
-            include_str!("webhooks_probe.java.txt")
+            include_str!("../tests/fixtures/webhooks_probe.java")
                 .replace(
                     "__BODY__",
                     &serde_json::to_string(&vector["raw_body"]).unwrap(),

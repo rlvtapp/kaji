@@ -91,7 +91,7 @@ pub(crate) fn render(
     }
     tree.insert(GeneratedFile::new(
         format!("{root}src/main/java/{path}/model/Presence.java"),
-        include_str!("presence.java.txt").replace("__PACKAGE__", &package),
+        include_str!("../templates/presence.java.tmpl").replace("__PACKAGE__", &package),
     )?)?;
     tree.insert(GeneratedFile::new(format!("{root}PRESENCE.md"), "Optional fields use Presence<T> when preserve_presence is enabled. A null wrapper means omitted; Presence.of(null) sends explicit JSON null; Presence.of(value) sends a value. Required fields retain their native types. Deserialize with the generated Jackson annotations, then serialize with the same mapper to retain missing/null distinctions. This opt-in changes optional accessor/constructor types; default SDK ABI is unchanged. Unknown string enums require the separate open_enums setting. Union aliases retain raw JSON rather than promising complete variant validation.")?)?;
     Ok(tree)
