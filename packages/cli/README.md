@@ -1,6 +1,6 @@
-# kajicli
+# poolster
 
-The `kajicli` npm package provides the native CLI. SDK generation runs in Rust;
+The `poolster` npm package provides the native CLI. SDK generation runs in Rust;
 OpenAPI parsing runs in the bundled Go compiler.
 End users do not need Rust or Go installed.
 
@@ -11,18 +11,18 @@ No npm release is implied by this source tree.
 After publication:
 
 ```sh
-npm install --save-dev kajicli
-npx kaji generate ./openapi.yaml --output ./sdk --language go,typescript
-npx kaji languages
-npx kaji --help
+npm install --save-dev poolster
+npx poolster generate ./openapi.yaml --output ./sdk --language go,typescript
+npx poolster languages
+npx poolster --help
 ```
 
-For `kaji.config.mjs`, JavaScript input/output plugins, and Rust plugins selected
-from JavaScript, install `@relevate/kaji` and use the [Node API](sdk/README.md):
+For `poolster.config.mjs`, JavaScript input/output plugins, and Rust plugins selected
+from JavaScript, install `@relevate/poolster` and use the [Node API](sdk/README.md):
 
 ```js
-import { defineConfig } from '@relevate/kaji/sdk';
-import { pluginTypeScript } from '@relevate/kaji/sdk/plugins';
+import { defineConfig } from '@relevate/poolster';
+import { pluginTypeScript } from '@relevate/poolster/sdk/plugins';
 ```
 
 The `/sdk/plugins` entry point exports the bundled factories; individual input and
@@ -47,14 +47,14 @@ From the repository root:
 
 ```sh
 node packages/cli/scripts/build-platform.mjs
-KAJI_BINARY="$PWD/packages/cli/npm/darwin-arm64/kaji" node packages/cli/bin/kaji.cjs --help
+POOLSTER_BINARY="$PWD/packages/cli/npm/darwin-arm64/poolster" node packages/cli/bin/poolster.cjs --help
 node --test packages/cli/test/*.test.cjs
 ```
 
 Use your platform directory in the second command. The build script needs Rust,
 the selected Rust target, an appropriate linker and Go. Both native binaries are
 assembled under `packages/cli/npm/<platform>/`; source code and build tools are
-not shipped to users. `KAJI_BINARY` is an optional local development override.
-`KAJI_OPENAPI_BIN` overrides the Go helper for source builds.
+not shipped to users. `POOLSTER_BINARY` is an optional local development override.
+`POOLSTER_OPENAPI_BIN` overrides the Go helper for source builds.
 
 Full CLI and release instructions: [docs/cli.md](https://github.com/rlvtapp/kaji/blob/main/docs/cli.md).

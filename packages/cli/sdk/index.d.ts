@@ -144,7 +144,7 @@ export interface InputReport {
   data?: unknown;
 }
 
-export interface KajiConfig {
+export interface PoolsterConfig {
   input: string | { artifacts: string } | { path: string; plugin: NativeInputPlugin | JsInputPlugin };
   output: string | { path: string };
   name?: string;
@@ -167,7 +167,7 @@ export interface GenerateResult {
   output: string;
 }
 
-export function defineConfig<T extends KajiConfig>(config: T): T;
+export function defineConfig<T extends PoolsterConfig>(config: T): T;
 export function definePlugin<TOptions extends unknown[]>(factory: (...options: TOptions) => JsPlugin): (...options: TOptions) => JsPlugin;
 export function defineInputPlugin<TOptions extends unknown[], TData = unknown>(factory: (...options: TOptions) => JsInputPlugin<TData>): (...options: TOptions) => JsInputPlugin<TData>;
 export function defineContract<T = unknown>(name: string): JsContract<T>;
@@ -176,6 +176,6 @@ export function requireContract<T>(contract: JsContract<T>, options?: { from?: P
 export function availableNativePlugins(): string[];
 export function availableInputPlugins(): Array<{ provider: string; format: string }>;
 export function inspectInput(input: { path: string; plugin: NativeInputPlugin | JsInputPlugin }): Promise<InputReport>;
-export function loadConfig(file?: string): Promise<KajiConfig>;
-export function generate(config: KajiConfig, options?: { write?: boolean }): Promise<GenerateResult>;
-export function createKaji(config: KajiConfig): { generate(options?: { write?: boolean }): Promise<GenerateResult>; inspectInput(): Promise<InputReport> };
+export function loadConfig(file?: string): Promise<PoolsterConfig>;
+export function generate(config: PoolsterConfig, options?: { write?: boolean }): Promise<GenerateResult>;
+export function createPoolster(config: PoolsterConfig): { generate(options?: { write?: boolean }): Promise<GenerateResult>; inspectInput(): Promise<InputReport> };

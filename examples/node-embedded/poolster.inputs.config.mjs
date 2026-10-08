@@ -19,6 +19,6 @@ export default defineConfig({
     path: path.resolve(here, '../../crates/inputs/graphql/tests/fixtures/github/schema.graphql'),
     plugin: inputGraphql(),
   },
-  output: path.resolve(process.env.KAJI_EXAMPLE_OUTPUT ?? path.join(here, 'generated-input')),
+  output: path.resolve(process.env.POOLSTER_EXAMPLE_OUTPUT ?? path.join(here, 'generated-input')),
   plugins: [pluginSchemaReport()],
 });

@@ -1,21 +1,21 @@
-# Kaji for Node.js
+# Poolster for Node.js
 
-Embed Kaji's Rust SDK renderers in a Node.js build, with input, output, and
+Embed Poolster's Rust SDK renderers in a Node.js build, with input, output, and
 JavaScript plugins selected explicitly in a JavaScript config file. Installing
 a plugin does not enable it; add its export to the config.
 
 ```sh
-npm install -D @relevate/kaji
+npm install -D @relevate/poolster @relevate/poolster-plugin-typescript
 ```
 
-The native command-line package is `kajicli`. Install it separately if you use
-the `kaji` command; the Node SDK package does not download that binary.
+The native command-line package is `poolster`. Install it separately if you use
+the `poolster` command; the Node SDK package does not download that binary.
 
-Create `kaji.config.mjs`:
+Create `poolster.config.mjs`:
 
 ```js
-import { defineConfig, definePlugin } from '@relevate/kaji/sdk';
-import { pluginTypeScript } from '@relevate/kaji/sdk/plugins';
+import { defineConfig, definePlugin } from '@relevate/poolster';
+import { pluginTypeScript } from '@relevate/poolster-plugin-typescript';
 
 const pluginRoutes = definePlugin(() => ({
   name: 'routes',
@@ -41,38 +41,38 @@ export default defineConfig({
 });
 ```
 
-Run `npx kaji-sdk generate`. The CLI discovers `kaji.config.mjs`,
-`kaji.config.js`, or `kaji.config.cjs` in the current directory. Use `--config`
+With the separately installed `poolster` CLI, run `npx poolster generate`. The CLI discovers `poolster.config.mjs`,
+`poolster.config.js`, or `poolster.config.cjs` in the current directory. Use `--config`
 for another path, `--check` to fail when generated files differ, or `--dry-run`
 to inspect changes without writing. Relative input, output and compiler paths
 in a config file resolve from the config file's directory.
 
-For programmatic embedding, use `loadConfig` and `createKaji`:
+For programmatic embedding, use `loadConfig` and `createPoolster`:
 
 ```js
-import { createKaji, loadConfig } from '@relevate/kaji/sdk';
+import { createPoolster, loadConfig } from '@relevate/poolster';
 
-const config = await loadConfig('./kaji.config.mjs');
-const result = await createKaji(config).generate({ write: false });
+const config = await loadConfig('./poolster.config.mjs');
+const result = await createPoolster(config).generate({ write: false });
 console.log(result.changes, result.files);
 ```
 
 `generate(config, { write: false })` is also available directly. Passing an
 in-memory config uses paths relative to the process working directory.
-`input: { artifacts: './.kaji/openapi' }` reuses artifacts from
-`kaji-openapi`. For source OpenAPI input, the published package uses the
-compiler from `@relevate/kaji`; consumers do not need Go or Rust toolchains.
-Set `compiler` or `KAJI_OPENAPI_BIN` to override it.
+`input: { artifacts: './.poolster/openapi' }` reuses artifacts from
+`poolster-openapi`. For source OpenAPI input, the published package uses the
+compiler from `@relevate/poolster`; consumers do not need Go or Rust toolchains.
+Set `compiler` or `POOLSTER_OPENAPI_BIN` to override it.
 
 ## Input plugins
 
 Five Rust input providers are available as individual npm packages and from
-`@relevate/kaji-plugins`: `inputGraphql`, `inputAsyncApi`, `inputArazzo`,
+`@relevate/poolster-plugins`: `inputGraphql`, `inputAsyncApi`, `inputArazzo`,
 `inputProtobuf`, and `inputCapnProto`. Select one explicitly:
 
 ```js
-import { defineConfig, definePlugin } from '@relevate/kaji/sdk';
-import { inputGraphql } from '@relevate/kaji/sdk/plugins';
+import { defineConfig, definePlugin } from '@relevate/poolster';
+import { inputGraphql } from '@relevate/poolster/sdk/plugins';
 
 const summary = definePlugin(() => ({
   name: 'summary',
@@ -89,9 +89,9 @@ export default defineConfig({
 ```
 
 `availableInputPlugins()` lists the Rust providers compiled into the addon.
-`inspectInput(config.input)` or `createKaji(config).inspectInput()` returns the
+`inspectInput(config.input)` or `createPoolster(config).inspectInput()` returns the
 provider, source, summary, and diagnostics without generating files. Native
-GraphQL, event, workflow, and RPC contracts do not currently publish Kaji's
+GraphQL, event, workflow, and RPC contracts do not currently publish Poolster's
 normalized HTTP API, so the existing language SDK plugins cannot consume them.
 JavaScript output plugins can use `ctx.input` to generate their own artifacts.
 An additional Rust input provider needs to be linked into a custom addon and
@@ -105,7 +105,7 @@ diagnostics and data. If it also returns a normalized `api` and optional
 
 ```js
 import { readFile } from 'node:fs/promises';
-import { defineInputPlugin } from '@relevate/kaji/sdk';
+import { defineInputPlugin } from '@relevate/poolster';
 
 export const inputJsonApi = defineInputPlugin(() => ({
   kind: 'js-input', name: 'example.json-api', format: 'http-json',
@@ -130,19 +130,19 @@ Install only the languages you use:
 
 | Package | Export |
 | --- | --- |
-| `@relevate/kaji-plugin-typescript` | `pluginTypeScript` |
-| `@relevate/kaji-plugin-rust` | `pluginRust` |
-| `@relevate/kaji-plugin-go` | `pluginGo` |
-| `@relevate/kaji-plugin-python` | `pluginPython` |
-| `@relevate/kaji-plugin-php` | `pluginPhp` |
-| `@relevate/kaji-plugin-java` | `pluginJava` |
-| `@relevate/kaji-plugin-csharp` | `pluginCSharp` |
-| `@relevate/kaji-plugin-elixir` | `pluginElixir` |
-| `@relevate/kaji-plugin-ruby` | `pluginRuby` |
-| `@relevate/kaji-plugin-swift` | `pluginSwift` |
+| `@relevate/poolster-plugin-typescript` | `pluginTypeScript` |
+| `@relevate/poolster-plugin-rust` | `pluginRust` |
+| `@relevate/poolster-plugin-go` | `pluginGo` |
+| `@relevate/poolster-plugin-python` | `pluginPython` |
+| `@relevate/poolster-plugin-php` | `pluginPhp` |
+| `@relevate/poolster-plugin-java` | `pluginJava` |
+| `@relevate/poolster-plugin-csharp` | `pluginCSharp` |
+| `@relevate/poolster-plugin-elixir` | `pluginElixir` |
+| `@relevate/poolster-plugin-ruby` | `pluginRuby` |
+| `@relevate/poolster-plugin-swift` | `pluginSwift` |
 
-`@relevate/kaji/sdk/plugins` exports all language, Rust auxiliary, and input
-factories from the main package. The separate `@relevate/kaji-plugins` bundle
+`@relevate/poolster/sdk/plugins` exports all language, Rust auxiliary, and input
+factories from the main package. The separate `@relevate/poolster-plugins` bundle
 and individual plugin packages are also available. Language factories
 accept `path`, `name`, `version`, and `style` options. TypeScript also accepts
 `transport` (`fetch` or `axios`), `clientName`, and `raw`; Go accepts `jobs`.
@@ -154,9 +154,9 @@ separate, typed JavaScript entry points.
 Compiled Rust plugins exposed by the addon can be selected in the same config:
 
 ```js
-import { pluginTypeScript } from '@relevate/kaji-plugin-typescript';
-import { pluginZod } from '@relevate/kaji-plugin-zod';
-import { pluginReactQuery } from '@relevate/kaji-plugin-react-query';
+import { pluginTypeScript } from '@relevate/poolster-plugin-typescript';
+import { pluginZod } from '@relevate/poolster-plugin-zod';
+import { pluginReactQuery } from '@relevate/poolster-plugin-react-query';
 
 plugins: [
   pluginTypeScript({ path: 'web' }),
@@ -167,7 +167,7 @@ plugins: [
 
 The addon currently registers TypeScript's `zod`, `faker`, `msw`, `cypress`,
 `react-query`, `vue-query`, and `swr` Rust plugins. Each has an individual
-`@relevate/kaji-plugin-<name>` package and an export in the bundle. Pass
+`@relevate/poolster-plugin-<name>` package and an export in the bundle. Pass
 `target` to select the TypeScript package path. Call `availableNativePlugins()`
 to inspect this addon's registry. The Rust provider graph runs normally inside
 that TypeScript package. An arbitrary Rust crate must be linked and registered
@@ -190,12 +190,12 @@ and `operation(operation, ctx)` run per normalized item. Hooks can be async and
 may live in the `hooks` object or directly on the plugin. The context includes
 `api`, `securitySchemes`, `output`, `emitFile`, `readFile`, and `replaceFile`.
 
-Plugins can declare `requires: ['other-plugin-name']`. Kaji orders JavaScript
+Plugins can declare `requires: ['other-plugin-name']`. Poolster orders JavaScript
 plugins by those dependencies, rejects missing dependencies and cycles, then
 runs each phase in that order. Native SDK entries render together between the
 transform and file generation phases. Duplicate output paths fail. `replaceFile`
 keeps file ownership and create-once metadata. Emitted files have a stable
-owner based on the plugin name, so keep that name stable across releases. Kaji
+owner based on the plugin name, so keep that name stable across releases. Poolster
 refuses to overwrite locally edited generated files and leaves unrelated files
 alone.
 
@@ -211,7 +211,7 @@ share `ctx.workspace` during one generation. The implementation is JavaScript
 with JSDoc and TypeScript declarations, so publishing a plugin does not need a
 TypeScript build step.
 
-This supports custom JavaScript generators around Kaji's normalized API and
+This supports custom JavaScript generators around Poolster's normalized API and
 explicit selection of registered Rust plugins. JS contracts do not expose
 arbitrary Rust `TypeId` values or language workspaces. Native contract values
 need a deliberately written adapter before JS can consume them. The JS phases
@@ -227,7 +227,7 @@ contracts, a custom generator, transforms, and artifact-only previews.
 From the repository root:
 
 ```sh
-(cd openapi && go build -o ../target/debug/kaji-openapi .)
+(cd openapi && go build -o ../target/debug/poolster-openapi .)
 node packages/cli/sdk/scripts/build-native.mjs
 node packages/node-plugins/generate.mjs --check
 npm test --prefix packages/cli/sdk

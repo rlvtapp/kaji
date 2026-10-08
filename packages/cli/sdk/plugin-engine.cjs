@@ -2,8 +2,8 @@
 
 // @ts-check
 
-const contractTag = Symbol('kaji.contract');
-const handleTag = Symbol('kaji.providerHandle');
+const contractTag = Symbol('poolster.contract');
+const handleTag = Symbol('poolster.providerHandle');
 
 /**
  * A contract is a process-local token. Export the same token from a plugin
@@ -48,7 +48,7 @@ function requireContract(contract, options = {}) {
 }
 
 /**
- * Resolve the same essential provider graph rules as Kaji's Rust package
+ * Resolve the same essential provider graph rules as Poolster's Rust package
  * engine, using contract tokens rather than Rust TypeId values.
  * @param {object[]} plugins
  * @param {Set<string>} nativeNames

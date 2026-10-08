@@ -21,20 +21,20 @@ const auxiliaries = [
 ];
 
 test('SDK package installs only SDK platform runtimes', () => {
-  assert.equal(core.name, '@relevate/kaji');
+  assert.equal(core.name, '@relevate/poolster');
   assert.deepEqual(Object.keys(core.optionalDependencies).sort(), [
-    '@relevate/kaji-darwin-arm64', '@relevate/kaji-darwin-x64',
-    '@relevate/kaji-linux-x64-gnu', '@relevate/kaji-win32-x64-msvc',
+    '@relevate/poolster-node-darwin-arm64', '@relevate/poolster-node-darwin-x64',
+    '@relevate/poolster-node-linux-x64-gnu', '@relevate/poolster-node-win32-x64-msvc',
   ].sort());
-  assert.equal(core.dependencies?.kajicli, undefined);
-  assert.deepEqual(Object.keys(core.bin), ['kaji-sdk']);
+  assert.equal(core.dependencies?.poolster, undefined);
+  assert.equal(core.bin, undefined);
 });
 
-test('the published SDK and plugin subpaths resolve from @relevate/kaji', async () => {
-  const sdk = require('@relevate/kaji/sdk');
-  const plugins = require('@relevate/kaji/sdk/plugins');
-  const sdkEsm = await import('@relevate/kaji/sdk');
-  const pluginsEsm = await import('@relevate/kaji/sdk/plugins');
+test('the published SDK and plugin subpaths resolve from @relevate/poolster', async () => {
+  const sdk = require('@relevate/poolster/sdk');
+  const plugins = require('@relevate/poolster/sdk/plugins');
+  const sdkEsm = await import('@relevate/poolster/sdk');
+  const pluginsEsm = await import('@relevate/poolster/sdk/plugins');
   assert.equal(typeof sdk.defineConfig, 'function');
   assert.equal(sdkEsm.defineConfig, sdk.defineConfig);
   assert.deepEqual(plugins.inputGraphql(), bundle.inputGraphql());
@@ -53,7 +53,7 @@ test('native input providers have individual and bundled JS exports', async () =
     const directory = path.join(root, 'node-plugins', `input-${format}`);
     const manifest = require(path.join(directory, 'package.json'));
     const factory = `input${suffix}`;
-    assert.equal(manifest.name, `@relevate/kaji-input-${format}`);
+    assert.equal(manifest.name, `@relevate/poolster-input-${format}`);
     assert.equal(manifest.version, core.version);
     const cjs = require(path.join(directory, manifest.exports['.'].require));
     const esm = await import(pathToFileURL(path.join(directory, manifest.exports['.'].import)).href);
@@ -67,11 +67,11 @@ test('each language package has independently importable CommonJS and ESM export
   for (const [language, suffix] of languages) {
     const directory = path.join(root, 'node-plugins', language);
     const manifest = require(path.join(directory, 'package.json'));
-    const name = `@relevate/kaji-plugin-${language}`;
+    const name = `@relevate/poolster-plugin-${language}`;
     const exportName = `plugin${suffix}`;
     assert.equal(manifest.name, name);
     assert.equal(manifest.version, core.version);
-    assert.equal(manifest.peerDependencies['@relevate/kaji'], core.version);
+    assert.equal(manifest.peerDependencies['@relevate/poolster'], core.version);
     for (const file of ['index.cjs', 'index.mjs', 'index.d.ts', 'README.md', 'LICENSE']) {
       assert.ok(fs.statSync(path.join(directory, file)).size > 0, `${name} lacks ${file}`);
     }
@@ -90,8 +90,8 @@ test('each Rust auxiliary has independent CommonJS and ESM exports', async () =>
     const directory = path.join(root, 'node-plugins', id);
     const manifest = require(path.join(directory, 'package.json'));
     const exportName = `plugin${suffix}`;
-    assert.equal(manifest.name, `@relevate/kaji-plugin-${id}`);
-    assert.equal(manifest.peerDependencies['@relevate/kaji'], core.version);
+    assert.equal(manifest.name, `@relevate/poolster-plugin-${id}`);
+    assert.equal(manifest.peerDependencies['@relevate/poolster'], core.version);
     const cjs = require(path.join(directory, manifest.exports['.'].require));
     const esm = await import(pathToFileURL(path.join(directory, manifest.exports['.'].import)).href);
     assert.deepEqual(cjs[exportName]({ target: 'web' }), esm[exportName]({ target: 'web' }));
@@ -101,11 +101,11 @@ test('each Rust auxiliary has independent CommonJS and ESM exports', async () =>
 
 test('bundle package exposes the same named factories without pulling in individual packages', () => {
   const manifest = require('../../../node-plugins/all/package.json');
-  assert.equal(manifest.name, '@relevate/kaji-plugins');
+  assert.equal(manifest.name, '@relevate/poolster-plugins');
   assert.deepEqual(Object.keys(bundle).sort(), [
     ...[...languages, ...auxiliaries].map(([, suffix]) => `plugin${suffix}`),
     ...inputs.map(([, suffix]) => `input${suffix}`),
   ].sort());
-  assert.deepEqual(manifest.peerDependencies, { '@relevate/kaji': core.version });
+  assert.deepEqual(manifest.peerDependencies, { '@relevate/poolster': core.version });
   assert.equal(manifest.dependencies, undefined);
 });

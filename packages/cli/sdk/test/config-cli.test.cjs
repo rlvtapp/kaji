@@ -10,7 +10,7 @@ const test = require('node:test');
 const { generate, loadConfig } = require('../index.cjs');
 const { compiler, fixture, root, temporary } = require('../test-support/helpers.cjs');
 
-const cli = path.join(root, 'packages/cli/sdk/bin/kaji-sdk.cjs');
+const cli = path.join(root, 'packages/cli/bin/poolster.cjs');
 const core = path.join(root, 'packages/cli/sdk/index.cjs');
 const tsPlugin = path.join(root, 'packages/node-plugins/typescript/index.cjs');
 
@@ -18,17 +18,19 @@ function runCli(args, cwd) {
   return spawnSync(process.execPath, [cli, ...args], {
     cwd,
     encoding: 'utf8',
-    env: { ...process.env, KAJI_OPENAPI_BIN: compiler },
+    env: { ...process.env, POOLSTER_OPENAPI_BIN: compiler },
   });
 }
 
 test('JavaScript config files drive the Node CLI', async (t) => {
   const dir = await temporary(t);
   await fs.copyFile(fixture, path.join(dir, 'api.yaml'));
+  await fs.mkdir(path.join(dir, 'node_modules/@relevate'), { recursive: true });
+  await fs.symlink(path.join(root, 'packages/cli/sdk'), path.join(dir, 'node_modules/@relevate/poolster'), 'dir');
 
   await t.test('auto-discovered CommonJS config resolves paths from its own directory', async () => {
     const source = `const { defineConfig } = require(${JSON.stringify(core)});\nconst { pluginTypeScript } = require(${JSON.stringify(tsPlugin)});\nmodule.exports = defineConfig({ input: './api.yaml', output: { path: './generated' }, name: 'Widgets', version: '1.0.0', plugins: [pluginTypeScript(), { name: 'status', hooks: { generate(ctx) { ctx.emitFile({ path: 'status.txt', contents: 'ready\\n' }); } } }] });\n`;
-    await fs.writeFile(path.join(dir, 'kaji.config.cjs'), source);
+    await fs.writeFile(path.join(dir, 'poolster.config.cjs'), source);
     const first = runCli(['generate'], dir);
     assert.equal(first.status, 0, first.stderr);
     assert.match(first.stdout, /added/);
@@ -82,7 +84,7 @@ export default defineConfig({ input: './api.yaml', output: './mixed-output', nam
   await t.test('missing config and invalid flags report actionable errors', () => {
     const noConfig = runCli(['generate', '--config', path.join(dir, 'absent.mjs')], root);
     assert.equal(noConfig.status, 1);
-    assert.match(noConfig.stderr, /No Kaji config found/);
+    assert.match(noConfig.stderr, /No Poolster config found/);
     const badFlag = runCli(['generate', '--unknown'], dir);
     assert.equal(badFlag.status, 1);
     assert.match(badFlag.stderr, /Unknown option/);

@@ -44,7 +44,7 @@ test('Rust GraphQL input and JavaScript output plugin generate and regenerate to
   const input = { path: path.join(root, cases[0][2]), plugin: bundle.inputGraphql() };
   const configuration = { input, output, plugins: [{
     name: 'schema-report',
-    requires: ['@relevate/kaji-input-graphql'],
+    requires: ['@relevate/poolster-input-graphql'],
     generate(ctx) {
       assert.equal(ctx.api, null);
       assert.equal(ctx.input.summary.format, 'graphql');
@@ -66,7 +66,7 @@ test('native input rejects HTTP SDK consumers without a matching contract', asyn
     input: { path: path.join(root, cases[0][2]), plugin: bundle.inputGraphql() },
     output: path.join(dir, 'out'),
     plugins: [bundle.pluginTypeScript()],
-  }), /did not publish kaji\.http-api/);
+  }), /did not publish poolster\.http-api/);
   await assert.rejects(fs.stat(path.join(dir, 'out')), { code: 'ENOENT' });
 });
 

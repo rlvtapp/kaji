@@ -40,7 +40,7 @@ const pluginReport = definePlugin(() => ({
 
 const result = await generate(defineConfig({
   input: path.join(here, 'openapi.yaml'),
-  output: path.resolve(process.env.KAJI_EXAMPLE_OUTPUT ?? path.join(here, 'generated-native')),
+  output: path.resolve(process.env.POOLSTER_EXAMPLE_OUTPUT ?? path.join(here, 'generated-native')),
   name: 'Widgets',
   version: '1.0.0',
   plugins: [

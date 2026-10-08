@@ -5,7 +5,7 @@ import { pluginPython } from '../../packages/node-plugins/all/index.mjs';
 import { pluginCatalog } from './plugins/catalog.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const output = path.resolve(process.env.KAJI_EXAMPLE_OUTPUT ?? path.join(here, 'generated-filtered'));
+const output = path.resolve(process.env.POOLSTER_EXAMPLE_OUTPUT ?? path.join(here, 'generated-filtered'));
 const pluginPublicOnly = definePlugin(() => ({
   name: 'public-only',
   hooks: {

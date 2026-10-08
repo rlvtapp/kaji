@@ -1,11 +1,11 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createKaji, defineConfig } from '../../packages/cli/sdk/index.mjs';
+import { createPoolster, defineConfig } from '../../packages/cli/sdk/index.mjs';
 import { pluginTypeScript } from '../../packages/node-plugins/typescript/index.mjs';
 import { pluginCatalog } from './plugins/catalog.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const output = path.resolve(process.env.KAJI_EXAMPLE_OUTPUT ?? path.join(here, 'generated'));
+const output = path.resolve(process.env.POOLSTER_EXAMPLE_OUTPUT ?? path.join(here, 'generated'));
 const config = defineConfig({
   input: path.join(here, 'openapi.yaml'),
   output: { path: output },
@@ -17,5 +17,5 @@ const config = defineConfig({
   ],
 });
 
-const result = await createKaji(config).generate();
+const result = await createPoolster(config).generate();
 console.log(`Wrote ${result.files.length} files to ${result.output}`);

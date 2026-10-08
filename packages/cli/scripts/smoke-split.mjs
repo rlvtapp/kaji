@@ -11,7 +11,7 @@ const platform = process.argv[2];
 if (!platform || !/^(darwin-(arm64|x64)|linux-x64-gnu|win32-x64-msvc)$/.test(platform)) {
   throw new Error('Supply a supported platform key');
 }
-const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'kaji-npm-split-'));
+const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'poolster-npm-split-'));
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
 function run(command, args, cwd) {
@@ -44,21 +44,21 @@ const installFlags = ['install', '--offline', '--ignore-scripts', '--no-audit', 
 run(npm, [...installFlags, cli, cliNative], cliConsumer);
 run(npm, [...installFlags, sdk, sdkNative], sdkConsumer);
 
-if (fs.existsSync(path.join(cliConsumer, 'node_modules', '@relevate', 'kaji'))) {
+if (fs.existsSync(path.join(cliConsumer, 'node_modules', '@relevate', 'poolster'))) {
   throw new Error('CLI-only install unexpectedly contains the SDK');
 }
-if (fs.existsSync(path.join(sdkConsumer, 'node_modules', 'kajicli'))) {
+if (fs.existsSync(path.join(sdkConsumer, 'node_modules', 'poolster'))) {
   throw new Error('SDK-only install unexpectedly contains the CLI');
 }
-const version = run(process.execPath, [path.join(cliConsumer, 'node_modules', 'kajicli', 'bin', 'kaji.cjs'), '--version'], cliConsumer);
-if (!/^kaji \d+\.\d+\.\d+/.test(version)) throw new Error(`Unexpected CLI version output: ${version}`);
+const version = run(process.execPath, [path.join(cliConsumer, 'node_modules', 'poolster', 'bin', 'poolster.cjs'), '--version'], cliConsumer);
+if (!/^poolster \d+\.\d+\.\d+/.test(version)) throw new Error(`Unexpected CLI version output: ${version}`);
 
 const fixture = path.join(root, 'crates/kaji-cli/tests/fixtures/pets.yaml');
 const sdkProgram = `
-  const { defineConfig, createKaji } = require('@relevate/kaji/sdk');
-  const { pluginTypeScript } = require('@relevate/kaji/sdk/plugins');
+  const { defineConfig, createPoolster } = require('@relevate/poolster/sdk');
+  const { pluginTypeScript } = require('@relevate/poolster/sdk/plugins');
   const config = defineConfig({ input: process.argv[1], output: './generated', name: 'Pets', version: '1.0.0', plugins: [pluginTypeScript()] });
-  createKaji(config).generate({ write: false }).then(result => {
+  createPoolster(config).generate({ write: false }).then(result => {
     if (!result.files.length) throw new Error('SDK generated no files');
     console.log(result.files.length + ' files');
   }).catch(error => { console.error(error); process.exitCode = 1; });

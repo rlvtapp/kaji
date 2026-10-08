@@ -11,9 +11,9 @@ const key = process.argv[2];
 if (!key || !/^(darwin-(arm64|x64)|linux-x64-gnu|win32-x64-msvc)$/.test(key)) {
   throw new Error('Supply a supported native platform directory');
 }
-const output = fs.mkdtempSync(path.join(os.tmpdir(), 'kaji-cli-smoke-'));
+const output = fs.mkdtempSync(path.join(os.tmpdir(), 'poolster-cli-smoke-'));
 const environment = { ...process.env };
-delete environment.KAJI_OPENAPI_BIN;
+delete environment.POOLSTER_OPENAPI_BIN;
 // Prove runtime generation does not require Cargo, rustc, Go, or other PATH tools.
 for (const name of Object.keys(environment)) {
   if (name.toLowerCase() === 'path') delete environment[name];
@@ -21,12 +21,12 @@ for (const name of Object.keys(environment)) {
 environment.PATH = path.join(output, 'no-toolchains');
 fs.mkdirSync(environment.PATH);
 const result = spawnSync(process.execPath, [
-  path.join(packageRoot, 'bin/kaji.cjs'), 'generate',
+  path.join(packageRoot, 'bin/poolster.cjs'), 'generate',
   path.join(root, 'crates/kaji-cli/tests/fixtures/pets.yaml'),
   '--output', output, '--language', 'go,typescript', '--jobs', '2',
 ], { stdio: 'inherit', env: {
   ...environment,
-  KAJI_BINARY: path.join(packageRoot, 'npm', key, key.startsWith('win32') ? 'kaji.exe' : 'kaji'),
+  POOLSTER_BINARY: path.join(packageRoot, 'npm', key, key.startsWith('win32') ? 'poolster.exe' : 'poolster'),
 } });
 if (result.error) throw result.error;
 if (result.status !== 0) throw new Error(`Packaged CLI failed (${result.status ?? result.signal})`);

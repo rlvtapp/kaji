@@ -1,10 +1,10 @@
 {
-  "name": "kajicli",
+  "name": "poolster",
   "version": "0.5.0",
-  "description": "Kaji command-line SDK generator",
+  "description": "Poolster command-line SDK generator",
   "license": "MIT",
   "repository": { "type": "git", "url": "git+https://github.com/rlvtapp/kaji.git" },
-  "bin": { "kaji": "bin/kaji.cjs" },
+  "bin": { "poolster": "bin/poolster.cjs" },
   "files": ["bin", "README.md", "LICENSE"],
   "engines": { "node": ">=18" },
   "scripts": {
@@ -12,10 +12,10 @@
     "build:native": "node scripts/build-platform.mjs"
   },
   "optionalDependencies": {
-    "@relevate/kajicli-darwin-arm64": "0.5.0",
-    "@relevate/kajicli-darwin-x64": "0.5.0",
-    "@relevate/kajicli-linux-x64-gnu": "0.5.0",
-    "@relevate/kajicli-win32-x64-msvc": "0.5.0"
+    "@relevate/poolster-cli-darwin-arm64": "0.5.0",
+    "@relevate/poolster-cli-darwin-x64": "0.5.0",
+    "@relevate/poolster-cli-linux-x64-gnu": "0.5.0",
+    "@relevate/poolster-cli-win32-x64-msvc": "0.5.0"
   },
   "publishConfig": { "access": "public" }
 }

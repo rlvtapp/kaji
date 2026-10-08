@@ -17,7 +17,7 @@ test('JavaScript plugins compose around native SDK renderers', async (t) => {
     const events = [];
     const first = definePlugin(() => ({
       name: 'first',
-      requires: ['second', '@relevate/kaji-plugin-typescript'],
+      requires: ['second', '@relevate/poolster-plugin-typescript'],
       hooks: {
         transformApi(api) {
           events.push(`first:transform:${api.name}`);
@@ -56,7 +56,7 @@ test('JavaScript plugins compose around native SDK renderers', async (t) => {
     const a = { name: 'a', requires: ['b'], hooks: { generate() {} } };
     const b = { name: 'b', requires: ['a'], hooks: { generate() {} } };
     await assert.rejects(generate(config({ artifacts: compiled }, path.join(dir, 'cycle'), [a, b])), /dependency cycle/);
-    const collision = { name: '@relevate/kaji-plugin-typescript', hooks: { generate() {} } };
+    const collision = { name: '@relevate/poolster-plugin-typescript', hooks: { generate() {} } };
     await assert.rejects(generate(config({ artifacts: compiled }, path.join(dir, 'collision-a'), [collision, pluginTypeScript()])), /duplicate plugin name/);
     await assert.rejects(generate(config({ artifacts: compiled }, path.join(dir, 'collision-b'), [pluginTypeScript(), collision])), /duplicate plugin name/);
   });
@@ -123,7 +123,7 @@ test('JavaScript plugins compose around native SDK renderers', async (t) => {
     await assert.rejects(generate(config({ artifacts: compiled }, path.join(dir, 'js-case-collision'), [
       jsCaseCollision,
     ])), /existing file/);
-    const reserved = { name: 'reserved', hooks: { generate(ctx) { ctx.emitFile({ path: '.kaji/ownership.json', contents: '{}' }); } } };
-    await assert.rejects(generate(config({ artifacts: compiled }, path.join(dir, 'reserved'), [reserved])), /reserved Kaji ownership path/);
+    const reserved = { name: 'reserved', hooks: { generate(ctx) { ctx.emitFile({ path: '.poolster/ownership.json', contents: '{}' }); } } };
+    await assert.rejects(generate(config({ artifacts: compiled }, path.join(dir, 'reserved'), [reserved])), /reserved Poolster ownership path/);
   });
 });

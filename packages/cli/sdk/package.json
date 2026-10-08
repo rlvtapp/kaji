@@ -1,7 +1,7 @@
 {
-  "name": "@relevate/kaji",
+  "name": "@relevate/poolster",
   "version": "0.5.0",
-  "description": "Kaji Node SDK for embedded and plugin-based generation",
+  "description": "Poolster Node SDK for embedded and plugin-based generation",
   "license": "MIT",
   "repository": { "type": "git", "url": "git+https://github.com/rlvtapp/kaji.git" },
   "exports": {
@@ -10,18 +10,17 @@
     "./sdk/plugins": { "types": "./plugins.d.ts", "import": "./plugins.mjs", "require": "./plugins.cjs" },
     "./package.json": "./package.json"
   },
-  "bin": { "kaji-sdk": "bin/kaji-sdk.cjs" },
-  "files": ["bin", "index.cjs", "index.mjs", "index.d.ts", "plugins.cjs", "plugins.mjs", "plugins.d.ts", "plugin-engine.cjs", "README.md", "LICENSE"],
+  "files": ["index.cjs", "index.mjs", "index.d.ts", "plugins.cjs", "plugins.mjs", "plugins.d.ts", "plugin-engine.cjs", "config.cjs", "README.md", "LICENSE"],
   "engines": { "node": ">=18" },
   "scripts": {
     "test": "node --test test/*.test.cjs",
     "build:native": "node scripts/build-native.mjs"
   },
   "optionalDependencies": {
-    "@relevate/kaji-darwin-arm64": "0.5.0",
-    "@relevate/kaji-darwin-x64": "0.5.0",
-    "@relevate/kaji-linux-x64-gnu": "0.5.0",
-    "@relevate/kaji-win32-x64-msvc": "0.5.0"
+    "@relevate/poolster-node-darwin-arm64": "0.5.0",
+    "@relevate/poolster-node-darwin-x64": "0.5.0",
+    "@relevate/poolster-node-linux-x64-gnu": "0.5.0",
+    "@relevate/poolster-node-win32-x64-msvc": "0.5.0"
   },
   "publishConfig": { "access": "public" }
 }

@@ -17,8 +17,8 @@ if (!targets[key]) throw new Error(`Choose a platform: ${Object.keys(targets).jo
 const [target, os, cpu] = targets[key];
 const environment = os === 'darwin' ? { MACOSX_DEPLOYMENT_TARGET: key === 'darwin-arm64' ? '11.0' : '10.13' } : {};
 const output = path.join(packageRoot, 'npm', key);
-const compilerName = os === 'win32' ? 'kaji-openapi.exe' : 'kaji-openapi';
-const library = os === 'win32' ? 'kaji_node.dll' : os === 'darwin' ? 'libkaji_node.dylib' : 'libkaji_node.so';
+const compilerName = os === 'win32' ? 'poolster-openapi.exe' : 'poolster-openapi';
+const library = os === 'win32' ? 'poolster_node.dll' : os === 'darwin' ? 'libpoolster_node.dylib' : 'libpoolster_node.so';
 
 function run(command, args, cwd, extraEnv = {}) {
   const result = spawnSync(command, args, { cwd, stdio: 'inherit', env: { ...process.env, ...extraEnv } });
@@ -26,19 +26,19 @@ function run(command, args, cwd, extraEnv = {}) {
   if (result.status !== 0) throw new Error(`${command} failed (${result.status ?? result.signal})`);
 }
 
-run('cargo', ['build', '--locked', '--release', '-p', 'kaji-node', '--target', target], root, environment);
+run('cargo', ['build', '--locked', '--release', '-p', 'poolster-node', '--target', target], root, environment);
 fs.mkdirSync(output, { recursive: true });
 run('go', ['build', '-trimpath', '-ldflags=-s -w', '-o', path.join(output, compilerName), '.'],
   path.join(root, 'openapi'), { ...environment, GOOS: os === 'win32' ? 'windows' : os, GOARCH: cpu === 'x64' ? 'amd64' : cpu, CGO_ENABLED: '0' });
-fs.copyFileSync(path.join(root, 'target', target, 'release', library), path.join(output, 'kaji_node.node'));
+fs.copyFileSync(path.join(root, 'target', target, 'release', library), path.join(output, 'poolster_node.node'));
 if (os !== 'win32') fs.chmodSync(path.join(output, compilerName), 0o755);
 fs.copyFileSync(path.join(root, 'LICENSE'), path.join(output, 'LICENSE'));
 const nativeManifest = {
-  name: `@relevate/kaji-${key}`, version: manifest.version,
-  description: `Native Kaji SDK runtime for ${key}`, license: manifest.license,
+  name: `@relevate/poolster-node-${key}`, version: manifest.version,
+  description: `Native Poolster SDK runtime for ${key}`, license: manifest.license,
   repository: manifest.repository, os: [os], cpu: [cpu],
   ...(os === 'linux' ? { libc: ['glibc'] } : {}),
-  files: ['kaji_node.node', compilerName, 'LICENSE'], publishConfig: { access: 'public' },
+  files: ['poolster_node.node', compilerName, 'LICENSE'], publishConfig: { access: 'public' },
 };
 fs.writeFileSync(path.join(output, 'package.json'), `${JSON.stringify(nativeManifest, null, 2)}\n`);
 console.log(`Built ${nativeManifest.name}@${manifest.version} in ${output}. Nothing has been published.`);

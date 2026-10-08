@@ -5,40 +5,40 @@ const fsp = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const { pathToFileURL } = require('node:url');
 const { defineContract, providerHandle, requireContract, planPlugins, contractRuntime } = require('./plugin-engine.cjs');
+const { validateInput, defineInputPlugin, defineConfig, sdkPackage, normalizedPackagePath, definePlugin, validatePlugin, loadConfig } = require('./config.cjs');
 
 const root = path.resolve(__dirname, '../../..');
 
 function platformKey(platform = process.platform, arch = process.arch, report = process.report) {
   if (platform === 'linux' && arch === 'x64') {
     if (!report?.getReport().header.glibcVersionRuntime) {
-      throw new Error('Kaji native packages currently require glibc on Linux.');
+      throw new Error('Poolster native packages currently require glibc on Linux.');
     }
     return 'linux-x64-gnu';
   }
   const key = `${platform}-${arch}`;
   if (key === 'darwin-arm64' || key === 'darwin-x64') return key;
   if (key === 'win32-x64') return 'win32-x64-msvc';
-  throw new Error(`Kaji has no native Node package for ${key}.`);
+  throw new Error(`Poolster has no native Node package for ${key}.`);
 }
 
 function resolveNative() {
-  if (process.env.KAJI_NODE_BINARY) return path.resolve(process.env.KAJI_NODE_BINARY);
-  const local = path.join(__dirname, 'native', 'kaji_node.node');
+  if (process.env.POOLSTER_NODE_BINARY) return path.resolve(process.env.POOLSTER_NODE_BINARY);
+  const local = path.join(__dirname, 'native', 'poolster_node.node');
   if (fs.existsSync(local)) return local;
-  const name = `@relevate/kaji-${platformKey()}`;
+  const name = `@relevate/poolster-node-${platformKey()}`;
   let manifestPath;
   try {
     manifestPath = require.resolve(`${name}/package.json`);
   } catch {
-    throw new Error(`Missing native package ${name}. Reinstall @relevate/kaji with optional dependencies enabled.`);
+    throw new Error(`Missing native package ${name}. Reinstall @relevate/poolster with optional dependencies enabled.`);
   }
   const installed = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   if (installed.version !== require('./package.json').version) {
-    throw new Error(`Native package ${name} version ${installed.version} does not match @relevate/kaji.`);
+    throw new Error(`Native package ${name} version ${installed.version} does not match @relevate/poolster.`);
   }
-  return path.join(path.dirname(manifestPath), 'kaji_node.node');
+  return path.join(path.dirname(manifestPath), 'poolster_node.node');
 }
 
 let binding;
@@ -53,29 +53,6 @@ function availableNativePlugins() {
 
 function availableInputPlugins() {
   return JSON.parse(native().availableInputPlugins());
-}
-
-function validateInput(input) {
-  if (typeof input === 'string') return;
-  if (input && typeof input === 'object' && typeof input.artifacts === 'string') return;
-  if (input && typeof input === 'object' && typeof input.path === 'string' && input.path &&
-      input.plugin?.kind === 'native-input' && typeof input.plugin.format === 'string' && input.plugin.format.trim() &&
-      typeof input.plugin.provider === 'string' && input.plugin.provider.trim()) return;
-  if (input && typeof input === 'object' && typeof input.path === 'string' && input.path &&
-      input.plugin?.kind === 'js-input' && typeof input.plugin.name === 'string' && input.plugin.name.trim() &&
-      typeof input.plugin.format === 'string' && input.plugin.format.trim() &&
-      typeof input.plugin.load === 'function') return;
-  throw new TypeError('input must be an OpenAPI path, { artifacts: directory }, or { path, plugin: inputPlugin() }');
-}
-
-function defineInputPlugin(factory) {
-  if (typeof factory !== 'function') throw new TypeError('input plugin factory must be a function');
-  return (...args) => {
-    const plugin = factory(...args);
-    validateInput({ path: '.', plugin });
-    if (plugin.kind !== 'js-input') throw new TypeError('defineInputPlugin requires kind: js-input');
-    return plugin;
-  };
 }
 
 async function loadInput(input) {
@@ -108,113 +85,22 @@ async function inspectInput(input) {
 
 function resolveCompiler(config) {
   if (config.compiler) return path.resolve(config.compiler);
-  if (process.env.KAJI_OPENAPI_BIN) return path.resolve(process.env.KAJI_OPENAPI_BIN);
-  const exe = process.platform === 'win32' ? 'kaji-openapi.exe' : 'kaji-openapi';
+  if (process.env.POOLSTER_OPENAPI_BIN) return path.resolve(process.env.POOLSTER_OPENAPI_BIN);
+  const exe = process.platform === 'win32' ? 'poolster-openapi.exe' : 'poolster-openapi';
   const local = path.join(root, 'target', 'debug', exe);
   if (fs.existsSync(local)) return local;
-  const name = `@relevate/kaji-${platformKey()}`;
+  const name = `@relevate/poolster-node-${platformKey()}`;
   let manifestPath;
   try {
     manifestPath = require.resolve(`${name}/package.json`);
   } catch {
-    throw new Error(`Missing OpenAPI compiler ${name}. Install @relevate/kaji or set KAJI_OPENAPI_BIN.`);
+    throw new Error(`Missing OpenAPI compiler ${name}. Install @relevate/poolster or set POOLSTER_OPENAPI_BIN.`);
   }
   const installed = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   if (installed.version !== require('./package.json').version) {
-    throw new Error(`OpenAPI compiler package ${name} version does not match @relevate/kaji.`);
+    throw new Error(`OpenAPI compiler package ${name} version does not match @relevate/poolster.`);
   }
   return path.join(path.dirname(manifestPath), exe);
-}
-
-function defineConfig(config) {
-  if (!config || typeof config !== 'object' || Array.isArray(config)) {
-    throw new TypeError('Kaji config must be an object');
-  }
-  validateInput(config.input);
-  if (!config.input.plugin && (typeof config.name !== 'string' || !config.name.trim())) throw new TypeError('name is required');
-  if (!config.input.plugin && (typeof config.version !== 'string' || !config.version.trim())) throw new TypeError('version is required');
-  const destination = typeof config.output === 'string' ? config.output : config.output?.path;
-  if (typeof destination !== 'string' || !destination.trim()) throw new TypeError('output or output.path is required');
-  if (!Array.isArray(config.plugins) || config.plugins.length === 0) {
-    throw new TypeError('plugins must contain at least one SDK or JavaScript plugin');
-  }
-  return config;
-}
-
-function sdkPackage(options) {
-  if (!options || typeof options !== 'object' || Array.isArray(options)) {
-    throw new TypeError('sdk options must be an object');
-  }
-  if (typeof options.language !== 'string' || !options.language) {
-    throw new TypeError('sdk language is required');
-  }
-  const allowed = new Set(['language', 'path', 'name', 'version', 'style', 'transport', 'clientName', 'raw', 'jobs']);
-  for (const key of Object.keys(options)) {
-    if (!allowed.has(key)) throw new TypeError(`unknown sdk option ${key}`);
-  }
-  if (!['typescript', 'rust', 'go', 'python', 'php', 'java', 'csharp', 'elixir', 'ruby', 'swift'].includes(options.language)) {
-    throw new TypeError(`unsupported SDK language ${options.language}`);
-  }
-  const { language, path: outputPath = language, name, version, style, transport, clientName, raw, jobs } = options;
-  if (typeof outputPath !== 'string' || !outputPath) throw new TypeError('sdk path must be a nonempty string');
-  return { language, path: outputPath, name, version, style, transport, clientName, raw, jobs };
-}
-
-function normalizedPackagePath(value) {
-  const normalized = path.posix.normalize(value.replaceAll('\\', '/'));
-  return normalized.endsWith('/') && normalized !== '/' ? normalized.slice(0, -1) : normalized;
-}
-
-function definePlugin(factory) {
-  if (typeof factory !== 'function') throw new TypeError('plugin factory must be a function');
-  return (...args) => {
-    const plugin = factory(...args);
-    validatePlugin(plugin);
-    return plugin;
-  };
-}
-
-function validatePlugin(plugin) {
-  if (!plugin || typeof plugin !== 'object' || typeof plugin.name !== 'string' || !plugin.name.trim()) {
-    throw new TypeError('JavaScript plugins need a nonempty name');
-  }
-  const hooks = plugin.hooks ?? plugin;
-  if (!hooks || typeof hooks !== 'object') throw new TypeError(`plugin ${plugin.name}.hooks must be an object`);
-  if (!['transformApi', 'generate', 'schema', 'operation'].some((hook) => typeof hooks[hook] === 'function')) {
-    throw new TypeError(`plugin ${plugin.name} needs transformApi, generate, schema, or operation`);
-  }
-  for (const hook of ['transformApi', 'generate', 'schema', 'operation']) {
-    if (hooks[hook] != null && typeof hooks[hook] !== 'function') {
-      throw new TypeError(`plugin ${plugin.name}.${hook} must be a function`);
-    }
-  }
-  if (plugin.requires != null && !Array.isArray(plugin.requires)) {
-    throw new TypeError(`plugin ${plugin.name}.requires must be an array`);
-  }
-  return plugin;
-}
-
-async function loadConfig(configFile) {
-  const candidates = configFile
-    ? [path.resolve(configFile)]
-    : ['kaji.config.mjs', 'kaji.config.js', 'kaji.config.cjs'].map((file) => path.resolve(file));
-  const file = candidates.find((candidate) => fs.existsSync(candidate));
-  if (!file) throw new Error(`No Kaji config found. Looked for ${candidates.join(', ')}`);
-  const module = await import(pathToFileURL(file).href);
-  let config = module.default ?? module.config;
-  if (typeof config === 'function') config = config();
-  config = await config;
-  defineConfig(config);
-  const base = path.dirname(file);
-  const resolve = (value) => path.resolve(base, value);
-  return {
-    ...config,
-    input: typeof config.input === 'string' ? resolve(config.input) : config.input.plugin
-      ? { ...config.input, path: resolve(config.input.path) }
-      : { artifacts: resolve(config.input.artifacts) },
-    output: typeof config.output === 'string' ? resolve(config.output) : { ...config.output, path: resolve(config.output.path) },
-    ...(config.compiler ? { compiler: resolve(config.compiler) } : {}),
-  };
 }
 
 function outputPath(value) {
@@ -282,7 +168,7 @@ function compile(input, artifacts, compiler) {
     child.on('close', (code, signal) => {
       if (settled) return;
       if (code === 0) resolve();
-      else reject(new Error(`Kaji OpenAPI compiler failed (${signal || code}): ${stderr.trim()}`));
+      else reject(new Error(`Poolster OpenAPI compiler failed (${signal || code}): ${stderr.trim()}`));
     });
   });
 }
@@ -343,14 +229,14 @@ async function generate(config, options = {}) {
     if (config.input.plugin) {
       const loaded = await loadInput(config.input);
       if (!loaded.api && (packages.length || nativeAddons.length)) {
-        throw new Error(`Input ${config.input.plugin.format} did not publish kaji.http-api, which the selected SDK plugins require`);
+        throw new Error(`Input ${config.input.plugin.format} did not publish poolster.http-api, which the selected SDK plugins require`);
       }
       if (!loaded.api && jsPlugins.length === 0) throw new Error('native input generation needs a JavaScript output plugin');
       contract = { api: loaded.api, securitySchemes: loaded.securitySchemes, input: loaded.report };
     } else {
       let artifacts;
       if (typeof config.input === 'string') {
-        temporary = await fsp.mkdtemp(path.join(os.tmpdir(), 'kaji-node-'));
+        temporary = await fsp.mkdtemp(path.join(os.tmpdir(), 'poolster-node-'));
         artifacts = temporary;
         await compile(path.resolve(config.input), artifacts, resolveCompiler(config));
       } else {
@@ -401,9 +287,9 @@ async function generate(config, options = {}) {
   }
 }
 
-function createKaji(config) {
+function createPoolster(config) {
   defineConfig(config);
   return { generate: (options) => generate(config, options), inspectInput: () => inspectInput(config.input) };
 }
 
-module.exports = { defineConfig, definePlugin, defineInputPlugin, defineContract, providerHandle, requireContract, availableNativePlugins, availableInputPlugins, inspectInput, loadConfig, createKaji, generate };
+module.exports = { defineConfig, definePlugin, defineInputPlugin, defineContract, providerHandle, requireContract, availableNativePlugins, availableInputPlugins, inspectInput, loadConfig, createPoolster, generate };

@@ -10,7 +10,7 @@ const { artifacts, compiler, execFileAsync, root, temporary } = require('../test
 async function run(script, output, args = []) {
   return execFileAsync(process.execPath, [path.join(root, 'examples/node-embedded', script), ...args], {
     cwd: root,
-    env: { ...process.env, KAJI_OPENAPI_BIN: compiler, KAJI_EXAMPLE_OUTPUT: output },
+    env: { ...process.env, POOLSTER_OPENAPI_BIN: compiler, POOLSTER_EXAMPLE_OUTPUT: output },
   });
 }
 

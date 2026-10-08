@@ -36,7 +36,7 @@ test('Rust plugins selected from JS emit meaningful, connected SDK output', asyn
 
   const faker = file(result, 'web/extensions/faker.ts');
   assert.match(faker, /export function createWidget\(__depth = 0\): Widget/);
-  assert.match(faker, /export const seedKajiFixtures/);
+  assert.match(faker, /export const seedPoolsterFixtures/);
   assert.match(faker, /"Widget":/);
 
   const msw = file(result, 'web/extensions/msw.ts');
@@ -90,7 +90,7 @@ test('JS transforms, Rust plugins, JS contracts, and regeneration compose safely
   };
   const inspector = {
     name: 'inspect-native',
-    requires: ['@relevate/kaji-plugin-zod', '@relevate/kaji-plugin-react-query'],
+    requires: ['@relevate/poolster-plugin-zod', '@relevate/poolster-plugin-react-query'],
     provides: [Inspected],
     generate(ctx) {
       const validation = ctx.readFile('web/validation.ts');

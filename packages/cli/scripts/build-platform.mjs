@@ -30,18 +30,18 @@ function run(command, args, cwd, extraEnv = {}) {
   if (result.status !== 0) throw new Error(`${command} failed (${result.status ?? result.signal})`);
 }
 
-run('cargo', ['build', '--locked', '--release', '-p', 'kaji-cli', '--target', target, '--target-dir', cargoDirectory], root, platformEnvironment);
+run('cargo', ['build', '--locked', '--release', '-p', 'poolster-cli', '--target', target, '--target-dir', cargoDirectory], root, platformEnvironment);
 fs.mkdirSync(output, { recursive: true });
-run('go', ['build', '-trimpath', '-ldflags=-s -w', '-o', path.join(output, `kaji-openapi${exe}`), '.'], path.join(root, 'openapi'), { ...platformEnvironment, GOOS: goos, GOARCH: goarch, CGO_ENABLED: '0' });
-fs.copyFileSync(path.join(cargoDirectory, target, 'release', `kaji${exe}`), path.join(output, `kaji${exe}`));
-for (const binary of [`kaji${exe}`, `kaji-openapi${exe}`]) if (!exe) fs.chmodSync(path.join(output, binary), 0o755);
+run('go', ['build', '-trimpath', '-ldflags=-s -w', '-o', path.join(output, `poolster-openapi${exe}`), '.'], path.join(root, 'openapi'), { ...platformEnvironment, GOOS: goos, GOARCH: goarch, CGO_ENABLED: '0' });
+fs.copyFileSync(path.join(cargoDirectory, target, 'release', `poolster${exe}`), path.join(output, `poolster${exe}`));
+for (const binary of [`poolster${exe}`, `poolster-openapi${exe}`]) if (!exe) fs.chmodSync(path.join(output, binary), 0o755);
 fs.copyFileSync(path.join(root, 'LICENSE'), path.join(output, 'LICENSE'));
 const nativeManifest = {
-  name: `@relevate/kajicli-${key}`, version: manifest.version,
-  description: `Native Kaji executables for ${key}`, license: manifest.license,
+  name: `@relevate/poolster-cli-${key}`, version: manifest.version,
+  description: `Native Poolster executables for ${key}`, license: manifest.license,
   repository: manifest.repository, os: [key.split('-')[0]], cpu: [key.split('-')[1]],
   ...(goos === 'linux' ? { libc: ['glibc'] } : {}),
-  files: [`kaji${exe}`, `kaji-openapi${exe}`, 'LICENSE'], publishConfig: { access: 'public' },
+  files: [`poolster${exe}`, `poolster-openapi${exe}`, 'LICENSE'], publishConfig: { access: 'public' },
 };
 fs.writeFileSync(path.join(output, 'package.json'), `${JSON.stringify(nativeManifest, null, 2)}\n`);
 console.log(`Built ${nativeManifest.name}@${manifest.version} in ${output}. Nothing has been published.`);

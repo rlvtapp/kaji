@@ -10,5 +10,5 @@ export const availableNativePlugins = api.availableNativePlugins;
 export const availableInputPlugins = api.availableInputPlugins;
 export const inspectInput = api.inspectInput;
 export const loadConfig = api.loadConfig;
-export const createKaji = api.createKaji;
+export const createPoolster = api.createPoolster;
 export const generate = api.generate;

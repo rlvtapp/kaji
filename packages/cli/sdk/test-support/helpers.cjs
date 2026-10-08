@@ -9,10 +9,10 @@ const { promisify } = require('node:util');
 const execFileAsync = promisify(execFile);
 const root = path.resolve(__dirname, '../../../..');
 const fixture = path.join(root, 'examples', 'node-embedded', 'openapi.yaml');
-const compiler = process.env.KAJI_OPENAPI_BIN || path.join(root, 'target', 'debug', process.platform === 'win32' ? 'kaji-openapi.exe' : 'kaji-openapi');
+const compiler = process.env.POOLSTER_OPENAPI_BIN || path.join(root, 'target', 'debug', process.platform === 'win32' ? 'poolster-openapi.exe' : 'poolster-openapi');
 
 async function temporary(t) {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'kaji-node-test-'));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'poolster-node-test-'));
   t.after(() => fs.rm(dir, { recursive: true, force: true }));
   return dir;
 }
