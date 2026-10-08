@@ -94,13 +94,6 @@ impl Plugin<RustCli> for Cli {
             "src/poolster_extension.rs",
             extension_template(),
         )?)?;
-        // Keep the pre-auth API separate from the original extension file. That
-        // lets an upgraded CLI retain an existing user-owned extension verbatim
-        // while still gaining the new hook on the next generation.
-        cx.files.emit_custom(GeneratedFile::new(
-            "src/poolster_auth.rs",
-            auth_extension_template(),
-        )?)?;
         cx.files
             .emit(GeneratedFile::new("README.md", readme(cx.api, &command))?)?;
         for (group, reference) in render_skill_references(cx.api, &command) {
@@ -200,7 +193,6 @@ fn render_main(
         .unwrap_or_else(|| "None".into());
     format!(
         r#"{NOTICE}mod poolster_extension;
-mod poolster_auth;
 
 use anyhow::{{bail, Context, Result}};
 use clap::{{Arg, ArgAction, ArgMatches, Command}};
@@ -209,8 +201,7 @@ use reqwest::header::{{HeaderMap, HeaderName, HeaderValue, ACCEPT, AUTHORIZATION
 use serde_json::{{Map, Value}};
 use std::{{env, fs, io::IsTerminal}};
 use dialoguer::{{Input, Password}};
-use poolster_extension::{{Extension, PoolsterExtension}};
-use poolster_auth::{{ExtensionV1, PoolsterAuthExtension}};
+use poolster_extension::{{AuthenticationResult, Extension, PoolsterExtension}};
 
 #[derive(Clone, Copy)] struct Parameter {{ name: &'static str, option: &'static str, location: &'static str, required: bool }}
 #[derive(Clone, Copy)] struct BodyField {{ name: &'static str, option: &'static str, kind: &'static str, array: bool, file: bool, required: bool }}
@@ -228,7 +219,6 @@ fn run() -> Result<()> {{
     let matches = build_cli().get_matches();
     let interactive = is_interactive(&matches);
     let extension = PoolsterExtension::default();
-    let auth_extension = PoolsterAuthExtension::default();
     if let Some(auth) = matches.subcommand_matches("auth") {{ return run_auth(auth, &extension, interactive); }}
     let (operation, values) = selected_operation(&matches).context("Choose an API command; use --help to list commands.")?;
     if interactive {{ println!("\n\x1b[36m◆\x1b[0m {{}}  \x1b[2m{{}} {{}}\x1b[0m", operation.command.join(" "), operation.method, operation.path); }}
@@ -239,8 +229,7 @@ fn run() -> Result<()> {{
     for parameter in operation.parameters {{ let supplied = values.get_one::<String>(parameter.option).cloned(); let value = match supplied {{ Some(value) => Some(value), None if parameter.required && interactive => Some(prompt(&format!("--{{}}", parameter.option))?), None if parameter.required => bail!("Missing required --{{}}", parameter.option), None => None }}; if let Some(value) = value {{ match parameter.location {{ "path" => path = path.replace(&format!("{{{{{{}}}}}}", parameter.name), &url_encode(&value)), "query" => query.push((parameter.name, value)), "header" => {{ headers.insert(HeaderName::from_bytes(parameter.name.as_bytes())?, HeaderValue::from_str(&value)?); }}, _ => {{}} }} }} }}
     let body = request_body(values, operation, interactive)?; if body.is_some() {{ headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json")); }} headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
     let context = poolster_extension::AuthContext {{ profile, command: operation.command, operation_id: operation.id }};
-    let authentication = {{ let mut auth = poolster_auth::AuthenticateContext {{ context: &context, headers: &mut headers, query: &mut query }}; auth_extension.pre_authenticate(&mut auth)? }};
-    if authentication.is_fallback() {{ if let Some(token) = extension.authenticate(&context)? {{ headers.insert(AUTHORIZATION, HeaderValue::from_str(&format!("Bearer {{token}}"))?); }} else {{ apply_openapi_security(operation, profile, &mut headers, &mut query, {command_lit})?; }} }}
+    if matches!(extension.authenticate(&mut headers, &mut query, &context)?, AuthenticationResult::UseOpenApi) {{ apply_openapi_security(operation, profile, &mut headers, &mut query, {command_lit})?; }}
     extension.before_request(&mut headers, &mut query, &context)?;
     let mut url = format!("{{}}/{{}}", base_url.trim_end_matches('/'), path.trim_start_matches('/')); if !query.is_empty() {{ url.push('?'); url.push_str(&query.into_iter().map(|(key, value)| format!("{{}}={{}}", url_encode(key), url_encode(&value))).collect::<Vec<_>>().join("&")); }}
     let response = Client::new().request(operation.method.parse()?, &url).headers(headers).json(&body).send()?;
@@ -267,7 +256,7 @@ fn default_profile_path() -> Result<std::path::PathBuf> {{ Ok(credential_dir()?.
 fn default_profile() -> Result<String> {{ match fs::read_to_string(default_profile_path()?) {{ Ok(value) if !value.trim().is_empty() => Ok(value.trim().to_owned()), Ok(_) | Err(_) => Ok("default".into()), }} }}
 fn save_default_profile(profile: &str) -> Result<()> {{ let path = default_profile_path()?; fs::create_dir_all(path.parent().expect("credential parent"))?; fs::write(path, profile)?; Ok(()) }}
 fn list_profiles() -> Result<Vec<String>> {{ let dir = credential_dir()?; let mut profiles = std::collections::BTreeSet::new(); profiles.insert(default_profile()?); if let Ok(entries) = fs::read_dir(dir) {{ for entry in entries.flatten() {{ if let Some(name) = entry.file_name().to_str().and_then(|name| name.strip_suffix(".token")) {{ profiles.insert(name.split('.').next().unwrap_or(name).to_owned()); }} }} }} Ok(profiles.into_iter().collect()) }}
-fn profile_has_credentials(profile: &str) -> Result<bool> {{ let prefix = format!("{{profile}}."); let legacy = format!("{{profile}}.token"); Ok(fs::read_dir(credential_dir()?).ok().into_iter().flatten().flatten().filter_map(|entry| entry.file_name().into_string().ok()).any(|name| name == legacy || (name.starts_with(&prefix) && name.ends_with(".token")))) }}
+fn profile_has_credentials(profile: &str) -> Result<bool> {{ let prefix = format!("{{profile}}."); let default_token = format!("{{profile}}.token"); Ok(fs::read_dir(credential_dir()?).ok().into_iter().flatten().flatten().filter_map(|entry| entry.file_name().into_string().ok()).any(|name| name == default_token || (name.starts_with(&prefix) && name.ends_with(".token")))) }}
 fn infer_api_key_scheme(requested: Option<&str>) -> Result<Option<&'static str>> {{ if let Some(scheme) = requested {{ let value = SECURITY_SCHEMES.iter().find(|candidate| candidate.id == scheme && candidate.kind == "api-key").context("--scheme must name an OpenAPI API-key scheme")?; return Ok(Some(value.id)); }} let matches = SECURITY_SCHEMES.iter().filter(|candidate| candidate.kind == "api-key").collect::<Vec<_>>(); match matches.as_slice() {{ [scheme] => Ok(Some(scheme.id)), [] => bail!("This OpenAPI document declares no API-key scheme."), _ => bail!("This API has multiple API-key schemes; pass --scheme."), }} }}
 fn apply_openapi_security(operation: &Operation, profile: &str, headers: &mut HeaderMap, query: &mut Vec<(&'static str, String)>, command: &str) -> Result<()> {{ if operation.security.is_empty() {{ return Ok(()); }} for alternative in operation.security {{ let mut credentials = Vec::new(); for scheme_id in *alternative {{ let Some(scheme) = SECURITY_SCHEMES.iter().find(|candidate| candidate.id == *scheme_id) else {{ continue; }}; let environment = format!("{{}}_{{}}_TOKEN", env_key(command), env_key(scheme.id)); let credential = env::var(&environment).ok().or_else(|| env::var(format!("{{}}_TOKEN", env_key(command))).ok()).or_else(|| load_credential(profile, scheme.id).ok().flatten()); let Some(credential) = credential else {{ credentials.clear(); break; }}; credentials.push((*scheme, credential)); }} if credentials.len() != alternative.len() {{ continue; }} for (scheme, credential) in credentials {{ if scheme.kind == "api-key" {{ match scheme.location {{ "query" => query.push((scheme.name, credential)), "cookie" => {{ headers.append(reqwest::header::COOKIE, HeaderValue::from_str(&format!("{{}}={{}}", scheme.name, url_encode(&credential)))?); }}, _ => {{ headers.insert(HeaderName::from_bytes(scheme.name.as_bytes())?, HeaderValue::from_str(&credential)?); }} }} }} else {{ headers.insert(AUTHORIZATION, HeaderValue::from_str(&format!("Bearer {{credential}}"))?); }} }} return Ok(()); }} bail!("No credentials for this operation. Run `auth set-key <value> --scheme <name>` or set the generated <COMMAND>_<SCHEME>_TOKEN environment variable.") }}
 fn env_key(name: &str) -> String {{ name.chars().map(|character| if character.is_ascii_alphanumeric() {{ character.to_ascii_uppercase() }} else {{ '_' }}).collect() }}
@@ -563,7 +552,7 @@ fn kebab_case(value: &str) -> String {
 }
 fn readme(api: &Api, command: &str) -> String {
     format!(
-        "# {command}\n\nGenerated Rust CLI for {}.\n\n```sh\ncargo install --path .\n{command} --help\n{command} auth set-token \"$API_TOKEN\"\n```\n\nCommands are grouped from paths: `/admin/users` with `listUsers` becomes `{command} admin users list`. `src/poolster_extension.rs` is preserved on regeneration for the stable login/request hooks. `src/poolster_auth.rs` is also user-owned and contains the versioned `ExtensionV1` pre-auth hook: return `Handled` after providing custom OAuth, SSO, keychain, signing, or telemetry credentials, or `Fallback` to retain the legacy extension and Poolster token flow.\n",
+        "# {command}\n\nGenerated Rust CLI for {}.\n\n```sh\ncargo install --path .\n{command} --help\n{command} auth set-token \"$API_TOKEN\"\n```\n\nCommands are grouped from paths: `/admin/users` with `listUsers` becomes `{command} admin users list`. `src/poolster_extension.rs` is preserved on regeneration for login, authentication, request, and response hooks. Return `AuthenticationResult::Handled` after adding custom OAuth, SSO, keychain, or signing credentials; return `UseOpenApi` to apply the declared OpenAPI security scheme.\n",
         api.name
     )
 }
@@ -574,41 +563,16 @@ use reqwest::header::HeaderMap;
 
 #[allow(dead_code)] // User extensions opt into the fields they need.
 pub struct AuthContext<'a> { pub profile: &'a str, pub command: &'a [&'a str], pub operation_id: &'a str }
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AuthenticationResult { Handled, UseOpenApi }
 pub trait Extension {
     fn login(&self, _context: &AuthContext<'_>) -> Result<Option<String>> { Ok(None) }
-    fn authenticate(&self, _context: &AuthContext<'_>) -> Result<Option<String>> { Ok(None) }
+    fn authenticate(&self, _headers: &mut HeaderMap, _query: &mut Vec<(&'static str, String)>, _context: &AuthContext<'_>) -> Result<AuthenticationResult> { Ok(AuthenticationResult::UseOpenApi) }
     fn before_request(&self, _headers: &mut HeaderMap, _query: &mut Vec<(&str, String)>, _context: &AuthContext<'_>) -> Result<()> { Ok(()) }
     fn after_response(&self, _status: u16, _body: &str, _context: &AuthContext<'_>) -> Result<()> { Ok(()) }
 }
 #[derive(Default)] pub struct PoolsterExtension;
 impl Extension for PoolsterExtension {}
-"#
-}
-
-fn auth_extension_template() -> &'static str {
-    r#"// This file is yours. Poolster preserves it on regeneration.
-// Extension API v1: custom authentication before Poolster's normal token handling.
-#![allow(dead_code)]
-use anyhow::Result;
-use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
-use crate::poolster_extension::AuthContext;
-
-pub const EXTENSION_API_VERSION: u32 = 1;
-pub struct AuthenticateContext<'a, 'b, 'c> { pub context: &'a AuthContext<'b>, pub headers: &'c mut HeaderMap, pub query: &'c mut Vec<(&'static str, String)> }
-impl AuthenticateContext<'_, '_, '_> {
-    pub fn bearer_token(&mut self, token: &str) -> Result<()> { self.headers.insert(AUTHORIZATION, HeaderValue::from_str(&format!("Bearer {token}"))?); Ok(()) }
-}
-#[derive(Clone, Copy, Debug, Eq, PartialEq)] pub enum AuthenticationResult { Handled, Fallback }
-impl AuthenticationResult { pub fn is_fallback(self) -> bool { matches!(self, Self::Fallback) } }
-
-pub trait ExtensionV1 {
-    fn extension_api_version(&self) -> u32 { EXTENSION_API_VERSION }
-    // Return Handled after writing credentials to context. Return Fallback to
-    // continue with `poolster_extension.rs` and Poolster's profile/environment token.
-    fn pre_authenticate(&self, _context: &mut AuthenticateContext<'_, '_, '_>) -> Result<AuthenticationResult> { Ok(AuthenticationResult::Fallback) }
-}
-#[derive(Default)] pub struct PoolsterAuthExtension;
-impl ExtensionV1 for PoolsterAuthExtension {}
 "#
 }
 
@@ -648,7 +612,7 @@ mod tests {
             .unwrap()
             .write_to(root.path())
             .unwrap();
-        let target = std::env::var_os("KAJI_CLI_CARGO_TARGET_DIR")
+        let target = std::env::var_os("POOLSTER_CLI_CARGO_TARGET_DIR")
             .unwrap_or_else(|| root.path().join("target").into_os_string());
         let output = std::process::Command::new("cargo")
             .args(["run", "--offline", "--quiet", "--", "--help"])
@@ -669,7 +633,7 @@ mod tests {
     }
 
     #[test]
-    fn emits_versioned_authentication_extension_with_legacy_fallback() {
+    fn emits_one_authentication_extension_with_openapi_default() {
         let api = Api {
             name: "Example".into(),
             operations: vec![Operation {
@@ -687,22 +651,19 @@ mod tests {
         let main = tree.get("cli/src/main.rs").unwrap();
         let admin = tree.get("cli/references/admin.md").unwrap();
         let extension = tree.get("cli/src/poolster_extension.rs").unwrap();
-        let auth_extension = tree.get("cli/src/poolster_auth.rs").unwrap();
-        assert!(main.contains("auth_extension.pre_authenticate(&mut auth)?"));
-        assert!(main.contains("authentication.is_fallback()"));
-        assert!(main.contains("extension.authenticate(&context)?"));
+        assert!(main.contains("extension.authenticate(&mut headers, &mut query, &context)?"));
+        assert!(main.contains("AuthenticationResult::UseOpenApi"));
         assert!(main.contains("fn is_interactive(matches: &ArgMatches) -> bool"));
         assert!(main.contains("prompt_secret(\"Credential\")?"));
         assert!(main.contains("dialoguer::{Input, Password}"));
         assert!(main.contains("\"code\": \"cli_error\""));
         assert!(admin.contains("## example admin users list"));
         assert!(extension.contains("pub trait Extension"));
+        assert!(extension.contains("pub enum AuthenticationResult { Handled, UseOpenApi }"));
+        assert!(extension.contains("fn authenticate(&self, _headers: &mut HeaderMap"));
         assert!(extension.contains("#[allow(dead_code)]"));
-        assert!(auth_extension.contains("pub trait ExtensionV1"));
-        assert!(auth_extension.contains("pub enum AuthenticationResult { Handled, Fallback }"));
-        assert!(auth_extension.contains("fn pre_authenticate"));
         assert!(tree.preserves_existing("cli/src/poolster_extension.rs"));
-        assert!(tree.preserves_existing("cli/src/poolster_auth.rs"));
+        assert!(tree.get("cli/src/poolster_auth.rs").is_none());
     }
 
     #[test]
