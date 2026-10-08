@@ -288,7 +288,7 @@ impl Plugin<TypeScript> for Query {
                     }
                     .import_from(&target)?;
                     let source = format!(
-                        "import {{ __kajiInputs, __kajiQueryCall, __kajiInitial, __kajiNext, __kajiPageOptions, __kajiMaxPages, type PoolsterQueryScope, type PoolsterPageParam, type PoolsterPaginationOptions }} from {shared:?};\nexport type {{ PoolsterQueryScope, PoolsterPageParam, PoolsterPaginationOptions }} from {shared:?};\n"
+                        "import {{ __poolsterInputs, __poolsterQueryCall, __poolsterInitial, __poolsterNext, __poolsterPageOptions, __poolsterMaxPages, type PoolsterQueryScope, type PoolsterPageParam, type PoolsterPaginationOptions }} from {shared:?};\nexport type {{ PoolsterQueryScope, PoolsterPageParam, PoolsterPaginationOptions }} from {shared:?};\n"
                     );
                     contents.replace_range(start..end, &source);
                 }

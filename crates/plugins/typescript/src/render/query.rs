@@ -145,7 +145,7 @@ pub(crate) fn render_query_operation(
     if read {
         let _ = writeln!(
             output,
-            "export const {name}QueryKey = (options: Parameters<typeof {function}>[0], scope: PoolsterQueryScope = 'default') => [{}, scope, __kajiInputs(options)] as const;",
+            "export const {name}QueryKey = (options: Parameters<typeof {function}>[0], scope: PoolsterQueryScope = 'default') => [{}, scope, __poolsterInputs(options)] as const;",
             js_string(identity)
         );
         if swr {
@@ -165,7 +165,7 @@ pub(crate) fn render_query_operation(
             };
             let _ = writeln!(
                 output,
-                "export type {pascal}QueryOverrides<TData = Awaited<ReturnType<typeof {function}>>> = Omit<{query_type}, 'queryKey' | 'queryFn'>;\nexport function {name}QueryOptions<TData = Awaited<ReturnType<typeof {function}>>>(options: Parameters<typeof {function}>[0], query: {pascal}QueryOverrides<TData> = {{}}, scope: PoolsterQueryScope = 'default'): {pascal}QueryOverrides<TData> & {{ queryKey: ReturnType<typeof {name}QueryKey>; queryFn: (context: QueryFunctionContext<ReturnType<typeof {name}QueryKey>>) => Promise<Awaited<ReturnType<typeof {function}>>> }} {{\n  return {{ ...query, queryKey: {name}QueryKey(options, scope), queryFn: (context: QueryFunctionContext<ReturnType<typeof {name}QueryKey>>) => __kajiQueryCall(options, context.signal, {function}) }};\n}}\nexport function use{pascal}<TData = Awaited<ReturnType<typeof {function}>>>(options: Parameters<typeof {function}>[0], query: {pascal}QueryOverrides<TData> = {{}}, scope: PoolsterQueryScope = 'default') {{ return useQuery({name}QueryOptions(options, query, scope)); }}\n"
+                "export type {pascal}QueryOverrides<TData = Awaited<ReturnType<typeof {function}>>> = Omit<{query_type}, 'queryKey' | 'queryFn'>;\nexport function {name}QueryOptions<TData = Awaited<ReturnType<typeof {function}>>>(options: Parameters<typeof {function}>[0], query: {pascal}QueryOverrides<TData> = {{}}, scope: PoolsterQueryScope = 'default'): {pascal}QueryOverrides<TData> & {{ queryKey: ReturnType<typeof {name}QueryKey>; queryFn: (context: QueryFunctionContext<ReturnType<typeof {name}QueryKey>>) => Promise<Awaited<ReturnType<typeof {function}>>> }} {{\n  return {{ ...query, queryKey: {name}QueryKey(options, scope), queryFn: (context: QueryFunctionContext<ReturnType<typeof {name}QueryKey>>) => __poolsterQueryCall(options, context.signal, {function}) }};\n}}\nexport function use{pascal}<TData = Awaited<ReturnType<typeof {function}>>>(options: Parameters<typeof {function}>[0], query: {pascal}QueryOverrides<TData> = {{}}, scope: PoolsterQueryScope = 'default') {{ return useQuery({name}QueryOptions(options, query, scope)); }}\n"
             );
         }
     } else if swr {

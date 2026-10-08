@@ -54,7 +54,7 @@ pub(crate) fn bundle(tree: &mut GeneratedTree, middleware: &[BundledMiddleware])
                 path.display()
             );
         }
-        let alias = format!("kajiBundledMiddleware{index}");
+        let alias = format!("poolsterBundledMiddleware{index}");
         imports.push((
             Symbol {
                 module: path.with_extension(""),

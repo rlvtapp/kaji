@@ -934,7 +934,7 @@ fn render_pagination_iterator_with_client(
         Pagination::Cursor(pagination) => {
             let update = if pagination.input_location == "body" {
                 format!(
-                    "kajiWithBodyValue(current, {:?}, cursor)",
+                    "poolsterWithBodyValue(current, {:?}, cursor)",
                     pagination
                         .input_body_path
                         .as_deref()
@@ -942,12 +942,12 @@ fn render_pagination_iterator_with_client(
                 )
             } else {
                 format!(
-                    "kajiWithValue(current, {:?}, {:?}, cursor)",
+                    "poolsterWithValue(current, {:?}, {:?}, cursor)",
                     pagination.input_location, pagination.input_name
                 )
             };
             format!(
-                "          const cursor = kajiJsonPath(response, {:?})\n          if (cursor === undefined || cursor === null || cursor === '') return\n          const next = {update}\n          if (next === undefined) return\n          current = next\n",
+                "          const cursor = poolsterJsonPath(response, {:?})\n          if (cursor === undefined || cursor === null || cursor === '') return\n          const next = {update}\n          if (next === undefined) return\n          current = next\n",
                 pagination.next_cursor_path
             )
         }
@@ -970,7 +970,7 @@ fn render_url_pagination_iterator(
     client_expression: &str,
 ) -> String {
     format!(
-        "    {{\n      const paginationClient = {client_expression}\n      this.{public_name}Pages = async function* (options: Parameters<typeof {function}>[0]) {{\n        let current: unknown = options\n        let nextUrl: string | undefined\n        while (true) {{\n          const request: ClientInstance = nextUrl === undefined\n            ? paginationClient\n            : (operation) => paginationClient({{ ...operation, paginationUrl: nextUrl }})\n          const requestOptions = nextUrl === undefined\n            ? (current as Record<string, unknown>)\n            : {{ ...(current as Record<string, unknown>), query: undefined }}\n          const response = await {function}({{ ...requestOptions, client: request }} as Parameters<typeof {function}>[0])\n          yield response\n          nextUrl = kajiPaginationUrl(response, {:?})\n          if (nextUrl === undefined) return\n        }}\n      }}\n    }}\n",
+        "    {{\n      const paginationClient = {client_expression}\n      this.{public_name}Pages = async function* (options: Parameters<typeof {function}>[0]) {{\n        let current: unknown = options\n        let nextUrl: string | undefined\n        while (true) {{\n          const request: ClientInstance = nextUrl === undefined\n            ? paginationClient\n            : (operation) => paginationClient({{ ...operation, paginationUrl: nextUrl }})\n          const requestOptions = nextUrl === undefined\n            ? (current as Record<string, unknown>)\n            : {{ ...(current as Record<string, unknown>), query: undefined }}\n          const response = await {function}({{ ...requestOptions, client: request }} as Parameters<typeof {function}>[0])\n          yield response\n          nextUrl = poolsterPaginationUrl(response, {:?})\n          if (nextUrl === undefined) return\n        }}\n      }}\n    }}\n",
         pagination.next_url_path,
     )
 }
@@ -987,7 +987,7 @@ fn render_offset_pagination(pagination: &OffsetPagination) -> String {
         let current_value = pagination_input_value(input);
         let update = pagination_input_update(input, "nextValue");
         output.push_str(&format!(
-            "          const currentValue = Number({current_value})\n          const nextValue = currentValue + 1\n          const numPages = Number(kajiJsonPath(response, {:?}))\n          if (!Number.isSafeInteger(currentValue) || !Number.isSafeInteger(nextValue) || !Number.isSafeInteger(numPages) || numPages < 0 || nextValue > numPages) return\n          const next = {update}\n          if (next === undefined) return\n          current = next\n",
+            "          const currentValue = Number({current_value})\n          const nextValue = currentValue + 1\n          const numPages = Number(poolsterJsonPath(response, {:?}))\n          if (!Number.isSafeInteger(currentValue) || !Number.isSafeInteger(nextValue) || !Number.isSafeInteger(numPages) || numPages < 0 || nextValue > numPages) return\n          const next = {update}\n          if (next === undefined) return\n          current = next\n",
             num_pages_path,
         ));
         return output;
@@ -1004,7 +1004,7 @@ fn render_offset_pagination(pagination: &OffsetPagination) -> String {
     let current_value = pagination_input_value(input);
     let update = pagination_input_update(input, "nextValue");
     output.push_str(&format!(
-        "          const items = kajiJsonPath(response, {:?})\n          if (!Array.isArray(items)) return\n          const configuredLimit = {limit}\n          if (items.length === 0 || (Number.isFinite(configuredLimit) && configuredLimit > 0 && items.length < configuredLimit)) return\n          const currentValue = Number({current_value})\n          const nextValue = {increment}\n          if (!Number.isSafeInteger(currentValue) || currentValue < 0 || !Number.isSafeInteger(nextValue)) return\n          const next = {update}\n          if (next === undefined) return\n          current = next\n",
+        "          const items = poolsterJsonPath(response, {:?})\n          if (!Array.isArray(items)) return\n          const configuredLimit = {limit}\n          if (items.length === 0 || (Number.isFinite(configuredLimit) && configuredLimit > 0 && items.length < configuredLimit)) return\n          const currentValue = Number({current_value})\n          const nextValue = {increment}\n          if (!Number.isSafeInteger(currentValue) || currentValue < 0 || !Number.isSafeInteger(nextValue)) return\n          const next = {update}\n          if (next === undefined) return\n          current = next\n",
         results_path,
     ));
     output
@@ -1013,7 +1013,7 @@ fn render_offset_pagination(pagination: &OffsetPagination) -> String {
 fn pagination_input_value(input: &PaginationInput) -> String {
     if input.location == "body" {
         format!(
-            "kajiBodyValue(current, {:?})",
+            "poolsterBodyValue(current, {:?})",
             input
                 .body_path
                 .as_deref()
@@ -1021,7 +1021,7 @@ fn pagination_input_value(input: &PaginationInput) -> String {
         )
     } else {
         format!(
-            "kajiOptionValue(current, {:?}, {:?})",
+            "poolsterOptionValue(current, {:?}, {:?})",
             input.location, input.name
         )
     }
@@ -1030,7 +1030,7 @@ fn pagination_input_value(input: &PaginationInput) -> String {
 fn pagination_input_update(input: &PaginationInput, value: &str) -> String {
     if input.location == "body" {
         format!(
-            "kajiWithBodyValue(current, {:?}, {value})",
+            "poolsterWithBodyValue(current, {:?}, {value})",
             input
                 .body_path
                 .as_deref()
@@ -1038,14 +1038,14 @@ fn pagination_input_update(input: &PaginationInput, value: &str) -> String {
         )
     } else {
         format!(
-            "kajiWithValue(current, {:?}, {:?}, {value})",
+            "poolsterWithValue(current, {:?}, {:?}, {value})",
             input.location, input.name
         )
     }
 }
 
 fn pagination_helpers() -> &'static str {
-    "\nconst kajiJsonPath = (value: unknown, path: string): unknown => {\n  const segments: (string | number)[] = []\n  if (path.startsWith('/')) {\n    for (const part of path.slice(1).split('/')) {\n      if (/~(?![01])/.test(part)) return undefined\n      segments.push(part.replace(/~1/g, '/').replace(/~0/g, '~'))\n    }\n  } else if (path.startsWith('$')) {\n    let rest = path.slice(1)\n    while (rest) {\n      const match = /^(?:\\.([^.[\\]]+)|\\[(-?\\d+)\\])/.exec(rest)\n      if (!match) return undefined\n      segments.push(match[1] ?? Number(match[2]))\n      rest = rest.slice(match[0].length)\n    }\n  } else return undefined\n  let current: unknown = value\n  for (const segment of segments) {\n    if (Array.isArray(current)) {\n      if (typeof segment === 'string' && !/^(?:0|[1-9]\\d*)$/.test(segment)) return undefined\n      const index = Number(segment)\n      if (!Number.isSafeInteger(index)) return undefined\n      const position = index < 0 ? current.length + index : index\n      if (!Object.hasOwn(current, position)) return undefined\n      current = current[position]\n    } else if (current && typeof current === 'object' && Object.hasOwn(current, segment)) current = (current as Record<string, unknown>)[segment]\n    else return undefined\n  }\n  return current\n}\nconst kajiPaginationUrl = (response: unknown, path: string): string | undefined => {\n  const value = kajiJsonPath(response, path)\n  return typeof value === 'string' && value.trim() ? value : undefined\n}\nconst kajiOptionValue = (options: unknown, location: string, name: string): unknown => {\n  const current = (options ?? {}) as Record<string, unknown>\n  const section = current[location] as Record<string, unknown> | undefined\n  return section?.[name]\n}\nconst kajiWithValue = (options: unknown, location: string, name: string, value: unknown): Record<string, unknown> => {\n  const current = (options ?? {}) as Record<string, unknown>\n  const section = (current[location] ?? {}) as Record<string, unknown>\n  return { ...current, [location]: { ...section, [name]: value } }\n}\n// `bodyPath` is an explicit RFC 6901 JSON Pointer. This helper creates new\n// objects/arrays only along that declared path; it never mutates caller input\n// and refuses to invent a missing array shape.\nconst kajiJsonPointer = (path: string): string[] | undefined => {\n  if (!path.startsWith('/') || path.includes('//')) return undefined\n  return path.slice(1).split('/').map((part) => part.split('~1').join('/').split('~0').join('~'))\n}\nconst kajiBodyValue = (options: unknown, path: string): unknown => {\n  const current = (options ?? {}) as Record<string, unknown>\n  const pointer = kajiJsonPointer(path)\n  if (!pointer) return undefined\n  let value: unknown = current.body\n  for (const key of pointer) {\n    if (value === null || typeof value !== 'object') return undefined\n    value = Array.isArray(value) ? value[Number(key)] : (value as Record<string, unknown>)[key]\n  }\n  return value\n}\nconst kajiWithBodyValue = (options: unknown, path: string, value: unknown): Record<string, unknown> | undefined => {\n  const current = (options ?? {}) as Record<string, unknown>\n  const pointer = kajiJsonPointer(path)\n  if (!pointer || pointer.length === 0) return undefined\n  const update = (node: unknown, index: number): unknown | undefined => {\n    const key = pointer[index]\n    if (Array.isArray(node)) {\n      if (!/^\\d+$/.test(key)) return undefined\n      const position = Number(key)\n      if (!Number.isSafeInteger(position) || position < 0 || position >= node.length) return undefined\n      const copy = node.slice()\n      const next = index + 1 === pointer.length ? value : update(node[position], index + 1)\n      if (next === undefined) return undefined\n      copy[position] = next\n      return copy\n    }\n    if (node !== null && typeof node === 'object') {\n      const record = node as Record<string, unknown>\n      const next = index + 1 === pointer.length ? value : update(record[key] ?? {}, index + 1)\n      if (next === undefined) return undefined\n      return { ...record, [key]: next }\n    }\n    // An absent optional object can be created, but scalar and array shapes\n    // remain unrepresentable without a schema-directed declaration.\n    if (node === undefined || node === null) return update({}, index)\n    return undefined\n  }\n  const body = update(current.body ?? {}, 0)\n  return body === undefined ? undefined : { ...current, body }\n}\n"
+    "\nconst poolsterJsonPath = (value: unknown, path: string): unknown => {\n  const segments: (string | number)[] = []\n  if (path.startsWith('/')) {\n    for (const part of path.slice(1).split('/')) {\n      if (/~(?![01])/.test(part)) return undefined\n      segments.push(part.replace(/~1/g, '/').replace(/~0/g, '~'))\n    }\n  } else if (path.startsWith('$')) {\n    let rest = path.slice(1)\n    while (rest) {\n      const match = /^(?:\\.([^.[\\]]+)|\\[(-?\\d+)\\])/.exec(rest)\n      if (!match) return undefined\n      segments.push(match[1] ?? Number(match[2]))\n      rest = rest.slice(match[0].length)\n    }\n  } else return undefined\n  let current: unknown = value\n  for (const segment of segments) {\n    if (Array.isArray(current)) {\n      if (typeof segment === 'string' && !/^(?:0|[1-9]\\d*)$/.test(segment)) return undefined\n      const index = Number(segment)\n      if (!Number.isSafeInteger(index)) return undefined\n      const position = index < 0 ? current.length + index : index\n      if (!Object.hasOwn(current, position)) return undefined\n      current = current[position]\n    } else if (current && typeof current === 'object' && Object.hasOwn(current, segment)) current = (current as Record<string, unknown>)[segment]\n    else return undefined\n  }\n  return current\n}\nconst poolsterPaginationUrl = (response: unknown, path: string): string | undefined => {\n  const value = poolsterJsonPath(response, path)\n  return typeof value === 'string' && value.trim() ? value : undefined\n}\nconst poolsterOptionValue = (options: unknown, location: string, name: string): unknown => {\n  const current = (options ?? {}) as Record<string, unknown>\n  const section = current[location] as Record<string, unknown> | undefined\n  return section?.[name]\n}\nconst poolsterWithValue = (options: unknown, location: string, name: string, value: unknown): Record<string, unknown> => {\n  const current = (options ?? {}) as Record<string, unknown>\n  const section = (current[location] ?? {}) as Record<string, unknown>\n  return { ...current, [location]: { ...section, [name]: value } }\n}\n// `bodyPath` is an explicit RFC 6901 JSON Pointer. This helper creates new\n// objects/arrays only along that declared path; it never mutates caller input\n// and refuses to invent a missing array shape.\nconst poolsterJsonPointer = (path: string): string[] | undefined => {\n  if (!path.startsWith('/') || path.includes('//')) return undefined\n  return path.slice(1).split('/').map((part) => part.split('~1').join('/').split('~0').join('~'))\n}\nconst poolsterBodyValue = (options: unknown, path: string): unknown => {\n  const current = (options ?? {}) as Record<string, unknown>\n  const pointer = poolsterJsonPointer(path)\n  if (!pointer) return undefined\n  let value: unknown = current.body\n  for (const key of pointer) {\n    if (value === null || typeof value !== 'object') return undefined\n    value = Array.isArray(value) ? value[Number(key)] : (value as Record<string, unknown>)[key]\n  }\n  return value\n}\nconst poolsterWithBodyValue = (options: unknown, path: string, value: unknown): Record<string, unknown> | undefined => {\n  const current = (options ?? {}) as Record<string, unknown>\n  const pointer = poolsterJsonPointer(path)\n  if (!pointer || pointer.length === 0) return undefined\n  const update = (node: unknown, index: number): unknown | undefined => {\n    const key = pointer[index]\n    if (Array.isArray(node)) {\n      if (!/^\\d+$/.test(key)) return undefined\n      const position = Number(key)\n      if (!Number.isSafeInteger(position) || position < 0 || position >= node.length) return undefined\n      const copy = node.slice()\n      const next = index + 1 === pointer.length ? value : update(node[position], index + 1)\n      if (next === undefined) return undefined\n      copy[position] = next\n      return copy\n    }\n    if (node !== null && typeof node === 'object') {\n      const record = node as Record<string, unknown>\n      const next = index + 1 === pointer.length ? value : update(record[key] ?? {}, index + 1)\n      if (next === undefined) return undefined\n      return { ...record, [key]: next }\n    }\n    // An absent optional object can be created, but scalar and array shapes\n    // remain unrepresentable without a schema-directed declaration.\n    if (node === undefined || node === null) return update({}, index)\n    return undefined\n  }\n  const body = update(current.body ?? {}, 0)\n  return body === undefined ? undefined : { ...current, body }\n}\n"
 }
 
 pub(crate) fn sdk_client_name(api_name: &str) -> String {
@@ -1924,7 +1924,9 @@ mod tests {
                     }],
                 }],
                 security: vec![SecurityRequirement {
-                    schemes: [("kajiApiKey".into(), Vec::new())].into_iter().collect(),
+                    schemes: [("poolsterApiKey".into(), Vec::new())]
+                        .into_iter()
+                        .collect(),
                 }],
                 ..Operation::default()
             }],
@@ -1932,7 +1934,7 @@ mod tests {
         };
         let catalog = SecuritySchemeCatalog {
             schemes: vec![SecurityScheme {
-                name: "kajiApiKey".into(),
+                name: "poolsterApiKey".into(),
                 description: None,
                 kind: SecuritySchemeKind::ApiKey {
                     name: Some("X-API-Key".into()),
@@ -1946,9 +1948,9 @@ mod tests {
         let operation = tree
             .get("sdk/typescript/clients/messages/listMessages.ts")
             .unwrap();
-        assert!(runtime.contains("\"kajiApiKey\"?: string"));
+        assert!(runtime.contains("\"poolsterApiKey\"?: string"));
         assert!(runtime.contains("applySecurity"));
-        assert!(operation.contains("id: 'kajiApiKey'"));
+        assert!(operation.contains("id: 'poolsterApiKey'"));
         assert!(operation.contains("name: 'X-API-Key', in: 'header'"));
     }
 
@@ -1976,7 +1978,7 @@ mod tests {
             }),
         );
         let source = format!(
-            "type ClientInstance = (request: any) => Promise<any>;\nconst seen: number[]=[];\nconst listItems=async (options: any) => {{ seen.push(options.query.page); return {{'a/b':{{'~items':[options.query.page < 3 || options.query.page === Number.MAX_SAFE_INTEGER ? [options.query.page] : []]}}}} }};\n{}\nclass Pages {{ transport: ClientInstance=async request=>request; listItemsPages!: (options: any) => AsyncGenerator<any>; constructor() {{ {} }} }}\n(async()=>{{ const p=new Pages(); let count=0; for await (const page of p.listItemsPages({{}})) count++; if(count!==3 || seen.join(',')!=='1,2,3') throw Error('default page failed'); seen.length=0; for await (const page of p.listItemsPages({{query:{{page:0,limit:2}}}})) {{}}; if(seen.join(',')!=='0') throw Error('zero or short limit failed'); if(kajiJsonPath([{{items:[1,2]}}], '$[0].items[-1]')!==2) throw Error('selector failed'); if(kajiJsonPath([10,20], '/01')!==undefined || kajiJsonPath([10,20], '/-1')!==undefined || kajiJsonPath([10,20], '/')!==undefined || kajiJsonPath({{'a/b': 1}}, '/a~2b')!==undefined) throw Error('invalid pointer accepted'); const original={{query:{{page:0,limit:2}}}}; for await (const page of p.listItemsPages(original)) {{}}; if(original.query.page!==0) throw Error('caller mutated'); seen.length=0; for await(const page of p.listItemsPages({{query:{{page:Number.MAX_SAFE_INTEGER}}}})) {{}}; if(seen.length!==1) throw Error('unsafe page advanced'); for(const limit of [true,0,-1,1.5]) {{ let failed=false; try {{ for await (const result of p.listItemsPages({{query:{{limit}}}})) {{}} }} catch {{ failed=true }} if(!failed) throw Error('bad limit accepted'); }} for(const page of [-1,1.5,NaN]) {{ let failed=false; try {{ for await (const result of p.listItemsPages({{query:{{page}}}})) {{}} }} catch {{ failed=true }} if(!failed) throw Error('bad page accepted'); }} }})().catch(error=>{{ console.error(error); throw error }});",
+            "type ClientInstance = (request: any) => Promise<any>;\nconst seen: number[]=[];\nconst listItems=async (options: any) => {{ seen.push(options.query.page); return {{'a/b':{{'~items':[options.query.page < 3 || options.query.page === Number.MAX_SAFE_INTEGER ? [options.query.page] : []]}}}} }};\n{}\nclass Pages {{ transport: ClientInstance=async request=>request; listItemsPages!: (options: any) => AsyncGenerator<any>; constructor() {{ {} }} }}\n(async()=>{{ const p=new Pages(); let count=0; for await (const page of p.listItemsPages({{}})) count++; if(count!==3 || seen.join(',')!=='1,2,3') throw Error('default page failed'); seen.length=0; for await (const page of p.listItemsPages({{query:{{page:0,limit:2}}}})) {{}}; if(seen.join(',')!=='0') throw Error('zero or short limit failed'); if(poolsterJsonPath([{{items:[1,2]}}], '$[0].items[-1]')!==2) throw Error('selector failed'); if(poolsterJsonPath([10,20], '/01')!==undefined || poolsterJsonPath([10,20], '/-1')!==undefined || poolsterJsonPath([10,20], '/')!==undefined || poolsterJsonPath({{'a/b': 1}}, '/a~2b')!==undefined) throw Error('invalid pointer accepted'); const original={{query:{{page:0,limit:2}}}}; for await (const page of p.listItemsPages(original)) {{}}; if(original.query.page!==0) throw Error('caller mutated'); seen.length=0; for await(const page of p.listItemsPages({{query:{{page:Number.MAX_SAFE_INTEGER}}}})) {{}}; if(seen.length!==1) throw Error('unsafe page advanced'); for(const limit of [true,0,-1,1.5]) {{ let failed=false; try {{ for await (const result of p.listItemsPages({{query:{{limit}}}})) {{}} }} catch {{ failed=true }} if(!failed) throw Error('bad limit accepted'); }} for(const page of [-1,1.5,NaN]) {{ let failed=false; try {{ for await (const result of p.listItemsPages({{query:{{page}}}})) {{}} }} catch {{ failed=true }} if(!failed) throw Error('bad page accepted'); }} }})().catch(error=>{{ console.error(error); throw error }});",
             pagination_helpers(),
             iterator
         );
@@ -2025,9 +2027,9 @@ mod tests {
                 num_pages_path: None,
             }),
         );
-        assert!(iterator.contains("kajiJsonPath(response, \"$.data.results\")"));
+        assert!(iterator.contains("poolsterJsonPath(response, \"$.data.results\")"));
         assert!(iterator.contains("currentValue + items.length"));
-        assert!(iterator.contains("kajiWithValue(current, \"query\", \"offset\", nextValue)"));
+        assert!(iterator.contains("poolsterWithValue(current, \"query\", \"offset\", nextValue)"));
     }
 
     #[test]
@@ -2069,9 +2071,11 @@ mod tests {
             "listThings",
             &Pagination::Cursor(cursor_pager),
         );
-        assert!(iterator.contains("kajiWithBodyValue(current, \"/filters/page/cursor\", cursor)"));
-        assert!(iterator.contains("const next = kajiWithBodyValue"));
-        assert!(pagination_helpers().contains("kajiJsonPointer"));
+        assert!(
+            iterator.contains("poolsterWithBodyValue(current, \"/filters/page/cursor\", cursor)")
+        );
+        assert!(iterator.contains("const next = poolsterWithBodyValue"));
+        assert!(pagination_helpers().contains("poolsterJsonPointer"));
 
         let invalid = Operation {
             annotations: BTreeMap::from([(
@@ -2109,8 +2113,8 @@ mod tests {
             num_pages_path: None,
         };
         let rendered = render_offset_pagination(&pagination);
-        assert!(rendered.contains("kajiBodyValue(current, \"/page/offset\")"));
-        assert!(rendered.contains("kajiWithBodyValue(current, \"/page/offset\", nextValue)"));
+        assert!(rendered.contains("poolsterBodyValue(current, \"/page/offset\")"));
+        assert!(rendered.contains("poolsterWithBodyValue(current, \"/page/offset\", nextValue)"));
     }
 
     #[test]
@@ -2126,7 +2130,7 @@ mod tests {
         assert!(iterator.contains("paginationClient({ ...operation, paginationUrl: nextUrl })"));
         assert!(iterator.contains("await listThings({ ...requestOptions, client: request }"));
         assert!(iterator.contains("query: undefined"));
-        assert!(iterator.contains("kajiPaginationUrl(response, \"$.links.next\")"));
+        assert!(iterator.contains("poolsterPaginationUrl(response, \"$.links.next\")"));
         assert!(!iterator.contains("url: nextUrl"));
 
         let fetch_runtime = poolster_runtime(SdkTransport::Fetch, None);

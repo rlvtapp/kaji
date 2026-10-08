@@ -21,6 +21,7 @@ mod tests {
             crate::sdk::SdkTransport::Axios,
         ] {
             let root = tempfile::tempdir().unwrap();
+            std::os::unix::fs::symlink(&dependencies, root.path().join("node_modules")).unwrap();
             fs::write(
                 root.path().join("runtime.ts"),
                 crate::sdk::poolster_runtime(transport, None),
@@ -43,9 +44,7 @@ mod tests {
                     "--strict",
                     "--skipLibCheck",
                     "--esModuleInterop",
-                    "--baseUrl",
                 ])
-                .arg(&dependencies)
                 .arg("runtime.ts")
                 .current_dir(root.path())
                 .output()
@@ -62,7 +61,7 @@ mod tests {
                 .current_dir(root.path())
                 .env("NODE_PATH", &dependencies);
             if matches!(transport, crate::sdk::SdkTransport::Axios) {
-                command.env("KAJI_CONTROL_AXIOS", "1");
+                command.env("POOLSTER_CONTROL_AXIOS", "1");
             }
             let output = command.output().unwrap();
             assert!(

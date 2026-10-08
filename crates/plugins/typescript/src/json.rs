@@ -222,7 +222,7 @@ pub(crate) fn shared_refs(
             "import {{ refs as chunk{index} }} from './{name}'\n"
         ));
     }
-    root.push_str("export const kajiJsonRefs: Record<string, JsonShape | null> = {\n");
+    root.push_str("export const poolsterJsonRefs: Record<string, JsonShape | null> = {\n");
     for index in 0..files.len() {
         root.push_str(&format!("  ...chunk{index},\n"));
     }
@@ -596,7 +596,7 @@ mod tests {
         assert!(shared.contains("\"integer\""));
         for (path, source) in tree.iter() {
             if path.starts_with("ts/clients") && source.contains("jsonPlan:") {
-                assert!(source.contains("kajiJsonRefs"), "{}", path.display());
+                assert!(source.contains("poolsterJsonRefs"), "{}", path.display());
                 assert!(!source.contains("\"integer\""), "{}", path.display());
                 assert!(source.len() < 4_000, "{}: {}", path.display(), source.len());
             }

@@ -145,13 +145,13 @@ pub(crate) fn generate(api: &Api, config: &ArtifactOptions) -> Result<Vec<Genera
         for &index in indices {
             let schema = &api.schemas[index];
             let name = render::type_identifier(&schema.name);
-            source.push_str(&format!("import type {{ {name} }} from '{prefix}models';\nexport function create{name}(__depth = 0): {name} {{ return __kajiFixtures.create({}, __depth) as {name}; }}\n",render::js_string(&schema.name)));
+            source.push_str(&format!("import type {{ {name} }} from '{prefix}models';\nexport function create{name}(__depth = 0): {name} {{ return __poolsterFixtures.create({}, __depth) as {name}; }}\n",render::js_string(&schema.name)));
         }
         source
     };
     if !split {
         let mut source = runtime.to_owned();
-        source.push_str(&format!("\nconst __poolsterSchemas: Record<string, FixtureSchema> = {{ {} }};\nconst __kajiFixtures = createFixtureRuntime(__poolsterSchemas, {settings});\nexport const seedPoolsterFixtures = (seed: number | number[]) => __kajiFixtures.seed(seed);\n",api.schemas.iter().zip(&descriptors).map(|(schema,value)|format!("{}: {value}",render::js_string(&schema.name))).collect::<Vec<_>>().join(",")));
+        source.push_str(&format!("\nconst __poolsterSchemas: Record<string, FixtureSchema> = {{ {} }};\nconst __poolsterFixtures = createFixtureRuntime(__poolsterSchemas, {settings});\nexport const seedPoolsterFixtures = (seed: number | number[]) => __poolsterFixtures.seed(seed);\n",api.schemas.iter().zip(&descriptors).map(|(schema,value)|format!("{}: {value}",render::js_string(&schema.name))).collect::<Vec<_>>().join(",")));
         source.push_str(&factory(&(0..api.schemas.len()).collect::<Vec<_>>(), "./"));
         return Ok(vec![file(config, "faker.ts", source)?]);
     }
@@ -178,7 +178,7 @@ pub(crate) fn generate(api: &Api, config: &ArtifactOptions) -> Result<Vec<Genera
             shapes,
         )?);
         let source = format!(
-            "import {{ __kajiFixtures }} from './runtime';\n{}",
+            "import {{ __poolsterFixtures }} from './runtime';\n{}",
             factory(indices, "../")
         );
         files.push(file(
@@ -199,7 +199,7 @@ pub(crate) fn generate(api: &Api, config: &ArtifactOptions) -> Result<Vec<Genera
         registries.join(",")
     ));
     files.push(file(config, "faker_chunks/schemas.ts", schemas)?);
-    files.push(file(config,"faker_chunks/runtime.ts",format!("{runtime}\nimport {{ schemas }} from './schemas';\nexport const __kajiFixtures = createFixtureRuntime(schemas, {settings});\nexport const seedPoolsterFixtures = (seed: number | number[]) => __kajiFixtures.seed(seed);\n"))?);
+    files.push(file(config,"faker_chunks/runtime.ts",format!("{runtime}\nimport {{ schemas }} from './schemas';\nexport const __poolsterFixtures = createFixtureRuntime(schemas, {settings});\nexport const seedPoolsterFixtures = (seed: number | number[]) => __poolsterFixtures.seed(seed);\n"))?);
     files.push(file(config, "faker.ts", root)?);
     Ok(files)
 }

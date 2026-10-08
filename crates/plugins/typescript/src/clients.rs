@@ -76,7 +76,7 @@ pub(crate) fn generate_operations(
             if let Some(rule) = poolster_core::poolster_extension(&operation.annotations, "idempotency-resolved") {
                 let header = serde_json::to_string(rule.get("header").and_then(Value::as_str).unwrap())?;
                 let auto_generate = rule.get("auto_generate").and_then(Value::as_bool).unwrap_or(false);
-                source = source.replace("  const { client: request = client, ...config } = options", &format!("  const {{ client: request = client, ...config }} = options\n  const idempotencyHeaders = kajiIdempotencyHeaders(config.headers, {header}, {auto_generate})"));
+                source = source.replace("  const { client: request = client, ...config } = options", &format!("  const {{ client: request = client, ...config }} = options\n  const idempotencyHeaders = poolsterIdempotencyHeaders(config.headers, {header}, {auto_generate})"));
                 source = source.replace("      ...config,", &format!("      ...config,\n      headers: idempotencyHeaders,\n      idempotencyHeader: {header},"));
                 source.push_str(include_str!("../templates/idempotency_headers.ts.tmpl"));
             }
@@ -86,12 +86,12 @@ pub(crate) fn generate_operations(
                 .as_ref()
                 .and_then(|options| crate::json::operation_inline_plan(api, operation, options))
             {
-                let plan = format!("{{ lossless: {}, refs: kajiJsonRefs, requests: {}, responses: {} }}",
+                let plan = format!("{{ lossless: {}, refs: poolsterJsonRefs, requests: {}, responses: {} }}",
                     serde_json::to_string(&plan["lossless"])?,
                     serde_json::to_string(&plan["requests"])?,
                     serde_json::to_string(&plan["responses"])?);
                 let prefix = if grouped_directory(operation, config, group_by_tag).is_some() { "../" } else { "./" };
-                source = format!("import {{ kajiJsonRefs }} from '{prefix}_poolster_json_refs'\n{source}");
+                source = format!("import {{ poolsterJsonRefs }} from '{prefix}_poolster_json_refs'\n{source}");
                 source = source.replace(
                     "      ...config,",
                     &format!("      jsonPlan: {plan},\n      ...config,"),
