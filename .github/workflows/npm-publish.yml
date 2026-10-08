@@ -37,7 +37,7 @@ jobs:
         working-directory: openapi
         run: go test ./...
       - name: Run generated SDK contract suite
-        run: cargo test -p poolster --test sdk_to_mock_contract -- --ignored
+        run: cargo test -p poolster --features all-plugins --test sdk_to_mock_contract -- --ignored
       - name: Build Poolster and OpenAPI sidecar
         run: |
           cargo build -p poolster-cli --locked
@@ -233,6 +233,16 @@ jobs:
       - name: Pack SDK
         working-directory: packages/npm/sdk
         run: npm pack --ignore-scripts
+      - name: Test and pack independent bundler integration
+        working-directory: packages/integrations/unplugin
+        run: |
+          npm test
+          npm pack --ignore-scripts
+      - uses: actions/upload-artifact@v7
+        with:
+          name: node-unplugin
+          path: packages/integrations/unplugin/*.tgz
+          if-no-files-found: error
       - name: Pack language plugins
         run: |
           node packages/npm/generate-plugins.mjs --check
@@ -290,10 +300,20 @@ jobs:
         with:
           name: node-plugins
           path: release-artifacts/node-plugins
+      - uses: actions/download-artifact@v8
+        with:
+          name: node-unplugin
+          path: release-artifacts/unplugin
       - uses: actions/setup-node@v7
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
+      - name: Select npm distribution channel
+        run: |
+          case "${GITHUB_REF_NAME#v}" in
+            *-*) echo "NPM_DIST_TAG=alpha" >> "$GITHUB_ENV" ;;
+            *) echo "NPM_DIST_TAG=latest" >> "$GITHUB_ENV" ;;
+          esac
       - name: Verify release version
         run: |
           tag="${GITHUB_REF_NAME#v}"
@@ -305,20 +325,34 @@ jobs:
       - name: Publish native packages
         run: |
           for package in release-artifacts/native/*.tgz; do
-            npm publish "$package" --access public
+            npm publish "$package" --access public --tag "$NPM_DIST_TAG"
           done
           for package in release-artifacts/sdk-native/*.tgz; do
-            npm publish "$package" --access public
+            npm publish "$package" --access public --tag "$NPM_DIST_TAG"
           done
       - name: Publish CLI and SDK
         run: |
-          npm publish release-artifacts/cli/*.tgz --access public
-          npm publish release-artifacts/sdk/*.tgz --access public
+          npm publish release-artifacts/cli/*.tgz --access public --tag "$NPM_DIST_TAG"
+          npm publish release-artifacts/sdk/*.tgz --access public --tag "$NPM_DIST_TAG"
       - name: Publish language plugins
         run: |
           for package in release-artifacts/node-plugins/*.tgz; do
-            npm publish "$package" --access public
+            npm publish "$package" --access public --tag "$NPM_DIST_TAG"
           done
+
+      - name: Publish independent bundler integration
+        run: |
+          package_name="$(node -p "require('./packages/integrations/unplugin/package.json').name")"
+          package_version="$(node -p "require('./packages/integrations/unplugin/package.json').version")"
+          # This integration owns its version; do not compare it with the release tag.
+          if npm view "$package_name@$package_version" version --json > "$RUNNER_TEMP/unplugin-registry.json"; then
+            echo "$package_name@$package_version is already published; leaving its existing tags unchanged"
+          elif node -e 'const fs = require("node:fs"); const result = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); process.exit(result.error?.code === "E404" ? 0 : 1)' "$RUNNER_TEMP/unplugin-registry.json"; then
+            npm publish release-artifacts/unplugin/*.tgz --access public --tag "$NPM_DIST_TAG"
+          else
+            echo "Cannot verify the independently versioned integration on npm" >&2
+            exit 1
+          fi
 
   publish-crates:
     name: Publish Rust SDK to crates.io
@@ -360,7 +394,8 @@ jobs:
         run: |
           tag="${GITHUB_REF_NAME#v}"
           version="$(python -c 'from pathlib import Path; import re; source = Path("packages/python/setup.py").read_text(); print(re.search(r"version=\"([^\"]+)\"", source).group(1))')"
-          test "$tag" = "$version"
+          python -m pip install --disable-pip-version-check 'packaging==25.0'
+          python -c 'import sys; from packaging.version import Version; assert Version(sys.argv[1]) == Version(sys.argv[2]), f"release version mismatch: {sys.argv[1]} != {sys.argv[2]}"' "$tag" "$version"
       - name: Publish platform-native wheels
         uses: pypa/gh-action-pypi-publish@v1.14.2
         with:

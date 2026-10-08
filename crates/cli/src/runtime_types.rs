@@ -3,6 +3,7 @@ use super::*;
 #[derive(Debug)]
 pub(super) struct Generate {
     pub(super) source: Option<OpenApiInput>,
+    pub(super) native_input: Option<NativeInputConfig>,
     pub(super) config: Option<PathBuf>,
     pub(super) config_packages: Option<Vec<PackageConfig>>,
     pub(super) artifacts: Option<PathBuf>,

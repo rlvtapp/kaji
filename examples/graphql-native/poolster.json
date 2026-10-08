@@ -1,0 +1,17 @@
+{
+  "input": {
+    "format": "graphql",
+    "provider": "graphql.apollo",
+    "path": "schema.graphql",
+    "options": { "operation_files": ["operations.graphql"] }
+  },
+  "output": { "path": "generated" },
+  "packages": [
+    {
+      "language": "typescript",
+      "path": "client",
+      "name": "@example/graphql-person",
+      "plugins": [{ "name": "graphql" }]
+    }
+  ]
+}

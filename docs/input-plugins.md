@@ -18,9 +18,11 @@ Source -> InputPlugin -> InputContract -> InputProvider<C> -> Plugin<L> -> files
 | `InputProvider<C>` | Publish the selected input capability in a package graph. |
 | `Plugin<L>` | Declare requirements, consume contracts and emit output. |
 
-The current providers support inspection and native contract publication. Existing
-HTTP SDKs consume `AdaptedApi`; GraphQL, event, RPC and workflow SDKs need native
-output consumers. See [architecture](architecture.md) for the layer boundaries.
+Providers support inspection and native contract publication. GraphQL now also
+publishes Poolster-owned `GraphqlOperations` for the TypeScript native output
+pipeline. Existing HTTP SDKs consume `AdaptedApi`; RPC, event and workflow usable
+output pipelines remain follow-up work. See the [native support matrix](native-pipelines.md)
+and [architecture](architecture.md) for the boundaries.
 
 The [Node API](../packages/npm/sdk/README.md#input-plugins) exposes the same five
 compiled Rust providers through individually installable npm input packages and
@@ -52,7 +54,7 @@ this inspection. Workflow inspection does not perform API calls.
 
 | Format | Provider | Published native contract | Scope |
 | --- | --- | --- | --- |
-| GraphQL SDL | `graphql.apollo` | `GraphqlDocument` | Apollo validated schema; query/mutation/subscription roots, arguments, type wrappers, directives and extensions |
+| GraphQL SDL + operations | `graphql.apollo` | `GraphqlDocument`, optionally `GraphqlOperations` | Apollo validated native schema plus parser-independent selections/variables/results for TypeScript generation |
 | AsyncAPI | `asyncapi.roas` | `AsyncApiDocument` | 2.6.0, 3.0.0 and 3.1.0 typed models plus source JSON; channels/messages/bindings retained; invalid local references fail, external references require bundling |
 | Arazzo | `arazzo.roas` | `ArazzoDocument` | 1.0.0, 1.0.1 and 1.1.0 typed models plus source JSON; dependency/step checks, reusable references, source URLs and criteria retained; no execution |
 | Protobuf | `protobuf.protox` | `ProtobufDocument` | Pure Rust compilation to descriptor pool; imports relative to the root directory; message/enum/service types and all RPC streaming forms |
@@ -61,8 +63,8 @@ this inspection. Workflow inspection does not perform API calls.
 Cap'n Proto requires the `capnp` executable on PATH. Its binary descriptor parser
 is tested independently; real source compilation is a separate check requiring
 that executable. Protobuf include directories beyond the root directory are not
-configurable in this first interface. GraphQL accepts a complete SDL schema;
-introspection JSON and separate operation documents are not accepted as SDL.
+configurable in this first interface. GraphQL accepts a complete SDL schema and `InputOptions.operation_files` for
+separate executable documents. Introspection JSON is not supported.
 
 ## Select or replace a provider
 
@@ -121,7 +123,10 @@ let input_handle = input.handle();
 // Register the input and consumer in the same Package<L>.
 ```
 
-Handles remain package-local. Consumers request their native document capability.
+Handles remain package-local. Generation consumers should request the
+Poolster-owned protocol capability; inspection consumers may request native parser
+documents. See [native generation](native-pipelines.md) for the GraphQL recipe,
+warning/skip policy and subscription transport boundary.
 See [typed plugin contracts](typed-plugins.md#contracts-describe-actual-outputs)
 for dependency declarations and output publication.
 
@@ -174,7 +179,7 @@ SHA-256 digests; normal tests do not download documents.
 
 | Input | Retained upstream corpus | Coverage |
 | --- | --- | --- |
-| GraphQL | GitHub schema from Octokit, 1.18 MB | Native validation, publication, broken-reference rejection, documentation output |
+| GraphQL | GitHub schema from Octokit, 1.18 MB | Native validation/publication, operation lowering, broken-reference rejection, documentation output; generated package checks described separately |
 | AsyncAPI | Official Slack RTM 2.6/3.0/3.1, ADEO Kafka, Kraken WebSocket, 10–25 KB each | Versions, exact operations/types, event output, external-reference rejection |
 | Arazzo | Official BNPL, FAPI PAR, OAuth, pet coupons, 5–10 KB each | Exact workflows/steps, source diagnostics, workflow output |
 | Protobuf | Official v21.12 conformance schema and imports, 51 KB | 135 types, 2 methods, repository import roots; v29.3 editions rejected explicitly |
@@ -191,7 +196,8 @@ The CLI searches the input directory by default. Protobuf supports proto2/proto3
 and reports editions as unsupported. GraphQL validates SDL defaults in addition
 to Apollo’s schema checks.
 
-For the full test matrix, ignored toolchain checks and known baseline snapshot
-failure, see [verification](verification.md). Corpus tests establish parsing and
+For GraphQL generation capabilities and concrete protocol/Forge follow-ups, see
+[native pipelines](native-pipelines.md). For the full test matrix, ignored
+toolchain checks and baseline failures, see [verification](verification.md). Corpus tests establish parsing and
 source-to-documentation routing; generated SDK compilation and runtime behavior
 require separate format-specific generators and tests.

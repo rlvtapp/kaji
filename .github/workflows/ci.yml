@@ -61,10 +61,12 @@ jobs:
           cargo test -p poolster-cli eject::tests::rebuilt_ejected_renderer_consumes_custom_source -- --ignored
           cargo test -p poolster-cli --test local_references -- --ignored
           cargo test -p poolster-cli --test migration -- --ignored
-      - name: Verify generated TypeScript middleware and response decoding
+      - name: Verify generated TypeScript middleware, GraphQL and response decoding
         run: |
-          npm install --prefix "$RUNNER_TEMP/poolster-ts-runtime" --no-audit --no-fund typescript@5.9.3 axios@1.20.0
+          npm install --prefix "$RUNNER_TEMP/poolster-ts-runtime" --no-audit --no-fund typescript@5.9.3 axios@1.20.0 graphql@16.14.2
           export POOLSTER_TSC_JS="$RUNNER_TEMP/poolster-ts-runtime/node_modules/typescript/lib/tsc.js"
+          export POOLSTER_GRAPHQL_JS="$RUNNER_TEMP/poolster-ts-runtime/node_modules/graphql/index.js"
+          cargo test -p poolster-plugin-typescript --test graphql_native -- --include-ignored
           export POOLSTER_AXIOS_NODE_MODULES="$RUNNER_TEMP/poolster-ts-runtime/node_modules"
           export POOLSTER_TS_AXIOS_NODE_MODULES="$RUNNER_TEMP/poolster-ts-runtime/node_modules"
           cargo test -p poolster-plugin-typescript generated_middleware_fetch_and_axios_execute -- --ignored
@@ -121,7 +123,7 @@ jobs:
         working-directory: openapi
         run: go test ./...
       - name: Run generated SDK contract suite
-        run: cargo test -p poolster --test sdk_to_mock_contract -- --ignored
+        run: cargo test -p poolster --features all-plugins --test sdk_to_mock_contract -- --ignored
       - name: Build Poolster once
         run: |
           cargo build -p poolster-cli --locked

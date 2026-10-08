@@ -38,6 +38,7 @@ pub struct GeneratedTree {
     files: BTreeMap<PathBuf, String>,
     preserve_existing: BTreeSet<PathBuf>,
     owners: BTreeMap<PathBuf, String>,
+    retained_prefixes: BTreeSet<PathBuf>,
 }
 
 type OutputPlan = (
@@ -112,6 +113,7 @@ impl GeneratedTree {
             files,
             preserve_existing,
             mut owners,
+            retained_prefixes: _,
         } = self;
         files.into_iter().map(move |(path, contents)| {
             let custom = preserve_existing.contains(&path);
@@ -134,6 +136,8 @@ impl GeneratedTree {
     }
 
     pub fn append(&mut self, other: GeneratedTree) -> Result<()> {
+        self.retained_prefixes
+            .extend(other.retained_prefixes.iter().cloned());
         for (file, custom, owner) in other.into_owned_files() {
             let path = file.path.clone();
             if custom {
@@ -145,6 +149,34 @@ impl GeneratedTree {
                 self.set_owner(path, owner)?;
             }
         }
+        Ok(())
+    }
+
+    /// Retain prior ownership and bytes for a skipped package during mixed generation.
+    /// Files under this prefix are neither written nor removed, including local edits.
+    /// The prior hash is retained so skipping does not silently adopt those edits.
+    pub fn preserve_owned_prefix(
+        &mut self,
+        root: impl AsRef<Path>,
+        prefix: impl AsRef<Path>,
+    ) -> Result<()> {
+        let prefix = prefix.as_ref();
+        GeneratedFile::new(prefix, "")?;
+        let prefix: PathBuf = prefix
+            .components()
+            .filter(|part| !matches!(part, Component::CurDir))
+            .collect();
+        if prefix.as_os_str().is_empty() {
+            bail!("retained package prefix cannot be empty or '.'");
+        }
+        safe_path(root.as_ref(), &prefix)?;
+        if self.files.keys().any(|path| path.starts_with(&prefix)) {
+            bail!(
+                "retained package prefix overlaps generated files: {}",
+                prefix.display()
+            );
+        }
+        self.retained_prefixes.insert(prefix);
         Ok(())
     }
 
@@ -195,8 +227,27 @@ impl GeneratedTree {
         let mut changes = OutputChanges::default();
         let mut output = BTreeMap::new();
         let mut manifest = Ownership::default();
+        for (path, owned) in &previous.files {
+            if self
+                .retained_prefixes
+                .iter()
+                .any(|prefix| path.starts_with(prefix))
+            {
+                manifest.files.insert(path.clone(), owned.clone());
+            }
+        }
         let mut removed = Vec::new();
         for (path, generated) in &self.files {
+            if self
+                .retained_prefixes
+                .iter()
+                .any(|prefix| path.starts_with(prefix))
+            {
+                bail!(
+                    "retained package prefix overlaps generated file {}",
+                    path.display()
+                );
+            }
             GeneratedFile::new(path, "")?;
             if path == Path::new(OWNERSHIP_PATH) {
                 bail!("reserved Poolster ownership path");
@@ -267,7 +318,11 @@ impl GeneratedTree {
             output.insert(path.clone(), contents);
         }
         for (path, owned) in &previous.files {
-            if self.files.contains_key(path)
+            if self
+                .retained_prefixes
+                .iter()
+                .any(|prefix| path.starts_with(prefix))
+                || self.files.contains_key(path)
                 || owned.create_once
                 || (path.file_name().is_some_and(|name| name == "package.json")
                     && !path
@@ -327,7 +382,7 @@ impl Default for Ownership {
         }
     }
 }
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct OwnedFile {
     owner: String,
@@ -481,7 +536,49 @@ fn merge_npm_manifest(existing: &str, generated: &str) -> Result<String> {
 mod tests {
     use std::fs;
 
-    use super::{GeneratedFile, GeneratedTree};
+    use super::{GeneratedFile, GeneratedTree, OWNERSHIP_PATH};
+
+    #[test]
+    fn skipped_package_preserves_bytes_and_prior_ownership_without_adopting_edits() {
+        let root = tempfile::tempdir().unwrap();
+        let mut initial = GeneratedTree::default();
+        initial
+            .insert(GeneratedFile::new("skipped/model.ts", "original").unwrap())
+            .unwrap();
+        initial
+            .set_owner("skipped/model.ts", "original-owner")
+            .unwrap();
+        initial
+            .insert(GeneratedFile::new("active/model.ts", "old").unwrap())
+            .unwrap();
+        initial.write_to(root.path()).unwrap();
+        let previous: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(root.path().join(OWNERSHIP_PATH)).unwrap())
+                .unwrap();
+        fs::write(root.path().join("skipped/model.ts"), "local edit").unwrap();
+        let mut next = GeneratedTree::default();
+        next.insert(GeneratedFile::new("active/model.ts", "new").unwrap())
+            .unwrap();
+        next.preserve_owned_prefix(root.path(), "skipped").unwrap();
+        assert!(next.check(root.path()).unwrap().removed.is_empty());
+        next.write_to(root.path()).unwrap();
+        assert_eq!(
+            fs::read_to_string(root.path().join("skipped/model.ts")).unwrap(),
+            "local edit"
+        );
+        let current: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(root.path().join(OWNERSHIP_PATH)).unwrap())
+                .unwrap();
+        assert_eq!(
+            previous["files"]["skipped/model.ts"],
+            current["files"]["skipped/model.ts"]
+        );
+        assert!(next.preserve_owned_prefix(root.path(), "active").is_err());
+        assert!(
+            next.preserve_owned_prefix(root.path(), "../outside")
+                .is_err()
+        );
+    }
 
     #[test]
     fn ownership_checks_drift_removes_stale_files_and_preserves_custom() {

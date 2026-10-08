@@ -3,6 +3,8 @@
 //! directives, extensions and source locations for future generators.
 
 mod defaults;
+mod lowering;
+pub use lowering::lower as lower_operations;
 
 use anyhow::{Result, anyhow};
 use apollo_compiler::{Schema, schema::ExtendedType, validation::Valid};
@@ -84,6 +86,36 @@ impl poolster_core::input::InputPlugin for GraphqlInput {
         )?;
         let mut input = poolster_core::input::InputContract::new(document.summary());
 
+        input.publish(document)?;
+        Ok(input)
+    }
+    fn load_with_options(
+        &self,
+        path: &std::path::Path,
+        options: &poolster_core::input::InputOptions,
+    ) -> Result<poolster_core::input::InputContract> {
+        anyhow::ensure!(
+            options.import_roots.is_empty()
+                && options.broker.is_none()
+                && options.workflow_sources.is_empty(),
+            "GraphQL input supports operation_files only; imports, broker and workflow options are unsupported"
+        );
+        let source = std::fs::read_to_string(path)
+            .with_context(|| format!("cannot read schema {}", path.display()))?;
+        let document = parse(&source)?;
+        let operations = options
+            .operation_files
+            .iter()
+            .map(|p| {
+                std::fs::read_to_string(p)
+                    .with_context(|| format!("cannot read operation file {}", p.display()))
+            })
+            .collect::<Result<Vec<_>>>()?
+            .join("\n");
+        let mut input = poolster_core::input::InputContract::new(document.summary());
+        if !operations.trim().is_empty() {
+            input.publish(lower_operations(&document.schema, &source, &operations)?)?;
+        }
         input.publish(document)?;
         Ok(input)
     }

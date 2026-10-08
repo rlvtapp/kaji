@@ -133,9 +133,24 @@ pub fn generate_with_security_catalog(
     }
     GeneratedFile::new(&profiles.root, "")?;
     let generated = profiles.packages.generate(api, security_schemes)?;
+    prefix_generated(generated, &profiles.root)
+}
+
+/// Generate packages whose plugins consume native protocol contracts.
+/// HTTP-only packages are skipped with warnings; native contracts are never adapted into HTTP.
+pub fn generate_native(profiles: ProfileSet) -> Result<GeneratedTree> {
+    if profiles.packages.is_empty() {
+        bail!("add at least one package to the release");
+    }
+    GeneratedFile::new(&profiles.root, "")?;
+    let generated = profiles.packages.generate_native()?;
+    prefix_generated(generated, &profiles.root)
+}
+
+fn prefix_generated(generated: GeneratedTree, root: &str) -> Result<GeneratedTree> {
     let mut tree = GeneratedTree::default();
     for (file, custom, owner) in generated.into_owned_files() {
-        let file = GeneratedFile::new(Path::new(&profiles.root).join(file.path), file.contents)?;
+        let file = GeneratedFile::new(Path::new(root).join(file.path), file.contents)?;
         let path = file.path.clone();
         if custom {
             tree.insert_custom(file)?;
@@ -215,6 +230,15 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn native_generation_skips_http_plugins_without_emitting_files() {
+        let tree =
+            generate_native(ProfileSet::new("sdk").package(go::package("go").with(go::sdk())))
+                .unwrap();
+        assert_eq!(tree.iter().count(), 0);
+        assert!(generate_native(ProfileSet::new("sdk")).is_err());
     }
 
     #[test]

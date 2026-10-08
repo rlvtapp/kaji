@@ -175,6 +175,9 @@ pub fn metadata<L: Language>(value: PackageMetadata) -> Metadata<L> {
 }
 
 impl<L: Language> Plugin<L> for Metadata<L> {
+    fn supports_native_input(&self) -> bool {
+        true
+    }
     fn kind(&self) -> &'static str {
         "package-metadata"
     }
@@ -193,7 +196,11 @@ impl<L: Language> Plugin<L> for Metadata<L> {
             value.language = L::NAME.into();
         }
         if value.version.is_empty() {
-            value.version = cx.api.version.clone();
+            value.version = cx
+                .common
+                .package_version
+                .clone()
+                .unwrap_or_else(|| cx.api.version.clone());
         }
         cx.files
             .emit(GeneratedFile::new(PACKAGE_METADATA_PATH, value.to_json()?)?)?;
@@ -214,6 +221,22 @@ mod tests {
         const NAME: &'static str = "community";
         type Settings = ();
         type Workspace = ();
+    }
+
+    #[test]
+    fn native_metadata_uses_explicit_package_version_without_http_input() {
+        let tree = Packages::new()
+            .package(
+                Package::<Community>::new("native")
+                    .common(crate::engine::Common::default().package_version("1.2.3"))
+                    .with(metadata::<Community>(PackageMetadata::new("native-sdk"))),
+            )
+            .generate_native()
+            .unwrap();
+        let value: PackageMetadata =
+            serde_json::from_str(tree.get("native/.poolster/package.json").unwrap()).unwrap();
+        assert_eq!(value.language, "community");
+        assert_eq!(value.version, "1.2.3");
     }
 
     #[test]

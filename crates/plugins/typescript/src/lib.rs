@@ -1,4 +1,6 @@
 //! TypeScript renderers and package configuration live outside neutral core.
+mod graphql;
+pub use graphql::{Graphql, GraphqlClient, GraphqlOperationSymbols, graphql};
 mod oauth;
 pub use oauth::{OAuth, oauth};
 mod webhooks;

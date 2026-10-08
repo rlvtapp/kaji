@@ -189,3 +189,60 @@ Live GitHub synchronization and registry publication have not been established
 by the mocked tests.
 
 [Configure delivery](sdk-automation.md) · [Publish releases](sdk-publishing.md)
+
+
+## Native GraphQL delivery verification (8 October 2026)
+
+The isolated `codex/graphql-native-pipeline` worktree from main passes
+`cargo test --workspace --locked --no-fail-fast`: **688 passed, 0 failed,
+130 ignored**. Formatting and workspace Clippy with warnings denied pass.
+Ignored tests are not counted as passes.
+
+The selected GraphQL native suite passes **6 tests with ignored tests included**
+using TypeScript 5.9.3 and GraphQL 16.14.2. It compiles emitted packages and
+consumers, executes queries/mutations against a real local GraphQL HTTP server,
+checks abstract selections/fragments/conditional presence, anonymous operations,
+partial results, root errors, HTTP/malformed response failures and cancellation.
+It also checks provider substitution, regeneration, separately injected async
+subscriptions, pinned GitHub schema compilation, symbol collisions and a Post
+consumer using actual generated symbols. This does not establish a bundled
+network subscription implementation.
+
+```sh
+POOLSTER_TSC_JS=/path/to/typescript/lib/tsc.js \
+POOLSTER_GRAPHQL_JS=/path/to/graphql/index.js \
+cargo test -p poolster-plugin-typescript --test graphql_native -- --include-ignored
+```
+
+CI installs these pinned dependencies and runs this selection explicitly.
+The runnable `examples/graphql-native` recipe additionally generates, compiles
+and executes its local server/consumer demonstration.
+
+The existing recipe JSON-schema ignored check passes with Python 3.12 and
+jsonschema 4.23.0. An initial default-Python attempt failed because the dependency
+was absent; using the matching installed interpreter/dependency resolved it.
+The native example validates against the actual recipe schema; conflicting or
+missing input selectors are rejected.
+
+The Node SDK/unplugin suite passes **67 tests**, and the full Go OpenAPI compiler
+suite passes. The remaining ordinary Node CI selections pass **85 tests** with no
+skips, and the Python launcher/collection-checker suites pass **5 tests**. Node
+tests initially lacked the local addon/compiler and Newman prerequisites; after
+supplying them, all passed. The archive-reader probe initially skipped with the
+default Python and passed with Python 3.12. Existing OpenAPI output snapshots pass unchanged
+on both main and the implementation worktree. Earlier snapshot failure records
+above describe earlier runs, not this delivery.
+The optional pristine-main full comparison was stopped after the snapshot and
+provider checks passed; a complete main-baseline run is not claimed. The complete
+688-test pass refers to the isolated implementation worktree.
+
+Core graph regressions establish heterogeneous providers feeding a transformation
+plugin, same-type replacements through explicit handles, dependency ordering,
+native skipped-package reports, and preserving skipped owned files/local edits
+without adopting modified hashes. CLI tests check actual JSON skip reports,
+relative operation paths, check/regeneration and preserved OpenAPI recipes.
+
+Cap’n Proto’s external compiler is absent from this environment; descriptor and
+inspection test results do not establish real source compilation here. No usable
+RPC/event/workflow/Cap’n Proto/Cap’n Web pipeline or Forge compatibility is claimed
+by this delivery. See the [support matrix and follow-ups](native-pipelines.md).

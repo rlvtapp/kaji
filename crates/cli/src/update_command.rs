@@ -127,6 +127,7 @@ fn replay_generate_options(replay: GenerationReplayLock, output: PathBuf) -> Res
         bail!("generation replay has invalid TypeScript surface")
     }
     Ok(Generate {
+        native_input: None,
         source,
         config: None,
         config_packages: None,

@@ -84,12 +84,30 @@ impl InputContract {
     }
 }
 
+/// Provider-neutral source resolution options. Providers reject unsupported options.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct InputOptions {
+    pub operation_files: Vec<PathBuf>,
+    pub import_roots: Vec<PathBuf>,
+    pub broker: Option<serde_json::Value>,
+    pub workflow_sources: BTreeMap<String, PathBuf>,
+}
+
 pub trait InputPlugin: Send + Sync {
     /// Unique provider identity, e.g. `graphql.apollo` or `openapi.roas`.
     fn id(&self) -> &str;
     /// Protocol/description format this plugin reads.
     fn format(&self) -> &str;
     fn load(&self, path: &Path) -> Result<InputContract>;
+    fn load_with_options(&self, path: &Path, options: &InputOptions) -> Result<InputContract> {
+        ensure!(
+            options == &InputOptions::default(),
+            "input provider {} does not support these options",
+            self.id()
+        );
+        self.load(path)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -155,6 +173,15 @@ impl InputRegistry {
     /// Several providers may serve the same format; callers select the provider
     /// explicitly when automatic selection would be ambiguous.
     pub fn load(&self, format: &str, provider: Option<&str>, path: &Path) -> Result<LoadedInput> {
+        self.load_with_options(format, provider, path, &InputOptions::default())
+    }
+    pub fn load_with_options(
+        &self,
+        format: &str,
+        provider: Option<&str>,
+        path: &Path,
+        options: &InputOptions,
+    ) -> Result<LoadedInput> {
         let plugin = if let Some(id) = provider {
             let plugin = self
                 .plugins
@@ -187,7 +214,7 @@ impl InputRegistry {
             );
             matching[0].as_ref()
         };
-        let contract = plugin.load(path).with_context(|| {
+        let contract = plugin.load_with_options(path, options).with_context(|| {
             format!(
                 "input provider {} failed reading {}",
                 plugin.id(),
@@ -219,6 +246,7 @@ pub struct InputProvider<C: Contract> {
     format: String,
     provider: Option<String>,
     source: PathBuf,
+    options: InputOptions,
     meta: crate::engine::Meta,
     marker: std::marker::PhantomData<fn() -> C>,
 }
@@ -234,6 +262,7 @@ impl<C: Contract> InputProvider<C> {
             format: format.into(),
             source: source.into(),
             provider: None,
+            options: InputOptions::default(),
             meta: crate::engine::Meta::new(),
             marker: std::marker::PhantomData,
         }
@@ -242,12 +271,19 @@ impl<C: Contract> InputProvider<C> {
         self.provider = Some(provider.into());
         self
     }
+    pub fn with_options(mut self, options: InputOptions) -> Self {
+        self.options = options;
+        self
+    }
     pub fn handle(&self) -> crate::engine::Handle<C> {
         self.meta.handle()
     }
 }
 
 impl<C: Contract, L: crate::engine::Language> crate::engine::Plugin<L> for InputProvider<C> {
+    fn supports_native_input(&self) -> bool {
+        true
+    }
     fn kind(&self) -> &'static str {
         "input-provider"
     }
@@ -260,7 +296,12 @@ impl<C: Contract, L: crate::engine::Language> crate::engine::Plugin<L> for Input
     fn generate(&self, cx: &mut crate::engine::PluginContext<'_, L>) -> Result<()> {
         let mut input = self
             .registry
-            .load(&self.format, self.provider.as_deref(), &self.source)?
+            .load_with_options(
+                &self.format,
+                self.provider.as_deref(),
+                &self.source,
+                &self.options,
+            )?
             .contract;
         cx.publish(input.take::<C>()?)
     }

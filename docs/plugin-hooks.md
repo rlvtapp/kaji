@@ -8,10 +8,10 @@ Choose the layer you want to extend. Follow the linked guide for a working examp
 
 | API | What it does | Details |
 | --- | --- | --- |
-| `InputPlugin::{id, format, load}` | Identify a parser and load a file into typed contracts | [Register a provider](input-plugins.md#select-or-replace-a-provider) |
-| `InputRegistry::{register, plugins, load}` | Register, list and select providers; ambiguous formats need explicit selection | [Provider selection](input-plugins.md#select-or-replace-a-provider) |
+| `InputPlugin::{id, format, load, load_with_options}` | Identify a parser and load a file into typed contracts | [Register a provider](input-plugins.md#select-or-replace-a-provider) |
+| `InputRegistry::{register, plugins, load, load_with_options}` | Register, list and select providers; ambiguous formats need explicit selection | [Provider selection](input-plugins.md#select-or-replace-a-provider) |
 | `InputContract::{publish, get, take}` | Store, borrow or remove a native capability; duplicate publication fails | [Input graph](input-plugins.md#feed-an-input-into-the-output-graph) |
-| `InputProvider<C>::new(...).using(...).handle()` | Publish one selected input capability into a package graph | [Input bridge](input-plugins.md#feed-an-input-into-the-output-graph) |
+| `InputProvider<C>::new(...).using(...).with_options(...).handle()` | Publish one selected input capability into a package graph | [Input bridge](input-plugins.md#feed-an-input-into-the-output-graph) |
 | `Adapter::adapt() -> Result<AdaptedApi>` | Normalize a source directly to the existing HTTP API and security catalog | [Adapter source](../crates/core/src/adapter/mod.rs) |
 | `poolster::generate_with_adapter` / `poolster::generate_with_input` | Generate HTTP packages from an adapter or published `AdaptedApi` | [HTTP capability](input-plugins.md#supply-a-normalized-http-input-later) |
 
@@ -29,6 +29,7 @@ all diagnostics or every capability stored by the parser.
 | `requires()` | Defaults to no requirements | Declare contracts the plugin reads |
 | `provides()` | Defaults to no provisions | Declare contracts the plugin publishes |
 | `generate(cx)` | Required | Read inputs, update the workspace, publish contracts and emit files |
+| `supports_native_input()` | Defaults to false | Opt into execution without the legacy HTTP API; native generation warns/skips HTTP-only packages |
 | `enforce()` | Defaults to `Enforce::Default` | Use `Enforce::Post` for a Post plugin |
 | `phase()` | Defaults to `self.enforce().phase()` | Override when phase selection needs custom logic |
 
@@ -53,6 +54,34 @@ Implement `Contract` with a diagnostic `NAME`. Rust types identify capabilities.
 Handles stay within a package. Generate plugins cannot depend on Post providers.
 Every declared provision must actually be published.
 [Binding rules →](typed-plugins.md#contracts-describe-actual-outputs)
+
+### Insert transformations and combine capabilities
+
+A plugin may require multiple contract types and publish its own combined or
+transformed value. This makes intermediate processing part of the typed graph:
+
+```text
+GraphQL provider ─┐
+                  ├─ transformation plugin → combined contract → output plugin
+Event provider ───┘
+```
+
+The resolver runs both providers before the transformer and the transformer
+before the output, regardless of registration order. A plugin may also declare
+optional requirements for several contract types and dispatch differently for
+each available capability. Required inputs express that all are needed. The
+GraphQL generator publishes `ts::GraphqlClient` with actual generated symbols
+for downstream consumers and Post artifacts. Contracts are immutable
+once published; a transformer publishes a new value. If it publishes the same
+contract type as its source, bind source and transformed providers by explicit
+handles to avoid ambiguity. No conversion to the HTTP API is required.
+
+These are linked Rust extension capabilities. The bundled GraphQL recipe
+currently selects one source and one GraphQL output plugin per package; it does
+not dynamically load arbitrary transformation crates or provide multi-input JSON
+recipes. Post plugins execute after language finalization and can read earlier
+contracts and emit additional artifacts. Source customization remains a later,
+separate stage.
 
 ### Use the generation context
 

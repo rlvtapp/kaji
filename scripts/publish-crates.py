@@ -24,7 +24,11 @@ def publication_order(metadata):
         visiting.add(name)
         for dependency in packages[name]['dependencies']:
             dep = dependency['name']
-            if dependency.get('path') and dependency.get('kind') != 'dev':
+            # Versioned dev dependencies remain in published manifests and are
+            # resolved while Cargo prepares the archive's registry lockfile.
+            # Path-only dev dependencies use req='*' and are omitted by Cargo.
+            published_dev = dependency.get('kind') == 'dev' and dependency.get('req', '*') != '*'
+            if dependency.get('path') and (dependency.get('kind') != 'dev' or published_dev):
                 if dep not in packages:
                     raise ValueError(f'{name} depends on unpublished crate {dep}')
                 visit(dep)
