@@ -55,8 +55,8 @@ if (!/^poolster \d+\.\d+\.\d+/.test(version)) throw new Error(`Unexpected CLI ve
 
 const fixture = path.join(root, 'crates/cli/tests/fixtures/pets.yaml');
 const sdkProgram = `
-  const { defineConfig, createPoolster } = require('@relevate/poolster/sdk');
-  const { pluginTypeScript } = require('@relevate/poolster/sdk/plugins');
+  const { defineConfig, createPoolster } = require('@relevate/poolster');
+  const { pluginTypeScript } = require('@relevate/poolster/plugins');
   const config = defineConfig({ input: process.argv[1], output: './generated', name: 'Pets', version: '1.0.0', plugins: [pluginTypeScript()] });
   createPoolster(config).generate({ write: false }).then(result => {
     if (!result.files.length) throw new Error('SDK generated no files');

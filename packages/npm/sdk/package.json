@@ -6,8 +6,7 @@
   "repository": { "type": "git", "url": "git+https://github.com/rlvtapp/kaji.git" },
   "exports": {
     ".": { "types": "./index.d.ts", "import": "./index.mjs", "require": "./index.cjs" },
-    "./sdk": { "types": "./index.d.ts", "import": "./index.mjs", "require": "./index.cjs" },
-    "./sdk/plugins": { "types": "./plugins.d.ts", "import": "./plugins.mjs", "require": "./plugins.cjs" },
+    "./plugins": { "types": "./plugins.d.ts", "import": "./plugins.mjs", "require": "./plugins.cjs" },
     "./package.json": "./package.json"
   },
   "files": ["index.cjs", "index.mjs", "index.d.ts", "plugins.cjs", "plugins.mjs", "plugins.d.ts", "plugin-engine.cjs", "config.cjs", "README.md", "LICENSE"],

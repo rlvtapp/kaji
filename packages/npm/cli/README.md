@@ -18,14 +18,14 @@ npx poolster --help
 ```
 
 For `poolster.config.mjs`, JavaScript input/output plugins, and Rust plugins selected
-from JavaScript, install `@relevate/poolster` and use the [Node API](sdk/README.md):
+from JavaScript, install `@relevate/poolster` and use the [Node API](../sdk/README.md):
 
 ```js
 import { defineConfig } from '@relevate/poolster';
-import { pluginTypeScript } from '@relevate/poolster/sdk/plugins';
+import { pluginTypeScript } from '@relevate/poolster/plugins';
 ```
 
-The `/sdk/plugins` entry point exports the bundled factories; individual input and
+The `/plugins` entry point exports the bundled factories; individual input and
 output plugin packages remain available for separate installs. Each plugin must
 still be added explicitly to the config.
 

@@ -72,7 +72,7 @@ Five Rust input providers are available as individual npm packages and from
 
 ```js
 import { defineConfig, definePlugin } from '@relevate/poolster';
-import { inputGraphql } from '@relevate/poolster/sdk/plugins';
+import { inputGraphql } from '@relevate/poolster/plugins';
 
 const summary = definePlugin(() => ({
   name: 'summary',
@@ -141,7 +141,7 @@ Install only the languages you use:
 | `@relevate/poolster-plugin-ruby` | `pluginRuby` |
 | `@relevate/poolster-plugin-swift` | `pluginSwift` |
 
-`@relevate/poolster/sdk/plugins` exports all language, Rust auxiliary, and input
+`@relevate/poolster/plugins` exports all language, Rust auxiliary, and input
 factories from the main package. The separate `@relevate/poolster-plugins` bundle
 and individual plugin packages are also available. Language factories
 accept `path`, `name`, `version`, and `style` options. TypeScript also accepts

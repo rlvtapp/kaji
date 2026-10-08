@@ -22,6 +22,7 @@ const auxiliaries = [
 
 test('SDK package installs only SDK platform runtimes', () => {
   assert.equal(core.name, '@relevate/poolster');
+  assert.deepEqual(Object.keys(core.exports).sort(), ['.', './plugins', './package.json'].sort());
   assert.deepEqual(Object.keys(core.optionalDependencies).sort(), [
     '@relevate/poolster-node-darwin-arm64', '@relevate/poolster-node-darwin-x64',
     '@relevate/poolster-node-linux-x64-gnu', '@relevate/poolster-node-win32-x64-msvc',
@@ -31,10 +32,10 @@ test('SDK package installs only SDK platform runtimes', () => {
 });
 
 test('the published SDK and plugin subpaths resolve from @relevate/poolster', async () => {
-  const sdk = require('@relevate/poolster/sdk');
-  const plugins = require('@relevate/poolster/sdk/plugins');
-  const sdkEsm = await import('@relevate/poolster/sdk');
-  const pluginsEsm = await import('@relevate/poolster/sdk/plugins');
+  const sdk = require('@relevate/poolster');
+  const plugins = require('@relevate/poolster/plugins');
+  const sdkEsm = await import('@relevate/poolster');
+  const pluginsEsm = await import('@relevate/poolster/plugins');
   assert.equal(typeof sdk.defineConfig, 'function');
   assert.equal(sdkEsm.defineConfig, sdk.defineConfig);
   assert.deepEqual(plugins.inputGraphql(), bundle.inputGraphql());
