@@ -29,10 +29,11 @@ replacements spread across several Rust modules.
 
 ## Keep implementation files focused
 
-- Aim for at most **400 lines** in a new production source file. At **600 lines**,
-  check whether it contains separate responsibilities; split it before it
-  becomes an 800-line file. These are review prompts, not a CI failure for
-  existing code, vendored inputs, generated output, or data fixtures.
+- Aim for **200–300 lines** in a new production source file. At **400 lines**,
+  split distinct responsibilities or record why keeping them together makes the
+  code easier to follow. These are review prompts, not a CI failure for
+  existing code, vendored inputs, generated output, or data fixtures. Reduce
+  large existing files in focused changes rather than mechanically slicing them.
 - Keep `main.rs` for process setup and dispatch, and `lib.rs` for the public
   surface and module wiring. Put argument parsing, configuration, compiler
   invocation, generation, and each command family in their own modules.
