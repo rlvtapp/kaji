@@ -138,7 +138,7 @@ pub(crate) fn render_sdk(
             &mut tree,
             &root,
             &format!("Sources/{module}/Streaming.swift"),
-            include_str!("sse_runtime.swift.txt").into(),
+            include_str!("../templates/sse_runtime.swift.tmpl").into(),
         )?;
     }
     if !pagination.is_empty() {
@@ -146,7 +146,7 @@ pub(crate) fn render_sdk(
             &mut tree,
             &root,
             &format!("Sources/{module}/Pagination.swift"),
-            include_str!("page_runtime.swift.txt").into(),
+            include_str!("../templates/page_runtime.swift.tmpl").into(),
         )?;
     }
     if style == SdkClientStyle::Namespaced {
@@ -395,8 +395,8 @@ public final class PoolsterClient: @unchecked Sendable {"#)
     .replace("        hooks.forEach { $0.willSend(request) }\n", "")
     .replace("        hooks.forEach { $0.didReceive(http, body: data) }\n", "")
     .replace("let (data, response) = try await transport.execute(request)", "let (data, response) = try await executeWithRetry(request, idempotencyHeader: idempotencyHeader)")
-    .replace("    internal func encode<T:", &(include_str!("sequential_json.swift.txt").to_owned()+"\n    internal func encode<T:"))
-    .replace("    internal func encode<T:", &(include_str!("retry_runtime.swift.txt").to_owned()+"\n    internal func encode<T:"))
+    .replace("    internal func encode<T:", &(include_str!("../templates/sequential_json.swift.tmpl").to_owned()+"\n    internal func encode<T:"))
+    .replace("    internal func encode<T:", &(include_str!("../templates/retry_runtime.swift.tmpl").to_owned()+"\n    internal func encode<T:"))
     // Preserve the default adapter's direct Foundation execution.
     .replace("        try await transport.execute(request)\n    }\n}\npublic typealias", "        try await session.data(for: request)\n    }\n}\npublic typealias")
 }

@@ -529,7 +529,7 @@ pub(crate) fn emit(api: &Api, root: &str, module: &str, tree: &mut GeneratedTree
         tree,
         root,
         &format!("Sources/{module}/PoolsterMultipart.swift"),
-        include_str!("multipart.swift.txt").into(),
+        include_str!("../templates/multipart.swift.tmpl").into(),
     )?;
     for operation in api
         .operations
@@ -550,7 +550,7 @@ pub(crate) fn emit(api: &Api, root: &str, module: &str, tree: &mut GeneratedTree
         tree,
         root,
         "MULTIPART.md",
-        include_str!("multipart_readme.md").into(),
+        include_str!("../templates/multipart_readme.md.tmpl").into(),
     )?;
     Ok(())
 }

@@ -160,7 +160,7 @@ fn native_probe(directory: &std::path::Path) -> std::path::PathBuf {
     tree.write_to(directory).unwrap();
     fs::write(
         directory.join("Probe.swift"),
-        include_str!("../multipart_probe.swift.txt"),
+        include_str!("../../tests/fixtures/multipart_probe.swift"),
     )
     .unwrap();
     let mut compiler = Command::new("swiftc");

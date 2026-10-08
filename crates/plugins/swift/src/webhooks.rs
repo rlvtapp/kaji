@@ -22,7 +22,7 @@ impl Plugin<Swift> for Webhooks {
         );
         cx.files.emit(GeneratedFile::new(
             format!("Sources/{}/StandardWebhooks.swift", namespace),
-            include_str!("webhooks.swift.txt").replace("__PACKAGE__", &namespace),
+            include_str!("../templates/webhooks.swift.tmpl").replace("__PACKAGE__", &namespace),
         )?)
     }
 }
@@ -89,9 +89,9 @@ mod tests {
             String::from_utf8_lossy(&manifest.stderr)
         );
         let source = dir.path().join("Webhooks.swift");
-        std::fs::write(&source, include_str!("webhooks.swift.txt")).unwrap();
+        std::fs::write(&source, include_str!("../templates/webhooks.swift.tmpl")).unwrap();
         let main = dir.path().join("Probe.swift");
-        std::fs::write(&main, include_str!("webhooks_probe.swift.txt")).unwrap();
+        std::fs::write(&main, include_str!("../tests/fixtures/webhooks_probe.swift")).unwrap();
         let vector = dir.path().join("vector.json");
         std::fs::write(
             &vector,

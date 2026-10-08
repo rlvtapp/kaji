@@ -205,7 +205,7 @@ impl Plugin<crate::Swift> for OperationTests {
         )?)?;
         cx.files.emit(GeneratedFile::new(
             "test/OperationTests.swift",
-            include_str!("operation_tests.swift.txt").replace("__CASES__", &code),
+            include_str!("../tests/fixtures/operation_tests.swift").replace("__CASES__", &code),
         )?)?;
         cx.files.emit(GeneratedFile::new("OPERATION_TESTS.md","Compile `swiftc -parse-as-library Sources/*/*.swift test/OperationTests.swift -o /tmp/kaji-operation-tests`, then run `/tmp/kaji-operation-tests`. Public native calls use a fake driver without network. Bounded structural samples assert wire values and decoded responses; explicit unsupported operations are in test/operation-diagnostics.json. Optional webhook dependencies require SwiftPM module search paths when compiling this probe.")?)
     }
@@ -332,7 +332,7 @@ let waiting=RetryProbe();waiting.delay="60000";let slow=PoolsterClient(options:.
 let cancelled=Task {try await slow.deleteThing()};try await Task.sleep(nanoseconds:20_000_000);cancelled.cancel();do{try await cancelled.value;throw ProbeError.mismatch}catch is CancellationError{};guard waiting.calls==1 else{throw ProbeError.mismatch}
 "#;
         let source = source.replace("\n}}\n", &(extra.to_owned() + "\n}}\n"))
-            + include_str!("retry_probe.swift.txt");
+            + include_str!("../tests/fixtures/retry_probe.swift");
         std::fs::write(probe, source).unwrap();
         let mut command = std::process::Command::new("swiftc");
         command

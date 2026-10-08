@@ -24,7 +24,7 @@ impl Plugin<crate::Swift> for OAuth {
         let module = type_name(&package);
         cx.files.emit(GeneratedFile::new(
             format!("Sources/{module}/OAuth.swift"),
-            include_str!("oauth.swift.txt"),
+            include_str!("../templates/oauth.swift.tmpl"),
         )?)
     }
 }
@@ -52,7 +52,7 @@ mod tests {
                 source.push('\n');
             }
         }
-        source.push_str(include_str!("oauth_probe.swift.txt"));
+        source.push_str(include_str!("../tests/fixtures/oauth_probe.swift"));
         let path = dir.path().join("probe.swift");
         std::fs::write(&path, source).unwrap();
         let binary = dir.path().join("probe");

@@ -40,7 +40,7 @@ mod tests {
     #[test]
     #[ignore = "Requires Swift6; native chunk framing, middleware, cancellation and bounded-memory probe"]
     fn native_sse_frames_incrementally_preserves_policy_and_cancels() {
-        compile_and_run(include_str!("sse_probe.swift.txt"));
+        compile_and_run(include_str!("../tests/fixtures/sse_probe.swift"));
     }
     #[test]
     #[ignore = "Requires Swift6+Python3 and loopback sockets; incremental URLSession stream/cancellation/redirect probe"]
@@ -48,7 +48,7 @@ mod tests {
         use std::io::BufRead;
         let root = tempfile::tempdir().unwrap();
         let server = root.path().join("server.py");
-        std::fs::write(&server, include_str!("sse_loopback_server.py")).unwrap();
+        std::fs::write(&server, include_str!("../tests/fixtures/sse_loopback_server.py")).unwrap();
         let mut child = std::process::Command::new("python3")
             .arg(server)
             .arg(root.path())
@@ -63,7 +63,7 @@ mod tests {
             port.trim().parse::<u16>().is_ok(),
             "Loopback server failed to bind"
         );
-        let script = include_str!("sse_loopback_probe.swift.txt")
+        let script = include_str!("../tests/fixtures/sse_loopback_probe.swift")
             .replace("__PORT__", port.trim())
             .replace("__ROOT__", root.path().to_str().unwrap());
         let result = std::panic::catch_unwind(|| compile_and_run(&script));
