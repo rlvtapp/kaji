@@ -37,8 +37,8 @@ Generated clients retry safe transient failures by default. `GET`, `PUT`,
 and `on_error` callbacks for telemetry. Binary bodies and downloads remain
 native Python `bytes`.
 
-When an operation explicitly declares `x-kaji-pagination` (or compatible
-`x-speakeasy-pagination`) with `type: cursor`, an existing cursor parameter,
+When an operation explicitly declares `x-poolster-pagination` (or legacy
+`x-kaji-pagination`/`x-speakeasy-pagination`) with `type: cursor`, an existing cursor parameter,
 and `outputs.nextCursor`, Poolster also emits a synchronous page iterator such as
 `client.list_contacts_pages(cursor=None)`. In namespaced mode the same helper
 is available as `client.contacts.list_pages(...)`. Paths support object fields

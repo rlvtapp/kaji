@@ -86,7 +86,7 @@ impl Plugin<Python> for Sdk {
                 schema
                     .value
                     .extensions
-                    .insert("x-kaji-open-enum".into(), serde_json::json!(true));
+                    .insert("x-poolster-open-enum".into(), serde_json::json!(true));
             }
         }
         cx.files.append(crate::render_sdk_with_async(
