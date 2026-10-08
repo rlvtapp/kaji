@@ -48,7 +48,11 @@ mod tests {
         use std::io::BufRead;
         let root = tempfile::tempdir().unwrap();
         let server = root.path().join("server.py");
-        std::fs::write(&server, include_str!("../tests/fixtures/sse_loopback_server.py")).unwrap();
+        std::fs::write(
+            &server,
+            include_str!("../tests/fixtures/sse_loopback_server.py"),
+        )
+        .unwrap();
         let mut child = std::process::Command::new("python3")
             .arg(server)
             .arg(root.path())

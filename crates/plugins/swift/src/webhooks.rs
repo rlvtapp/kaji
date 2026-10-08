@@ -91,7 +91,11 @@ mod tests {
         let source = dir.path().join("Webhooks.swift");
         std::fs::write(&source, include_str!("../templates/webhooks.swift.tmpl")).unwrap();
         let main = dir.path().join("Probe.swift");
-        std::fs::write(&main, include_str!("../tests/fixtures/webhooks_probe.swift")).unwrap();
+        std::fs::write(
+            &main,
+            include_str!("../tests/fixtures/webhooks_probe.swift"),
+        )
+        .unwrap();
         let vector = dir.path().join("vector.json");
         std::fs::write(
             &vector,

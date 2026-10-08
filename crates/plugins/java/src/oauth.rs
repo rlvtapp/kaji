@@ -21,8 +21,14 @@ impl Plugin<Java> for OAuth {
                 .unwrap_or(&format!("io.poolster.{}", package_segment(&cx.api.name))),
         );
         for (name, source) in [
-            ("OAuthClientCredentials", include_str!("../templates/oauth.java.tmpl")),
-            ("OAuthHttpClient", include_str!("../templates/oauth_http.java.tmpl")),
+            (
+                "OAuthClientCredentials",
+                include_str!("../templates/oauth.java.tmpl"),
+            ),
+            (
+                "OAuthHttpClient",
+                include_str!("../templates/oauth_http.java.tmpl"),
+            ),
         ] {
             cx.files.emit(GeneratedFile::new(
                 format!(

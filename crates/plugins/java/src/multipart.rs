@@ -582,13 +582,19 @@ mod tests {
         tree.write_to(dir.path()).unwrap();
         let mut source = include_str!("../tests/fixtures/operation_driver.java")
             .replace("__PACKAGE__", "io.poolster.multipart")
-            .replace("__CASES__", include_str!("../tests/fixtures/multipart_probe_main.java"));
+            .replace(
+                "__CASES__",
+                include_str!("../tests/fixtures/multipart_probe_main.java"),
+            );
         let start = source.find("        void assertRequest(").unwrap();
         let end = source[start..]
             .find("        public <T> HttpResponse<T> send(")
             .unwrap()
             + start;
-        source.replace_range(start..end, include_str!("../tests/fixtures/multipart_probe_assert.java"));
+        source.replace_range(
+            start..end,
+            include_str!("../tests/fixtures/multipart_probe_assert.java"),
+        );
         std::fs::write(
             dir.path()
                 .join("sdk/src/test/java/io/poolster/multipart/PoolsterOperationTests.java"),

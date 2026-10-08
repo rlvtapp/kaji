@@ -253,7 +253,11 @@ mod tests {
             .write_to(root.path())
             .unwrap();
         let main = root.path().join("main.swift");
-        std::fs::write(&main, include_str!("../tests/fixtures/pagination_probe.swift")).unwrap();
+        std::fs::write(
+            &main,
+            include_str!("../tests/fixtures/pagination_probe.swift"),
+        )
+        .unwrap();
         fn sources(path: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
             for entry in std::fs::read_dir(path).unwrap() {
                 let path = entry.unwrap().path();
@@ -298,7 +302,11 @@ mod tests {
     fn native_page_sequence_is_lazy_and_bounded() {
         let temp = tempfile::tempdir().unwrap();
         let runtime = temp.path().join("Pagination.swift");
-        std::fs::write(&runtime, include_str!("../templates/page_runtime.swift.tmpl")).unwrap();
+        std::fs::write(
+            &runtime,
+            include_str!("../templates/page_runtime.swift.tmpl"),
+        )
+        .unwrap();
         let main = temp.path().join("main.swift");
         std::fs::write(&main, r#"
 import Foundation
