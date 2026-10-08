@@ -1,13 +1,13 @@
     private
 
-    def kaji_parameter_content(value, content_type)
+    def poolster_parameter_content(value, content_type)
       return JSON.generate(Models.to_wire(value)) if content_type == 'application/json' || content_type.end_with?('+json')
       return URI.encode_www_form(value) if content_type == 'application/x-www-form-urlencoded' && value.is_a?(Hash)
       raise ArgumentError, 'parameter content must be a serialized string' unless value.is_a?(String)
       value
     end
 
-    def kaji_whole_query(value, content_type, allow_null = false)
+    def poolster_whole_query(value, content_type, allow_null = false)
       return '' if value.nil? && !allow_null
       if content_type == 'application/json' || content_type.end_with?('+json')
         return URI.encode_www_form_component(JSON.generate(Models.to_wire(value)))
@@ -19,7 +19,7 @@
       value
     end
 
-    def kaji_sequential_json(body, content_type)
+    def poolster_sequential_json(body, content_type)
       raise ArgumentError, 'sequential response exceeds 64 MiB' if body.bytesize > 64 * 1024 * 1024
       if content_type == 'application/json-seq'
         prefix, *records = body.split("\x1e", -1)
@@ -68,10 +68,10 @@
         following = handler
         handler = ->(native_request) { item.call(native_request, following) }
       end
-      response = Timeout.timeout(timeout, KajiTimeoutError) { execute_with_retry(handler, request, idempotency_header, cancelled: cancelled) }
+      response = Timeout.timeout(timeout, PoolsterTimeoutError) { execute_with_retry(handler, request, idempotency_header, cancelled: cancelled) }
       content_type = (response.respond_to?(:content_type) ? response.content_type : (response["Content-Type"] rescue nil)).to_s.split(';', 2).first
       if response.code.to_i.between?(200, 299) && ['application/x-ndjson', 'application/ndjson', 'application/jsonl', 'application/json-seq'].include?(content_type)
-        return kaji_sequential_json(response.body.to_s, content_type)
+        return poolster_sequential_json(response.body.to_s, content_type)
       end
       shape = nil
       if @validate_responses && response_schemas && response.code.to_i.between?(200, 299)

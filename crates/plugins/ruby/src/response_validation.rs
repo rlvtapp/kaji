@@ -98,7 +98,7 @@ pub(super) fn render(api: &Api, module: &str) -> String {
     let catalog = serde_json::to_string(&catalog(api)).unwrap();
     format!(
         "{NOTICE}require \"json\"\nmodule {module}\n{}\n  ResponseShapes = JSON.parse({})\nend\n",
-        include_str!("response_validation.rb"),
+        include_str!("../templates/response_validation.rb"),
         ruby_string(&catalog)
     )
 }
@@ -111,7 +111,7 @@ pub(super) fn render_partitioned(api: &Api, module: &str) -> Vec<(String, String
     let mut files = Vec::new();
     let mut loader = format!(
         "{NOTICE}require \"json\"\nmodule {module}\n{}\n  ResponseShapes = {{\"refs\" => {{}}, \"operations\" => {{}}}}\nend\n",
-        include_str!("response_validation.rb")
+        include_str!("../templates/response_validation.rb")
     );
     let catalog = catalog(api);
     for group in ["refs", "operations"] {

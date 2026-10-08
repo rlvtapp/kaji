@@ -20,7 +20,7 @@ module __MODULE__
     end
     def inspect; '#<OAuthClientCredentials>'; end
     def check_cancelled(cancelled)
-      raise KajiCancellationError, 'request cancelled' if cancelled && cancelled.call
+      raise PoolsterCancellationError, 'request cancelled' if cancelled && cancelled.call
     end
     def token(rejected_token: nil, cancelled: nil)
       @mutex.synchronize do
@@ -69,7 +69,7 @@ module __MODULE__
       payload=JSON.parse(body);access=payload['access_token'];kind=payload['token_type'];lifetime=payload.fetch('expires_in',0)
       raise OAuthError,'OAuth token response invalid' unless access.is_a?(String) && !access.empty? && !access.match?(/[\r\n]/) && (kind.nil? || (kind.is_a?(String) && kind.casecmp('Bearer')==0)) && lifetime.is_a?(Numeric) && lifetime.finite? && lifetime>=0
       [access.dup.freeze,lifetime.to_f]
-    rescue KajiCancellationError,OAuthError
+    rescue PoolsterCancellationError,OAuthError
       raise
     rescue StandardError
       raise OAuthError,'OAuth token request failed'

@@ -17,7 +17,7 @@
       end
     end
     def check_cancellation(cancelled = @cancelled)
-      raise KajiCancellationError, 'request cancelled' if cancelled && cancelled.call
+      raise PoolsterCancellationError, 'request cancelled' if cancelled && cancelled.call
     end
     def retry_pause(delay, cancelled = @cancelled)
       deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + delay
@@ -42,7 +42,7 @@
         attempt += 1
         begin
           response = handler.call(request)
-        rescue KajiTimeoutError
+        rescue PoolsterTimeoutError
           raise
         rescue IOError, EOFError, SystemCallError, Timeout::Error
           raise unless replay_safe && attempt < @max_attempts

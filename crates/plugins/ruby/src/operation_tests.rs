@@ -186,7 +186,7 @@ impl Plugin<crate::Ruby> for OperationTests {
             "test/operation-fixtures.json",
             serde_json::to_string_pretty(&serde_json::json!({"cases":cases,"skipped":skipped}))?,
         )?)?;
-        let script = include_str!("operation_tests.rb.txt")
+        let script = include_str!("../templates/operation_tests.rb.txt")
             .replace("__IMPORT__", &models.import)
             .replace("__MODULE__", &models.module);
         cx.files
@@ -301,7 +301,7 @@ mod tests {
         tree.write_to(dir.path()).unwrap();
         std::fs::write(
             dir.path().join("sdk/test/retry_probe.rb"),
-            include_str!("retry_probe.rb.txt"),
+            include_str!("../tests/fixtures/retry_probe.rb.txt"),
         )
         .unwrap();
         let output = std::process::Command::new("ruby")

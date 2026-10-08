@@ -33,7 +33,7 @@ impl Plugin<crate::Ruby> for OAuth {
         let models = cx.inputs.get::<crate::package::RubyModels>()?;
         cx.files.emit(GeneratedFile::new(
             format!("lib/{}/oauth.rb", models.import),
-            include_str!("oauth.rb.txt")
+            include_str!("../templates/oauth.rb.txt")
                 .replace("__MODULE__", &models.module)
                 .replace("__IMPORT__", &models.import),
         )?)?;
@@ -96,7 +96,7 @@ mod tests {
         tree.write_to(dir.path()).unwrap();
         std::fs::write(
             dir.path().join("sdk/probe.rb"),
-            include_str!("oauth_probe.rb.txt"),
+            include_str!("../tests/fixtures/oauth_probe.rb.txt"),
         )
         .unwrap();
         let output = std::process::Command::new("ruby")

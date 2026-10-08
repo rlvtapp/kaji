@@ -2,7 +2,7 @@
     attr_reader :path, :expected
     def initialize(path, expected)
       @path, @expected = path, expected
-      super("Kaji response decoding failed at #{path}: expected #{expected}")
+      super("Poolster response decoding failed at #{path}: expected #{expected}")
     end
   end
 

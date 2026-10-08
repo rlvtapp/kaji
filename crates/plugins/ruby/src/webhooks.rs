@@ -34,7 +34,7 @@ impl Plugin<crate::Ruby> for Webhooks {
         let models = cx.inputs.get::<RubyModels>()?;
         cx.files.emit(GeneratedFile::new(
             format!("lib/{}/webhooks.rb", models.import),
-            include_str!("webhooks.rb").replace("__MODULE__", &models.module),
+            include_str!("../templates/webhooks.rb").replace("__MODULE__", &models.module),
         )?)
     }
 }

@@ -17,7 +17,7 @@ stalled = ExampleSdk::Client.new(base_url: 'http://example.invalid', transport: 
 begin
   stalled.get_probe(request_options: {timeout: 0.03})
   raise 'timeout did not terminate request'
-rescue ExampleSdk::KajiTimeoutError
+rescue ExampleSdk::PoolsterTimeoutError
   raise 'timeout scope too long' if Process.clock_gettime(Process::CLOCK_MONOTONIC) - started > 0.5
 end
 calls = 0
@@ -25,18 +25,18 @@ retrying = ExampleSdk::Client.new(base_url: 'http://example.invalid', transport:
 begin
   retrying.get_probe(request_options: {timeout: 0.03})
   raise 'retry deadline reset'
-rescue ExampleSdk::KajiTimeoutError
+rescue ExampleSdk::PoolsterTimeoutError
   raise 'retried after deadline' unless calls == 1
 end
 begin
   retrying.get_probe(request_options: {cancelled: -> {true}})
   raise 'cancellation ignored'
-rescue ExampleSdk::KajiCancellationError
+rescue ExampleSdk::PoolsterCancellationError
   raise 'cancelled call reached driver' unless calls == 1
 end
 fast = ExampleSdk::Client.new(base_url: 'http://example.invalid', timeout: 1, transport: ->(_) { sleep 0.04; Response.new('200','{}') })
 failed = Thread.new do
-  begin; fast.get_probe(request_options: {timeout: 0.01}); raise 'missing timeout'; rescue ExampleSdk::KajiTimeoutError; true; end
+  begin; fast.get_probe(request_options: {timeout: 0.01}); raise 'missing timeout'; rescue ExampleSdk::PoolsterTimeoutError; true; end
 end
 passed = Thread.new { fast.get_probe(request_options: {timeout: 0.3}) }
 raise 'concurrent controls leaked' unless failed.value && passed.value == {}

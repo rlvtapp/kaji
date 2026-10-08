@@ -19,7 +19,7 @@ begin;client.send(:request,'PATCH','/thing',query:{},headers:{'X-Once'=>'  '},bo
 raise 'blank retried' unless calls==1
 cancel=false;calls=0
 client=ProbeSdk::Client.new(base_url:'https://unused.example',transport:->(_){calls+=1;cancel=true;Reply.new('503','')},max_attempts:2,retry_base_delay:60,retry_max_delay:60,cancelled:-> {cancel})
-begin;client.delete_thing;raise 'cancellation missing';rescue ProbeSdk::KajiCancellationError;end
+begin;client.delete_thing;raise 'cancellation missing';rescue ProbeSdk::PoolsterCancellationError;end
 raise 'cancel retried' unless calls==1
 
 HeaderReply=Struct.new(:code,:body,:headers){def [](name);headers[name];end}

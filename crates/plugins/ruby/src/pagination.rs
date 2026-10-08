@@ -4,7 +4,8 @@ use poolster_core::pagination::{PaginationPlan, normalize_pagination};
 pub(crate) fn plan(api: &Api, op: &Operation) -> anyhow::Result<Option<PaginationPlan>> {
     let Some(raw) = op
         .annotations
-        .get("x-kaji-pagination")
+        .get("x-poolster-pagination")
+        .or_else(|| op.annotations.get("x-kaji-pagination"))
         .or_else(|| op.annotations.get("x-speakeasy-pagination"))
     else {
         return Ok(None);
@@ -257,7 +258,7 @@ mod tests {
                 true,
             ));
         }
-        op.annotations.insert("x-kaji-pagination".into(),serde_json::json!({"type":"page","inputs":[{"name":"page","in":if body{"requestBody"}else{"parameters"},"type":"page"},{"name":"limit","in":if body{"requestBody"}else{"parameters"},"type":"limit"}],"outputs":{"results":"/items"}}));
+        op.annotations.insert("x-poolster-pagination".into(),serde_json::json!({"type":"page","inputs":[{"name":"page","in":if body{"requestBody"}else{"parameters"},"type":"page"},{"name":"limit","in":if body{"requestBody"}else{"parameters"},"type":"limit"}],"outputs":{"results":"/items"}}));
         api.operations.push(op);
         api
     }
@@ -336,7 +337,7 @@ raise unless !model.to_h.key?('page') && seen.map{|entry|entry[0]['page']}==[1,2
         let mut api = fixture(false);
         api.operations[0]
             .annotations
-            .get_mut("x-kaji-pagination")
+            .get_mut("x-poolster-pagination")
             .unwrap()["type"] = serde_json::json!("cursor");
         let tree = render_sdk(&api, "ruby", Some("paging-sdk"), SdkClientStyle::Flat).unwrap();
         assert!(
