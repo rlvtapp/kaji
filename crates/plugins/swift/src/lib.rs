@@ -5,6 +5,7 @@
 //! works in server-side Swift as well as Apple application targets without
 //! making an SDK consumer adopt a dependency graph chosen by the generator.
 
+mod native_names;
 mod webhooks;
 pub use webhooks::{Webhooks, webhooks};
 mod bundled;
@@ -18,7 +19,7 @@ pub use package::{PackageExt, Settings, Swift, package, sdk};
 mod operation_tests;
 pub use operation_tests::{OperationTests, operation_tests};
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
 use anyhow::{Result, bail};
@@ -37,24 +38,8 @@ pub(crate) fn render_sdk(
     package_name: Option<&str>,
     style: SdkClientStyle,
 ) -> Result<GeneratedTree> {
-    for schema in &api.schemas {
-        if let SchemaKind::Object { fields, .. } = &schema.value.kind {
-            let mut names = std::collections::BTreeMap::new();
-            for field in fields {
-                let native = identifier(&field.name);
-                if let Some(previous) = names.insert(native.clone(), &field.name) {
-                    anyhow::bail!(
-                        "swift model '{}' properties '{}' and '{}' collide as native identifier '{}'",
-                        schema.name,
-                        previous,
-                        field.name,
-                        native
-                    );
-                }
-            }
-        }
-    }
-
+    let prepared = native_api(api);
+    let api = &prepared;
     let prepared = multipart::prepare(api)?;
     let api = &prepared;
     let root = normalized_root(output_dir)?;
@@ -109,16 +94,45 @@ pub(crate) fn render_sdk(
         insert(
             &mut tree,
             &root,
-            &format!("Sources/{module}/Models/{}.swift", type_name(&schema.name)),
+            &format!(
+                "Sources/{module}/Models/{}.swift",
+                model_file_name(&schema.name)
+            ),
             render_model_for_api(api, schema),
         )?;
     }
-    insert(
-        &mut tree,
-        &root,
-        &format!("Sources/{module}/Operations.swift"),
-        render_operations(api).replace("\n}\n", &format!("\n{pagination}\n}}\n")),
-    )?;
+    // Split at complete operation boundaries by source bytes and declaration count.
+    let mut operation_chunks: Vec<Vec<Operation>> = Vec::new();
+    let mut current = Vec::new();
+    let mut bytes = 1024;
+    for operation in &api.operations {
+        let length = render_operation(operation, "    ").len();
+        if !current.is_empty() && (current.len() >= 100 || bytes + length > 128 * 1024) {
+            operation_chunks.push(std::mem::take(&mut current));
+            bytes = 1024;
+        }
+        current.push(operation.clone());
+        bytes += length;
+    }
+    if !current.is_empty() {
+        operation_chunks.push(current);
+    }
+    for (index, operations) in operation_chunks.into_iter().enumerate() {
+        let mut chunk = api.as_ref().clone();
+        chunk.operations = operations;
+        let pagination = pagination::render(&chunk)?;
+        let file = if index == 0 {
+            "Operations.swift".to_owned()
+        } else {
+            format!("KajiOperations{index:03}.swift")
+        };
+        insert(
+            &mut tree,
+            &root,
+            &format!("Sources/{module}/{file}"),
+            render_operations(&chunk).replace("\n}\n", &format!("\n{pagination}\n}}\n")),
+        )?;
+    }
     if api.operations.iter().any(operation_is_sse) {
         insert(
             &mut tree,
@@ -137,15 +151,95 @@ pub(crate) fn render_sdk(
     }
     if style == SdkClientStyle::Namespaced {
         for (resource, operations) in operation_groups(api) {
-            insert(
-                &mut tree,
-                &root,
-                &format!("Sources/{module}/Resources/{resource}Resource.swift"),
-                render_resource(api, &resource, &operations),
-            )?;
+            let mut groups: Vec<Vec<&Operation>> = Vec::new();
+            let mut current = Vec::new();
+            let mut bytes = 1024;
+            for operation in operations {
+                let length = render_resource(api, &resource, &[operation], true).len();
+                if !current.is_empty() && (current.len() >= 100 || bytes + length > 128 * 1024) {
+                    groups.push(std::mem::take(&mut current));
+                    bytes = 1024;
+                }
+                current.push(operation);
+                bytes += length;
+            }
+            if !current.is_empty() {
+                groups.push(current);
+            }
+            for (index, operations) in groups.iter().enumerate() {
+                let file = if index == 0 {
+                    format!("{resource}Resource.swift")
+                } else {
+                    format!("KajiResource_{resource}_{index:03}.swift")
+                };
+                insert(
+                    &mut tree,
+                    &root,
+                    &format!("Sources/{module}/Resources/{file}"),
+                    render_resource(api, &resource, operations, index > 0),
+                )?;
+            }
         }
     }
     Ok(tree)
+}
+
+fn native_api(api: &Api) -> Api {
+    let resource_types: Vec<_> = operation_groups(api)
+        .keys()
+        .map(|resource| format!("{resource}Resource"))
+        .collect();
+    native_names::prepare(
+        api,
+        type_name,
+        function_name,
+        &[
+            "String",
+            "Bool",
+            "Int",
+            "Int64",
+            "UInt",
+            "UInt64",
+            "Float",
+            "Double",
+            "Data",
+            "URL",
+            "URLComponents",
+            "URLRequest",
+            "URLResponse",
+            "HTTPURLResponse",
+            "URLSession",
+            "URLQueryItem",
+            "JSONDecoder",
+            "JSONEncoder",
+            "JSONValue",
+            "Error",
+            "TimeInterval",
+            "Locale",
+            "TimeZone",
+            "DateFormatter",
+            "ISO8601DateFormatter",
+            "CharacterSet",
+            "UUID",
+            "Decimal",
+            "Date",
+            "Task",
+            "Never",
+            "Any",
+            "Optional",
+            "Array",
+            "Dictionary",
+            "Set",
+            "KajiClient",
+            "KajiClientOptions",
+            "KajiAPIError",
+            "KajiTransport",
+            "KajiCodingKey",
+        ]
+        .into_iter()
+        .chain(resource_types.iter().map(String::as_str))
+        .collect::<Vec<_>>(),
+    )
 }
 
 fn normalized_root(output_dir: &str) -> Result<String> {
@@ -435,18 +529,19 @@ fn render_object_kind(
     additional: &AdditionalProperties,
     recursive: bool,
 ) -> String {
+    let names = native_names::field_names(fields, identifier, &["encode", "init", "self"]);
     let open = !matches!(additional, AdditionalProperties::Forbidden);
     let mut extra = "additionalProperties".to_owned();
     while fields
         .iter()
-        .any(|field| identifier(&field.name).trim_matches('`') == extra)
+        .any(|field| names[&field.name].clone().trim_matches('`') == extra)
     {
         extra.push('_');
     }
     let mut present = "_kajiPresentFields".to_owned();
     while fields
         .iter()
-        .any(|field| identifier(&field.name).trim_matches('`') == present)
+        .any(|field| names[&field.name].clone().trim_matches('`') == present)
         || present == extra
     {
         present.push('_');
@@ -469,7 +564,7 @@ fn render_object_kind(
         let _ = writeln!(
             output,
             "    public {property} {}: {}",
-            identifier(&field.name),
+            names[&field.name].clone(),
             swift_type(&field.value, !field.required)
         );
     }
@@ -484,7 +579,7 @@ fn render_object_kind(
         .map(|field| {
             format!(
                 "{}: {}{}",
-                identifier(&field.name),
+                names[&field.name].clone(),
                 swift_type(&field.value, !field.required),
                 if field.required { "" } else { " = nil" }
             )
@@ -498,7 +593,7 @@ fn render_object_kind(
         let _ = writeln!(output, "        self.{present} = []");
     }
     for field in fields {
-        let generated = identifier(&field.name);
+        let generated = names[&field.name].clone();
         let _ = writeln!(output, "        self.{generated} = {generated}");
     }
     if open {
@@ -510,7 +605,7 @@ fn render_object_kind(
         "        self.{present} = Set(container.allKeys.map(\\.stringValue))"
     );
     for field in fields {
-        let generated = identifier(&field.name);
+        let generated = names[&field.name].clone();
         let key = format!("KajiCodingKey({:?})", field.name);
         let ty = swift_type(&field.value, !field.required);
         let base = ty.strip_suffix('?').unwrap_or(&ty);
@@ -549,7 +644,7 @@ fn render_object_kind(
         );
     }
     for field in fields {
-        let generated = identifier(&field.name);
+        let generated = format!("self.{}", names[&field.name]);
         let key = format!("KajiCodingKey({:?})", field.name);
         let ty = swift_type(&field.value, !field.required);
         if ty.ends_with('?') {
@@ -577,9 +672,21 @@ fn render_enum(name: &str, values: &[Value]) -> String {
     let mut output = format!(
         "{NOTICE}\nimport Foundation\n\npublic enum {name}: String, Codable, Sendable {{\n"
     );
+    let mut used = BTreeSet::new();
+    let mut wire_values = BTreeSet::new();
     for (index, value) in values.iter().enumerate() {
         let raw = value.as_str().unwrap_or_default();
-        let _ = writeln!(output, "    case {} = {:?}", enum_case(raw, index), raw);
+        if !wire_values.insert(raw) {
+            continue;
+        }
+        let base = enum_case(raw, index);
+        let mut case = identifier(&base);
+        let mut suffix = 2;
+        while !used.insert(case.clone()) {
+            case = identifier(&format!("{base}{suffix}"));
+            suffix += 1;
+        }
+        let _ = writeln!(output, "    case {case} = {raw:?}");
     }
     output.push_str("}\n");
     output
@@ -618,24 +725,26 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
     }
     let _ = writeln!(output, ") async throws -> {response} {{");
     let mut path = operation.path.clone();
-    for parameter in operation
+    for (index, parameter) in operation
         .parameters
         .iter()
         .filter(|parameter| parameter.location == "path")
+        .enumerate()
     {
-        let value = identifier(&parameter.name);
+        let value = parameter_name(parameter);
         let serialized = if parameter_json_content(parameter) {
             format!("try jsonParameter({value})")
         } else {
             format!("String(describing: {value})")
         };
+        let path_value = format!("_kajiPath{index}");
         let _ = writeln!(
             output,
-            "{indent}    let {value}Path = ({serialized}).kajiPathComponent"
+            "{indent}    let {path_value} = ({serialized}).kajiPathComponent"
         );
         path = path.replace(
             &format!("{{{}}}", parameter.name),
-            &format!("\\({value}Path)"),
+            &format!("\\({path_value})"),
         );
     }
     let url_pagination = operation
@@ -665,7 +774,7 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
     while operation
         .parameters
         .iter()
-        .any(|parameter| identifier(&parameter.name) == query_binding)
+        .any(|parameter| parameter_name(parameter) == query_binding)
     {
         query_binding.push_str("Items");
     }
@@ -682,80 +791,56 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
         output,
         "{indent}    {query_mutability} {query_binding}: [URLQueryItem] = []"
     );
-    for parameter in operation
+    let query_parameters = operation
         .parameters
         .iter()
-        .filter(|parameter| parameter.location == "query")
-    {
-        let value = identifier(&parameter.name);
-        if parameter_json_content(parameter) {
-            let value = identifier(&parameter.name);
-            let expression = if parameter.required {
-                format!(
-                    "{indent}    {query_binding}.append(URLQueryItem(name:{:?},value:try jsonParameter({value})))",
-                    parameter.name
-                )
-            } else {
-                format!(
-                    "{indent}    if let value={value} {{{query_binding}.append(URLQueryItem(name:{:?},value:try jsonParameter(value)))}}",
-                    parameter.name
-                )
+        .filter(|p| p.location == "query")
+        .collect::<Vec<_>>();
+    let mut query_helpers = String::new();
+    // Hundreds of serialization branches in one async method make Swift's
+    // debug LLVM code generation disproportionately expensive. Keep the public
+    // arguments intact and build their query items in bounded sync functions.
+    if query_parameters.len() > 100 {
+        for (index, chunk) in query_parameters.chunks(50).enumerate() {
+            let helper = format!("__kajiQuery_{name}_{index}");
+            let local = Operation {
+                parameters: chunk.iter().map(|p| (*p).clone()).collect(),
+                ..Default::default()
             };
-            let _ = writeln!(output, "{expression}");
-            continue;
+            let rendered = operation_parameters(&local);
+            let signature = rendered
+                .iter()
+                .map(|p| p.signature.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            let arguments = rendered
+                .iter()
+                .map(|p| {
+                    let name = p.signature.split(':').next().unwrap();
+                    format!("{name}: {name}")
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            let _ = writeln!(
+                output,
+                "{indent}    {query_binding}.append(contentsOf: try self.{helper}({arguments}))"
+            );
+            let _ = writeln!(
+                query_helpers,
+                "{indent}private func {helper}({signature}) throws -> [URLQueryItem] {{\n{indent}    var {query_binding}: [URLQueryItem] = []"
+            );
+            query_helpers.push_str(&render_query_parameters(&local, &query_binding, indent));
+            let _ = writeln!(
+                query_helpers,
+                "{indent}    return {query_binding}\n{indent}}}\n"
+            );
         }
-        let array = parameter
-            .schema
-            .as_ref()
-            .is_some_and(|schema| matches!(schema.kind, SchemaKind::Array { .. }));
-        let expression = if array {
-            let values = if parameter.required {
-                value.clone()
-            } else {
-                format!("({value} ?? [])")
-            };
-            if parameter
-                .annotations
-                .get("explode")
-                .and_then(serde_json::Value::as_bool)
-                == Some(false)
-            {
-                if parameter.required {
-                    format!(
-                        "[URLQueryItem(name: {:?}, value: {values}.map {{ String(describing: $0) }}.joined(separator: \",\"))]",
-                        parameter.name
-                    )
-                } else {
-                    format!(
-                        "{value}.map {{ [URLQueryItem(name: {:?}, value: $0.map {{ String(describing: $0) }}.joined(separator: \",\"))] }} ?? []",
-                        parameter.name
-                    )
-                }
-            } else {
-                format!(
-                    "{values}.map {{ URLQueryItem(name: {:?}, value: String(describing: $0)) }}",
-                    parameter.name
-                )
-            }
-        } else if parameter.required {
-            format!(
-                "[URLQueryItem(name: {:?}, value: String(describing: {value}))]",
-                parameter.name
-            )
-        } else {
-            format!(
-                "{value}.map {{ [URLQueryItem(name: {:?}, value: String(describing: $0))] }} ?? []",
-                parameter.name
-            )
-        };
-        let _ = writeln!(
-            output,
-            "{indent}    {query_binding}.append(contentsOf: {expression})"
-        );
+    } else {
+        output.push_str(&render_query_parameters(operation, &query_binding, indent));
     }
     let _ = writeln!(
         output,
-        "{indent}    {request_binding} request = try makeRequest(method: {:?}, path: \"{}\", query: {query_binding})",
+        "{indent}    {request_binding} request = try self.makeRequest(method: {:?}, path: \"{}\", query: {query_binding})",
         operation.method.as_str(),
         swift_path_literal(&path)
     );
@@ -764,7 +849,7 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
         .iter()
         .filter(|p| p.location == "querystring")
     {
-        let value = identifier(&parameter.name);
+        let value = parameter_name(parameter);
         let expression = if parameter.required {
             format!("Optional({value})")
         } else {
@@ -780,7 +865,7 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
         .iter()
         .filter(|parameter| parameter.location == "header")
     {
-        let value = identifier(&parameter.name);
+        let value = parameter_name(parameter);
         let serialized = if parameter_json_content(parameter) {
             format!("try jsonParameter({value})")
         } else {
@@ -805,7 +890,7 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
         .iter()
         .filter(|p| p.location == "cookie")
     {
-        let value = identifier(&parameter.name);
+        let value = parameter_name(parameter);
         let expression = if parameter.required {
             format!("Optional({value})")
         } else {
@@ -864,7 +949,7 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
             ) {
                 format!("encodeSequentialJSON(body,media:{content_type:?})")
             } else {
-                "encode(body)".into()
+                "self.encode(body)".into()
             };
             if body.required {
                 let _ = writeln!(output, "{indent}    request.httpBody = try {encoding}");
@@ -892,12 +977,12 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
     } else if response == "Void" {
         let _ = writeln!(
             output,
-            "{indent}    try await sendVoid(request, idempotencyHeader: {retry_header})"
+            "{indent}    try await self.sendVoid(request, idempotencyHeader: {retry_header})"
         );
     } else {
         let _ = writeln!(
             output,
-            "{indent}    return try await send(request, as: {response}.self, idempotencyHeader: {retry_header})"
+            "{indent}    return try await self.send(request, as: {response}.self, idempotencyHeader: {retry_header})"
         );
     }
     let _ = writeln!(output, "{indent}}}\n");
@@ -928,11 +1013,13 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
         let brace = helper.find(" {\n").unwrap() + 3;
         helper.insert_str(
             brace,
-            &format!("{indent}    let _kajiValidatedURL = try kajiContinuationURL(_kajiURL)\n"),
+            &format!(
+                "{indent}    let _kajiValidatedURL = try self.kajiContinuationURL(_kajiURL)\n"
+            ),
         );
         let send = helper
-            .rfind(&format!("{indent}    return try await send"))
-            .or_else(|| helper.rfind(&format!("{indent}    try await send")))
+            .rfind(&format!("{indent}    return try await self.send"))
+            .or_else(|| helper.rfind(&format!("{indent}    try await self.send")))
             .unwrap();
         helper.insert_str(
             send,
@@ -957,6 +1044,101 @@ fn render_operation(operation: &Operation, indent: &str) -> String {
             "{} {{\n{indent}    return try await {name}KajiURL({args}_kajiURL: nil)\n{indent}}}\n\n{helper}",
             &original[..signature_end + format!(") async throws -> {response}").len()]
         );
+    }
+    output.push_str(&query_helpers);
+    output
+}
+
+fn render_query_parameters(operation: &Operation, query_binding: &str, indent: &str) -> String {
+    let mut output = String::new();
+    for parameter in operation
+        .parameters
+        .iter()
+        .filter(|parameter| parameter.location == "query")
+    {
+        let value = parameter_name(parameter);
+        if parameter_json_content(parameter) {
+            let value = parameter_name(parameter);
+            let expression = if parameter.required {
+                format!(
+                    "{indent}    {query_binding}.append(URLQueryItem(name:{:?},value:try jsonParameter({value})))",
+                    parameter.name
+                )
+            } else {
+                format!(
+                    "{indent}    if let value={value} {{{query_binding}.append(URLQueryItem(name:{:?},value:try jsonParameter(value)))}}",
+                    parameter.name
+                )
+            };
+            let _ = writeln!(output, "{expression}");
+            continue;
+        }
+        let required = parameter.required
+            && !parameter
+                .schema
+                .as_ref()
+                .is_some_and(|schema| schema.nullable);
+        let array = parameter
+            .schema
+            .as_ref()
+            .is_some_and(|schema| matches!(schema.kind, SchemaKind::Array { .. }));
+        let local = if required {
+            value.clone()
+        } else {
+            "value".into()
+        };
+        let nested = if required {
+            format!("{indent}    ")
+        } else {
+            format!("{indent}        ")
+        };
+        if !required {
+            let _ = writeln!(output, "{indent}    if let value = {value} {{");
+        }
+        if array {
+            if parameter
+                .annotations
+                .get("explode")
+                .and_then(serde_json::Value::as_bool)
+                == Some(false)
+            {
+                let mut joined = "__kajiJoinedValues".to_owned();
+                while operation
+                    .parameters
+                    .iter()
+                    .any(|p| parameter_name(p) == joined)
+                {
+                    joined.push_str("Values");
+                }
+                let _ = writeln!(output, "{nested}do {{");
+                let _ = writeln!(output, "{nested}    var {joined}: [String] = []");
+                let _ = writeln!(
+                    output,
+                    "{nested}    for item in {local} {{ {joined}.append(String(describing: item)) }}"
+                );
+                let _ = writeln!(
+                    output,
+                    r#"{nested}    {query_binding}.append(URLQueryItem(name: {:?}, value: {joined}.joined(separator: ",")))"#,
+                    parameter.name
+                );
+                let _ = writeln!(output, "{nested}}}");
+            } else {
+                let _ = writeln!(
+                    output,
+                    "{nested}for item in {local} {{ {query_binding}.append(URLQueryItem(name: {:?}, value: String(describing: item))) }}",
+                    parameter.name
+                );
+            }
+        } else {
+            let _ = writeln!(
+                output,
+                "{nested}{query_binding}.append(URLQueryItem(name: {:?}, value: String(describing: {local})))",
+                parameter.name
+            );
+        }
+        if !required {
+            let _ = writeln!(output, "{indent}    }}");
+        }
     }
     output
 }
@@ -986,7 +1168,7 @@ fn operation_parameters(operation: &Operation) -> Vec<ParameterRender> {
         .map(|parameter| ParameterRender {
             signature: format!(
                 "{}: {}{}",
-                identifier(&parameter.name),
+                parameter_name(parameter),
                 if parameter.location == "querystring" {
                     if parameter.required {
                         "String".into()
@@ -995,7 +1177,13 @@ fn operation_parameters(operation: &Operation) -> Vec<ParameterRender> {
                     }
                 } else {
                     parameter.schema.as_ref().map_or_else(
-                        || "JSONValue".to_owned(),
+                        || {
+                            if parameter.required {
+                                "JSONValue".to_owned()
+                            } else {
+                                "JSONValue?".to_owned()
+                            }
+                        },
                         |schema| swift_type(schema, !parameter.required),
                     )
                 },
@@ -1016,7 +1204,13 @@ fn operation_parameters(operation: &Operation) -> Vec<ParameterRender> {
                 .or_else(|| body.media_types.first())
                 .and_then(|media| media.schema.as_ref())
                 .map_or_else(
-                    || "JSONValue".to_owned(),
+                    || {
+                        if body.required {
+                            "JSONValue".to_owned()
+                        } else {
+                            "JSONValue?".to_owned()
+                        }
+                    },
                     |schema| swift_type(schema, !body.required),
                 )
         };
@@ -1043,11 +1237,25 @@ fn operation_groups(api: &Api) -> BTreeMap<String, Vec<&Operation>> {
     groups
 }
 
-fn render_resource(api: &Api, resource: &str, operations: &[&Operation]) -> String {
-    let property = identifier(&lower_camel(resource));
-    let mut output = format!(
-        "{NOTICE}\nimport Foundation\n\npublic extension KajiClient {{\n    var {property}: {resource}Resource {{ {resource}Resource(client: self) }}\n}}\n\npublic struct {resource}Resource: Sendable {{\n    private let client: KajiClient\n    internal init(client: KajiClient) {{ self.client = client }}\n"
-    );
+fn render_resource(
+    api: &Api,
+    resource: &str,
+    operations: &[&Operation],
+    extension: bool,
+) -> String {
+    let property = match identifier(&lower_camel(resource)).as_str() {
+        "session" | "options" | "hooks" | "transport" | "encoder" | "decoder" => {
+            format!("{}Resource", identifier(&lower_camel(resource)))
+        }
+        _ => identifier(&lower_camel(resource)),
+    };
+    let mut output = if extension {
+        format!("{NOTICE}\nimport Foundation\n\nextension {resource}Resource {{\n")
+    } else {
+        format!(
+            "{NOTICE}\nimport Foundation\n\npublic extension KajiClient {{\n    var {property}: {resource}Resource {{ {resource}Resource(client: self) }}\n}}\n\npublic struct {resource}Resource: Sendable {{\n    internal let client: KajiClient\n    internal init(client: KajiClient) {{ self.client = client }}\n"
+        )
+    };
     for operation in operations {
         let name = function_name(&operation.id);
         let parameters = operation_parameters(operation);
@@ -1080,29 +1288,34 @@ fn render_resource(api: &Api, resource: &str, operations: &[&Operation]) -> Stri
             .collect::<Vec<_>>()
             .join(", ");
         if sse {
-            let _ = writeln!(output, "        return client.{name}({call_args})");
+            let _ = writeln!(output, "        return self.client.{name}({call_args})");
         } else if response == "Void" {
-            let _ = writeln!(output, "        try await client.{name}({call_args})");
+            let _ = writeln!(output, "        try await self.client.{name}({call_args})");
         } else {
             let _ = writeln!(
                 output,
-                "        return try await client.{name}({call_args})"
+                "        return try await self.client.{name}({call_args})"
             );
         }
         output.push_str("    }\n");
     }
-    let mut resource_api = api.clone();
-    resource_api
-        .operations
-        .retain(|operation| operations.iter().any(|item| item.id == operation.id));
-    if let Ok(pages) = pagination::render(&resource_api) {
-        output.push_str(
-            &pages
-                .replace("    func ", "    public func ")
-                .replace("self.", "client.")
-                .replace("{ current in", "{ [client] current in")
-                .replace("{ nextURL in", "{ [client] nextURL in"),
-        );
+    if operations.iter().any(|operation| {
+        operation.annotations.contains_key("x-kaji-pagination")
+            || operation.annotations.contains_key("x-speakeasy-pagination")
+    }) {
+        let mut resource_api = api.clone();
+        resource_api
+            .operations
+            .retain(|operation| operations.iter().any(|item| item.id == operation.id));
+        if let Ok(pages) = pagination::render(&resource_api) {
+            output.push_str(
+                &pages
+                    .replace("    func ", "    public func ")
+                    .replace("self.", "client.")
+                    .replace("{ current in", "{ [client] current in")
+                    .replace("{ nextURL in", "{ [client] nextURL in"),
+            );
+        }
     }
     output.push_str("}\n");
     output
@@ -1195,6 +1408,19 @@ fn function_name(value: &str) -> String {
     identifier(&lower_camel(value))
 }
 
+fn model_file_name(name: &str) -> String {
+    let name = type_name(name);
+    if name == "Operations"
+        || name.starts_with("Kaji")
+        || name.ends_with("Resource")
+        || matches!(name.as_str(), "Streaming" | "Pagination" | "JSONValue")
+    {
+        format!("Model_{name}")
+    } else {
+        name
+    }
+}
+
 fn identifier(value: &str) -> String {
     let mut value = lower_camel(value);
     if value.is_empty() {
@@ -1283,15 +1509,147 @@ fn swift_path_literal(value: &str) -> String {
         .replace('\n', "\\n")
 }
 
+fn parameter_name(parameter: &OperationParameter) -> String {
+    identifier(
+        parameter
+            .annotations
+            .get("kaji.native_argument")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or(&parameter.name),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use kaji_core::{HttpMethod, OperationParameter, OperationRequestBody, OperationResponse};
 
     #[test]
+    fn large_operation_sets_keep_public_methods_in_bounded_extensions() {
+        let api = Api {
+            name: "Split".into(),
+            operations: (0..201)
+                .map(|index| Operation {
+                    id: format!("operation{index}"),
+                    method: HttpMethod::Get,
+                    path: format!("/items/{index}"),
+                    ..Default::default()
+                })
+                .collect(),
+            ..Default::default()
+        };
+        let tree = render_sdk(&api, "swift", Some("SplitSdk"), SdkClientStyle::Flat).unwrap();
+        let sources: Vec<_> = tree
+            .into_files()
+            .filter(|(file, _)| {
+                file.path.ends_with("Operations.swift")
+                    || file.path.to_string_lossy().contains("KajiOperations")
+            })
+            .collect();
+        assert_eq!(sources.len(), 3);
+        for (source, _) in sources {
+            assert!(source.contents.matches("async throws ->").count() <= 100);
+        }
+    }
+
+    #[test]
+    #[ignore = "requires Swift; compiles and executes across resource chunk boundaries"]
+    fn native_split_resource_keeps_last_methods_and_transport() {
+        let api = Api {
+            name: "Split".into(),
+            operations: (0..201)
+                .map(|index| Operation {
+                    id: format!("operation{index}"),
+                    method: HttpMethod::Get,
+                    path: format!("/items/{index}"),
+                    ..Default::default()
+                })
+                .collect(),
+            ..Default::default()
+        };
+        let root = tempfile::tempdir().unwrap();
+        let tree = render_sdk(&api, "sdk", Some("SplitSdk"), SdkClientStyle::Namespaced).unwrap();
+        let files: Vec<_> = tree
+            .iter()
+            .filter(|(path, _)| {
+                path.extension().is_some_and(|ext| ext == "swift")
+                    && path.file_name().is_some_and(|name| name != "Package.swift")
+            })
+            .map(|(path, _)| root.path().join(path))
+            .collect();
+        tree.write_to(root.path()).unwrap();
+        std::fs::write(root.path().join("Probe.swift"), r#"import Foundation
+struct Mock: KajiTransport {
+    func execute(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        precondition(["/items/100", "/items/200"].contains(request.url!.path))
+        return (Data(), HTTPURLResponse(url: request.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!)
+    }
+}
+@main struct Probe {
+    static func main() async throws {
+        let client = KajiClient(options: .init(baseURL: URL(string: "https://unused.test")!), transport: Mock())
+        try await client.items.operation100()
+        try await client.items.operation200()
+    }
+}
+"#).unwrap();
+        let output = std::process::Command::new("swiftc")
+            .args(["-swift-version", "6", "-module-cache-path", "cache"])
+            .args(files)
+            .args(["Probe.swift", "-o", "probe"])
+            .current_dir(root.path())
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let output = std::process::Command::new(root.path().join("probe"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
+    fn oversized_queries_keep_public_arguments_and_bound_private_helpers() {
+        let operation = Operation {
+            id: "massive".into(),
+            method: HttpMethod::Get,
+            path: "/query".into(),
+            parameters: (0..600)
+                .map(|index| OperationParameter {
+                    name: format!("q{index}"),
+                    location: "query".into(),
+                    required: index == 2,
+                    schema: Some(SchemaValue::new(SchemaKind::String)),
+                    description: None,
+                    annotations: Default::default(),
+                })
+                .collect(),
+            ..Default::default()
+        };
+        let source = render_operation(&operation, "    ");
+        assert_eq!(
+            source.matches("private func __kajiQuery_massive_").count(),
+            12
+        );
+        assert!(source.contains("q2: String,"));
+        assert!(!source.contains("q2: String ="));
+        assert!(source.contains("q599: String? = nil"));
+        assert!(source.contains("URLQueryItem(name: \"q599\", value: String(describing: value))"));
+        assert!(!source.contains(".map {"));
+        assert_eq!(source.matches("self.sendVoid(request").count(), 1);
+    }
+
+    #[test]
     #[ignore = "requires Swift; many-parameter typechecker and native query wire regression"]
     fn native_large_query_operation_preserves_scalars_arrays_and_omission() {
-        let parameters = (0..60)
+        let mut parameters: Vec<OperationParameter> = (0..600)
             .map(|index| {
                 let kind = match index % 4 {
                     0 => SchemaKind::Boolean,
@@ -1304,7 +1662,7 @@ mod tests {
                 OperationParameter {
                     name: format!("q{index}"),
                     location: "query".into(),
-                    required: false,
+                    required: index == 2,
                     schema: Some(SchemaValue::new(kind)),
                     description: None,
                     annotations: if index == 7 {
@@ -1315,6 +1673,18 @@ mod tests {
                 }
             })
             .collect();
+        let mut nullable_array = SchemaValue::new(SchemaKind::Array {
+            items: Box::new(SchemaValue::new(SchemaKind::String)),
+        });
+        nullable_array.nullable = true;
+        parameters.push(OperationParameter {
+            name: "requiredNullable".into(),
+            location: "query".into(),
+            required: true,
+            schema: Some(nullable_array),
+            description: None,
+            annotations: Default::default(),
+        });
         let api = Api {
             operations: vec![Operation {
                 id: "largeQuery".into(),
@@ -1336,6 +1706,11 @@ mod tests {
             render_operations(&api),
         )
         .unwrap();
+        std::fs::write(
+            root.path().join("Resource.swift"),
+            render_resource(&api, "Query", &[&api.operations[0]], false),
+        )
+        .unwrap();
         std::fs::write(root.path().join("Probe.swift"), r#"import Foundation
 #if canImport(FoundationNetworking)
 import FoundationNetworking
@@ -1343,25 +1718,31 @@ import FoundationNetworking
 struct Mock: KajiTransport {
  func execute(_ request: URLRequest) async throws -> (Data, URLResponse) {
   let query = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!.queryItems!
-  precondition(query.count == 6)
+  precondition(query.count == 7 || query.count == 9)
+  precondition(query.filter { $0.name == "requiredNullable" }.map { $0.value! } == (query.count == 9 ? ["n1", "n2"] : []))
   precondition(query.filter { $0.name == "q0" }.map { $0.value! } == ["false"])
   precondition(query.filter { $0.name == "q1" }.map { $0.value! } == ["0"])
   precondition(query.filter { $0.name == "q2" }.map { $0.value! } == ["héllo 雪"])
   precondition(query.filter { $0.name == "q3" }.map { $0.value! } == ["a", "λ"])
   precondition(query.filter { $0.name == "q7" }.map { $0.value! } == ["c,d"])
+  precondition(query.filter { $0.name == "q599" }.map { $0.value! } == ["tail"])
   return (Data("1".utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: [:])!)
  }
 }
 @main struct Probe {
  static func main() async throws {
   let client = KajiClient(options: .init(baseURL: URL(string: "https://unused.test")!), transport: Mock())
-  let result = try await client.largeQuery(q0: false, q1: 0, q2: "héllo 雪", q3: ["a", "λ"], q7: ["c", "d"])
+  let result = try await client.largeQuery(q0: false, q1: 0, q2: "héllo 雪", q3: ["a", "λ"], q7: ["c", "d"], q599: ["tail"], requiredNullable: ["n1", "n2"])
   precondition(result == 1)
+  let omitted = try await client.query.largeQuery(q0: false, q1: 0, q2: "héllo 雪", q3: ["a", "λ"], q7: ["c", "d"], q599: ["tail"], requiredNullable: nil)
+  precondition(omitted == 1)
  }
 }
 "#).unwrap();
-        let output = std::process::Command::new("swiftc")
+        let output = std::process::Command::new("python3")
+            .args(["-c", "import subprocess,sys; result=subprocess.run(sys.argv[1:],timeout=120); sys.exit(result.returncode)", "swiftc"])
             .args([
+                "-g",
                 "-swift-version",
                 "6",
                 "-warnings-as-errors",
@@ -1369,6 +1750,7 @@ struct Mock: KajiTransport {
                 "cache",
                 "Client.swift",
                 "Operations.swift",
+                "Resource.swift",
                 "Probe.swift",
                 "-o",
                 "probe",
@@ -1539,6 +1921,29 @@ let constructed = OpenModel(id: "three")
 let value = try JSONSerialization.jsonObject(with: JSONEncoder().encode(constructed)) as! NSDictionary
 precondition(value["optional"] == nil)
 "##;
+        let collisions = Schema::new(
+            "ReservedModel",
+            SchemaValue::new(SchemaKind::Object {
+                fields: ["self", "self2", "encode", "encode2", "container"]
+                    .into_iter()
+                    .map(|name| Field {
+                        name: name.into(),
+                        value: SchemaValue::new(SchemaKind::String),
+                        required: true,
+                        annotations: Default::default(),
+                    })
+                    .collect(),
+                additional_properties: AdditionalProperties::Forbidden,
+            }),
+        );
+        std::fs::write(
+            root.path().join("ReservedModel.swift"),
+            render_model(&collisions),
+        )
+        .unwrap();
+        let script = format!(
+            "{script}\nlet reservedData = #\"{{\"self\":\"a\",\"self2\":\"b\",\"encode\":\"c\",\"encode2\":\"d\",\"container\":\"e\"}}\"#.data(using: .utf8)!\nlet reserved = try JSONDecoder().decode(ReservedModel.self, from: reservedData)\nlet reservedAfter = try JSONSerialization.jsonObject(with: JSONEncoder().encode(reserved)) as! NSDictionary\nlet reservedBefore = try JSONSerialization.jsonObject(with: reservedData) as! NSDictionary\nprecondition(reservedAfter == reservedBefore)\n"
+        );
         std::fs::write(root.path().join("main.swift"), script).unwrap();
         let output = Command::new("swiftc")
             .args([
@@ -1547,6 +1952,7 @@ precondition(value["optional"] == nil)
                 "JSONValue.swift",
                 "OpenModel.swift",
                 "TypedExtras.swift",
+                "ReservedModel.swift",
                 "main.swift",
                 "-o",
                 "probe",
@@ -1568,7 +1974,7 @@ precondition(value["optional"] == nil)
     }
 
     #[test]
-    fn streaming_is_native_and_multipart_fails_before_emission() {
+    fn streaming_is_native_and_unstructured_multipart_uses_ordered_parts() {
         let mut api = Api::default();
         let mut operation = Operation {
             id: "events".into(),
@@ -1593,11 +1999,10 @@ precondition(value["optional"] == nil)
                 schema: Some(SchemaValue::new(SchemaKind::String)),
             }],
         });
+        let tree = render_sdk(&api, "swift", None, SdkClientStyle::Flat).unwrap();
         assert!(
-            render_sdk(&api, "swift", None, SdkClientStyle::Flat)
-                .unwrap_err()
-                .to_string()
-                .contains("multipart root")
+            tree.iter()
+                .any(|(_, source)| source.contains("public var parts: [KajiOrderedPart]"))
         );
     }
 
@@ -1664,7 +2069,7 @@ precondition(value["optional"] == nil)
     fn generated_package_builds_with_swiftpm() {
         use std::process::Command;
 
-        let api = Api {
+        let mut api = Api {
             name: "Example API".into(),
             version: "1.0.0".into(),
             operations: vec![
@@ -1704,6 +2109,46 @@ precondition(value["optional"] == nil)
             ],
             ..Api::default()
         };
+        api.schemas = ["Operations", "MediaResource"]
+            .into_iter()
+            .map(|name| Schema::new(name, SchemaValue::new(SchemaKind::String)))
+            .collect();
+        let mut duplicate_enum = SchemaValue::new(SchemaKind::String);
+        duplicate_enum.enum_values = vec![
+            serde_json::json!("ok"),
+            serde_json::json!("ok"),
+            serde_json::json!("new"),
+        ];
+        api.schemas
+            .push(Schema::new("RepeatedEnum", duplicate_enum));
+        api.operations.push(Operation {
+            id: "reservedPath".into(),
+            method: HttpMethod::Get,
+            path: "/session/{default}".into(),
+            parameters: vec![OperationParameter {
+                name: "default".into(),
+                location: "path".into(),
+                required: true,
+                schema: Some(SchemaValue::new(SchemaKind::String)),
+                description: None,
+                annotations: Default::default(),
+            }],
+            ..Default::default()
+        });
+        api.operations.push(Operation {
+            id: "reservedClient".into(),
+            method: HttpMethod::Get,
+            path: "/media".into(),
+            parameters: vec![OperationParameter {
+                name: "client".into(),
+                location: "query".into(),
+                required: false,
+                schema: Some(SchemaValue::new(SchemaKind::String)),
+                description: None,
+                annotations: Default::default(),
+            }],
+            ..Default::default()
+        });
         let directory = tempfile::tempdir().unwrap();
         render_sdk(&api, "sdk", None, SdkClientStyle::Namespaced)
             .unwrap()

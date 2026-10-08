@@ -251,24 +251,26 @@ fn ordered(api: &Api, operation: &Operation) -> bool {
     let Some(body) = operation.request_body.as_ref() else {
         return false;
     };
-    body.media_types.iter().any(|media| {
-        media
-            .content_type
-            .to_ascii_lowercase()
-            .starts_with("multipart/")
-            && (media.content_type != "multipart/form-data"
-                || media
-                    .schema
-                    .as_ref()
-                    .and_then(|s| resolve(api, s, 0).ok())
-                    .is_some_and(|s| matches!(s.kind, SchemaKind::Array { .. })))
-    }) || kaji_core::openapi32::request_content(operation)
-        .ok()
-        .is_some_and(|content| {
-            content
-                .iter()
-                .any(|media| !media.prefix_encoding.is_empty() || media.item_encoding.is_some())
+    fields(api, operation).is_err()
+        || body.media_types.iter().any(|media| {
+            media
+                .content_type
+                .to_ascii_lowercase()
+                .starts_with("multipart/")
+                && (media.content_type != "multipart/form-data"
+                    || media
+                        .schema
+                        .as_ref()
+                        .and_then(|s| resolve(api, s, 0).ok())
+                        .is_some_and(|s| matches!(s.kind, SchemaKind::Array { .. })))
         })
+        || kaji_core::openapi32::request_content(operation)
+            .ok()
+            .is_some_and(|content| {
+                content
+                    .iter()
+                    .any(|media| !media.prefix_encoding.is_empty() || media.item_encoding.is_some())
+            })
 }
 pub(crate) fn prepare(api: &Api) -> Result<std::borrow::Cow<'_, Api>> {
     if !api.operations.iter().any(selected) {

@@ -138,14 +138,15 @@ impl Plugin<crate::Swift> for OperationTests {
         &self.meta
     }
     fn generate(&self, cx: &mut PluginContext<'_, crate::Swift>) -> Result<()> {
+        let api = native_api(cx.api);
         let mut skipped = BTreeMap::new();
         let mut code = String::new();
         let mut count = 0;
-        for (index, op) in cx.api.operations.iter().enumerate() {
+        for (index, op) in api.operations.iter().enumerate() {
             let result = if index >= self.limit {
                 Err("operation bound exhausted".into())
             } else {
-                fixture(cx.api, op, self.options)
+                fixture(&api, op, self.options)
             };
             match result {
                 Err(reason) => {
@@ -159,7 +160,7 @@ impl Plugin<crate::Swift> for OperationTests {
                         let literal = serde_json::to_string(&v.to_string())?;
                         args.push(format!(
                             "{}: try JSONDecoder().decode({ty}.self, from: Data({literal}.utf8))",
-                            identifier(&p.name)
+                            parameter_name(p)
                         ));
                     }
                     if let Some(body) = &op.request_body {

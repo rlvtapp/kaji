@@ -131,7 +131,7 @@ fn typed_multipart_does_not_change_json_models_and_preserves_encoding_selection(
     );
 }
 #[test]
-fn unsupported_multipart_shapes_and_identifiers_fail_before_sdk_emission() {
+fn wider_multipart_shapes_use_explicit_ordered_parts() {
     for mutate in [0, 1, 2, 3] {
         let mut api = fixture();
         let SchemaKind::Object {
@@ -147,7 +147,12 @@ fn unsupported_multipart_shapes_and_identifiers_fail_before_sdk_emission() {
             2 => fields[0].name = "bad\r\nname".into(),
             _ => fields[0].name = "partHeaders".into(),
         }
-        assert!(render_sdk(&api, ".", None, SdkClientStyle::Flat).is_err());
+        let generated = render_sdk(&api, ".", None, SdkClientStyle::Flat).unwrap();
+        assert!(
+            generated
+                .iter()
+                .any(|(_, source)| source.contains("public var parts: [KajiOrderedPart]"))
+        );
     }
 }
 fn native_probe(directory: &std::path::Path) -> std::path::PathBuf {

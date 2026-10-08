@@ -7,6 +7,8 @@ pub(crate) fn render(
     style: SdkClientStyle,
     enabled: bool,
 ) -> Result<GeneratedTree> {
+    let prepared = native_api(api);
+    let api = &prepared;
     let mut tree = render_sdk(api, dir, package, style)?;
     if !enabled {
         return Ok(tree);
@@ -42,10 +44,11 @@ pub(crate) fn render(
                 );
             }
             output.push_str("}\n");
+            let file_name = model_file_name(&schema.name);
             let path = if root.is_empty() {
-                format!("Sources/{module}/Models/{name}.swift")
+                format!("Sources/{module}/Models/{file_name}.swift")
             } else {
-                format!("{root}/Sources/{module}/Models/{name}.swift")
+                format!("{root}/Sources/{module}/Models/{file_name}.swift")
             };
             tree.replace(GeneratedFile::new(path, output)?)?;
         }
@@ -119,6 +122,23 @@ mod tests {
                 .contains("public struct State: RawRepresentable")
         );
     }
+    #[test]
+    fn open_enum_overlays_follow_reserved_runtime_names() {
+        let mut contract = api();
+        let mut value = SchemaValue::new(SchemaKind::String);
+        value.enum_values = vec![serde_json::json!("UTC")];
+        contract.schemas.push(Schema::new("TimeZone", value));
+        let tree = render(&contract, "sdk", Some("Enums"), SdkClientStyle::Flat, true).unwrap();
+        let source = tree
+            .get("sdk/Sources/Enums/Models/TimeZoneModel.swift")
+            .unwrap();
+        assert!(source.contains("public struct TimeZoneModel: RawRepresentable"));
+        assert!(
+            tree.get("sdk/Sources/Enums/Models/TimeZone.swift")
+                .is_none()
+        );
+    }
+
     #[test]
     #[ignore = "requires Swift6; executes unknown enum Codable and named query serialization"]
     fn native_unknown_enum_roundtrip_and_query_preserve_wire_strings() {
