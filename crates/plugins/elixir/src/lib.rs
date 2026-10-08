@@ -2209,7 +2209,7 @@ if Collision.Models.Page.from_map(nil)!=nil, do: raise("nullable array alias")
     }
 
     #[test]
-    #[ignore = "requires Elixir Mix project with Finch/Jason; KAJI_ELIXIR_NATIVE_PROJECT optional"]
+    #[ignore = "requires Elixir Mix project with Finch/Jason; POOLSTER_ELIXIR_NATIVE_PROJECT optional"]
     fn native_multipart_binary_json_limits_and_retry_bytes() {
         let root = tempfile::tempdir().unwrap();
         let tree = render_sdk(
@@ -2237,10 +2237,10 @@ if Collision.Models.Page.from_map(nil)!=nil, do: raise("nullable array alias")
         script.push_str(include_str!("../tests/fixtures/multipart_probe.exs"));
         let path = root.path().join("probe.exs");
         std::fs::write(&path, script).unwrap();
-        let project = std::env::var_os("KAJI_ELIXIR_NATIVE_PROJECT")
+        let project = std::env::var_os("POOLSTER_ELIXIR_NATIVE_PROJECT")
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|| root.path().join("sdk"));
-        if std::env::var_os("KAJI_ELIXIR_NATIVE_PROJECT").is_none() {
+        if std::env::var_os("POOLSTER_ELIXIR_NATIVE_PROJECT").is_none() {
             let deps = std::process::Command::new("mix")
                 .arg("deps.get")
                 .current_dir(&project)
@@ -2656,7 +2656,7 @@ if Probe.Models.WireInput.to_map(restored)!=expected, do: raise("roundtrip prese
             annotations: Default::default(),
         });
         pages.annotations.insert(
-            "x-kaji-pagination".into(),
+            "x-poolster-pagination".into(),
             serde_json::json!({
                 "type": "cursor",
                 "inputs": [{"name": "cursor", "in": "parameters", "type": "cursor"}],
@@ -2740,7 +2740,7 @@ if Probe.Models.WireInput.to_map(restored)!=expected, do: raise("roundtrip prese
                 schema: Some(SchemaValue::new(SchemaKind::String)),
             }],
         }];
-        op.annotations.insert("x-kaji-idempotency-resolved".into(),serde_json::json!({"header":"X-Request-Key","parameter_name":"X-Request-Key","auto_generate":true}));
+        op.annotations.insert("x-poolster-idempotency-resolved".into(),serde_json::json!({"header":"X-Request-Key","parameter_name":"X-Request-Key","auto_generate":true}));
         let root = tempfile::tempdir().unwrap();
         std::fs::write(
             root.path().join("multipart_body.ex"),
@@ -2895,7 +2895,7 @@ end
             description: None,
             annotations: Default::default(),
         });
-        op.annotations.insert("x-kaji-idempotency-resolved".into(),serde_json::json!({"header":"X-Request-Key","parameter_name":"X-Request-Key","auto_generate":true}));
+        op.annotations.insert("x-poolster-idempotency-resolved".into(),serde_json::json!({"header":"X-Request-Key","parameter_name":"X-Request-Key","auto_generate":true}));
         let rendered = render_operation("Probe", &api, &api.operations[0]);
         assert!(rendered.contains("nil -> Client.idempotency_key(); provided -> provided"));
         assert!(rendered.contains(", \"X-Request-Key\") do"));

@@ -32,10 +32,10 @@ impl Plugin<crate::Elixir> for OAuth {
 #[cfg(test)]
 mod tests {
     #[test]
-    #[ignore = "requires Elixir with Jason; KAJI_ELIXIR_NATIVE_PROJECT points to cached Mix project"]
+    #[ignore = "requires Elixir with Jason; POOLSTER_ELIXIR_NATIVE_PROJECT points to cached Mix project"]
     fn native_oauth_singleflight_and_origin() {
         let project =
-            std::env::var("KAJI_ELIXIR_NATIVE_PROJECT").expect("cached Mix project required");
+            std::env::var("POOLSTER_ELIXIR_NATIVE_PROJECT").expect("cached Mix project required");
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(
             dir.path().join("oauth.ex"),

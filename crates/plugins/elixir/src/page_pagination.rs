@@ -208,7 +208,7 @@ mod tests {
                 items: Box::new(SchemaValue::new(SchemaKind::String)),
             }),
         )];
-        operation.annotations.insert("x-kaji-pagination".into(), serde_json::json!({"type":"page","inputs":[{"name":"page","type":"page","in":"parameters"}],"outputs":{"results":"$"}}));
+        operation.annotations.insert("x-poolster-pagination".into(), serde_json::json!({"type":"page","inputs":[{"name":"page","type":"page","in":"parameters"}],"outputs":{"results":"$"}}));
         let mut api = Api {
             operations: vec![operation],
             ..Default::default()
@@ -226,7 +226,7 @@ mod tests {
         api.operations[0].parameters[0].required = true;
         let source = render(&api, &api.operations[0]).unwrap().unwrap();
         assert!(!source.contains("|| 1"));
-        api.operations[0].annotations.insert("x-kaji-pagination".into(), serde_json::json!({"type":"page","inputs":[{"name":"page","type":"page"}],"outputs":{"results":"$.missing"}}));
+        api.operations[0].annotations.insert("x-poolster-pagination".into(), serde_json::json!({"type":"page","inputs":[{"name":"page","type":"page"}],"outputs":{"results":"$.missing"}}));
         assert!(render(&api, &api.operations[0]).is_err());
     }
 }
@@ -288,7 +288,7 @@ mod expanded_tests {
         operation.responses = vec![OperationResponse::json("200", response)];
         operation
             .annotations
-            .insert("x-kaji-pagination".into(), rule);
+            .insert("x-poolster-pagination".into(), rule);
         Api {
             operations: vec![operation],
             ..Default::default()
@@ -386,7 +386,7 @@ mod native_tests {
                 items: Box::new(SchemaValue::new(SchemaKind::String)),
             }),
         )];
-        operation.annotations.insert("x-kaji-pagination".into(), serde_json::json!({"type":"page","inputs":[{"name":"page","type":"page"},{"name":"limit","type":"limit"}],"outputs":{"results":"$"}}));
+        operation.annotations.insert("x-poolster-pagination".into(), serde_json::json!({"type":"page","inputs":[{"name":"page","type":"page"},{"name":"limit","type":"limit"}],"outputs":{"results":"$"}}));
         let api = Api {
             operations: vec![operation],
             ..Default::default()
