@@ -1,0 +1,6 @@
+# Preserve upstream test fixtures exactly as published.
+crates/inputs/arazzo/tests/corpus/** -whitespace
+crates/inputs/asyncapi/tests/corpus/** -whitespace
+crates/inputs/capnproto/tests/fixtures/upstream/** -whitespace
+crates/inputs/graphql/tests/fixtures/github/** -whitespace
+crates/inputs/protobuf/tests/fixtures/upstream/** -whitespace

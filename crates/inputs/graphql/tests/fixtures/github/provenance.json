@@ -1,0 +1,16 @@
+{
+  "repository": "https://github.com/octokit/graphql-schema",
+  "commit": "503d8f18a265230ec224669241c2f1957811faf8",
+  "files": {
+    "schema.graphql": {
+      "url": "https://raw.githubusercontent.com/octokit/graphql-schema/503d8f18a265230ec224669241c2f1957811faf8/schema.graphql",
+      "bytes": 1177658,
+      "sha256": "4dea7bd74e69637bd55795157eef5bfd89af3a32a6f05e8ac69004f223896415"
+    },
+    "LICENSE.md": {
+      "url": "https://raw.githubusercontent.com/octokit/graphql-schema/503d8f18a265230ec224669241c2f1957811faf8/LICENSE.md",
+      "bytes": 1059,
+      "sha256": "f5f7b68650527969a41df756f8b8960df77cc53b41ed1fc37a42586abc7dccf4"
+    }
+  }
+}

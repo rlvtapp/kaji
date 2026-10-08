@@ -1,0 +1,9 @@
+syntax = "proto3";
+package demo;
+import "common.proto";
+service Store {
+  rpc Get(Item) returns (Item);
+  rpc Watch(Item) returns (stream Item);
+  rpc Upload(stream Item) returns (Item);
+  rpc Chat(stream Item) returns (stream Item);
+}

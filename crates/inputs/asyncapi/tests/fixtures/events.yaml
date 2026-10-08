@@ -1,0 +1,26 @@
+asyncapi: 3.0.0
+info:
+  title: Order events
+  version: 1.0.0
+channels:
+  orders:
+    address: orders
+    bindings:
+      kafka:
+        topic: orders
+    messages:
+      created:
+        payload:
+          type: object
+          properties:
+            id:
+              type: string
+operations:
+  emitCreated:
+    action: send
+    channel:
+      $ref: '#/channels/orders'
+components:
+  schemas:
+    Order:
+      type: object

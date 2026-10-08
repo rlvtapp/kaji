@@ -1,0 +1,22 @@
+arazzo: 1.0.1
+info:
+  title: Checkout workflows
+  version: 1.0.0
+sourceDescriptions:
+  - name: shop
+    url: https://example.test/openapi.yaml
+    type: openapi
+workflows:
+  - workflowId: login
+    steps:
+      - stepId: authenticate
+        operationId: login
+        successCriteria:
+          - condition: $statusCode == 200
+  - workflowId: checkout
+    dependsOn: [login]
+    steps:
+      - stepId: create
+        operationId: createOrder
+        successCriteria:
+          - condition: $statusCode == 201

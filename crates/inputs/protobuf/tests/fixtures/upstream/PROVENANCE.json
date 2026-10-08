@@ -1,0 +1,23 @@
+{
+  "repository": "https://github.com/protocolbuffers/protobuf",
+  "commit": "f0dc78d7e6e331b8c6bb2d5283e06aa26883ca7c",
+  "root": "google/protobuf/unittest.proto",
+  "license_file": "LICENSE",
+  "files": [
+    {
+      "path": "google/protobuf/unittest.proto",
+      "bytes": 46726,
+      "sha256": "8b0651a76954082f2b9c85651efeb06420b7a8737c821a74d243c24218805013"
+    },
+    {
+      "path": "google/protobuf/unittest_import.proto",
+      "bytes": 2743,
+      "sha256": "239cfa6c7bea7efcd3fd2331428d2a3693428e6ef706eaa200525e6c29ce21fe"
+    },
+    {
+      "path": "google/protobuf/unittest_import_public.proto",
+      "bytes": 1865,
+      "sha256": "e83b6ba104555b79e098f0ec9533a6d9c38302e480f88be2a826312fca6eca47"
+    }
+  ]
+}

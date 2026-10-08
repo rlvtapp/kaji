@@ -1,0 +1,8 @@
+syntax = "proto3";
+package demo;
+message Item {
+  string name = 1;
+  enum State { UNKNOWN = 0; READY = 1; }
+  State state = 2;
+  map<string, string> attributes = 3;
+}

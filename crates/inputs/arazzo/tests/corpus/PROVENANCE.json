@@ -1,0 +1,42 @@
+[
+  {
+    "file": "bnpl-1.0.yaml",
+    "source": "https://github.com/OAI/Arazzo-Specification/blob/12aa8bcb07a2df0719afd1f1f3d18334012a5172/examples/1.0.0/bnpl-arazzo.yaml",
+    "commit": "12aa8bcb07a2df0719afd1f1f3d18334012a5172",
+    "upstream_path": "examples/1.0.0/bnpl-arazzo.yaml",
+    "license": "Apache-2.0",
+    "bytes": 10349,
+    "sha256": "d61927249565ca8b7a8f3d80ede63cb505dda18392cea424de44c21a5bb0163e",
+    "modified": false
+  },
+  {
+    "file": "fapi-par-1.0.yaml",
+    "source": "https://github.com/OAI/Arazzo-Specification/blob/12aa8bcb07a2df0719afd1f1f3d18334012a5172/examples/1.0.0/FAPI-PAR.arazzo.yaml",
+    "commit": "12aa8bcb07a2df0719afd1f1f3d18334012a5172",
+    "upstream_path": "examples/1.0.0/FAPI-PAR.arazzo.yaml",
+    "license": "Apache-2.0",
+    "bytes": 6092,
+    "sha256": "8a51da1842c8150ab7181105097507291bec18f4c2c4361d6bae921c8607e85b",
+    "modified": false
+  },
+  {
+    "file": "oauth-1.0.yaml",
+    "source": "https://github.com/OAI/Arazzo-Specification/blob/12aa8bcb07a2df0719afd1f1f3d18334012a5172/examples/1.0.0/oauth.arazzo.yaml",
+    "commit": "12aa8bcb07a2df0719afd1f1f3d18334012a5172",
+    "upstream_path": "examples/1.0.0/oauth.arazzo.yaml",
+    "license": "Apache-2.0",
+    "bytes": 5833,
+    "sha256": "7c444a293cce0dae71eb59df3fd68500f9772e1e8ef7b5a984df9ed7aa8b24d9",
+    "modified": false
+  },
+  {
+    "file": "pet-coupons-1.0.yaml",
+    "source": "https://github.com/OAI/Arazzo-Specification/blob/12aa8bcb07a2df0719afd1f1f3d18334012a5172/examples/1.0.0/pet-coupons.arazzo.yaml",
+    "commit": "12aa8bcb07a2df0719afd1f1f3d18334012a5172",
+    "upstream_path": "examples/1.0.0/pet-coupons.arazzo.yaml",
+    "license": "Apache-2.0",
+    "bytes": 5555,
+    "sha256": "76167a6cd5994a13eadfde5d21ae39085e2f445af08223c3b46a1d2927df7644",
+    "modified": false
+  }
+]

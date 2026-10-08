@@ -1,0 +1,62 @@
+[
+  {
+    "file": "slack-rtm-3.1.yaml",
+    "source": "https://github.com/asyncapi/spec/blob/1dd65fd2c1ed13f06365c1e870c61cdc82d8a981/examples/slack-rtm-asyncapi.yml",
+    "commit": "1dd65fd2c1ed13f06365c1e870c61cdc82d8a981",
+    "upstream_path": "examples/slack-rtm-asyncapi.yml",
+    "license": "Apache-2.0",
+    "bytes": 25194,
+    "sha256": "714f0635858eef8ed5e54262c073aea93309a087291da959f8932158ca9efa83",
+    "modified": false
+  },
+  {
+    "file": "slack-rtm-3.0.yaml",
+    "source": "https://github.com/asyncapi/spec/blob/d78dcea70c9b094a3df72f9a4e811828cec778cc/examples/slack-rtm-asyncapi.yml",
+    "commit": "d78dcea70c9b094a3df72f9a4e811828cec778cc",
+    "upstream_path": "examples/slack-rtm-asyncapi.yml",
+    "license": "Apache-2.0",
+    "bytes": 25194,
+    "sha256": "b8001ff6c3096f432389f241bbb0ab58de17b2b965899e8478827efa85edfbff",
+    "modified": false
+  },
+  {
+    "file": "slack-rtm-2.6.yaml",
+    "source": "https://github.com/asyncapi/spec/blob/1824379ba6252bfb52550337a86ca9b10a33b3aa/examples/slack-rtm.yml",
+    "commit": "1824379ba6252bfb52550337a86ca9b10a33b3aa",
+    "upstream_path": "examples/slack-rtm.yml",
+    "license": "Apache-2.0",
+    "bytes": 21769,
+    "sha256": "9150e823e7d8be7d6190f07fbc2905ff23bdf87c1c7977faa24ef0c569ec8fba",
+    "modified": false
+  },
+  {
+    "file": "adeo-kafka-3.1.yaml",
+    "source": "https://github.com/asyncapi/spec/blob/1dd65fd2c1ed13f06365c1e870c61cdc82d8a981/examples/adeo-kafka-request-reply-asyncapi.yml",
+    "commit": "1dd65fd2c1ed13f06365c1e870c61cdc82d8a981",
+    "upstream_path": "examples/adeo-kafka-request-reply-asyncapi.yml",
+    "license": "Apache-2.0",
+    "bytes": 10315,
+    "sha256": "657308e25e73a7e5f79dc9a6552782091bbc43dfaf9130bbe838eb7e5d803d2d",
+    "modified": false
+  },
+  {
+    "file": "kraken-websocket-3.1.yaml",
+    "source": "https://github.com/asyncapi/spec/blob/1dd65fd2c1ed13f06365c1e870c61cdc82d8a981/examples/kraken-websocket-request-reply-multiple-channels-asyncapi.yml",
+    "commit": "1dd65fd2c1ed13f06365c1e870c61cdc82d8a981",
+    "upstream_path": "examples/kraken-websocket-request-reply-multiple-channels-asyncapi.yml",
+    "license": "Apache-2.0",
+    "bytes": 12597,
+    "sha256": "f64369546376e3c19a1ea3f2bdbc137ef2ab2348be4eb6a4fe9b2dda820bd534",
+    "modified": false
+  },
+  {
+    "file": "social-backend-external-3.1.yaml",
+    "source": "https://github.com/asyncapi/spec/blob/1dd65fd2c1ed13f06365c1e870c61cdc82d8a981/examples/social-media/backend/asyncapi.yaml",
+    "commit": "1dd65fd2c1ed13f06365c1e870c61cdc82d8a981",
+    "upstream_path": "examples/social-media/backend/asyncapi.yaml",
+    "license": "Apache-2.0",
+    "bytes": 2585,
+    "sha256": "04511395c549733ab3e4e59a21b61df5db70ec0223aa33b8012456f9b77b78c7",
+    "modified": false
+  }
+]

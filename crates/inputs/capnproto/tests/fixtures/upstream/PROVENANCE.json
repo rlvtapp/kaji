@@ -1,0 +1,66 @@
+{
+  "repository": "https://github.com/capnproto/capnproto",
+  "commit": "b34ec28cceaf15b1082b74b50f03f770873c3636",
+  "license_file": "LICENSE",
+  "files": [
+    {
+      "path": "capnp/c++.capnp",
+      "bytes": 2712,
+      "sha256": "52ead0eaa560b21e692d6f3d9966a52dfc99e19f53ae2d7c7bd2944a240d86de"
+    },
+    {
+      "path": "capnp/test.capnp",
+      "bytes": 30272,
+      "sha256": "dfb59b9d3f092386e53b840a0f54ea6ba7c48864c12bd959f91c2be472847438"
+    },
+    {
+      "path": "capnp/schema.capnp",
+      "bytes": 19230,
+      "sha256": "a5c1c4a18d10e094d3c127f2cc20fc1eaa10d1ef8623130a0613f530a21fd350"
+    },
+    {
+      "path": "capnp/rpc.capnp",
+      "bytes": 85783,
+      "sha256": "026845b4658ac5c3ef40d0c892060241ba1caed09b8219c158ee609ccfcfadf5"
+    },
+    {
+      "path": "capnp/rpc-twoparty.capnp",
+      "bytes": 9632,
+      "sha256": "a28328408261d476403acb1f3861a7d88075ffaefca1996c21c746b580527223"
+    },
+    {
+      "path": "capnp/stream.capnp",
+      "bytes": 2545,
+      "sha256": "5b0656ca3daca9ef28740c14813d5dd474fd0f9991ce99f652838f4cccf6fb30"
+    },
+    {
+      "path": "capnp/testdata/packed",
+      "bytes": 831,
+      "sha256": "f8001fa34f313bdc8a7c015d592f5fbde2cb1f32dd99a3ca54d14899f87938c0"
+    },
+    {
+      "path": "capnp/testdata/short.txt",
+      "bytes": 4235,
+      "sha256": "d009d68ad9f54c563213c9b4dff81cf82d6755df6670bfe3523d0f77a67b5236"
+    },
+    {
+      "path": "capnp/testdata/binary",
+      "bytes": 2816,
+      "sha256": "73a8f3f8712655637b86d18653896d3a94ade8b384e7d82300a81890ba130c04"
+    }
+  ],
+  "roots": [
+    "capnp/test.capnp",
+    "capnp/schema.capnp",
+    "capnp/rpc.capnp",
+    "capnp/rpc-twoparty.capnp"
+  ],
+  "descriptor_request": {
+    "path": "corpus.bin",
+    "bytes": 320016,
+    "sha256": "6945efff028b29d87eb79ff755fe5591509e763cfe4d322b32357be90251b205",
+    "compiler": "Cap'n Proto 1.5.0",
+    "compiler_bottle_sha256": "9783efaa35e1d88fe4ffd18023bf496b98cb2f1befaee1849dd6076163612562",
+    "command": "capnp compile -o- --src-prefix=. -I. capnp/test.capnp capnp/schema.capnp capnp/rpc.capnp capnp/rpc-twoparty.capnp"
+  }
+}
