@@ -180,3 +180,5 @@ XML node metadata and device authorization endpoints are preserved. Multipart
 responses remain native buffered data for caller decoding. See the
 [OpenAPI 3.2 guide](guides/openapi32.md) and
 [model policy guide](guides/forward-compatible-models.md) for the concrete APIs.
+
+See the [generator completion backlog](generator-backlog.md) for language fixes, output size/splitting, framework APIs and artifact acceptance work. These items are planned, not current capabilities.

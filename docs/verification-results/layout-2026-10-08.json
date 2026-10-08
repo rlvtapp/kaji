@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-08",
+  "revision": "a01a16b9d7a038ae11eb21c062e2b65a9d99fc32",
+  "contract": "stripe",
+  "scope": "generation only; direct default namespaced SDKs; not native compilation",
+  "languages": {
+    "typescript": {
+      "files": 2057,
+      "bytes": 147315476,
+      "largest_files": [
+        {
+          "path": "clients/checkout/postCheckoutSessions.ts",
+          "bytes": 375848
+        },
+        {
+          "path": "clients/checkout/getCheckoutSessions.ts",
+          "bytes": 353762
+        },
+        {
+          "path": "clients/checkout/postCheckoutSessionsSessionExpire.ts",
+          "bytes": 353497
+        },
+        {
+          "path": "clients/checkout/getCheckoutSessionsSession.ts",
+          "bytes": 353276
+        },
+        {
+          "path": "clients/treasury/postTreasuryOutboundPayments.ts",
+          "bytes": 347092
+        }
+      ]
+    },
+    "ruby": {
+      "files": 8,
+      "bytes": 2996599,
+      "largest_files": [
+        {
+          "path": "lib/layout_audit_sdk/models.rb",
+          "bytes": 1994092
+        },
+        {
+          "path": "lib/layout_audit_sdk/response_validation.rb",
+          "bytes": 561572
+        },
+        {
+          "path": "lib/layout_audit_sdk/client.rb",
+          "bytes": 436588
+        },
+        {
+          "path": "README.md",
+          "bytes": 3738
+        },
+        {
+          "path": "layout-audit-sdk.gemspec",
+          "bytes": 254
+        }
+      ]
+    },
+    "go": {
+      "files": 1292,
+      "bytes": 3387464,
+      "largest_files": [
+        {
+          "path": "client.go",
+          "bytes": 508751
+        },
+        {
+          "path": "model_invoice_2358484a94534cf0.go",
+          "bytes": 19282
+        },
+        {
+          "path": "service_customers_0_0aa8c0c0b61133d9.go",
+          "bytes": 16847
+        },
+        {
+          "path": "model_checkout_session_b2e95921ac3f71e7.go",
+          "bytes": 13290
+        },
+        {
+          "path": "model_charge_26c6cf03380bb6b1.go",
+          "bytes": 11467
+        }
+      ]
+    }
+  },
+  "source_sha256": "fba83fd7ff9ce87eafa0fbbc15c382b176dac204ca21b72df1a8c361441d9ecf"
+}

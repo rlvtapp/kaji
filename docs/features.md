@@ -160,3 +160,5 @@ Complex contracts, SSE/uploads and real API semantics still need focused tests.
 [roadmap](sdk-roadmap.md) tracks remaining work. Different native APIs are
 intentional; behavior and evidence should be comparable where the capabilities
 overlap.
+
+See the [generator completion backlog](generator-backlog.md) for language fixes, output size/splitting, framework APIs and artifact acceptance work. These items are planned, not current capabilities.

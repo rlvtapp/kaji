@@ -326,3 +326,5 @@ Licensed under the [MIT License](LICENSE).
 Need a commercial license for Kaji? We've got you covered.
 
 **[Get a commercial license →](https://www.youtube.com/watch?v=dQw4w9WgXcQ)**
+
+See the [generator completion backlog](docs/generator-backlog.md) for language fixes, output size/splitting, framework APIs and artifact acceptance work. These items are planned, not current capabilities.

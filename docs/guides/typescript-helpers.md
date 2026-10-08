@@ -46,3 +46,5 @@ they are not complete behavioral mocks. See [testing generated SDKs](testing.md)
 and the [full TypeScript example](../../examples/typescript-stack/README.md).
 
 For every option and direct Rust API use, see [auxiliary generators](../auxiliary-generators.md).
+
+See the [generator completion backlog](../generator-backlog.md) for language fixes, output size/splitting, framework APIs and artifact acceptance work. These items are planned, not current capabilities.

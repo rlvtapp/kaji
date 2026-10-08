@@ -8,6 +8,9 @@
 
 #### Generation and customization
 
+- Documented a prioritized generator completion backlog covering native corpus
+  failures, output size/splitting, framework APIs and artifact acceptance checks.
+
 - Migration from Stainless, Fern and Speakeasy through `kaji migrate`, direct
   generation from supported vendor configurations, and automatic normalization
   of supported OpenAPI annotations. Originals are preserved; unsupported settings
