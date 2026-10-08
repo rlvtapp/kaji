@@ -62,7 +62,7 @@ try:
         requests = [(data, content_type) for role, data, content_type in seen if role == marker]
         assert len(requests) == 2 and requests[0] == requests[1], 'retry changed multipart bytes or boundary'
         data, content_type = requests[0]
-        assert content_type.startswith('multipart/form-data; boundary=kaji-')
+        assert content_type.startswith('multipart/form-data; boundary=poolster-')
         message = BytesParser(policy=policy.default).parsebytes(f'Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n'.encode() + data)
         assert message.is_multipart()
         parts = list(message.iter_parts())
