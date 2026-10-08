@@ -45,7 +45,7 @@ Declared samples precede bounded schema samples. Sensitive credential names,
 
 Run ordinary behavior tests with `cargo test -p poolster-plugin-postman`. The ignored
 `validates_actual_official_draft04_schema` test validates generated representations
-using Python `jsonschema`; set `KAJI_TEST_PYTHON` and `PYTHONPATH` as needed:
+using Python `jsonschema`; set `POOLSTER_TEST_PYTHON` and `PYTHONPATH` as needed:
 
 ```sh
 cargo test -p poolster-plugin-postman validates_actual_official_draft04_schema -- --ignored

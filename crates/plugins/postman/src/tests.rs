@@ -342,7 +342,7 @@ fn duplicate_ids_and_unresolved_redaction_fail_safely() {
     );
 }
 #[test]
-#[ignore = "requires Python with jsonschema; set KAJI_TEST_PYTHON and PYTHONPATH if needed"]
+#[ignore = "requires Python with jsonschema; set POOLSTER_TEST_PYTHON and PYTHONPATH if needed"]
 fn validates_actual_official_draft04_schema() {
     let root = tempfile::tempdir().unwrap();
     let mut variants = vec![api()];
@@ -371,7 +371,7 @@ fn validates_actual_official_draft04_schema() {
         for (index, (_, document)) in documents.iter().enumerate() {
             let path = root.path().join(format!("collection-{i}-{index}.json"));
             std::fs::write(&path, serde_json::to_string_pretty(document).unwrap()).unwrap();
-            let result=std::process::Command::new(std::env::var("KAJI_TEST_PYTHON").unwrap_or_else(|_|"python3".into())).arg("-c").arg("import json,sys,jsonschema; schema=json.load(open(sys.argv[1])); jsonschema.Draft4Validator.check_schema(schema); jsonschema.Draft4Validator(schema).validate(json.load(open(sys.argv[2])))").arg(concat!(env!("CARGO_MANIFEST_DIR"),"/tests/schema/collection-v2.1.0.json")).arg(path).output().unwrap();
+            let result=std::process::Command::new(std::env::var("POOLSTER_TEST_PYTHON").unwrap_or_else(|_|"python3".into())).arg("-c").arg("import json,sys,jsonschema; schema=json.load(open(sys.argv[1])); jsonschema.Draft4Validator.check_schema(schema); jsonschema.Draft4Validator(schema).validate(json.load(open(sys.argv[2])))").arg(concat!(env!("CARGO_MANIFEST_DIR"),"/tests/schema/collection-v2.1.0.json")).arg(path).output().unwrap();
             assert!(
                 result.status.success(),
                 "{}{}",
@@ -394,7 +394,7 @@ fn generated_collection_executes_with_newman_local_mock() {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, serde_json::to_string(&document).unwrap()).unwrap();
         let output = std::process::Command::new(
-            std::env::var("KAJI_TEST_NODE").unwrap_or_else(|_| "node".into()),
+            std::env::var("POOLSTER_TEST_NODE").unwrap_or_else(|_| "node".into()),
         )
         .arg(concat!(
             env!("CARGO_MANIFEST_DIR"),
