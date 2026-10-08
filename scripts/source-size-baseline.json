@@ -21,7 +21,7 @@
     "crates/plugins/elixir/src/operation_tests.rs": 458,
     "crates/plugins/elixir/src/page_pagination.rs": 434,
     "crates/plugins/go/src/layout.rs": 453,
-    "crates/plugins/go/src/lib.rs": 3686,
+    "crates/plugins/go/src/lib.rs": 3698,
     "crates/plugins/go/src/operation_tests.rs": 481,
     "crates/plugins/go/src/providers.rs": 433,
     "crates/plugins/java/src/lib.rs": 3207,
