@@ -4,7 +4,7 @@ Expose this small OpenAPI contract as a stdio MCP server:
 
 ```sh
 cd examples/mcp-api-tools
-npx kajicli mcp ./openapi.yaml --base-url http://localhost:4010
+npx poolster mcp ./openapi.yaml --base-url http://localhost:4010
 ```
 
 Configure that command as a stdio server in an MCP host. It publishes tools for

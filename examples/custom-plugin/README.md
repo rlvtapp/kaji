@@ -1,10 +1,10 @@
 # Author a typed plugin
 
-This standalone Rust generator depends only on `kaji-core`. Run:
+This standalone Rust generator depends only on `poolster-core`. Run:
 
 ```sh
 cargo test --manifest-path examples/custom-plugin/Cargo.toml
-cargo run --manifest-path examples/custom-plugin/Cargo.toml -- /tmp/kaji-plugin-example
+cargo run --manifest-path examples/custom-plugin/Cargo.toml -- /tmp/poolster-plugin-example
 ```
 
 `Names` is a typed contract. Two independent providers publish it. The consumer

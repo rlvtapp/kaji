@@ -3,7 +3,7 @@
 Generate from the repository root:
 
 ```sh
-cargo run -p kaji-cli -- generate --config examples/symfony-sdk/kaji.json
+cargo run -p poolster-cli -- generate --config examples/symfony-sdk/poolster.json
 ```
 
 The recipe creates example/notes-sdk and example/notes-symfony together. The

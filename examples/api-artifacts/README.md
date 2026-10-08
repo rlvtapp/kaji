@@ -2,21 +2,21 @@
 
 This example uses explicit Widgets CRUD bindings and exports a Postman collection
 with a blank environment. It requires the new source-checkout plugins; published
-Kaji 0.4.0 does not contain them.
+Poolster 0.4.0 does not contain them.
 
 Build the generator and embedded compiler from the repository root:
 
 ```sh
-cargo build -p kaji-cli
-(cd openapi && go build -o ../target/debug/kaji-openapi .)
-target/debug/kaji generate --config examples/api-artifacts/kaji.json
+cargo build -p poolster-cli
+(cd openapi && go build -o ../target/debug/poolster-openapi .)
+target/debug/poolster generate --config examples/api-artifacts/poolster.json
 ```
 
 Inspect:
 
 - `generated/postman/widgets.postman_collection.json`: importable Collection 2.1.
 - `generated/postman/widgets.postman_environment.json`: create-once credential template.
-- `generated/terraform/.kaji/terraform-plan.json`: validated resource bindings and exclusions.
+- `generated/terraform/.poolster/terraform-plan.json`: validated resource bindings and exclusions.
 - `generated/terraform/internal/provider`: typed Framework provider/resources.
 
 The Postman base URL is intentionally a non-live example domain. Populate a local
@@ -36,7 +36,7 @@ Build and test the provider:
 
 ```sh
 (cd examples/api-artifacts/generated/terraform && go mod tidy && go test ./... && go build ./...)
-target/debug/kaji generate --config examples/api-artifacts/kaji.json --check --format json
+target/debug/poolster generate --config examples/api-artifacts/poolster.json --check --format json
 ```
 
 The generated Go manifest and checksum lock pin the Framework dependency graph;
@@ -46,14 +46,14 @@ Terraform against it.
 
 For CI, generate from the committed recipe first, then copy the editable
 `packages/postman-check` action sources into `.github/actions/postman-check` and
-`packages/sdk-check/{action.yml,check.mjs}` into `.github/actions/kaji-check`:
+`packages/sdk-check/{action.yml,check.mjs}` into `.github/actions/poolster-check`:
 
 ```yaml
 - uses: ./.github/actions/postman-check
   with:
     collection: examples/api-artifacts/generated/postman/widgets.postman_collection.json
     environment: examples/api-artifacts/generated/postman/widgets.postman_environment.json
-- uses: ./.github/actions/kaji-check
+- uses: ./.github/actions/poolster-check
   with:
     path: examples/api-artifacts/generated/terraform
     language: terraform

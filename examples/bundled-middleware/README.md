@@ -1,7 +1,7 @@
 # Ship middleware that customers do not have to register
 
 This example generates a TypeScript Fetch SDK for a Notes API. The SDK author
-keeps a policy in `middleware/author-policy.ts`; Kaji copies it into the SDK and
+keeps a policy in `middleware/author-policy.ts`; Poolster copies it into the SDK and
 registers it automatically. Every generated request receives
 `X-SDK-Policy: bundled`. A customer just calls `new Notes(...)` and `listNotes()`.
 
@@ -11,20 +11,20 @@ not publish anything or require a running API to verify the policy.
 ## Prerequisites
 
 The example uses the middleware and delivery APIs in the current source tree.
-Use a Kaji release containing those APIs once published. For source builds,
+Use a Poolster release containing those APIs once published. For source builds,
 you need Rust and Go; compiling/testing the SDK needs Node 22+ and npm.
 
 From the repository root, build the generator and its OpenAPI compiler:
 
 ```sh
-cargo build -p kaji-cli
-(cd openapi && go build -o ../target/debug/kaji-openapi .)
+cargo build -p poolster-cli
+(cd openapi && go build -o ../target/debug/poolster-openapi .)
 ```
 
 ## Generate, build, and prove the default behavior
 
 ```sh
-./target/debug/kaji generate --config examples/bundled-middleware/kaji.json
+./target/debug/poolster generate --config examples/bundled-middleware/poolster.json
 cd examples/bundled-middleware/generated/typescript
 npm install --ignore-scripts
 npm run build
@@ -46,7 +46,7 @@ extensionless imports.
 ## What belongs in source control
 
 ```text
-kaji.json                         recipe, middleware registration, release metadata
+poolster.json                         recipe, middleware registration, release metadata
 openapi.yaml                      API contract
 middleware/author-policy.ts       author-maintained policy source
 tests/verify.cjs                   author-maintained executable SDK test
@@ -57,7 +57,7 @@ Commit the recipe, contract, middleware, and test. Commit generated output too
 if you review SDK changes in pull requests. Edit the original policy, not its
 copy under `generated/`.
 
-`middleware[].source` is relative to `kaji.json`; `middleware[].path` is relative
+`middleware[].source` is relative to `poolster.json`; `middleware[].path` is relative
 to the SDK package. The `symbol` names the exported `ClientMiddleware` function.
 The policy imports runtime types with `import type`, avoiding a runtime import
 cycle. `customizations` copies the test; `release` declares build/test commands
@@ -68,7 +68,7 @@ and opts into the standard npm publisher.
 From the repository root:
 
 ```sh
-./target/debug/kaji generate --config examples/bundled-middleware/kaji.json --check
+./target/debug/poolster generate --config examples/bundled-middleware/poolster.json --check
 ```
 
 This succeeds with current output. Change the original policy, then repeat the
@@ -79,14 +79,14 @@ removes the automatic registration and deletes its unchanged owned source copy.
 ## Prepare delivery in your own repository
 
 Copy this example into the root of your API repository and use the matching
-Kaji executable. Generate there, then preview the automation:
+Poolster executable. Generate there, then preview the automation:
 
 ```sh
-kaji sdk init --root . --config kaji.json --actions local --dry-run
+poolster sdk init --root . --config poolster.json --actions local --dry-run
 ```
 
 Review the proposed files before running without `--dry-run`. The scaffolder
-needs the generated `.kaji/package.json`, supplied by this example's `release`
+needs the generated `.poolster/package.json`, supplied by this example's `release`
 entry. It does not install a GitHub App or register a trusted npm publisher.
 Replace `@example/notes` with a package name you own before any publication.
 

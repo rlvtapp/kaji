@@ -8,7 +8,7 @@ service.
 
 ```sh
 cd examples/typescript-cli
-npx kajicli generate
+npx poolster generate
 cd generated/notes
 npm install
 npm run build
@@ -46,7 +46,7 @@ notes get --note-id note_123 --base-url https://api.acme.test/v1 --profile work
 notes admin users list
 ```
 
-`kaji.json` owns the public OAuth client ID and endpoint overrides. The
+`poolster.json` owns the public OAuth client ID and endpoint overrides. The
 OpenAPI `authorizationCode` flow supplies the authorization and token URLs;
 the device authorization URL is configured separately because standard
 OpenAPI does not model it.

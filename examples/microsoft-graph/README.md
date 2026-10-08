@@ -1,21 +1,21 @@
-# Microsoft Graph: Kaji demo
+# Microsoft Graph: Poolster demo
 
-This is a real config-first Kaji project using the public Microsoft Graph v1.0
+This is a real config-first Poolster project using the public Microsoft Graph v1.0
 OpenAPI document directly by URL. It generates two independently configured,
 namespaced SDKs:
 
 - `generated/typescript`: Fetch-based TypeScript client, exported as
-  `@kaji/microsoft-graph` with `new MicrosoftGraph(...)`.
+  `@poolster/microsoft-graph` with `new MicrosoftGraph(...)`.
 - `generated/go`: standard-library Go client package named `graph`, split into
   bounded model, operation, and service files for the large contract.
 
 From this directory, run:
 
 ```sh
-npx kajicli generate --config kaji.json
+npx poolster generate --config poolster.json
 ```
 
-The first run downloads the roughly 42 MiB public contract. Kaji stores the
+The first run downloads the roughly 42 MiB public contract. Poolster stores the
 download only in its temporary compiler workspace; the generated SDKs are the
 only durable output in `generated/`. That directory is intentionally ignored by
 Git because the current Graph document produces tens of thousands of files.
@@ -36,5 +36,5 @@ bash ../../scripts/test-large-graph.sh
 ```
 
 See the [large-spec guide](../../docs/large-specs.md) for the performance and
-validation details, and the [`kaji.json` reference](../../docs/config-file.md)
+validation details, and the [`poolster.json` reference](../../docs/config-file.md)
 for remote URL, headers, and authentication settings.

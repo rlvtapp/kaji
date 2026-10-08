@@ -3,7 +3,7 @@
 Generate an installable Ruby 3.1+ gem from an OpenAPI document:
 
 ```sh
-kaji generate ../openapi.yaml --output generated --language ruby
+poolster generate ../openapi.yaml --output generated --language ruby
 cd generated/ruby
 gem build *.gemspec
 ```

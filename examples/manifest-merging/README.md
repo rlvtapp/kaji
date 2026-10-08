@@ -5,7 +5,7 @@ From the repository root, seed a user-owned manifest and generate:
 ```sh
 mkdir -p examples/manifest-merging/generated/typescript
 cp examples/manifest-merging/package.seed.json examples/manifest-merging/generated/typescript/package.json
-cargo run -p kaji-cli -- generate --config examples/manifest-merging/kaji.json
+cargo run -p poolster-cli -- generate --config examples/manifest-merging/poolster.json
 ```
 
 Inspect the resulting package.json: the test script, private flag, repository,

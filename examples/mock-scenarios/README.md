@@ -7,14 +7,14 @@ Run the native mock without Docker:
 
 ```sh
 cd examples/mock-scenarios
-npx kajicli mock serve openapi.yaml --port 4010
+npx poolster mock serve openapi.yaml --port 4010
 ```
 
 Or generate and run the Docker fixture:
 
 ```sh
 cd examples/mock-scenarios
-npx kajicli generate
+npx poolster generate
 cd generated/mock-server
 docker compose up --build
 ```

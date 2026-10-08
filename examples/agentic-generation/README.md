@@ -1,7 +1,7 @@
 # Agentic generation
 
-This is the smallest trusted-workspace example for Kaji's generator MCP
-server. It lets an agent ask Kaji which languages it supports and generate an
+This is the smallest trusted-workspace example for Poolster's generator MCP
+server. It lets an agent ask Poolster which languages it supports and generate an
 SDK from an explicit local OpenAPI file.
 
 ## Start the MCP server
@@ -11,7 +11,7 @@ directly while testing the stdio protocol:
 
 ```sh
 cd examples/agentic-generation
-npx kajicli mcp generator
+npx poolster mcp generator
 ```
 
 The server exposes only two tools:
@@ -36,10 +36,10 @@ and write. A representative tool input is:
 }
 ```
 
-The output path is deliberate: generation overwrites Kaji-owned files below
+The output path is deliberate: generation overwrites Poolster-owned files below
 it while preserving custom starter files. The generated output includes
-`.kaji/generation.lock.json`, so an agent can report the selected operations,
-targets, input hash, and Kaji version for review.
+`.poolster/generation.lock.json`, so an agent can report the selected operations,
+targets, input hash, and Poolster version for review.
 
 ## Safe operating boundary
 

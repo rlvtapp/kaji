@@ -1,6 +1,6 @@
 # Complete TypeScript stack
 
-This is a small, runnable Kaji project. It deliberately produces two SDK
+This is a small, runnable Poolster project. It deliberately produces two SDK
 packages from one contract:
 
 - `generated/typescript/fetch` is the complete Fetch SDK plus Zod, TanStack
@@ -18,7 +18,7 @@ instead; do not combine the two transports in a single published package.
 Run this from this directory:
 
 ```sh
-npx kajicli generate --config kaji.json
+npx poolster generate --config poolster.json
 ```
 
 The generated Fetch package contains this layout:
@@ -39,7 +39,7 @@ generated/typescript/fetch/
 
 Install the generated package's dependencies before compiling or running it.
 The framework integrations also require their normal application peer
-dependencies (React/Vue and their framework setup). Kaji generates the typed
+dependencies (React/Vue and their framework setup). Poolster generates the typed
 bindings; it does not install dependencies or configure an application for you.
 
 ## Full SDK: Fetch

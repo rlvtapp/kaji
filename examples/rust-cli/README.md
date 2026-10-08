@@ -3,7 +3,7 @@
 From the repository root:
 
 ```sh
-cargo run -p kaji-cli -- generate --config examples/rust-cli/kaji.json
+cargo run -p poolster-cli -- generate --config examples/rust-cli/poolster.json
 cargo build --manifest-path examples/rust-cli/generated/notes/Cargo.toml
 examples/rust-cli/generated/notes/target/debug/notes --help
 ```

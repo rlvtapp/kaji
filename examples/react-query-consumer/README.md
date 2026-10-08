@@ -6,7 +6,7 @@ application needs: create the SDK transport and provide a Query Client.
 
 ```sh
 cd examples/react-query-consumer
-npx kajicli generate
+npx poolster generate
 cd generated/sdk && npm install && npm run build && cd ../..
 npm install
 npm run typecheck

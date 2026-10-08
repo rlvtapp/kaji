@@ -5,7 +5,7 @@ packages through the Rust API, and writes them to `generated/`.
 
 ```sh
 cd openapi
-go run . --out ../examples/rust-embedded/.kaji/openapi ../examples/rust-embedded/openapi.yaml
+go run . --out ../examples/rust-embedded/.poolster/openapi ../examples/rust-embedded/openapi.yaml
 cd ../examples/rust-embedded
 cargo run
 ```

@@ -1,4 +1,4 @@
-# Kaji examples
+# Poolster examples
 
 Every example keeps its contract, recipe or application code, and instructions
 together. Start small, then move to the complete stacks.
@@ -20,7 +20,7 @@ together. Start small, then move to the complete stacks.
 | [Reproducible generation](reproducible-generation/README.md) | Path slicing, generation lock, TypeScript, and C# | Focused, reviewable SDK updates |
 | [Ruby SDK](ruby-sdk/README.md) | Ruby 3.1+ standard-library client and gem output | Ruby consumers |
 | [Swift SDK](swift-sdk/README.md) | Swift 5.9+ URLSession package output | Apple and server-side Swift consumers |
-| [Rust embedded](rust-embedded/README.md) | Calling Kaji from a Rust application | Integrators and plugin authors |
+| [Rust embedded](rust-embedded/README.md) | Calling Poolster from a Rust application | Integrators and plugin authors |
 | [Node embedded](node-embedded/README.md) | Async native generation with JavaScript plugins and artifact previews | Node build tools and plugin authors |
 | [TypeScript stack](typescript-stack/README.md) | Transports, validation, hooks, and testing helpers | Frontend consumers |
 | [Microsoft Graph](microsoft-graph/README.md) | Remote large contract and Go scaling | Large specifications |
