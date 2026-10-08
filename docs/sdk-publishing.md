@@ -21,9 +21,8 @@ It uses the simple strategy and explicit TOML updates because member crates inhe
 manifest tracks the last published version, currently `0.4.0`. Minor features bump
 the minor version before 1.0, so the pending feature release is `0.5.0`.
 
-`POOLSTER_RELEASE_ENABLED` must be set to `true` in repository variables before this
-workflow can create a GitHub release/tag. Leave it unset while release preparation
-is paused. Tag-triggered and manual publication also require that variable.
+Merging a Release Please release PR creates its GitHub release/tag. Publication
+runs for version tags; a manual retry must select the same release tag.
 The version-update regression test runs the pinned Release Please
 updaters against manifests and lockfiles without calling GitHub or publishing.
 
@@ -38,7 +37,7 @@ the release tag against the workspace version, publishes dependencies first,
 and skips versions already published when a run is retried. The public crates
 are `poolster`, `poolster-core`, the input crates and output plugin crates;
 `poolster-cli` and `poolster-node` remain private. This job uses the same
-`POOLSTER_RELEASE_ENABLED` gate as npm and PyPI.
+release-tag requirement as npm and PyPI.
 
 </details>
 

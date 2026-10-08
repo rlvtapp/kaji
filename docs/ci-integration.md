@@ -59,7 +59,7 @@ solely for Marketplace discovery.
 `.github/workflows/npm-publish.yml` is the release workflow. Pushing a version
 tag such as `v0.5.0` builds each native package on its target platform, then
 publishes CLI and SDK native packages before `poolster` and `@relevate/poolster`
-only when `POOLSTER_RELEASE_ENABLED` is set to `true`.
+after the release verification jobs pass. Manual retries must select a version tag.
 The SDK addon is only installed with `@relevate/poolster`; CLI-only installs use
 `poolster` and do not download it.
 

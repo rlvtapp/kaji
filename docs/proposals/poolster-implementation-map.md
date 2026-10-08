@@ -98,6 +98,6 @@ later, after the npm/PyPI CLI distribution is established.
    from the existing platform matrix. Verify exact versions and installation
    behavior before enabling any public publish job.
 
-The release workflow defines npm, PyPI and crates.io publication jobs behind
-`POOLSTER_RELEASE_ENABLED`. The crates.io job also requires `CRATES_IO_TOKEN`.
+The release workflow defines npm, PyPI and crates.io publication jobs for
+verified release tags. The crates.io job also requires `CRATES_IO_TOKEN`.
 Preparing these jobs does not publish a package.

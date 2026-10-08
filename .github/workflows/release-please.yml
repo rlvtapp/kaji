@@ -37,8 +37,6 @@ jobs:
           token: ${{ steps.app.outputs.token || secrets.SDK_GITHUB_TOKEN || github.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
-          # Release PRs can be prepared while publication remains disabled.
-          skip-github-release: ${{ vars.POOLSTER_RELEASE_ENABLED != 'true' }}
       - name: Run CI for a release PR created with the default token
         if: steps.release.outputs.pr != '' && steps.app.outputs.token == '' && env.HAS_RELEASE_TOKEN != 'true'
         env:

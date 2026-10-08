@@ -62,18 +62,18 @@ test('release updates inherited workspace and lock versions without changing dep
   assert.match(updated.get('packages/python/setup.py'), /version="0\.5\.1"/);
 });
 
-test('CLI native tests build the compiler first and releases require explicit enablement', () => {
+test('CLI native tests build the compiler first and publication requires a release tag', () => {
   const ci = read('.github/workflows/ci.yml');
   const build = ci.indexOf('go build -o ../target/debug/poolster-openapi .');
   const probe = ci.indexOf('cargo test -p poolster-cli --test local_references');
   assert.ok(build >= 0 && probe > build);
   const release = read('.github/workflows/release-please.yml');
-  assert.match(release, /skip-github-release: \$\{\{ vars\.POOLSTER_RELEASE_ENABLED != 'true' \}\}/);
+  assert.doesNotMatch(release, /skip-github-release|POOLSTER_RELEASE_ENABLED/);
   assert.match(release, /on:\n  push:\n    branches: \[main\]/);
   const publish = read('.github/workflows/npm-publish.yml');
-  assert.match(publish, /publish:\n    name: Publish to npm\n    needs: \[verify, generated-sdk, native, launchers\]\n    if: vars\.POOLSTER_RELEASE_ENABLED == 'true'/);
-  assert.match(publish, /publish-python:\n    name: Publish to PyPI\n    needs: \[verify, generated-sdk, native, launchers\]\n    if: vars\.POOLSTER_RELEASE_ENABLED == 'true'/);
-  assert.match(publish, /publish-crates:\n    name: Publish Rust SDK to crates.io\n    needs: \[verify, generated-sdk, native, launchers\]\n    if: vars\.POOLSTER_RELEASE_ENABLED == 'true'/);
+  assert.match(publish, /publish:\n    name: Publish to npm\n    needs: \[verify, generated-sdk, native, launchers\]\n    if: startsWith\(github\.ref, 'refs\/tags\/v'\)/);
+  assert.match(publish, /publish-python:\n    name: Publish to PyPI\n    needs: \[verify, generated-sdk, native, launchers\]\n    if: startsWith\(github\.ref, 'refs\/tags\/v'\)/);
+  assert.match(publish, /publish-crates:\n    name: Publish Rust SDK to crates.io\n    needs: \[verify, generated-sdk, native, launchers\]\n    if: startsWith\(github\.ref, 'refs\/tags\/v'\)/);
   assert.match(publish, /CARGO_REGISTRY_TOKEN: \$\{\{ secrets\.CRATES_IO_TOKEN \}\}/);
   assert.match(publish, /python scripts\/publish-crates.py --tag "\$GITHUB_REF_NAME"/);
 });
