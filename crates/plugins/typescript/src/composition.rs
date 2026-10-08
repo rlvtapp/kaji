@@ -501,195 +501,8 @@ impl Plugin<TypeScript> for Provider {
     }
 }
 
-pub enum QueryFramework {
-    React,
-    Vue,
-    Swr,
-}
-pub struct Query {
-    meta: Meta,
-    framework: QueryFramework,
-    provider: Option<Handle<Operations>>,
-    output: String,
-    operations_per_file: Option<usize>,
-}
-pub fn react_query() -> Query {
-    Query {
-        meta: Meta::new(),
-        framework: QueryFramework::React,
-        provider: None,
-        output: "react-query".into(),
-        operations_per_file: Some(50),
-    }
-}
-pub fn vue_query() -> Query {
-    Query {
-        framework: QueryFramework::Vue,
-        output: "vue-query".into(),
-        ..react_query()
-    }
-}
-pub fn swr() -> Query {
-    Query {
-        framework: QueryFramework::Swr,
-        output: "swr".into(),
-        ..react_query()
-    }
-}
-impl Query {
-    pub fn label(mut self, label: impl Into<String>) -> Self {
-        self.meta = self.meta.label(label);
-        self
-    }
-    pub fn using_operations(mut self, handle: Handle<Operations>) -> Self {
-        self.provider = Some(handle);
-        self
-    }
-    /// Bound generated helper modules; zero is rejected during generation.
-    pub fn max_operations_per_file(mut self, count: usize) -> Self {
-        self.operations_per_file = Some(count);
-        self
-    }
-    /// Preserve one aggregate helper module for callers that explicitly prefer it.
-    pub fn single_file(mut self) -> Self {
-        self.operations_per_file = None;
-        self
-    }
-    pub fn output(mut self, module: impl Into<String>) -> Self {
-        self.output = module.into();
-        self
-    }
-}
-impl Plugin<TypeScript> for Query {
-    fn kind(&self) -> &'static str {
-        "typescript-query"
-    }
-    fn meta(&self) -> &Meta {
-        &self.meta
-    }
-    fn requires(&self) -> Vec<Requirement> {
-        vec![Requirement::on(self.provider)]
-    }
-    fn generate(&self, cx: &mut PluginContext<'_, TypeScript>) -> Result<()> {
-        let config = render::ArtifactOptions {
-            output_dir: Some(".".into()),
-            group_by_tag: false,
-            ..Default::default()
-        };
-        let (dependency, version) = match self.framework {
-            QueryFramework::React => ("@tanstack/react-query", "^5.0.0"),
-            QueryFramework::Vue => ("@tanstack/vue-query", "^5.0.0"),
-            QueryFramework::Swr => ("swr", "^2.0.0"),
-        };
-        if let Some(count) = self.operations_per_file {
-            anyhow::ensure!(count > 0, "max_operations_per_file must be positive");
-        }
-        let mut prepared = crate::symbols::prepare(cx.api);
-        for (original, native) in cx.api.operations.iter().zip(&mut prepared.operations) {
-            native.annotations.insert(
-                "kaji.query.operation_id".into(),
-                serde_json::json!(original.id),
-            );
-        }
-        let selected = prepared
-            .operations
-            .iter()
-            .filter(|operation| {
-                !matches!(self.framework, QueryFramework::Swr)
-                    || operation.method == kaji_core::HttpMethod::Get
-            })
-            .cloned()
-            .collect::<Vec<_>>();
-        let count = self.operations_per_file.unwrap_or(usize::MAX);
-        let split = selected.len() > count;
-        let operations = cx.inputs.get::<Operations>()?;
-        let mut barrel = String::new();
-        // Emit an empty aggregate module as well, so package exports remain valid.
-        let groups = if selected.is_empty() {
-            vec![selected.as_slice()]
-        } else {
-            selected.chunks(count).collect::<Vec<_>>()
-        };
-        for (index, chunk) in groups.into_iter().enumerate() {
-            let mut group = prepared.clone();
-            group.operations = chunk.to_vec();
-            let files = match self.framework {
-                QueryFramework::React => render::TypeScriptReactQuery.generate(&group, &config)?,
-                QueryFramework::Vue => render::TypeScriptVueQuery.generate(&group, &config)?,
-                QueryFramework::Swr => render::TypeScriptSwr.generate(&group, &config)?,
-            };
-            let module = if split {
-                format!("{}_chunks/chunk_{index:04}", self.output)
-            } else {
-                self.output.clone()
-            };
-            let target = GeneratedFile::new(format!("{module}.ts"), "")?.path;
-            for file in files {
-                let mut contents = file.contents;
-                for (operation, native) in cx.api.operations.iter().zip(&prepared.operations) {
-                    if !chunk.iter().any(|item| item.id == native.id) {
-                        continue;
-                    }
-                    let symbol = operations
-                        .functions
-                        .get(&operation.id)
-                        .context("query plugin requires operation symbol")?;
-                    let function = sdk::lower_camel_identifier(&native.id);
-                    let old = serde_json::to_string(&format!(
-                        "{}/{function}",
-                        config.clients_import.trim_end_matches('/')
-                    ))?;
-                    contents = contents
-                        .replace(&old, &serde_json::to_string(&symbol.import_from(&target)?)?);
-                    if symbol.name != function {
-                        contents = contents.replace(
-                            &format!("import {{ {function} }}"),
-                            &format!("import {{ {} as {function} }}", symbol.name),
-                        );
-                    }
-                }
-                cx.files.emit(GeneratedFile::new(&target, contents)?)?;
-            }
-            if split {
-                let specifier = Symbol {
-                    module: PathBuf::from(&module),
-                    name: String::new(),
-                }
-                .import_from(format!("{}.ts", self.output))?;
-                let (values, types) = render::query_exports(
-                    &group,
-                    &config,
-                    matches!(self.framework, QueryFramework::Swr),
-                );
-                if !values.is_empty() {
-                    barrel.push_str(&format!(
-                        "export {{ {} }} from {};\n",
-                        values.join(", "),
-                        serde_json::to_string(&specifier)?
-                    ));
-                }
-                let mut types = types;
-                if index == 0 {
-                    types.push("KajiQueryScope".into());
-                }
-                if !types.is_empty() {
-                    barrel.push_str(&format!(
-                        "export type {{ {} }} from {};\n",
-                        types.join(", "),
-                        serde_json::to_string(&specifier)?
-                    ));
-                }
-            }
-        }
-        if split {
-            cx.files
-                .emit(GeneratedFile::new(format!("{}.ts", self.output), barrel)?)?;
-        }
-        cx.workspace.peer_dependency(dependency, version)?;
-        cx.workspace
-            .export_namespace(&self.output, &sdk::lower_camel_identifier(&self.output))
-    }
-}
+mod query;
+pub use query::{Query, QueryFramework, QueryKind, react_query, swr, vue_query};
 
 /// Auxiliary artifacts tied to the selected model and operation providers.
 pub struct Auxiliary {
@@ -699,6 +512,9 @@ pub struct Auxiliary {
     models: Option<Handle<Models>>,
     operations: Option<Handle<Operations>>,
     max_file_bytes: usize,
+    layout: Option<kaji_core::SourceLayout>,
+    fixture_options: crate::FixtureOptions,
+    cypress_options: crate::CypressOptions,
 }
 enum AuxiliaryKind {
     Zod,
@@ -714,6 +530,9 @@ fn auxiliary(kind: AuxiliaryKind, output: &str) -> Auxiliary {
         models: None,
         operations: None,
         max_file_bytes: 128 * 1024,
+        layout: None,
+        fixture_options: Default::default(),
+        cypress_options: Default::default(),
     }
 }
 pub fn zod() -> Auxiliary {
@@ -729,6 +548,18 @@ pub fn cypress() -> Auxiliary {
     auxiliary(AuxiliaryKind::Cypress, "cypress")
 }
 impl Auxiliary {
+    pub fn layout(mut self, layout: kaji_core::SourceLayout) -> Self {
+        self.layout = Some(layout);
+        self
+    }
+    pub fn fixture_options(mut self, options: crate::FixtureOptions) -> Self {
+        self.fixture_options = options;
+        self
+    }
+    pub fn cypress_options(mut self, options: crate::CypressOptions) -> Self {
+        self.cypress_options = options;
+        self
+    }
     /// Splits large auxiliary modules at declaration boundaries.
     pub fn max_file_bytes(mut self, bytes: usize) -> Self {
         self.max_file_bytes = bytes;
@@ -776,6 +607,9 @@ impl Plugin<TypeScript> for Auxiliary {
         let config = render::ArtifactOptions {
             output_dir: Some(".".into()),
             max_file_bytes: self.max_file_bytes,
+            layout: self.layout.clone().or_else(|| cx.common.layout.clone()),
+            fixture_options: self.fixture_options.clone(),
+            cypress_options: self.cypress_options.clone(),
             ..Default::default()
         };
         let mut api = crate::symbols::prepare(cx.api);
@@ -1140,6 +974,75 @@ mod tests {
         assert!(format!("{error:#}").contains("max_operations_per_file must be positive"));
     }
 
+    #[test]
+    fn query_selection_names_classification_and_bounded_barrels() {
+        let mut source = api();
+        source.operations.push(Operation {
+            id: "searchContacts".into(),
+            method: HttpMethod::Post,
+            path: "/search".into(),
+            ..Operation::default()
+        });
+        let build = |query| {
+            Packages::new()
+                .package(crate::package("ts").with(crate::sdk().raw()).with(query))
+                .generate(&source, None)
+        };
+        let tree = build(
+            react_query()
+                .include_operations(["searchContacts"])
+                .operation_kind("searchContacts", QueryKind::Query)
+                .operation_name("searchContacts", "findContacts")
+                .layout(kaji_core::SourceLayout::PerOperation),
+        )
+        .unwrap();
+        assert!(tree.iter().any(|(path, _)| {
+            path.to_string_lossy()
+                .contains("react-query_operations/searchContacts")
+        }));
+        let text = tree
+            .iter()
+            .filter(|(path, _)| path.to_string_lossy().contains("react-query"))
+            .map(|(_, contents)| contents)
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(text.contains("findContactsQueryOptions"));
+        assert!(!text.contains("listContactsQueryOptions"));
+        assert!(text.contains("searchContacts.js"));
+        assert!(build(react_query().include_operations(["missing"])).is_err());
+        assert!(build(react_query().operation_name("searchContacts", "listContacts")).is_err());
+        for index in 0..110 {
+            source.operations.push(Operation {
+                id: format!("read{index}"),
+                method: HttpMethod::Get,
+                path: format!("/items/{index}"),
+                ..Operation::default()
+            });
+        }
+        let tree = Packages::new()
+            .package(
+                crate::package("ts")
+                    .with(crate::sdk().raw())
+                    .with(react_query().layout(kaji_core::SourceLayout::PerOperation)),
+            )
+            .generate(&source, None)
+            .unwrap();
+        assert!(
+            tree.iter()
+                .any(|(path, _)| path.to_string_lossy().ends_with("index_0000.ts"))
+        );
+        let entry = tree.get("ts/react-query.ts").unwrap();
+        assert!(entry.len() < 4096);
+        assert_eq!(
+            tree.iter()
+                .filter(|(path, _)| path
+                    .to_string_lossy()
+                    .ends_with("react-query_chunks/runtime.ts"))
+                .count(),
+            1
+        );
+    }
+
     #[cfg(unix)]
     #[test]
     #[ignore = "requires KAJI_TSC_JS and KAJI_TS_NODE_MODULES with framework dependencies"]
@@ -1152,12 +1055,105 @@ mod tests {
             path: "/contacts".into(),
             ..Operation::default()
         });
+        for (id, kind) in [
+            ("cursorContacts", "cursor"),
+            ("pageContacts", "page"),
+            ("offsetContacts", "offsetLimit"),
+            ("urlContacts", "url"),
+        ] {
+            let role = match kind {
+                "page" => "page",
+                "offsetLimit" => "offset",
+                _ => "cursor",
+            };
+            let mut op = Operation {
+                id: id.into(),
+                method: HttpMethod::Get,
+                path: format!("/{id}"),
+                ..Operation::default()
+            };
+            for (name, schema) in [
+                (
+                    role,
+                    if role == "cursor" {
+                        kaji_core::SchemaKind::String
+                    } else {
+                        kaji_core::SchemaKind::Integer
+                    },
+                ),
+                ("limit", kaji_core::SchemaKind::Integer),
+            ] {
+                op.parameters.push(kaji_core::OperationParameter {
+                    name: name.into(),
+                    location: "query".into(),
+                    schema: Some(kaji_core::SchemaValue::new(schema)),
+                    required: false,
+                    description: None,
+                    annotations: BTreeMap::new(),
+                });
+            }
+            let inputs = if kind == "url" {
+                serde_json::json!([])
+            } else if kind == "cursor" {
+                serde_json::json!([{ "name":role,"type":role }])
+            } else {
+                serde_json::json!([{ "name":role,"type":role }, {"name":"limit","type":"limit"}])
+            };
+            let outputs = match kind {
+                "cursor" => serde_json::json!({"nextCursor":"$.next"}),
+                "url" => serde_json::json!({"nextUrl":"$.next"}),
+                _ => serde_json::json!({"results":"$.items"}),
+            };
+            op.annotations.insert(
+                "x-kaji-pagination".into(),
+                serde_json::json!({"type":kind,"inputs":inputs,"outputs":outputs}),
+            );
+            let mut next = kaji_core::SchemaValue::new(kaji_core::SchemaKind::String);
+            next.nullable = true;
+            op.responses.push(kaji_core::OperationResponse::json(
+                "200",
+                kaji_core::SchemaValue::new(kaji_core::SchemaKind::Object {
+                    fields: vec![
+                        kaji_core::Field {
+                            name: "next".into(),
+                            value: next,
+                            required: false,
+                            annotations: BTreeMap::new(),
+                        },
+                        kaji_core::Field {
+                            name: "items".into(),
+                            value: kaji_core::SchemaValue::new(kaji_core::SchemaKind::Array {
+                                items: Box::new(kaji_core::SchemaValue::new(
+                                    kaji_core::SchemaKind::Integer,
+                                )),
+                            }),
+                            required: false,
+                            annotations: BTreeMap::new(),
+                        },
+                    ],
+                    additional_properties: kaji_core::AdditionalProperties::Unspecified,
+                }),
+            ));
+
+            source.operations.push(op);
+        }
         Packages::new()
             .package(
                 crate::package("ts")
                     .with(crate::sdk().raw())
-                    .with(react_query().max_operations_per_file(1).output("ui/react"))
-                    .with(vue_query().max_operations_per_file(1).output("ui/vue"))
+                    .with(
+                        react_query()
+                            .layout(kaji_core::SourceLayout::PerOperation)
+                            .output("ui/react"),
+                    )
+                    .with(
+                        vue_query()
+                            .layout(kaji_core::SourceLayout::PerResource {
+                                max_file_bytes: 128 * 1024,
+                                max_declarations: Some(1),
+                            })
+                            .output("ui/vue"),
+                    )
                     .with(swr().output("ui/swr")),
             )
             .generate(&source, None)
@@ -1173,6 +1169,11 @@ mod tests {
         std::fs::write(
             package.join("query_probe.ts"),
             include_str!("query_probe.ts.txt"),
+        )
+        .unwrap();
+        std::fs::write(
+            package.join("pagination_probe.ts"),
+            include_str!("query_pagination_probe.ts.txt"),
         )
         .unwrap();
         let compile = std::process::Command::new("node")
@@ -1197,6 +1198,17 @@ mod tests {
             "{}{}",
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
+        );
+        let pagination = std::process::Command::new("node")
+            .arg("dist/pagination_probe.js")
+            .current_dir(&package)
+            .output()
+            .unwrap();
+        assert!(
+            pagination.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&pagination.stdout),
+            String::from_utf8_lossy(&pagination.stderr)
         );
     }
 

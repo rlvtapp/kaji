@@ -1,0 +1,58 @@
+export type KajiPageParam = string | number | null;
+export type KajiPaginationOptions = { baseUrl?: string; maxPages?: number };
+type __KajiPagination = { readonly kind: string; readonly input: { readonly name: string; readonly location: string } | null; readonly limit: { readonly name: string; readonly location: string } | null; readonly results: readonly (string | number)[] | null; readonly continuation: readonly (string | number)[] | null };
+const __kajiMaxPages = (options: KajiPaginationOptions) => { const n = options.maxPages ?? 10000; if (!Number.isSafeInteger(n) || n < 1) throw new RangeError('maxPages must be a positive safe integer'); return n; };
+const __kajiGet = (value: unknown, path: readonly (string | number)[] | null): unknown => {
+  for (const key of path ?? []) {
+    if (value === null || typeof value !== 'object') return undefined;
+    const index = Array.isArray(value) && typeof key === 'number' && key < 0 ? value.length + key : key;
+    if (!Object.hasOwn(value, index)) return undefined;
+    value = (value as Record<string | number, unknown>)[index];
+  }
+  return value;
+};
+const __kajiInput = (options: unknown, input: __KajiPagination['input']): unknown => input ? __kajiGet(options, [input.location, input.name]) : undefined;
+const __kajiInitial = (options: unknown, plan: __KajiPagination): KajiPageParam => {
+  const input = __kajiInput(options, plan.input);
+  if (plan.kind === 'url') return null;
+  if (plan.kind === 'cursor') { if (input != null && typeof input !== 'string' && (typeof input !== 'number' || !Number.isSafeInteger(input))) throw new TypeError('invalid pagination cursor'); return input as KajiPageParam ?? null; }
+  const number = input ?? (plan.kind === 'page' ? 1 : 0);
+  if (!Number.isSafeInteger(number) || Number(number) < 0) throw new RangeError('pagination value must be a nonnegative safe integer');
+  const limit = __kajiInput(options, plan.limit);
+  if (limit != null && (!Number.isSafeInteger(limit) || Number(limit) <= 0)) throw new RangeError('limit must be a positive safe integer');
+  return number as number;
+};
+const __kajiNext = (last: unknown, previous: KajiPageParam, options: unknown, plan: __KajiPagination): KajiPageParam | undefined => {
+  // Preserve the SDK response envelope; pagination selectors inspect its decoded data.
+  const data = last && typeof last === 'object' && Object.hasOwn(last, 'data') && Object.hasOwn(last, 'headers') && (last as {headers: unknown}).headers instanceof Headers ? (last as { data: unknown }).data : last;
+  if (plan.kind === 'cursor' || plan.kind === 'url') {
+    const next = __kajiGet(data, plan.continuation);
+    if (next == null || next === '') return undefined;
+    if (typeof next !== 'string' && (typeof next !== 'number' || !Number.isSafeInteger(next))) throw new TypeError('invalid pagination continuation');
+    if (plan.kind === 'url' && typeof next !== 'string') throw new TypeError('pagination URL must be a string');
+    return next;
+  }
+  const items = __kajiGet(data, plan.results);
+  if (!Array.isArray(items)) throw new TypeError('pagination results must be an array');
+  const limit = __kajiInput(options, plan.limit);
+  if (!items.length || (typeof limit === 'number' && items.length < limit)) return undefined;
+  const next = Number(previous) + (plan.kind === 'page' ? 1 : (typeof limit === 'number' ? limit : items.length));
+  if (!Number.isSafeInteger(next)) throw new RangeError('pagination value exceeds safe integer range');
+  return next;
+};
+const __kajiPageOptions = (options: unknown, param: KajiPageParam, plan: __KajiPagination, pagination: KajiPaginationOptions): Record<string, unknown> => {
+  const base = (options ?? {}) as Record<string, unknown>;
+  if (plan.kind === 'url') {
+    if (param === null) return { ...base };
+    if (typeof param !== 'string') throw new TypeError('pagination URL must be a string');
+    let url: string;
+    if (pagination.baseUrl) { const origin = new URL(pagination.baseUrl); const target = new URL(param, origin); if (target.origin !== origin.origin || target.username || target.password || target.hash) throw new TypeError('unsafe pagination URL'); url = target.href; }
+    else { if (!param.startsWith('/') || param.startsWith('//') || param.includes('\\') || param.includes('#')) throw new TypeError('pagination URL requires a configured baseUrl or safe root-relative path'); url = param; }
+    const client = base.client as ((request: Record<string, unknown>) => Promise<unknown>) | undefined;
+    if (typeof client !== 'function') throw new TypeError('URL pagination requires an explicit operation client');
+    return { ...base, query: undefined, client: (request: Record<string, unknown>) => client({ ...request, paginationUrl: url }) };
+  }
+  if (!plan.input) return { ...base };
+  const section = base[plan.input.location];
+  return { ...base, [plan.input.location]: { ...(section as Record<string, unknown> ?? {}), [plan.input.name]: param === null ? undefined : param } };
+};

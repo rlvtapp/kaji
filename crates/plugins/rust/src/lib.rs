@@ -352,3 +352,6 @@ mod native_cargo_tests {
 
 #[cfg(test)]
 mod multipart_tests;
+
+#[cfg(test)]
+mod source_layout_tests;

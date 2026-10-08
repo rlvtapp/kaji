@@ -1,5 +1,7 @@
 """Compile a pinned APIs.guru corpus; never call the described production APIs."""
 import argparse
+import hashlib
+import re
 import importlib.util
 import json
 import os
@@ -18,16 +20,59 @@ public = importlib.util.module_from_spec(loader)
 loader.loader.exec_module(public)
 
 
+def memory_command(command):
+    """Use the host time utility; never infer memory from parent-process RSS."""
+    executable = Path('/usr/bin/time')
+    if not executable.is_file():
+        return command, None
+    if sys.platform == 'darwin':
+        flags, method = ['-l'], 'bsd-time'
+    elif sys.platform.startswith('linux'):
+        flags, method = ['-v'], 'gnu-time'
+    else:
+        return command, None
+    # Sandboxed macOS can execute time but deny its sysctl measurement call.
+    # Probe before wrapping real work, so measurement never changes task success.
+    try:
+        probe = subprocess.run([str(executable), *flags, '/usr/bin/true'],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               timeout=5)
+        if probe.returncode != 0:
+            return command, None
+    except (OSError, subprocess.TimeoutExpired):
+        return command, None
+    return [str(executable), *flags, *command], method
+
+
+def peak_memory(log, method, interrupted=False):
+    result = {'status': 'unavailable', 'peak_bytes': None, 'method': method,
+              'scope': 'host_command_and_children_maximum_rss',
+              'reason': 'measurement_unavailable_on_host' if method is None else 'measurement_missing'}
+    if interrupted:
+        result['reason'] = 'interrupted_phase'
+        return result
+    if method:
+        pattern = (r'^\s*(\d+)\s+maximum resident set size\s*$' if method == 'bsd-time'
+                   else r'^\s*Maximum resident set size \(kbytes\):\s*(\d+)\s*$')
+        matches = re.findall(pattern, log.read_text(errors='replace'), re.MULTILINE)
+        if matches:
+            result.update(status='measured', peak_bytes=int(matches[-1]) *
+                          (1024 if method == 'gnu-time' else 1), reason=None)
+    return result
+
+
 def run_logged(command, environment, log, timeout):
     started = time.monotonic()
     log.parent.mkdir(parents=True, exist_ok=True)
+    command, memory_method = memory_command(command)
     with log.open('w') as writer:
         try:
-            process = subprocess.Popen(command, env=environment, stdout=writer,
+            process = subprocess.Popen(command, env={**environment, "LC_ALL": "C"}, stdout=writer,
                                        stderr=subprocess.STDOUT, start_new_session=True)
             code = process.wait(timeout=timeout)
-            return {'exit_code': code, 'seconds': round(time.monotonic() - started, 3),
-                    'log': str(log), 'timed_out': False}
+            return {'command': command, 'exit_code': code, 'seconds': round(time.monotonic() - started, 3),
+                    'log': str(log), 'timed_out': False,
+                    'peak_memory': peak_memory(log, memory_method)}
         except subprocess.TimeoutExpired:
             # A shell phase owns compiler children too. Stop the whole owned
             # group before removing its generated workspace.
@@ -37,12 +82,15 @@ def run_logged(command, environment, log, timeout):
                 pass
             process.wait()
             writer.write('\nCorpus phase exceeded its time limit.\n')
-            return {'exit_code': None, 'seconds': round(time.monotonic() - started, 3),
-                    'log': str(log), 'timed_out': True}
+            return {'command': command, 'exit_code': None, 'seconds': round(time.monotonic() - started, 3),
+                    'log': str(log), 'timed_out': True,
+                    'peak_memory': peak_memory(log, memory_method, interrupted=True)}
         except OSError as error:
             writer.write(str(error) + '\n')
-            return {'exit_code': None, 'seconds': round(time.monotonic() - started, 3),
-                    'log': str(log), 'timed_out': False}
+            return {'command': command, 'exit_code': None, 'seconds': round(time.monotonic() - started, 3),
+                    'log': str(log), 'timed_out': False,
+                    'peak_memory': {'status': 'unavailable', 'peak_bytes': None,
+                                    'method': memory_method, 'reason': 'launch_error'}}
 
 
 
@@ -79,7 +127,25 @@ def output_statistics(package, warning_bytes=0):
     }
 
 
-def run_case(contract, language, manifest, root, environment, timeout, keep_generated, warning_bytes=0):
+def output_fingerprint(package):
+    files = {}
+    for path in sorted(package.rglob('*')):
+        if path.is_file() and path.name not in ('generation.lock.json', 'generation-report.json'):
+            relative = path.relative_to(package).as_posix()
+            files[relative] = hashlib.sha256(path.read_bytes()).hexdigest()
+    digest = hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest()
+    return {'sha256': digest, 'files': files}
+
+
+def compare_fingerprints(before, after):
+    return {'status': 'passed' if before == after else 'failed',
+            'sha256_before': before['sha256'], 'sha256_after': after['sha256'],
+            'changed_paths': sorted(path for path in before['files'].keys() | after['files'].keys()
+                                    if before['files'].get(path) != after['files'].get(path))}
+
+
+def run_case(contract, language, manifest, root, environment, timeout, keep_generated,
+             warning_bytes=0, verify_regeneration=False):
     name = contract['name']
     report = {'contract': name, 'language': language, 'source_url': contract['url'],
               'source_sha256': contract['sha256'], 'input_bytes': contract.get('bytes'),
@@ -97,9 +163,18 @@ def run_case(contract, language, manifest, root, environment, timeout, keep_gene
         if report['generation']['exit_code'] == 0:
             package = sdk_root / language
             report.update(output_statistics(package, warning_bytes))
+            before = output_fingerprint(package)
+            report['output_sha256'] = before['sha256']
+            if verify_regeneration:
+                repeat = run_logged(['bash', str(PROJECT / 'scripts/test-public-contracts.sh'),
+                                     'generate'], env, logs / 'regenerate.log', timeout)
+                comparison = compare_fingerprints(before, output_fingerprint(package))
+                report['regeneration'] = {**comparison, 'generation': repeat}
+                if repeat['exit_code'] != 0:
+                    report['regeneration']['status'] = 'failed'
             report['native'] = run_logged(['bash', str(PROJECT / 'scripts/test-public-contracts.sh'),
                                           'check', language], env, logs / 'native.log', timeout)
-            if report['native']['exit_code'] == 0:
+            if report['native']['exit_code'] == 0 and report.get('regeneration', {}).get('status', 'passed') == 'passed':
                 report['status'] = 'passed'
         for metadata in (sdk_root / '.kaji', sdk_root / language / '.kaji'):
             if metadata.is_dir():
@@ -133,6 +208,8 @@ def main(arguments=None):
     parser.add_argument('--spec-cache', type=Path)
     parser.add_argument('--timeout', type=int, default=600, help='seconds per generation/native phase')
     parser.add_argument('--keep-generated', action='store_true')
+    parser.add_argument('--verify-regeneration', action='store_true',
+                        help='regenerate into the same owned workspace and compare every emitted byte')
     parser.add_argument('--file-warning-bytes', type=int, default=0,
                         help='report generated files above this size; 0 disables warnings')
     args = parser.parse_args(arguments)
@@ -158,7 +235,8 @@ def main(arguments=None):
     cases = []
     for contract in selected:
         case = run_case(contract, args.language, manifest, root, dict(os.environ),
-                        args.timeout, args.keep_generated, args.file_warning_bytes)
+                        args.timeout, args.keep_generated, args.file_warning_bytes,
+                        args.verify_regeneration)
         cases.append(case)
         result = save_report(root, manifest, cases)
         print(f"{contract['name']} / {args.language}: {case['status']}", flush=True)

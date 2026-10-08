@@ -134,7 +134,11 @@ fn render_sdk(
         &format!("lib/{app}/api.ex"),
         render_api_facade(&module, api),
     )?;
-    for (index, operations) in api.operations.chunks(OPERATIONS_PER_FILE).enumerate() {
+    for (index, range) in elixir_operation_groups(&module, api)
+        .into_iter()
+        .enumerate()
+    {
+        let operations = &api.operations[range];
         insert(
             &mut tree,
             root,
@@ -142,7 +146,33 @@ fn render_sdk(
             render_operation_chunk(&module, api, operations, index),
         )?;
     }
-    for (index, operations) in api.operations.chunks(ERROR_OPERATIONS_PER_FILE).enumerate() {
+    let api_facade_path = format!("{root}/lib/{app}/api.ex");
+    if tree
+        .get(&api_facade_path)
+        .is_some_and(|value| value.len() > 128 * 1024)
+    {
+        let module_ref = module.as_str();
+        let delegates = elixir_operation_groups(&module, api)
+            .into_iter()
+            .enumerate()
+            .flat_map(|(index, range)| {
+                api.operations[range].iter().map(move |operation| {
+                    (operation, format!("{module_ref}.API.Operations{index:04}"))
+                })
+            })
+            .collect::<Vec<_>>();
+        bound_elixir_facade(
+            &mut tree,
+            root,
+            &format!("lib/{app}/api.ex"),
+            &format!("lib/{app}/api"),
+            &format!("{module}.API"),
+            api,
+            &delegates,
+        )?;
+    }
+    for (index, range) in elixir_error_groups(&module, api).into_iter().enumerate() {
+        let operations = &api.operations[range];
         insert(
             &mut tree,
             root,
@@ -164,12 +194,45 @@ fn render_sdk(
                 &format!("lib/{app}/resources/{file_name}.ex"),
                 render_resource_facade(&module, api, &resource, &operations),
             )?;
-            for (index, chunk) in operations.chunks(RESOURCE_METHODS_PER_FILE).enumerate() {
+            for (index, range) in elixir_resource_groups(&module, api, &resource, &operations)
+                .into_iter()
+                .enumerate()
+            {
+                let chunk = &operations[range];
                 insert(
                     &mut tree,
                     root,
                     &format!("lib/{app}/resources/{file_name}/chunk_{:04}.ex", index + 1),
                     render_resource_chunk(&module, api, &resource, chunk, index),
+                )?;
+            }
+            let facade_path = format!("{root}/lib/{app}/resources/{file_name}.ex");
+            if tree
+                .get(&facade_path)
+                .is_some_and(|value| value.len() > 128 * 1024)
+            {
+                let module_ref = module.as_str();
+                let resource_ref = resource.as_str();
+                let delegates = elixir_resource_groups(&module, api, &resource, &operations)
+                    .into_iter()
+                    .enumerate()
+                    .flat_map(|(index, range)| {
+                        operations[range].iter().map(move |operation| {
+                            (
+                                *operation,
+                                format!("{module_ref}.Resources.{resource_ref}.Chunk{index:04}"),
+                            )
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                bound_elixir_facade(
+                    &mut tree,
+                    root,
+                    &format!("lib/{app}/resources/{file_name}.ex"),
+                    &format!("lib/{app}/resources/{file_name}"),
+                    &format!("{module}.Resources.{resource}"),
+                    api,
+                    &delegates,
                 )?;
             }
         }
@@ -814,12 +877,124 @@ fn render_model(module: &str, schema: &Schema) -> String {
     }
 }
 
+fn bound_elixir_facade(
+    tree: &mut GeneratedTree,
+    root: &str,
+    entry: &str,
+    folder: &str,
+    facade: &str,
+    api: &Api,
+    delegates: &[(&Operation, String)],
+) -> Result<()> {
+    let declarations = delegates.iter().map(|(operation, target)| {
+        let name = elixir_identifier(&operation.id);
+        let mut value = format!("      def {name}(client, options \\\\ []), do: {target}.{name}(client, options)\n");
+        if cursor_pagination(operation).is_some() || page_pagination::render(api, operation).ok().flatten().is_some() {
+            let _ = writeln!(value, "      def {name}_pages(client, options \\\\ []), do: {target}.{name}_pages(client, options)");
+        }
+        value
+    }).collect::<Vec<_>>();
+    let sizes = declarations.iter().map(String::len).collect::<Vec<_>>();
+    let groups = elixir_source_ranges(&sizes, 512 + facade.len(), 100);
+    let mut entry_source = format!(
+        "{NOTICE}defmodule {facade} do\n  @moduledoc \"Typed API operations for {}.\"\n",
+        escape_elixir_string(&api.name)
+    );
+    for (index, range) in groups.into_iter().enumerate() {
+        let macro_module = format!("{facade}.Delegates{index:04}");
+        let source = format!(
+            "{NOTICE}defmodule {macro_module} do\n  @moduledoc false\n  defmacro __using__(_options) do\n    quote do\n{}    end\n  end\nend\n",
+            declarations[range].concat()
+        );
+        insert(
+            tree,
+            root,
+            &format!("{folder}/delegates_{index:04}.ex"),
+            source,
+        )?;
+        let _ = writeln!(entry_source, "  use {macro_module}");
+    }
+    entry_source.push_str("end\n");
+    tree.replace(GeneratedFile::new(format!("{root}/{entry}"), entry_source)?)?;
+    Ok(())
+}
+
+fn elixir_source_ranges(
+    sizes: &[usize],
+    overhead: usize,
+    count: usize,
+) -> Vec<std::ops::Range<usize>> {
+    let units = sizes
+        .iter()
+        .map(|bytes| kaji_core::source_layout::SourceUnit {
+            bytes: *bytes,
+            resource: None,
+        })
+        .collect::<Vec<_>>();
+    kaji_core::source_layout::SourceLayout::Chunked {
+        max_file_bytes: 128 * 1024,
+        max_declarations: Some(count),
+    }
+    .groups(&units, overhead)
+    .expect("valid bounded source layout")
+    .into_iter()
+    .map(|group| group[0]..group[group.len() - 1] + 1)
+    .collect()
+}
+
+fn elixir_operation_groups(module: &str, api: &Api) -> Vec<std::ops::Range<usize>> {
+    let overhead = render_operation_chunk(module, api, &[], 0).len();
+    let sizes = api
+        .operations
+        .iter()
+        .map(|operation| {
+            render_operation_chunk(module, api, std::slice::from_ref(operation), 0)
+                .len()
+                .saturating_sub(overhead)
+        })
+        .collect::<Vec<_>>();
+    elixir_source_ranges(&sizes, overhead + 64, OPERATIONS_PER_FILE)
+}
+
+fn elixir_error_groups(module: &str, api: &Api) -> Vec<std::ops::Range<usize>> {
+    let overhead = render_declared_errors(module, &[]).len();
+    let sizes = api
+        .operations
+        .iter()
+        .map(|operation| {
+            render_declared_errors(module, std::slice::from_ref(operation))
+                .len()
+                .saturating_sub(overhead)
+        })
+        .collect::<Vec<_>>();
+    elixir_source_ranges(&sizes, overhead + 64, ERROR_OPERATIONS_PER_FILE)
+}
+
+fn elixir_resource_groups(
+    module: &str,
+    api: &Api,
+    resource: &str,
+    operations: &[&Operation],
+) -> Vec<std::ops::Range<usize>> {
+    let overhead = render_resource_chunk(module, api, resource, &[], 0).len();
+    let sizes = operations
+        .iter()
+        .map(|operation| {
+            render_resource_chunk(module, api, resource, std::slice::from_ref(operation), 0)
+                .len()
+                .saturating_sub(overhead)
+        })
+        .collect::<Vec<_>>();
+    elixir_source_ranges(&sizes, overhead + 64, RESOURCE_METHODS_PER_FILE)
+}
+
 fn render_api_facade(module: &str, api: &Api) -> String {
     let mut output = format!(
         "{NOTICE}\ndefmodule {module}.API do\n  @moduledoc \"Typed API operations for {}.\"\n\n",
         escape_elixir_string(&api.name)
     );
-    for (index, operations) in api.operations.chunks(OPERATIONS_PER_FILE).enumerate() {
+    for (index, range) in elixir_operation_groups(module, api).into_iter().enumerate() {
+        let operations = &api.operations[range];
         let _ = writeln!(output, "  alias {module}.API.Operations{index:04}");
         for operation in operations {
             let name = elixir_identifier(&operation.id);
@@ -869,7 +1044,11 @@ fn render_resource_facade(
     let mut output = format!(
         "{NOTICE}\ndefmodule {module}.Resources.{resource} do\n  @moduledoc \"Resource-namespaced operations for {resource}.\"\n\n"
     );
-    for (index, chunk) in operations.chunks(RESOURCE_METHODS_PER_FILE).enumerate() {
+    for (index, range) in elixir_resource_groups(module, api, resource, operations)
+        .into_iter()
+        .enumerate()
+    {
+        let chunk = &operations[range];
         let _ = writeln!(
             output,
             "\n  alias {module}.Resources.{resource}.Chunk{index:04}"
@@ -2725,6 +2904,164 @@ end
         assert!(client.contains(":crypto.strong_rand_bytes(16)"));
         assert!(client.contains("context.idempotency_header"));
         assert!(!client.contains("[:get, :put, :patch, :delete]"));
+    }
+    fn byte_boundary_api() -> Api {
+        let parameters = (0..80)
+            .map(|index| kaji_core::OperationParameter {
+                name: format!("queryParameter{index:03}{}", "LongName".repeat(20)),
+                location: "query".into(),
+                required: false,
+                schema: Some(SchemaValue::new(SchemaKind::String)),
+                description: None,
+                annotations: Default::default(),
+            })
+            .collect::<Vec<_>>();
+        Api {
+            name: "Byte Probe".into(),
+            operations: (0..20)
+                .map(|index| Operation {
+                    id: format!("getItem{index}"),
+                    path: format!("/items/{index}"),
+                    parameters: parameters.clone(),
+                    responses: vec![kaji_core::OperationResponse::json(
+                        "200",
+                        SchemaValue::new(SchemaKind::String),
+                    )],
+                    ..Default::default()
+                })
+                .collect(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    #[ignore = "requires Elixir; native bounded delegation macro compilation"]
+    fn native_large_facades_use_bounded_delegation_macros() {
+        let mut source = byte_boundary_api();
+        source.operations = (0..600)
+            .map(|index| Operation {
+                id: format!("getItem{index}{}", "LongName".repeat(20)),
+                path: format!("/items/{index}"),
+                responses: vec![kaji_core::OperationResponse::json(
+                    "200",
+                    SchemaValue::new(SchemaKind::String),
+                )],
+                ..Default::default()
+            })
+            .collect();
+        let tree = render_sdk(
+            &source,
+            "elixir",
+            Some("byte-probe"),
+            SdkClientStyle::Namespaced,
+        )
+        .unwrap();
+        assert!(
+            tree.get("elixir/lib/byte_probe/api.ex")
+                .unwrap()
+                .contains("use ByteProbe.API.Delegates")
+        );
+        assert!(
+            tree.get("elixir/lib/byte_probe/resources/items.ex")
+                .unwrap()
+                .contains("use ByteProbe.Resources.Items.Delegates")
+        );
+        assert!(
+            tree.iter()
+                .filter(|(path, _)| path.extension().is_some_and(|ext| ext == "ex"))
+                .all(|(_, value)| value.len() <= 128 * 1024)
+        );
+        let root = tempfile::tempdir().unwrap();
+        tree.write_to(root.path()).unwrap();
+        let method = elixir_identifier(&source.operations.last().unwrap().id);
+        let script = format!(
+            r#"
+defmodule ByteProbe.Client do
+ @type t :: map()
+ def request(client, _method, path, _query, _headers, _body, _body_kind, _response_kind, _errors, _idempotency), do: client.transport.(path)
+end
+defmodule ByteProbe.JSON do
+ def to_wire(value), do: value
+end
+Path.wildcard("elixir/lib/byte_probe/api/*.ex") |> Enum.each(&Code.compile_file/1)
+Code.compile_file("elixir/lib/byte_probe/api.ex")
+Path.wildcard("elixir/lib/byte_probe/resources/items/*.ex") |> Enum.each(&Code.compile_file/1)
+Code.compile_file("elixir/lib/byte_probe/resources/items.ex")
+client=%{{transport: fn path -> {{:ok,path}} end}}
+{{:ok,"/items/599"}}=ByteProbe.API.{method}(client)
+{{:ok,"/items/599"}}=ByteProbe.Resources.Items.{method}(client)
+"#
+        );
+        std::fs::write(root.path().join("probe.exs"), script).unwrap();
+        let output = std::process::Command::new("elixir")
+            .arg("probe.exs")
+            .current_dir(root.path())
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
+    #[ignore = "requires Elixir; dependency-free compiled operation/resource forwarding probe"]
+    fn native_byte_bounded_operations_preserve_last_resource_and_transport() {
+        let source = byte_boundary_api();
+        let root = tempfile::tempdir().unwrap();
+        let tree = render_sdk(
+            &source,
+            "elixir",
+            Some("byte-probe"),
+            SdkClientStyle::Namespaced,
+        )
+        .unwrap();
+        let chunks = tree
+            .iter()
+            .filter(|(path, _)| path.to_string_lossy().contains("api/operations_"))
+            .collect::<Vec<_>>();
+        assert!(chunks.len() > 1);
+        assert!(
+            chunks
+                .iter()
+                .all(|(_, contents)| contents.len() <= 128 * 1024)
+        );
+        assert!(
+            tree.iter()
+                .filter(|(path, _)| path.to_string_lossy().contains("resources/"))
+                .all(|(_, contents)| contents.len() <= 128 * 1024)
+        );
+        tree.write_to(root.path()).unwrap();
+        let script = r#"
+defmodule ByteProbe.Client do
+ @type t :: map()
+ def request(client, method, path, query, _headers, _body, _body_kind, _response_kind, _errors, _idempotency), do: client.transport.(method,path,query)
+end
+defmodule ByteProbe.JSON do
+ def to_wire(value), do: value
+end
+Path.wildcard("elixir/lib/byte_probe/api/*.ex") |> Enum.each(&Code.compile_file/1)
+Code.compile_file("elixir/lib/byte_probe/api.ex")
+Path.wildcard("elixir/lib/byte_probe/resources/items/*.ex") |> Enum.each(&Code.compile_file/1)
+Code.compile_file("elixir/lib/byte_probe/resources/items.ex")
+client=%{transport: fn _method,path,_query -> send(self(),path); {:ok,"custom"} end}
+{:ok,"custom"}=ByteProbe.API.get_item19(client)
+{:ok,"custom"}=ByteProbe.Resources.Items.get_item19(client)
+receive do "/items/19" -> :ok after 0 -> raise("transport not called") end
+receive do "/items/19" -> :ok after 0 -> raise("resource not called") end
+"#;
+        std::fs::write(root.path().join("probe.exs"), script).unwrap();
+        let output = std::process::Command::new("elixir")
+            .arg("probe.exs")
+            .current_dir(root.path())
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 }
 

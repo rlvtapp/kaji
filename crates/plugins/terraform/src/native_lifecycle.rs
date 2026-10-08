@@ -398,7 +398,7 @@ fn terraform_cli_local_mock_lifecycle() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let server_source = r#"import http.server,json,sys
+    let server_source = r#"import http.server,json,sys,pathlib
 state={'id':'a/b','name':'planned','enabled':True,'count':9007199254740993,'status':'ready'}
 class Handler(http.server.BaseHTTPRequestHandler):
  def log_message(self,*args): pass
@@ -406,11 +406,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
   self.send_response(status);self.send_header('Content-Type','application/json');self.end_headers()
   if body is not None:self.wfile.write(json.dumps(body).encode())
  def do_GET(self):
+  mode=pathlib.Path(sys.argv[2]).read_text()
+  if mode=='denied':return self.respond(401)
+  if mode=='missing':return self.respond(404)
+  if mode=='drift':state['name']='drifted'
   if self.path!='/things/a%2Fb':return self.respond(404)
   self.respond(200,state)
  def do_POST(self):
   state.update(json.loads(self.rfile.read(int(self.headers.get('Content-Length','0')))));self.respond(201,state)
  def do_PATCH(self):
+  if pathlib.Path(sys.argv[2]).read_text()=='update-failure':return self.respond(500)
   state.update(json.loads(self.rfile.read(int(self.headers.get('Content-Length','0')))));self.respond(204)
  def do_DELETE(self):self.respond(204)
 server=http.server.HTTPServer(('127.0.0.1',0),Handler)
@@ -419,9 +424,11 @@ server.serve_forever()
 "#;
     fs::write(root.path().join("mock.py"), server_source).unwrap();
     let python = std::env::var("KAJI_TEST_PYTHON").unwrap_or_else(|_| "python3".into());
+    fs::write(root.path().join("mode"), "normal").unwrap();
     let mut child = Command::new(python)
         .arg(root.path().join("mock.py"))
         .arg(root.path().join("port"))
+        .arg(root.path().join("mode"))
         .spawn()
         .unwrap();
     struct Cleanup<'a>(&'a mut std::process::Child);
@@ -447,7 +454,7 @@ server.serve_forever()
     };
     fs::write(root.path().join("main.tf"), config("planned")).unwrap();
     let terraform = std::env::var("KAJI_TERRAFORM_BIN").unwrap_or_else(|_| "terraform".into());
-    let run = |args: &[&str]| {
+    let run_expected = |args: &[&str], expected: i32| {
         let output = Command::new(&terraform)
             .args(args)
             .current_dir(root.path())
@@ -457,18 +464,49 @@ server.serve_forever()
             .output()
             .unwrap();
         assert!(
-            output.status.success(),
+            output.status.code() == Some(expected),
             "{}{}",
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
         output
     };
+    let run = |args: &[&str]| run_expected(args, 0);
     run(&["validate", "-no-color"]);
     run(&["apply", "-auto-approve", "-input=false", "-no-color"]);
     run(&["plan", "-detailed-exitcode", "-input=false", "-no-color"]);
+    // A real refresh must detect remote drift while denied reads keep managed state.
+    fs::write(root.path().join("mode"), "drift").unwrap();
+    run_expected(
+        &["plan", "-detailed-exitcode", "-input=false", "-no-color"],
+        2,
+    );
+    fs::write(root.path().join("mode"), "denied").unwrap();
+    run_expected(&["plan", "-input=false", "-no-color"], 1);
+    assert!(
+        String::from_utf8_lossy(&run(&["state", "list"]).stdout).contains("example_thing.test")
+    );
+    fs::write(root.path().join("mode"), "normal").unwrap();
     fs::write(root.path().join("main.tf"), config("updated")).unwrap();
+    fs::write(root.path().join("mode"), "update-failure").unwrap();
+    run_expected(&["apply", "-auto-approve", "-input=false", "-no-color"], 1);
+    assert!(
+        String::from_utf8_lossy(&run(&["state", "list"]).stdout).contains("example_thing.test")
+    );
+    fs::write(root.path().join("mode"), "normal").unwrap();
     run(&["apply", "-auto-approve", "-input=false", "-no-color"]);
+    let state: serde_json::Value = serde_json::from_slice(&run(&["show", "-json"]).stdout).unwrap();
+    let managed = state["values"]["root_module"]["resources"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|resource| resource["address"] == "example_thing.test")
+        .unwrap();
+    assert_eq!(
+        managed["values"]["quantity"],
+        serde_json::json!(9007199254740993_i64)
+    );
+    assert_eq!(managed["values"]["name"], "updated");
     run(&["state", "rm", "example_thing.test"]);
     run(&["import", "-input=false", "example_thing.test", "a/b"]);
     run(&["plan", "-detailed-exitcode", "-input=false", "-no-color"]);

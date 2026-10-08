@@ -1112,3 +1112,31 @@ fn url_component(value: &str) -> String {
         })
         .collect()
 }
+
+/// Split already scrubbed generated folders, retaining shared portable variables.
+/// Numeric filenames avoid path traversal and case-folding collisions in tag names.
+pub(crate) fn split_collections(document: &Value) -> Result<Vec<(String, Value)>> {
+    let folders = document
+        .get("item")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow::anyhow!("Postman collection items must be an array"))?;
+    folders
+        .iter()
+        .enumerate()
+        .map(|(index, folder)| {
+            let name = folder
+                .get("name")
+                .and_then(Value::as_str)
+                .ok_or_else(|| anyhow::anyhow!("Postman generated folder has no name"))?;
+            let mut split = document.clone();
+            let parent = document["info"]["name"].as_str().unwrap_or("API");
+            split["info"]["name"] = json!(format!("{parent} — {name}"));
+            split["info"]["_postman_id"] = json!(id(&format!(
+                "split:{}:{name}",
+                document["info"]["_postman_id"].as_str().unwrap_or(parent)
+            )));
+            split["item"] = json!([folder]);
+            Ok((format!("collections/group-{index:04}.json"), split))
+        })
+        .collect()
+}

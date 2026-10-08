@@ -107,10 +107,18 @@ fn render_sdk(
         format!("{root}/src/{module}/presence.py"),
         include_str!("presence.py"),
     )?)?;
-    tree.insert(GeneratedFile::new(
-        format!("{root}/src/{module}/response_validation.py"),
-        response_validation::render(api),
-    )?)?;
+    for (path, contents) in render_partitioned_errors(api) {
+        tree.insert(GeneratedFile::new(
+            format!("{root}/src/{module}/{path}"),
+            contents,
+        )?)?;
+    }
+    for (path, contents) in response_validation::render_partitioned(api) {
+        tree.insert(GeneratedFile::new(
+            format!("{root}/src/{module}/{path}"),
+            contents,
+        )?)?;
+    }
     tree.insert(GeneratedFile::new(
         format!("{root}/src/{module}/multipart.py"),
         include_str!("multipart.py"),
@@ -129,7 +137,8 @@ fn render_sdk(
         format!("{root}/src/{module}/oauth.py"),
         include_str!("oauth.py"),
     )?)?;
-    for (index, operations) in api.operations.chunks(100).enumerate() {
+    for (index, range) in python_operation_groups(api).into_iter().enumerate() {
+        let operations = &api.operations[range];
         tree.insert(GeneratedFile::new(
             format!("{root}/src/{module}/operations_{index:03}.py"),
             render_operation_chunk(api, operations, index),
@@ -153,7 +162,10 @@ fn render_sdk(
         }
         for (resource, resource_operations) in resource_operations(api) {
             let file = schema_file_name(&resource);
-            for (index, operations) in resource_operations.chunks(100).enumerate() {
+            let groups = python_resource_groups(api, &resource, &resource_operations);
+            let group_count = groups.len();
+            for (index, range) in groups.into_iter().enumerate() {
+                let operations = &resource_operations[range];
                 tree.insert(GeneratedFile::new(
                     format!("{root}/src/{module}/resources/{file}_part_{index:03}.py"),
                     render_resource_chunk(api, &resource, &resource_operations, operations, index),
@@ -161,7 +173,7 @@ fn render_sdk(
             }
             tree.insert(GeneratedFile::new(
                 format!("{root}/src/{module}/resources/{file}.py"),
-                render_resource_facade(&resource, resource_operations.len().div_ceil(100)),
+                render_resource_facade(&resource, group_count),
             )?)?;
         }
     }
@@ -584,7 +596,11 @@ fn render_schema(output: &mut String, schema: &Schema) {
 /// The transport/runtime is deliberately separate from API operations.  Large
 /// specs then load a small stable client plus bounded operation modules.
 fn render_runtime(api: &Api) -> String {
-    let errors = render_declared_error_classes(api);
+    let errors = if partition_python_errors(api) {
+        "from .errors import *\n".into()
+    } else {
+        render_declared_error_classes(api)
+    };
     let output = format!(
         r#"{NOTICE}
 from __future__ import annotations
@@ -1025,6 +1041,62 @@ class BaseClient:
     output
 }
 
+fn bounded_source_ranges(sizes: &[usize], overhead: usize) -> Vec<std::ops::Range<usize>> {
+    let units = sizes
+        .iter()
+        .map(|bytes| kaji_core::source_layout::SourceUnit {
+            bytes: *bytes,
+            resource: None,
+        })
+        .collect::<Vec<_>>();
+    kaji_core::source_layout::SourceLayout::Chunked {
+        max_file_bytes: 128 * 1024,
+        max_declarations: Some(100),
+    }
+    .groups(&units, overhead)
+    .expect("valid bounded source layout")
+    .into_iter()
+    .map(|group| group[0]..group[group.len() - 1] + 1)
+    .collect()
+}
+
+fn python_operation_groups(api: &Api) -> Vec<std::ops::Range<usize>> {
+    let overhead = render_operation_chunk(api, &[], 0).len();
+    let sizes = api
+        .operations
+        .iter()
+        .map(|operation| {
+            render_operation_chunk(api, std::slice::from_ref(operation), 0)
+                .len()
+                .saturating_sub(overhead)
+        })
+        .collect::<Vec<_>>();
+    bounded_source_ranges(&sizes, overhead + 64)
+}
+
+fn python_resource_groups(
+    api: &Api,
+    resource: &str,
+    operations: &[&Operation],
+) -> Vec<std::ops::Range<usize>> {
+    let overhead = render_resource_chunk(api, resource, operations, &[], 0).len();
+    let sizes = operations
+        .iter()
+        .map(|operation| {
+            render_resource_chunk(
+                api,
+                resource,
+                operations,
+                std::slice::from_ref(operation),
+                0,
+            )
+            .len()
+            .saturating_sub(overhead)
+        })
+        .collect::<Vec<_>>();
+    bounded_source_ranges(&sizes, overhead + 512)
+}
+
 fn render_operation_chunk(api: &Api, operations: &[Operation], index: usize) -> String {
     let mut output = format!(
         "{NOTICE}from __future__ import annotations\n\nfrom typing import Any, Iterator, cast\nfrom uuid import uuid4\nfrom urllib.parse import quote\n\nfrom .runtime import ApiError, _kaji_json_path, _kaji_with_body_value, to_wire\nfrom .multipart import MultipartBody\nfrom .models import *\n\n\nclass Operations{index:03}:\n"
@@ -1045,7 +1117,7 @@ fn render_operation_chunk(api: &Api, operations: &[Operation], index: usize) -> 
 }
 
 fn render_client_facade(api: &Api, client_style: SdkClientStyle) -> String {
-    let operation_imports = (0..api.operations.len().div_ceil(100))
+    let operation_imports = (0..python_operation_groups(api).len())
         .map(|index| format!("from .operations_{index:03} import Operations{index:03}"))
         .collect::<Vec<_>>();
     let resources = resource_operations(api);
@@ -1845,28 +1917,84 @@ fn declared_error_class_names(api: &Api) -> Vec<String> {
         .collect()
 }
 
-fn render_declared_error_classes(api: &Api) -> String {
-    let mut output = String::new();
-    for operation in &api.operations {
-        for response in operation
-            .responses
-            .iter()
-            .filter(|response| is_error_status(&response.status))
-        {
-            let name = error_class_name(operation, &response.status);
-            let _ = writeln!(output, "class {name}(ApiError):");
-            let _ = writeln!(
-                output,
-                "    \"\"\"Declared {} error response for `{}`.\"\"\"",
-                response.status, operation.id
-            );
-            if let Some(model) = error_body_model(api, response) {
-                let _ = writeln!(output, "\n    body: {model}");
-            }
-            output.push('\n');
-        }
+fn render_error_declaration(
+    api: &Api,
+    operation: &Operation,
+    response: &kaji_core::OperationResponse,
+) -> String {
+    let name = error_class_name(operation, &response.status);
+    let mut output = format!(
+        "class {name}(ApiError):\n    \"\"\"Declared {} error response for `{}`.\"\"\"\n",
+        response.status, operation.id
+    );
+    if let Some(model) = error_body_model(api, response) {
+        let _ = writeln!(output, "\n    body: {model}");
     }
+    output.push('\n');
     output
+}
+
+fn error_declarations(api: &Api) -> Vec<(String, String)> {
+    api.operations
+        .iter()
+        .flat_map(|operation| {
+            operation
+                .responses
+                .iter()
+                .filter(|response| is_error_status(&response.status))
+                .map(move |response| {
+                    (
+                        error_class_name(operation, &response.status),
+                        render_error_declaration(api, operation, response),
+                    )
+                })
+        })
+        .collect()
+}
+
+fn render_declared_error_classes(api: &Api) -> String {
+    error_declarations(api)
+        .into_iter()
+        .map(|(_, value)| value)
+        .collect()
+}
+
+fn partition_python_errors(api: &Api) -> bool {
+    render_declared_error_classes(api).len() > 64 * 1024
+}
+
+fn render_partitioned_errors(api: &Api) -> Vec<(String, String)> {
+    if !partition_python_errors(api) {
+        return Vec::new();
+    }
+    let declarations = error_declarations(api);
+    let sizes = declarations
+        .iter()
+        .map(|(name, value)| value.len() + name.len() + 100)
+        .collect::<Vec<_>>();
+    let mut files = Vec::new();
+    let mut entry = NOTICE.to_owned();
+    for (index, range) in bounded_source_ranges(&sizes, 512).into_iter().enumerate() {
+        let mut source = format!(
+            "{NOTICE}from __future__ import annotations\nfrom ..runtime import ApiError\nfrom ..models import *\n\n"
+        );
+        let mut names = Vec::new();
+        for (name, value) in &declarations[range] {
+            // Public runtime aliases and pickle identities stay compatible.
+            source.push_str(value.trim_end());
+            source.push_str("\n    __module__ = __package__.rsplit('.', 1)[0] + '.runtime'\n\n");
+            names.push(name);
+        }
+        let _ = writeln!(
+            source,
+            "__all__ = {}",
+            serde_json::to_string(&names).unwrap()
+        );
+        files.push((format!("errors/chunk_{index:04}.py"), source));
+        let _ = writeln!(entry, "from .chunk_{index:04} import *");
+    }
+    files.push(("errors/__init__.py".into(), entry));
+    files
 }
 
 fn operation_error_types(api: &Api, operation: &Operation) -> String {
@@ -1889,9 +2017,13 @@ fn operation_error_types(api: &Api, operation: &Operation) -> String {
 }
 
 fn render_init(api: &Api, client_style: SdkClientStyle) -> String {
-    let client_imports = std::iter::once("ApiError".to_owned())
-        .chain(declared_error_class_names(api))
-        .collect::<Vec<_>>();
+    let client_imports = if partition_python_errors(api) {
+        vec!["ApiError".to_owned()]
+    } else {
+        std::iter::once("ApiError".to_owned())
+            .chain(declared_error_class_names(api))
+            .collect::<Vec<_>>()
+    };
     let resource_import = if client_style == SdkClientStyle::Namespaced {
         "from .resources import *\n".to_owned()
     } else {
@@ -1900,7 +2032,11 @@ fn render_init(api: &Api, client_style: SdkClientStyle) -> String {
     format!(
         "{NOTICE}\nfrom .client import Client\nfrom .presence import with_present_fields\nfrom .oauth import OAuthClientCredentials, AsyncOAuthClientCredentials\nfrom .multipart import MultipartBody, FilePart, JsonPart, RawJsonPart\nfrom .response_validation import ResponseDecodeError\nfrom .runtime import {}\nfrom .models import *\n{resource_import}",
         client_imports.join(", "),
-    )
+    ) + if partition_python_errors(api) {
+        "from .errors import *\n"
+    } else {
+        ""
+    }
 }
 
 fn render_readme(
@@ -2087,7 +2223,15 @@ fn render_resource_chunk(
     // name allocator with every preceding operation exactly as the original
     // single-file renderer did.
     let mut used_methods = BTreeMap::<String, usize>::new();
-    for operation in all_operations.iter().take(index * 100) {
+    let start = operations
+        .first()
+        .and_then(|first| {
+            all_operations
+                .iter()
+                .position(|item| std::ptr::eq(*item, *first))
+        })
+        .unwrap_or(0);
+    for operation in all_operations.iter().take(start) {
         let direct = python_identifier(&snake_case(&operation.id));
         let preferred = resource_method_name(&direct, resource);
         let previously_seen = *used_methods.get(&preferred).unwrap_or(&0);
@@ -4264,6 +4408,11 @@ pub use package::{
 
 #[cfg(test)]
 mod openapi32_native_tests {
+    use super::{
+        AdditionalProperties, Api, Operation, Schema, SchemaKind, SchemaValue, SdkClientStyle,
+        render_sdk,
+    };
+    use kaji_core::Field;
     use std::process::Command;
     #[test]
     fn native_buffered_sequences_round_trip_and_reject_invalid_records() {
@@ -4414,5 +4563,180 @@ for malformed in [b'\x1e{"bad":\n',b'{}\x1e{}']:
             .status()
             .unwrap();
         assert!(status.success());
+    }
+    fn byte_boundary_api() -> Api {
+        let parameters = (0..80)
+            .map(|index| kaji_core::OperationParameter {
+                name: format!("queryParameter{index:03}{}", "LongName".repeat(20)),
+                location: "query".into(),
+                required: false,
+                schema: Some(SchemaValue::new(SchemaKind::String)),
+                description: None,
+                annotations: Default::default(),
+            })
+            .collect::<Vec<_>>();
+        Api {
+            name: "Byte Probe".into(),
+            operations: (0..20)
+                .map(|index| Operation {
+                    id: format!("getItem{index}"),
+                    path: format!("/items/{index}"),
+                    parameters: parameters.clone(),
+                    responses: vec![kaji_core::OperationResponse::json(
+                        "200",
+                        SchemaValue::new(SchemaKind::String),
+                    )],
+                    ..Default::default()
+                })
+                .collect(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn native_partitioned_validation_and_errors_preserve_strict_checks_and_public_identity() {
+        let mut source = Api {
+            name: "Strict Probe".into(),
+            ..Default::default()
+        };
+        source.schemas = (0..600)
+            .map(|index| {
+                Schema::new(
+                    format!("Model{index}"),
+                    SchemaValue::new(SchemaKind::Object {
+                        fields: (0..20)
+                            .map(|field| Field {
+                                name: format!("field{field}"),
+                                value: SchemaValue::new(SchemaKind::String),
+                                required: true,
+                                annotations: Default::default(),
+                            })
+                            .collect(),
+                        additional_properties: AdditionalProperties::Any,
+                    }),
+                )
+            })
+            .collect();
+        source.operations = (0..600)
+            .map(|index| Operation {
+                id: format!("getItem{index}"),
+                path: format!("/items/{index}"),
+                responses: vec![
+                    kaji_core::OperationResponse::json(
+                        "200",
+                        SchemaValue::new(SchemaKind::Reference {
+                            reference: "#/components/schemas/Model599".into(),
+                        }),
+                    ),
+                    kaji_core::OperationResponse::json(
+                        "400",
+                        SchemaValue::new(SchemaKind::Reference {
+                            reference: "#/components/schemas/Model599".into(),
+                        }),
+                    ),
+                ],
+                ..Default::default()
+            })
+            .collect();
+        let tree = render_sdk(
+            &source,
+            "python",
+            Some("strict-probe"),
+            SdkClientStyle::Namespaced,
+        )
+        .unwrap();
+        assert!(
+            tree.get("python/src/strict_probe/response_shapes/refs_0000.py")
+                .is_some()
+        );
+        assert!(
+            tree.get("python/src/strict_probe/errors/chunk_0000.py")
+                .is_some()
+        );
+        assert!(
+            tree.iter()
+                .filter(|(path, _)| path.extension().is_some_and(|ext| ext == "py"))
+                .all(|(_, value)| value.len() <= 128 * 1024)
+        );
+        let root = tempfile::tempdir().unwrap();
+        tree.write_to(root.path()).unwrap();
+        let script = r#"import pickle, typing
+from strict_probe import GetItem599Status400Error, ApiError
+from strict_probe.runtime import GetItem599Status400Error as RuntimeErrorClass
+from strict_probe.models import Model599
+from strict_probe.response_validation import PLANS, assert_shape, ResponseDecodeError
+assert len(PLANS['refs'])==600 and len(PLANS['operations'])==600
+assert RuntimeErrorClass is GetItem599Status400Error
+assert typing.get_type_hints(RuntimeErrorClass)['body'] is Model599
+wire={f'field{i}':'value' for i in range(20)}
+assert_shape(wire, {'ref':'Model599'}, PLANS['refs'])
+try: assert_shape({**wire,'field19':42}, {'ref':'Model599'}, PLANS['refs'])
+except ResponseDecodeError as error: assert error.path=='$["field19"]'
+else: raise AssertionError('strict shape mismatch accepted')
+error=GetItem599Status400Error(400,{},wire)
+assert isinstance(error,ApiError) and error.__class__.__module__=='strict_probe.runtime'
+assert pickle.loads(pickle.dumps(RuntimeErrorClass)) is RuntimeErrorClass
+"#;
+        let output = std::process::Command::new("python3")
+            .args(["-c", script])
+            .env("PYTHONPATH", root.path().join("python/src"))
+            .env("PYTHONDONTWRITEBYTECODE", "1")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
+    fn native_byte_bounded_operations_preserve_last_resource_and_transport() {
+        let source = byte_boundary_api();
+        let root = tempfile::tempdir().unwrap();
+        let tree = render_sdk(
+            &source,
+            "python",
+            Some("byte-probe"),
+            SdkClientStyle::Namespaced,
+        )
+        .unwrap();
+        let chunks = tree
+            .iter()
+            .filter(|(path, _)| path.to_string_lossy().contains("operations_"))
+            .collect::<Vec<_>>();
+        assert!(chunks.len() > 1);
+        assert!(
+            chunks
+                .iter()
+                .all(|(_, contents)| contents.len() <= 128 * 1024)
+        );
+        assert!(
+            tree.iter()
+                .filter(|(path, _)| path.to_string_lossy().contains("_part_"))
+                .all(|(_, contents)| contents.len() <= 128 * 1024)
+        );
+        tree.write_to(root.path()).unwrap();
+        let script = r#"from byte_probe import Client
+client=Client('https://unused.example')
+seen=[]
+def transport(method,path,**options):
+    seen.append((method,path,options)); return 'custom'
+client._request=transport
+assert client.get_item19()=='custom'
+assert client.items.get_item19()=='custom'
+assert [item[1] for item in seen]==['/items/19','/items/19']
+"#;
+        let output = std::process::Command::new("python3")
+            .args(["-c", script])
+            .env("PYTHONPATH", root.path().join("python/src"))
+            .env("PYTHONDONTWRITEBYTECODE", "1")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 }

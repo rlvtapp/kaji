@@ -42,3 +42,10 @@ The first configured factory is outermost. SDK retries invoke the wrapped
 transport for each attempt. Both CSharp and legacy DotNet targets support this
 contract; `async_symbol` and alternate signatures are rejected. Files are owned
 by the generator, collisions fail, and native compilation checks the signature.
+
+Operation/resource partial classes and declared error classes use a 128 KiB
+byte-aware grouping budget. Oversized object models emit typed partial records,
+including when presence preservation is enabled. Public model and client names
+remain unchanged. Indivisible signatures/enums are retained with exact file/byte
+entries in `.kaji/source-layout-diagnostics.json`; no source declaration is sliced.
+Generated-file ownership protects local edits during regeneration.

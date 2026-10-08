@@ -55,3 +55,12 @@ The first configured factory is outermost, and SDK retries call the resulting
 transport for each attempt. `async_symbol` and alternate signatures are rejected.
 Files are generator-owned, collisions fail, and regeneration refreshes them from
 the author source. Native compilation checks the factory's signature.
+
+Large SDKs use byte-aware operation and resource inheritance partitions with a
+128 KiB grouping budget, retaining the original public `Client` and resource
+methods. Existing declaration-count ceilings still apply. Large typed model
+holders also use field-part superclass files; Jackson annotations, inherited
+getters, fluent setters, presence types and extra-property guards remain active.
+Single enum/method/request declarations that exceed the budget remain intact and
+are listed with their exact path and bytes in `.kaji/source-layout-diagnostics.json`.
+Generated-file ownership refuses regeneration over local edits.

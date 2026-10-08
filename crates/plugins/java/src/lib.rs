@@ -161,16 +161,15 @@ fn render_sdk_with_policy(
         include_str!("call_options.java.txt").replace("__PACKAGE__", &package),
     )?;
     multipart::emit(api, &root, &package, &mut tree)?;
-    for schema in &api.schemas {
-        insert(
-            &mut tree,
-            &root,
-            &format!(
-                "src/main/java/{package_path}/model/{}.java",
-                type_name(&schema.name)
-            ),
-            render_model(schema, &package, open_enums),
-        )?;
+    for (index, schema) in api.schemas.iter().enumerate() {
+        for (filename, source) in render_model_parts(schema, &package, open_enums, index)? {
+            insert(
+                &mut tree,
+                &root,
+                &format!("src/main/java/{package_path}/model/{filename}"),
+                source,
+            )?;
+        }
     }
     insert(
         &mut tree,
@@ -178,9 +177,30 @@ fn render_sdk_with_policy(
         &format!("src/main/java/{package_path}/ClientBase.java"),
         render_client_base(api, &package),
     )?;
-    let operation_chunks = api
+    let operation_overhead = render_operation_chunk(api, &[], &package, 0).len() + 64;
+    let units = api
         .operations
-        .chunks(OPERATIONS_PER_FILE)
+        .iter()
+        .map(|operation| kaji_core::source_layout::SourceUnit {
+            bytes: render_operation_chunk(api, std::slice::from_ref(operation), &package, 0)
+                .len()
+                .saturating_sub(operation_overhead - 64),
+            resource: None,
+        })
+        .collect::<Vec<_>>();
+    let groups = kaji_core::source_layout::SourceLayout::Chunked {
+        max_file_bytes: 128 * 1024,
+        max_declarations: Some(OPERATIONS_PER_FILE),
+    }
+    .groups(&units, operation_overhead)?;
+    let operation_chunks = groups
+        .iter()
+        .map(|indices| {
+            indices
+                .iter()
+                .map(|index| api.operations[*index].clone())
+                .collect::<Vec<_>>()
+        })
         .collect::<Vec<_>>();
     for (index, operations) in operation_chunks.iter().enumerate() {
         insert(
@@ -198,21 +218,45 @@ fn render_sdk_with_policy(
     )?;
     if style == SdkClientStyle::Namespaced {
         for (resource, operations) in resource_operations(api) {
-            for (index, operations) in operations.chunks(100).enumerate() {
+            let overhead = render_resource_chunk(&resource, &[], &package, 0).len() + 64;
+            let units = operations
+                .iter()
+                .map(|operation| kaji_core::source_layout::SourceUnit {
+                    bytes: render_resource_chunk(
+                        &resource,
+                        std::slice::from_ref(operation),
+                        &package,
+                        0,
+                    )
+                    .len()
+                    .saturating_sub(overhead - 64),
+                    resource: None,
+                })
+                .collect::<Vec<_>>();
+            let groups = kaji_core::source_layout::SourceLayout::Chunked {
+                max_file_bytes: 128 * 1024,
+                max_declarations: Some(100),
+            }
+            .groups(&units, overhead)?;
+            for (index, indices) in groups.iter().enumerate() {
+                let operations = indices
+                    .iter()
+                    .map(|index| operations[*index].clone())
+                    .collect::<Vec<_>>();
                 insert(
                     &mut tree,
                     &root,
                     &format!(
                         "src/main/java/{package_path}/internal/resources/{resource}ResourcePart{index:03}.java"
                     ),
-                    render_resource_chunk(&resource, operations, &package, index),
+                    render_resource_chunk(&resource, &operations, &package, index),
                 )?;
             }
             insert(
                 &mut tree,
                 &root,
                 &format!("src/main/java/{package_path}/{resource}Resource.java"),
-                render_resource_facade(&resource, &package, operations.len().div_ceil(100)),
+                render_resource_facade(&resource, &package, groups.len()),
             )?;
         }
     }
@@ -230,6 +274,18 @@ fn render_sdk_with_policy(
         for (path, source) in imports {
             tree.replace(GeneratedFile::new(path, source)?)?;
         }
+    }
+    let oversized = tree.iter().filter_map(|(path, source)| {
+        let native = path.extension().and_then(|value| value.to_str()) == Some("java");
+        (native && source.len() > 128 * 1024).then(|| serde_json::json!({"path":path,"bytes":source.len(),"max_file_bytes":128*1024,"reason":"Atomic native declaration or public facade exceeds the grouping budget; source was retained intact."}))
+    }).collect::<Vec<_>>();
+    if !oversized.is_empty() {
+        insert(
+            &mut tree,
+            &root,
+            ".kaji/source-layout-diagnostics.json",
+            serde_json::to_string_pretty(&oversized)?,
+        )?;
     }
     Ok(tree)
 }
@@ -357,6 +413,109 @@ fn render_model(schema: &Schema, package: &str, open_enums: bool) -> String {
     }
 }
 
+fn render_model_parts(
+    schema: &Schema,
+    package: &str,
+    open_enums: bool,
+    index: usize,
+) -> Result<Vec<(String, String)>> {
+    let name = type_name(&schema.name);
+    let whole = render_model(schema, package, open_enums);
+    let SchemaKind::Object {
+        fields,
+        additional_properties,
+    } = &schema.value.kind
+    else {
+        return Ok(vec![(format!("{name}.java"), whole)]);
+    };
+    if fields.len() <= 200 || whole.len() <= 128 * 1024 {
+        return Ok(vec![(format!("{name}.java"), whole)]);
+    }
+    let names = native_names::field_names(
+        fields,
+        field_name,
+        &[
+            "clone",
+            "getClass",
+            "toString",
+            "hashCode",
+            "equals",
+            "wait",
+            "notify",
+            "notifyAll",
+            "finalize",
+        ],
+    );
+    let declarations = fields.iter().map(|field| {
+        let native = &names[&field.name]; let ty = java_type(&field.value);
+        let omit = if field.required { "" } else { "@JsonInclude(JsonInclude.Include.NON_NULL) " };
+        format!("    {omit}@JsonProperty({:?}) private {ty} {native};\n    public {ty} {native}() {{ return {native}; }}\n    public {name} {native}({ty} value) {{ this.{native} = value; return ({name}) this; }}\n", field.name)
+    }).collect::<Vec<_>>();
+    let imports = format!(
+        "package {package}.model;\nimport com.fasterxml.jackson.annotation.*;\nimport com.fasterxml.jackson.databind.JsonNode;\nimport java.util.*;\n{NOTICE}"
+    );
+    let units = declarations
+        .iter()
+        .zip(fields)
+        .map(|(source, field)| kaji_core::source_layout::SourceUnit {
+            bytes: source.len() + field.name.len() + if field.required { 64 } else { 256 },
+            resource: None,
+        })
+        .collect::<Vec<_>>();
+    let groups =
+        kaji_core::source_layout::SourceLayout::default().groups(&units, imports.len() + 512)?;
+    let mut files = Vec::new();
+    for (part, indices) in groups.iter().enumerate() {
+        let holder = format!("KajiModelPart{index:05}_{part:03}");
+        let parent = if part == 0 {
+            String::new()
+        } else {
+            format!(" extends KajiModelPart{index:05}_{:03}", part - 1)
+        };
+        let mut source = format!("{imports}public abstract class {holder}{parent} {{\n");
+        for index in indices {
+            source.push_str(&declarations[*index]);
+        }
+        let known = indices
+            .iter()
+            .map(|index| format!("{:?}", fields[*index].name))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let fallback = if part == 0 {
+            String::new()
+        } else {
+            " || super.kajiIsDeclaredProperty(kajiWirePropertyName)".into()
+        };
+        let _ = writeln!(
+            source,
+            "    protected boolean kajiIsDeclaredProperty(String kajiWirePropertyName) {{ return Set.of({known}).contains(kajiWirePropertyName){fallback}; }}\n}}"
+        );
+        files.push((format!("{holder}.java"), source));
+    }
+    let mut source = imports;
+    if matches!(additional_properties, AdditionalProperties::Forbidden) {
+        source.push_str("@JsonIgnoreProperties(ignoreUnknown = true)\n");
+    }
+    let _ = writeln!(
+        source,
+        "public final class {name} extends KajiModelPart{index:05}_{:03} {{",
+        groups.len() - 1
+    );
+    if !matches!(additional_properties, AdditionalProperties::Forbidden) {
+        let ty = match additional_properties {
+            AdditionalProperties::Schema { value } => java_type(value),
+            _ => "Object".into(),
+        };
+        let _ = writeln!(
+            source,
+            "    private final Map<String,{ty}> kajiExtra = new LinkedHashMap<>();\n    @JsonAnyGetter public Map<String,{ty}> kajiAdditionalProperties() {{ return Collections.unmodifiableMap(kajiExtra); }}\n    @JsonAnySetter public void kajiAdditionalProperty(String kajiWirePropertyName, {ty} value) {{ if (kajiIsDeclaredProperty(kajiWirePropertyName)) throw new IllegalArgumentException(\"additional property shadows declared field\"); kajiExtra.put(kajiWirePropertyName,value); }}"
+        );
+    }
+    source.push_str("}\n");
+    files.push((format!("{name}.java"), source));
+    Ok(files)
+}
+
 fn render_object_model(
     name: &str,
     fields: &[Field],
@@ -376,6 +535,8 @@ fn render_object_model(
             "notify",
             "notifyAll",
             "finalize",
+            "kajiIsDeclaredProperty",
+            "kajiWirePropertyName",
         ],
     );
     if fields.len() > 200 {
@@ -414,7 +575,7 @@ fn render_object_model(
                 .join(", ");
             let _ = writeln!(
                 source,
-                "    private final Map<String,{ty}> kajiExtra = new LinkedHashMap<>();\n    @JsonAnyGetter public Map<String,{ty}> kajiAdditionalProperties() {{ return Collections.unmodifiableMap(kajiExtra); }}\n    @JsonAnySetter public void kajiAdditionalProperty(String name, {ty} value) {{ if (Set.of({known}).contains(name)) throw new IllegalArgumentException(\"additional property shadows declared field\"); kajiExtra.put(name,value); }}"
+                "    private final Map<String,{ty}> kajiExtra = new LinkedHashMap<>();\n    @JsonAnyGetter public Map<String,{ty}> kajiAdditionalProperties() {{ return Collections.unmodifiableMap(kajiExtra); }}\n    @JsonAnySetter public void kajiAdditionalProperty(String kajiWirePropertyName, {ty} value) {{ if (Set.of({known}).contains(kajiWirePropertyName)) throw new IllegalArgumentException(\"additional property shadows declared field\"); kajiExtra.put(kajiWirePropertyName,value); }}"
             );
         }
         source.push_str("}\n");
@@ -3038,3 +3199,6 @@ mod package;
 pub use package::{Java, PackageExt, Sdk, Settings, package, sdk};
 
 mod bundled_middleware;
+
+#[cfg(test)]
+mod source_layout_tests;

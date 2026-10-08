@@ -102,6 +102,7 @@ pub struct Collection {
     output: String,
     strict: bool,
     group_by_tag: bool,
+    split_by_group: bool,
     examples: Option<Handle<RequestExamples>>,
 }
 pub fn collection() -> Collection {
@@ -110,6 +111,7 @@ pub fn collection() -> Collection {
         output: "collection.json".into(),
         strict: false,
         group_by_tag: true,
+        split_by_group: false,
         examples: None,
     }
 }
@@ -127,6 +129,12 @@ impl Collection {
     }
     pub fn group_by_tag(mut self, enabled: bool) -> Self {
         self.group_by_tag = enabled;
+        self
+    }
+    /// Also emit one standalone collection per tag or path-resource folder.
+    /// The aggregate collection and its contract remain available.
+    pub fn split_by_group(mut self, enabled: bool) -> Self {
+        self.split_by_group = enabled;
         self
     }
     pub fn using_examples(mut self, handle: Handle<RequestExamples>) -> Self {
@@ -178,6 +186,14 @@ impl Plugin<Postman> for Collection {
             &self.output,
             serde_json::to_string_pretty(&document.document)? + "\n",
         )?)?;
+        if self.split_by_group {
+            for (path, collection) in render::split_collections(&document.document)? {
+                cx.files.emit(GeneratedFile::new(
+                    path,
+                    serde_json::to_string_pretty(&collection)? + "\n",
+                )?)?;
+            }
+        }
         cx.files.emit(GeneratedFile::new(
             "diagnostics.json",
             serde_json::to_string_pretty(&document.diagnostics)? + "\n",

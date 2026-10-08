@@ -30,19 +30,18 @@ pub(crate) fn render(
             let name = pascal_case(&schema.name);
             let names =
                 native_names::field_names(fields, pascal_case, &[&name, "EqualityContract"]);
-            let mut source = render_model_with_policy(schema, &namespace, open_enums);
-            for field in fields.iter().filter(|f| !f.required) {
-                let ty = csharp_type(&field.value, true);
-                let property = names[&field.name].clone();
-                source = source.replace(&format!("    public {ty} {property} {{ get; init; }}"), &format!("    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]\n    public Presence<{ty}> {property} {{ get; init; }}"));
+            for (filename, mut source) in render_model_parts(schema, &namespace, open_enums, index)?
+            {
+                for field in fields.iter().filter(|f| !f.required) {
+                    let ty = csharp_type(&field.value, true);
+                    let property = names[&field.name].clone();
+                    source = source.replace(&format!("    public {ty} {property} {{ get; init; }}"), &format!("    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]\n    public Presence<{ty}> {property} {{ get; init; }}"));
+                }
+                tree.replace(GeneratedFile::new(
+                    output_path(&root, &format!("./Models/{filename}")),
+                    source,
+                )?)?;
             }
-            tree.replace(GeneratedFile::new(
-                output_path(
-                    &root,
-                    &format!("./Models/{}", bounded_filename(&schema.name, index, "cs")),
-                ),
-                source,
-            )?)?;
         }
     }
     tree.insert(GeneratedFile::new(

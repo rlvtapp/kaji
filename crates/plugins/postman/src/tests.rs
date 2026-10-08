@@ -365,19 +365,20 @@ fn validates_actual_official_draft04_schema() {
     for (i, api) in variants.iter().enumerate() {
         let mut tree = generate(api, None);
         let _ = &mut tree;
-        let path = root.path().join(format!("collection-{i}.json"));
-        std::fs::write(
-            &path,
-            serde_json::to_string_pretty(&document(&tree)).unwrap(),
-        )
-        .unwrap();
-        let result=std::process::Command::new(std::env::var("KAJI_TEST_PYTHON").unwrap_or_else(|_|"python3".into())).arg("-c").arg("import json,sys,jsonschema; schema=json.load(open(sys.argv[1])); jsonschema.Draft4Validator.check_schema(schema); jsonschema.Draft4Validator(schema).validate(json.load(open(sys.argv[2])))").arg(concat!(env!("CARGO_MANIFEST_DIR"),"/tests/schema/collection-v2.1.0.json")).arg(path).output().unwrap();
-        assert!(
-            result.status.success(),
-            "{}{}",
-            String::from_utf8_lossy(&result.stdout),
-            String::from_utf8_lossy(&result.stderr)
-        );
+        let aggregate = document(&tree);
+        let mut documents = vec![("aggregate".to_owned(), aggregate.clone())];
+        documents.extend(render::split_collections(&aggregate).unwrap());
+        for (index, (_, document)) in documents.iter().enumerate() {
+            let path = root.path().join(format!("collection-{i}-{index}.json"));
+            std::fs::write(&path, serde_json::to_string_pretty(document).unwrap()).unwrap();
+            let result=std::process::Command::new(std::env::var("KAJI_TEST_PYTHON").unwrap_or_else(|_|"python3".into())).arg("-c").arg("import json,sys,jsonschema; schema=json.load(open(sys.argv[1])); jsonschema.Draft4Validator.check_schema(schema); jsonschema.Draft4Validator(schema).validate(json.load(open(sys.argv[2])))").arg(concat!(env!("CARGO_MANIFEST_DIR"),"/tests/schema/collection-v2.1.0.json")).arg(path).output().unwrap();
+            assert!(
+                result.status.success(),
+                "{}{}",
+                String::from_utf8_lossy(&result.stdout),
+                String::from_utf8_lossy(&result.stderr)
+            );
+        }
     }
 }
 
@@ -385,27 +386,126 @@ fn validates_actual_official_draft04_schema() {
 #[ignore = "requires npm ci in packages/postman-execute and permission for ephemeral loopback mock"]
 fn generated_collection_executes_with_newman_local_mock() {
     let root = tempfile::tempdir().unwrap();
-    let path = root.path().join("collection.json");
-    std::fs::write(
-        &path,
-        serde_json::to_string(&document(&generate(&api(), None))).unwrap(),
-    )
-    .unwrap();
-    let output = std::process::Command::new(
-        std::env::var("KAJI_TEST_NODE").unwrap_or_else(|_| "node".into()),
-    )
-    .arg(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../../packages/postman-execute/run.mjs"
-    ))
-    .arg(path)
-    .output()
-    .unwrap();
-    assert!(
-        output.status.success(),
-        "{}{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
+    let aggregate = document(&generate(&api(), None));
+    let mut documents = vec![("collection.json".to_owned(), aggregate.clone())];
+    documents.extend(render::split_collections(&aggregate).unwrap());
+    for (relative, document) in documents {
+        let path = root.path().join(relative);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, serde_json::to_string(&document).unwrap()).unwrap();
+        let output = std::process::Command::new(
+            std::env::var("KAJI_TEST_NODE").unwrap_or_else(|_| "node".into()),
+        )
+        .arg(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../../packages/postman-execute/run.mjs"
+        ))
+        .arg(path)
+        .output()
+        .unwrap();
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(String::from_utf8_lossy(&output.stdout).contains("\"requests\":1"));
+    }
+}
+
+#[test]
+fn split_groups_keep_request_identity_and_blank_credentials() {
+    let mut source = api();
+    source.operations[0]
+        .annotations
+        .insert("tags".into(), json!(["../Pets"]));
+    let mut other = source.operations[0].clone();
+    other.id = "createOtherPet".into();
+    other.path = "/other/{id}".into();
+    other.annotations.insert("tags".into(), json!(["../pets"]));
+    source.operations.push(other);
+    let tree = Packages::new()
+        .package(package("postman").with(collection().split_by_group(true)))
+        .generate(&source, None)
+        .unwrap();
+    let aggregate: Value =
+        serde_json::from_str(tree.get("postman/collection.json").unwrap()).unwrap();
+    let split: Vec<Value> = (0..2)
+        .map(|index| {
+            serde_json::from_str(
+                tree.get(format!("postman/collections/group-{index:04}.json"))
+                    .unwrap(),
+            )
+            .unwrap()
+        })
+        .collect();
+    assert_eq!(split.len(), aggregate["item"].as_array().unwrap().len());
+    for (index, child) in split.iter().enumerate() {
+        assert_eq!(child["item"], json!([aggregate["item"][index].clone()]));
+        assert_eq!(child["variable"], aggregate["variable"]);
+        assert_eq!(child["info"]["schema"], aggregate["info"]["schema"]);
+        assert_ne!(
+            child["info"]["_postman_id"],
+            aggregate["info"]["_postman_id"]
+        );
+        assert!(child.get("event").is_none());
+    }
+    assert_ne!(
+        split[0]["info"]["_postman_id"],
+        split[1]["info"]["_postman_id"]
     );
-    assert!(String::from_utf8_lossy(&output.stdout).contains("\"requests\":1"));
+    let second = Packages::new()
+        .package(package("postman").with(collection().split_by_group(true)))
+        .generate(&source, None)
+        .unwrap();
+    assert_eq!(tree, second);
+}
+
+#[test]
+fn regenerating_split_exports_preserves_only_the_customer_environment() {
+    let export = || {
+        Packages::new()
+            .package(
+                package("postman")
+                    .with(collection().split_by_group(true))
+                    .with(environment()),
+            )
+            .generate(&api(), None)
+            .unwrap()
+    };
+    let root = tempfile::tempdir().unwrap();
+    export().write_to(root.path()).unwrap();
+    let environment = root.path().join("postman/environment.json");
+    std::fs::write(&environment, "customer-owned credentials").unwrap();
+    let split = root.path().join("postman/collections/group-0000.json");
+    std::fs::write(&split, "edited generated requests").unwrap();
+    let rejected = export().write_to(root.path()).unwrap_err();
+    assert!(
+        rejected
+            .to_string()
+            .contains("locally modified generated file")
+    );
+    assert_eq!(
+        std::fs::read_to_string(&split).unwrap(),
+        "edited generated requests"
+    );
+    let restored = export();
+    std::fs::write(
+        &split,
+        restored.get("postman/collections/group-0000.json").unwrap(),
+    )
+    .unwrap();
+    restored.write_to(root.path()).unwrap();
+    assert_eq!(
+        std::fs::read_to_string(environment).unwrap(),
+        "customer-owned credentials"
+    );
+    let regenerated: Value =
+        serde_json::from_str(&std::fs::read_to_string(split).unwrap()).unwrap();
+    assert!(regenerated["item"][0]["item"].is_array());
+    assert!(
+        !serde_json::to_string(&regenerated)
+            .unwrap()
+            .contains("customer-owned credentials")
+    );
 }

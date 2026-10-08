@@ -23,25 +23,71 @@ pub(crate) fn prepare(api: &Api) -> Api {
     prepared
 }
 
-fn group_indices(lengths: impl Iterator<Item = usize>, budget: usize) -> Vec<Vec<usize>> {
-    let mut result = Vec::new();
-    let mut current = Vec::new();
-    let mut bytes = 1024;
-    for (index, length) in lengths.enumerate() {
-        if bytes + length > budget && !current.is_empty() {
-            result.push(std::mem::take(&mut current));
-            bytes = 1024;
-        }
-        current.push(index);
-        bytes += length;
-    }
-    if !current.is_empty() {
-        result.push(current);
-    }
-    result
+fn group_indices(
+    lengths: impl Iterator<Item = usize>,
+    config: &ArtifactOptions,
+    resources: &[String],
+) -> Result<Vec<Vec<usize>>> {
+    let units = lengths
+        .enumerate()
+        .map(|(index, bytes)| kaji_core::SourceUnit {
+            bytes,
+            resource: resources.get(index).map(String::as_str),
+        })
+        .collect::<Vec<_>>();
+    config
+        .layout
+        .clone()
+        .unwrap_or_else(|| kaji_core::SourceLayout::chunked(config.max_file_bytes))
+        .groups(&units, 1024)
+}
+pub(crate) fn uses_modules(
+    api: &Api,
+    config: &ArtifactOptions,
+    bytes: usize,
+    operations: bool,
+) -> Result<bool> {
+    let count = if operations {
+        api.operations.len()
+    } else {
+        api.schemas.len() + api.operations.len()
+    };
+    let units = (0..count)
+        .map(|_| kaji_core::SourceUnit {
+            bytes: bytes / count.max(1),
+            resource: None,
+        })
+        .collect::<Vec<_>>();
+    config
+        .layout
+        .clone()
+        .unwrap_or_else(|| kaji_core::SourceLayout::chunked(config.max_file_bytes))
+        .uses_modules(&units, 0)
+}
+fn operation_resources(api: &Api) -> Vec<String> {
+    api.operations
+        .iter()
+        .map(|operation| {
+            operation
+                .annotations
+                .get("tags")
+                .and_then(serde_json::Value::as_array)
+                .and_then(|tags| tags.first())
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned)
+                .unwrap_or_else(|| {
+                    operation
+                        .path
+                        .split('/')
+                        .find(|s| !s.is_empty() && !s.starts_with('{'))
+                        .unwrap_or("default")
+                        .into()
+                })
+        })
+        .collect()
 }
 
-fn references(value: &SchemaValue, names: &mut BTreeSet<String>) {
+pub(crate) fn references(value: &SchemaValue, names: &mut BTreeSet<String>) {
     match &value.kind {
         SchemaKind::Reference { reference } => {
             names.insert(reference.rsplit('/').next().unwrap_or(reference).into());
@@ -106,116 +152,8 @@ fn file(config: &ArtifactOptions, path: &str, source: String) -> Result<Generate
     )
 }
 
-fn bounded_faker(value: &SchemaValue) -> String {
-    if value.const_value.is_some() || !value.enum_values.is_empty() {
-        return render::render_faker(value);
-    }
-    let expression = match &value.kind {
-        SchemaKind::Reference { reference } => format!(
-            "create{}(__depth + 1)",
-            name(reference.rsplit('/').next().unwrap_or(reference))
-        ),
-        SchemaKind::Array { items } => format!(
-            "Array.from({{ length: __depth >= 4 ? 0 : 2 }}, () => {})",
-            bounded_faker(items)
-        ),
-        SchemaKind::Object { fields, .. } => format!(
-            "{{ {} }}",
-            fields
-                .iter()
-                .map(|field| {
-                    let entry = format!(
-                        "{}: {}",
-                        render::js_string(&field.name),
-                        bounded_faker(&field.value)
-                    );
-                    if field.required {
-                        entry
-                    } else {
-                        format!("...(__depth >= 4 ? {{}} : {{ {entry} }})")
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join(", ")
-        ),
-        SchemaKind::OneOf { variants }
-        | SchemaKind::AnyOf { variants }
-        | SchemaKind::AllOf { variants } => variants
-            .first()
-            .map(bounded_faker)
-            .unwrap_or_else(|| "undefined".into()),
-        _ => render::render_faker(value),
-    };
-    if value.nullable {
-        format!("(__depth >= 4 ? null : {expression})")
-    } else {
-        expression
-    }
-}
-
 pub(crate) fn faker(api: &Api, config: &ArtifactOptions) -> Result<Vec<GeneratedFile>> {
-    let recursive = has_cycles(api);
-    let groups = group_indices(
-        api.schemas
-            .iter()
-            .map(|s| render::render_faker(&s.value).len() + s.name.len() * 4 + 160),
-        config.max_file_bytes,
-    );
-    let membership = groups
-        .iter()
-        .enumerate()
-        .flat_map(|(chunk, indices)| {
-            indices
-                .iter()
-                .map(move |&i| (api.schemas[i].name.clone(), chunk))
-        })
-        .collect::<BTreeMap<_, _>>();
-    let mut files = Vec::new();
-    let mut root = String::new();
-    for (chunk, indices) in groups.iter().enumerate() {
-        let mut source = "import { faker } from '@faker-js/faker';\n".to_owned();
-        let mut dependencies = BTreeSet::new();
-        for &i in indices {
-            references(&api.schemas[i].value, &mut dependencies);
-        }
-        for dependency in dependencies {
-            let target = *membership
-                .get(&dependency)
-                .ok_or_else(|| anyhow::anyhow!("Faker reference has no component: {dependency}"))?;
-            if target != chunk {
-                source.push_str(&format!(
-                    "import {{ create{} }} from './chunk_{target:04}';\n",
-                    name(&dependency)
-                ));
-            }
-        }
-        for &i in indices {
-            let schema = &api.schemas[i];
-            let n = name(&schema.name);
-            let expression = if recursive {
-                bounded_faker(&schema.value)
-            } else {
-                render::render_faker(&schema.value)
-            };
-            let parameter = if recursive { "__depth = 0" } else { "" };
-            let guard = if recursive {
-                "if (__depth > 8) throw new RangeError('Cannot construct finite data for a required recursive schema'); "
-            } else {
-                ""
-            };
-            source.push_str(&format!("import type {{ {n} }} from '../models';\nexport function create{n}({parameter}): {n} {{ {guard}return {expression} as {n}; }}\n"));
-        }
-        root.push_str(&format!(
-            "export * from './faker_chunks/chunk_{chunk:04}';\n"
-        ));
-        files.push(file(
-            config,
-            &format!("faker_chunks/chunk_{chunk:04}.ts"),
-            source,
-        )?);
-    }
-    files.push(file(config, "faker.ts", root)?);
-    Ok(files)
+    crate::auxiliary_fixture::generate(api, config)
 }
 
 pub(crate) fn zod(api: &Api, config: &ArtifactOptions) -> Result<Vec<GeneratedFile>> {
@@ -223,8 +161,9 @@ pub(crate) fn zod(api: &Api, config: &ArtifactOptions) -> Result<Vec<GeneratedFi
         api.schemas
             .iter()
             .map(|s| render::render_zod(&s.value).len() + s.name.len() * 8 + 300),
-        config.max_file_bytes,
-    );
+        config,
+        &[],
+    )?;
     let membership = groups
         .iter()
         .enumerate()
@@ -296,8 +235,9 @@ pub(crate) fn zod(api: &Api, config: &ArtifactOptions) -> Result<Vec<GeneratedFi
             render::render_zod_operation_schemas(&mut text, &local);
             text.len() + o.id.len() * 4 + 300
         }),
-        config.max_file_bytes,
-    );
+        config,
+        &operation_resources(api),
+    )?;
     let mut operation_registries = Vec::new();
     for (chunk, indices) in operation_groups.iter().enumerate() {
         let local = Api {
@@ -317,7 +257,8 @@ pub(crate) fn zod(api: &Api, config: &ArtifactOptions) -> Result<Vec<GeneratedFi
                 anyhow::anyhow!("Zod operation reference has no component: {dependency}")
             })?;
             source.push_str(&format!(
-                "import {{ {}Schema }} from './schemas_{target:04}';\n",
+                "import {{ {}Schema, type {} }} from './schemas_{target:04}';\n",
+                name(&dependency),
                 name(&dependency)
             ));
         }
@@ -350,8 +291,8 @@ pub(crate) fn zod(api: &Api, config: &ArtifactOptions) -> Result<Vec<GeneratedFi
             source,
         )?);
     }
-    root.push_str(&format!("export const kajiSchemas = {{ {} }} as const;\nexport type KajiSchemaName = keyof typeof kajiSchemas;\nexport type KajiSchema = (typeof kajiSchemas)[KajiSchemaName];\nexport const getKajiSchema = <Name extends KajiSchemaName>(name: Name): (typeof kajiSchemas)[Name] => kajiSchemas[name];\n", schema_registries.join(", ")));
-    root.push_str(&format!("export const kajiOperationSchemas = {{ {} }} as const;\nexport type KajiOperationId = keyof typeof kajiOperationSchemas;\nexport type KajiOperationSchemas = typeof kajiOperationSchemas;\nexport const getKajiOperationSchemas = <Operation extends KajiOperationId>(operation: Operation): KajiOperationSchemas[Operation] => kajiOperationSchemas[operation];\n", operation_registries.join(", ")));
+    root.push_str(&format!("export const kajiSchemas: {} = {{ {} }} as const;\nexport type KajiSchemaName = keyof typeof kajiSchemas;\nexport type KajiSchema = (typeof kajiSchemas)[KajiSchemaName];\nexport const getKajiSchema = <Name extends KajiSchemaName>(name: Name): (typeof kajiSchemas)[Name] => kajiSchemas[name];\n", if schema_registries.is_empty() { "Record<never, never>".into() } else { (0..schema_registries.len()).map(|i| format!("typeof schemas{i}")).collect::<Vec<_>>().join(" & ") }, schema_registries.join(", ")));
+    root.push_str(&format!("export const kajiOperationSchemas: {} = {{ {} }} as const;\nexport type KajiOperationId = keyof typeof kajiOperationSchemas;\nexport type KajiOperationSchemas = typeof kajiOperationSchemas;\nexport const getKajiOperationSchemas = <Operation extends KajiOperationId>(operation: Operation): KajiOperationSchemas[Operation] => kajiOperationSchemas[operation];\n", if operation_registries.is_empty() { "Record<never, never>".into() } else { (0..operation_registries.len()).map(|i| format!("typeof operations{i}")).collect::<Vec<_>>().join(" & ") }, operation_registries.join(", ")));
     files.push(file(config, "zod.ts", root)?);
     Ok(files)
 }
@@ -363,6 +304,7 @@ fn split_operations(
 ) -> Result<Vec<GeneratedFile>> {
     let mut unsplit = config.clone();
     unsplit.max_file_bytes = usize::MAX;
+    unsplit.layout = Some(kaji_core::SourceLayout::SingleFile);
     let lengths = api
         .operations
         .iter()
@@ -372,14 +314,14 @@ fn split_operations(
                 ..api.clone()
             };
             let files = if cypress {
-                render::TypeScriptCypress.generate(&local, &unsplit)
+                render::TypeScriptCypress.generate(&local, &local_cypress_config(&local, &unsplit))
             } else {
                 render::TypeScriptMsw.generate(&local, &unsplit)
             }?;
             Ok(files[0].contents.len())
         })
         .collect::<Result<Vec<_>>>()?;
-    let groups = group_indices(lengths.into_iter(), config.max_file_bytes);
+    let groups = group_indices(lengths.into_iter(), config, &operation_resources(api))?;
     let kind = if cypress { "cypress" } else { "msw" };
     let mut files = Vec::new();
     let mut root = String::new();
@@ -390,7 +332,7 @@ fn split_operations(
             ..api.clone()
         };
         let generated = if cypress {
-            render::TypeScriptCypress.generate(&local, &unsplit)?
+            render::TypeScriptCypress.generate(&local, &local_cypress_config(&local, &unsplit))?
         } else {
             render::TypeScriptMsw.generate(&local, &unsplit)?
         };
@@ -428,4 +370,97 @@ pub(crate) fn msw(api: &Api, config: &ArtifactOptions) -> Result<Vec<GeneratedFi
 }
 pub(crate) fn cypress(api: &Api, config: &ArtifactOptions) -> Result<Vec<GeneratedFile>> {
     split_operations(api, config, true)
+}
+
+fn local_cypress_config(api: &Api, config: &ArtifactOptions) -> ArtifactOptions {
+    let mut config = config.clone();
+    config.cypress_options.operation_overrides.retain(|id, _| {
+        api.operations.iter().any(|operation| {
+            operation
+                .annotations
+                .get("kaji.aux.operation_id")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or(&operation.id)
+                == id
+        })
+    });
+    config
+}
+
+/// Standalone models share the same declaration budget as auxiliary artifacts.
+pub(crate) fn models(api: &Api, config: &ArtifactOptions) -> Result<Vec<GeneratedFile>> {
+    let api = prepare(api);
+    let declarations = api
+        .schemas
+        .iter()
+        .map(|schema| {
+            let mut source = String::new();
+            render::render_description(&mut source, schema.value.description.as_deref());
+            source.push_str(&format!(
+                "export type {} = {};\n",
+                render::type_identifier(&schema.name),
+                render::render_value(&schema.value)
+            ));
+            source
+        })
+        .collect::<Vec<_>>();
+    let groups = group_indices(declarations.iter().map(String::len), config, &[])?;
+    let layout = config
+        .layout
+        .clone()
+        .unwrap_or_else(|| kaji_core::SourceLayout::chunked(config.max_file_bytes));
+    let units = declarations
+        .iter()
+        .map(|source| kaji_core::SourceUnit {
+            bytes: source.len(),
+            resource: None,
+        })
+        .collect::<Vec<_>>();
+    if !layout.uses_modules(&units, 1024)? {
+        return Ok(vec![GeneratedFile::new(
+            render::output_path(config, "models.ts"),
+            declarations.join("\n"),
+        )?]);
+    }
+    let mut membership = BTreeMap::new();
+    for (chunk, indices) in groups.iter().enumerate() {
+        for &i in indices {
+            membership.insert(api.schemas[i].name.clone(), chunk);
+        }
+    }
+    let mut files = Vec::new();
+    let mut root = String::new();
+    for (chunk, indices) in groups.iter().enumerate() {
+        let mut source = String::new();
+        let mut dependencies = BTreeSet::new();
+        for &i in indices {
+            references(&api.schemas[i].value, &mut dependencies);
+        }
+        for dependency in dependencies {
+            let target = *membership
+                .get(&dependency)
+                .ok_or_else(|| anyhow::anyhow!("Model reference has no component: {dependency}"))?;
+            if target != chunk {
+                source.push_str(&format!(
+                    "import type {{ {} }} from './chunk_{target:04}';\n",
+                    render::type_identifier(&dependency)
+                ));
+            }
+        }
+        for &i in indices {
+            source.push_str(&declarations[i]);
+        }
+        files.push(GeneratedFile::new(
+            render::output_path(config, &format!("models_chunks/chunk_{chunk:04}.ts")),
+            source,
+        )?);
+        root.push_str(&format!(
+            "export type * from './models_chunks/chunk_{chunk:04}';\n"
+        ));
+    }
+    files.push(GeneratedFile::new(
+        render::output_path(config, "models.ts"),
+        root,
+    )?);
+    Ok(files)
 }

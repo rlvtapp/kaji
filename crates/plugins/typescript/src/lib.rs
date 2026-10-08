@@ -3,7 +3,12 @@ mod oauth;
 pub use oauth::{OAuth, oauth};
 mod webhooks;
 pub use webhooks::{Webhooks, webhooks};
+mod auxiliary_fixture;
 mod auxiliary_layout;
+mod auxiliary_options;
+mod auxiliary_validation;
+pub use auxiliary_options::{CypressOperationOptions, CypressOptions, FixtureOptions};
+pub use kaji_core::SourceLayout;
 mod bundled_middleware;
 mod clients;
 pub mod composition;
@@ -12,6 +17,7 @@ mod operation_tests;
 pub use operation_tests::{OperationTests, operation_tests};
 mod json;
 mod models;
+mod query_helpers;
 mod render;
 mod request_control;
 mod sdk;
@@ -28,7 +34,8 @@ pub use workspace::{Symbol, TsTypes, Workspace};
 pub mod artifacts {
     pub use crate::render::{
         ArtifactOptions, McpToolManifest, Naming, ReDoc, TypeScriptCypress, TypeScriptFaker,
-        TypeScriptMsw, TypeScriptReactQuery, TypeScriptSwr, TypeScriptVueQuery, TypeScriptZod,
+        TypeScriptModels, TypeScriptMsw, TypeScriptPackage, TypeScriptReactQuery, TypeScriptSwr,
+        TypeScriptVueQuery, TypeScriptZod,
     };
 }
 
@@ -276,14 +283,20 @@ impl Plugin<TypeScript> for Sdk {
 pub struct Types {
     meta: Meta,
     output: String,
+    layout: Option<SourceLayout>,
 }
 pub fn types() -> Types {
     Types {
         meta: Meta::new(),
         output: "models".into(),
+        layout: None,
     }
 }
 impl Types {
+    pub fn layout(mut self, layout: SourceLayout) -> Self {
+        self.layout = Some(layout);
+        self
+    }
     /// Module name without `.ts`, relative to this package.
     pub fn output(mut self, module: impl Into<String>) -> Self {
         self.output = module.into();
@@ -305,13 +318,14 @@ impl Plugin<TypeScript> for Types {
     }
     fn generate(&self, cx: &mut PluginContext<'_, TypeScript>) -> Result<()> {
         let mut schemas = std::collections::BTreeMap::new();
-        for schema in &cx.api.schemas {
+        let prepared = crate::auxiliary_layout::prepare(cx.api);
+        for (schema, original) in prepared.schemas.iter().zip(&cx.api.schemas) {
             let symbol = cx.workspace.declare(
                 &self.output,
                 &render::type_identifier(&schema.name),
                 self.kind(),
             )?;
-            if schemas.insert(schema.name.clone(), symbol).is_some() {
+            if schemas.insert(original.name.clone(), symbol).is_some() {
                 anyhow::bail!("duplicate schema name {}", schema.name);
             }
         }
@@ -320,11 +334,25 @@ impl Plugin<TypeScript> for Types {
             package_name: cx.settings.package_name.clone(),
             ..Default::default()
         };
+        let config = render::ArtifactOptions {
+            layout: self.layout.clone().or_else(|| cx.common.layout.clone()),
+            ..config
+        };
         for file in render::TypeScriptModels.generate(cx.api, &config)? {
-            cx.files.emit(GeneratedFile::new(
-                format!("{}.ts", self.output),
-                file.contents,
-            )?)?;
+            let path = file.path.to_string_lossy();
+            let target = if path == "models.ts" {
+                format!("{}.ts", self.output)
+            } else {
+                path.replacen("models_chunks", &format!("{}_chunks", self.output), 1)
+            };
+            let contents = file.contents.replace(
+                "./models_chunks/",
+                &format!(
+                    "./{}_chunks/",
+                    self.output.rsplit('/').next().unwrap_or(&self.output)
+                ),
+            );
+            cx.files.emit(GeneratedFile::new(target, contents)?)?;
         }
         for mut file in render::TypeScriptPackage.generate(cx.api, &config)? {
             if file.path == Path::new("index.ts") {
@@ -682,3 +710,6 @@ mod middleware_tests;
 
 #[cfg(test)]
 mod openapi32;
+
+#[cfg(test)]
+mod auxiliary_tests;

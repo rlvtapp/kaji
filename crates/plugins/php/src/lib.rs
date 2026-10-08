@@ -109,7 +109,11 @@ fn render_sdk(
             render_model(schema, &namespace, &named_types),
         )?;
     }
-    for (part, operations) in api.operations.chunks(100).enumerate() {
+    for (part, range) in php_operation_groups(api, &namespace, &named_types)
+        .into_iter()
+        .enumerate()
+    {
+        let operations = &api.operations[range];
         insert(
             &mut tree,
             root,
@@ -125,17 +129,16 @@ fn render_sdk(
     )?;
     if style == SdkClientStyle::Namespaced {
         for (resource, operations) in resource_operations(api) {
+            let groups = php_resource_groups(api, &resource, &operations, &namespace, &named_types);
+            let group_count = groups.len();
             insert(
                 &mut tree,
                 root,
                 &format!("src/Resources/{resource}Resource.php"),
-                render_resource(
-                    &resource,
-                    operations.len().div_ceil(RESOURCE_METHODS_PER_FILE),
-                    &namespace,
-                ),
+                render_resource(&resource, group_count, &namespace),
             )?;
-            for (part, chunk) in operations.chunks(RESOURCE_METHODS_PER_FILE).enumerate() {
+            for (part, range) in groups.into_iter().enumerate() {
+                let chunk = &operations[range];
                 insert(
                     &mut tree,
                     root,
@@ -442,7 +445,7 @@ fn render_client(api: &Api, namespace: &str, style: SdkClientStyle) -> String {
         "<?php\n\ndeclare(strict_types=1);\n\nnamespace {namespace};\n\nuse {namespace}\\Exceptions\\ApiException;\nuse Nyholm\\Psr7\\Factory\\Psr17Factory;\nuse Psr\\Http\\Client\\ClientInterface;\nuse Psr\\Http\\Message\\RequestFactoryInterface;\nuse Psr\\Http\\Message\\StreamFactoryInterface;\nuse Psr\\Http\\Message\\StreamInterface;\n"
     );
     output.push_str(&format!("\n{NOTICE}\nfinal class Client\n{{\n    private readonly RequestFactoryInterface $requestFactory;\n    private readonly StreamFactoryInterface $streamFactory;\n"));
-    for part in 0..api.operations.len().div_ceil(100) {
+    for part in 0..php_operation_groups(api, namespace, &NamedTypes::from_api(api)).len() {
         let _ = writeln!(output, "    use ClientOperations{part:03};");
     }
     if style == SdkClientStyle::Namespaced {
@@ -641,6 +644,79 @@ fn render_client(api: &Api, namespace: &str, style: SdkClientStyle) -> String {
     output = output.replace("$query = array_filter($query, static fn (mixed $value): bool => $value !== null);", "$query = is_array($query) ? array_filter($query, static fn (mixed $value): bool => $value !== null) : $query;");
     output = output.replace("if ($query !== [])", "if ($query !== [] && $query !== '')");
     output
+}
+
+fn php_source_ranges(
+    sizes: &[usize],
+    overhead: usize,
+    count: usize,
+) -> Vec<std::ops::Range<usize>> {
+    let units = sizes
+        .iter()
+        .map(|bytes| kaji_core::source_layout::SourceUnit {
+            bytes: *bytes,
+            resource: None,
+        })
+        .collect::<Vec<_>>();
+    kaji_core::source_layout::SourceLayout::Chunked {
+        max_file_bytes: 128 * 1024,
+        max_declarations: Some(count),
+    }
+    .groups(&units, overhead)
+    .expect("valid bounded source layout")
+    .into_iter()
+    .map(|group| group[0]..group[group.len() - 1] + 1)
+    .collect()
+}
+
+fn php_operation_groups(
+    api: &Api,
+    namespace: &str,
+    named_types: &NamedTypes,
+) -> Vec<std::ops::Range<usize>> {
+    let overhead = render_operation_trait(api, &[], 0, namespace, named_types).len();
+    let sizes = api
+        .operations
+        .iter()
+        .map(|operation| {
+            render_operation_trait(
+                api,
+                std::slice::from_ref(operation),
+                0,
+                namespace,
+                named_types,
+            )
+            .len()
+            .saturating_sub(overhead)
+        })
+        .collect::<Vec<_>>();
+    php_source_ranges(&sizes, overhead + 64, 100)
+}
+
+fn php_resource_groups(
+    api: &Api,
+    resource: &str,
+    operations: &[(&Operation, String)],
+    namespace: &str,
+    named_types: &NamedTypes,
+) -> Vec<std::ops::Range<usize>> {
+    let overhead = render_resource_trait(api, resource, &[], 0, namespace, named_types).len();
+    let sizes = operations
+        .iter()
+        .map(|operation| {
+            render_resource_trait(
+                api,
+                resource,
+                std::slice::from_ref(operation),
+                0,
+                namespace,
+                named_types,
+            )
+            .len()
+            .saturating_sub(overhead)
+        })
+        .collect::<Vec<_>>();
+    php_source_ranges(&sizes, overhead + 64, RESOURCE_METHODS_PER_FILE)
 }
 
 fn render_operation_trait(
@@ -3203,6 +3279,93 @@ check($original===['page'=>2,'limit'=>2,'filter'=>'keep'] && array_column(array_
         assert!(
             output.status.success(),
             "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    fn byte_boundary_api() -> Api {
+        let parameters = (0..80)
+            .map(|index| kaji_core::OperationParameter {
+                name: format!("queryParameter{index:03}{}", "LongName".repeat(20)),
+                location: "query".into(),
+                required: false,
+                schema: Some(SchemaValue::new(SchemaKind::String)),
+                description: None,
+                annotations: Default::default(),
+            })
+            .collect::<Vec<_>>();
+        Api {
+            name: "Byte Probe".into(),
+            operations: (0..20)
+                .map(|index| Operation {
+                    id: format!("getItem{index}"),
+                    path: format!("/items/{index}"),
+                    parameters: parameters.clone(),
+                    responses: vec![kaji_core::OperationResponse::json(
+                        "200",
+                        SchemaValue::new(SchemaKind::String),
+                    )],
+                    ..Default::default()
+                })
+                .collect(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    #[ignore = "requires PHP8.2 and cached PSR dependencies"]
+    fn native_byte_bounded_operations_preserve_last_resource_and_transport() {
+        let source = byte_boundary_api();
+        let root = tempfile::tempdir().unwrap();
+        let tree = render_sdk(
+            &source,
+            "php",
+            Some("byte-probe"),
+            SdkClientStyle::Namespaced,
+        )
+        .unwrap();
+        let chunks = tree
+            .iter()
+            .filter(|(path, _)| path.to_string_lossy().contains("ClientOperations"))
+            .collect::<Vec<_>>();
+        assert!(chunks.len() > 1);
+        assert!(
+            chunks
+                .iter()
+                .all(|(_, contents)| contents.len() <= 128 * 1024)
+        );
+        assert!(
+            tree.iter()
+                .filter(|(path, _)| path.to_string_lossy().contains("ResourceOperations"))
+                .all(|(_, contents)| contents.len() <= 128 * 1024)
+        );
+        tree.write_to(root.path()).unwrap();
+        let namespace = namespace_for_package("byte-probe");
+        let (resource, operations) = resource_operations(&source).into_iter().next().unwrap();
+        let method = &operations.last().unwrap().1;
+        let autoload = php_string(
+            &std::env::var("KAJI_PHP_AUTOLOAD")
+                .expect("KAJI_PHP_AUTOLOAD must point to cached PSR dependencies"),
+        );
+        let script = format!(
+            r#"<?php
+require {autoload};
+spl_autoload_register(function($class) {{ $prefix='{namespace}\\'; if(str_starts_with($class,$prefix)) require __DIR__.'/src/'.str_replace('\\','/',substr($class,strlen($prefix))).'.php'; }});
+$transport = new class implements \Psr\Http\Client\ClientInterface {{ public array $seen=[]; public function sendRequest(\Psr\Http\Message\RequestInterface $request): \Psr\Http\Message\ResponseInterface {{ $this->seen[]=(string)$request->getUri(); return new \Nyholm\Psr7\Response(200,['content-type'=>'application/json'],'"custom"'); }} }};
+$client = new \{namespace}\Client(baseUrl:'https://unused.example', httpClient:$transport);
+if ($client->getItem19() !== 'custom') throw new \Exception('last direct method');
+$facade = new \{namespace}\Resources\{resource}Resource($client);
+if ($facade->{method}() !== 'custom' || count($transport->seen)!==2 || !str_ends_with($transport->seen[1],'/items/19')) throw new \Exception('resource/transport forwarding');
+"#
+        );
+        std::fs::write(root.path().join("php/probe.php"), script).unwrap();
+        let output = std::process::Command::new("php")
+            .arg(root.path().join("php/probe.php"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
     }

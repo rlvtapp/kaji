@@ -104,29 +104,84 @@ fn render_sdk_with_policy(
     )?)?;
     multipart::emit(api, &root, &namespace, &mut tree)?;
     for (index, schema) in api.schemas.iter().enumerate() {
-        tree.insert(GeneratedFile::new(
-            output_path(
-                &root,
-                &format!("Models/{}", bounded_filename(&schema.name, index, "cs")),
-            ),
-            render_model_with_policy(schema, &namespace, open_enums),
-        )?)?;
+        for (filename, source) in render_model_parts(schema, &namespace, open_enums, index)? {
+            tree.insert(GeneratedFile::new(
+                output_path(&root, &format!("Models/{filename}")),
+                source,
+            )?)?;
+        }
     }
     tree.insert(GeneratedFile::new(
         output_path(&root, "ApiException.cs"),
-        render_api_exception(api, &namespace),
+        render_api_exception(&Api::default(), &namespace),
     )?)?;
+    let error_header = format!("{NOTICE}\nusing System.Text.Json;\nnamespace {namespace};\n");
+    let errors = api
+        .operations
+        .iter()
+        .map(|operation| {
+            let mut only = Api::default();
+            only.operations.push(operation.clone());
+            render_api_exception(&only, &namespace)
+                .strip_prefix(&render_api_exception(&Api::default(), &namespace))
+                .unwrap()
+                .to_owned()
+        })
+        .filter(|source| !source.is_empty())
+        .collect::<Vec<_>>();
+    let units = errors
+        .iter()
+        .map(|error| kaji_core::source_layout::SourceUnit {
+            bytes: error.len(),
+            resource: None,
+        })
+        .collect::<Vec<_>>();
+    for (part, indices) in kaji_core::source_layout::SourceLayout::default()
+        .groups(&units, error_header.len())?
+        .iter()
+        .enumerate()
+    {
+        let source = error_header.clone()
+            + &indices
+                .iter()
+                .map(|index| errors[*index].as_str())
+                .collect::<String>();
+        tree.insert(GeneratedFile::new(
+            output_path(&root, &format!("Errors/DeclaredErrors{part:03}.cs")),
+            source,
+        )?)?;
+    }
     tree.insert(GeneratedFile::new(
         output_path(&root, "KajiClient.cs"),
         render_client(api, &namespace, client_style),
     )?)?;
-    for (part, operations) in api.operations.chunks(100).enumerate() {
+    let overhead = render_operation_chunk(api, &[], &namespace).len();
+    let units = api
+        .operations
+        .iter()
+        .map(|operation| kaji_core::source_layout::SourceUnit {
+            bytes: render_operation_chunk(api, std::slice::from_ref(operation), &namespace)
+                .len()
+                .saturating_sub(overhead),
+            resource: None,
+        })
+        .collect::<Vec<_>>();
+    let groups = kaji_core::source_layout::SourceLayout::Chunked {
+        max_file_bytes: 128 * 1024,
+        max_declarations: Some(100),
+    }
+    .groups(&units, overhead)?;
+    for (part, indices) in groups.iter().enumerate() {
+        let operations = indices
+            .iter()
+            .map(|index| api.operations[*index].clone())
+            .collect::<Vec<_>>();
         tree.insert(GeneratedFile::new(
             output_path(
                 &root,
                 &format!("Operations/KajiClientOperations{part:03}.cs"),
             ),
-            render_operation_chunk(api, operations, &namespace),
+            render_operation_chunk(api, &operations, &namespace),
         )?)?;
     }
     if client_style == SdkClientStyle::Namespaced {
@@ -136,10 +191,34 @@ fn render_sdk_with_policy(
                 .iter()
                 .filter(|operation| operation_resource_name(operation) == resource)
                 .collect::<Vec<_>>();
-            for (part, operations) in operations.chunks(100).enumerate() {
+            let overhead = render_resource_chunk(&resource, &[], &namespace, true).len();
+            let units = operations
+                .iter()
+                .map(|operation| kaji_core::source_layout::SourceUnit {
+                    bytes: render_resource_chunk(
+                        &resource,
+                        std::slice::from_ref(operation),
+                        &namespace,
+                        false,
+                    )
+                    .len()
+                    .saturating_sub(render_resource_chunk(&resource, &[], &namespace, false).len()),
+                    resource: None,
+                })
+                .collect::<Vec<_>>();
+            let groups = kaji_core::source_layout::SourceLayout::Chunked {
+                max_file_bytes: 128 * 1024,
+                max_declarations: Some(100),
+            }
+            .groups(&units, overhead)?;
+            for (part, indices) in groups.iter().enumerate() {
+                let operations = indices
+                    .iter()
+                    .map(|index| operations[*index])
+                    .collect::<Vec<_>>();
                 tree.insert(GeneratedFile::new(
                     output_path(&root, &format!("Resources/{resource}Resource{part:03}.cs")),
-                    render_resource_chunk(&resource, operations, &namespace, part == 0),
+                    render_resource_chunk(&resource, &operations, &namespace, part == 0),
                 )?)?;
             }
         }
@@ -152,6 +231,16 @@ fn render_sdk_with_policy(
         output_path(&root, "STYLE_GUIDE.md"),
         render_style_guide(api, &namespace, client_style),
     )?)?;
+    let oversized = tree.iter().filter_map(|(path, source)| {
+        let native = path.extension().and_then(|value| value.to_str()) == Some("cs");
+        (native && source.len() > 128 * 1024).then(|| serde_json::json!({"path":path,"bytes":source.len(),"max_file_bytes":128*1024,"reason":"Atomic native declaration or public facade exceeds the grouping budget; source was retained intact."}))
+    }).collect::<Vec<_>>();
+    if !oversized.is_empty() {
+        tree.insert(GeneratedFile::new(
+            output_path(&root, ".kaji/source-layout-diagnostics.json"),
+            serde_json::to_string_pretty(&oversized)?,
+        )?)?;
+    }
     Ok(tree)
 }
 
@@ -205,6 +294,95 @@ fn bounded_filename(value: &str, index: usize, extension: &str) -> String {
     format!("{prefix}_{index:05}_{hash:016x}.{extension}")
 }
 
+fn render_object_property(field: &kaji_core::Field, property: &str) -> String {
+    let field_type = csharp_type(&field.value, !field.required);
+    let required = if field.required && is_reference_type(&field.value) {
+        "required "
+    } else {
+        ""
+    };
+    let preserve_null = if field.required
+        && (field.value.nullable || field.value.optional || field.value.nullish)
+    {
+        "    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]\n"
+    } else {
+        ""
+    };
+    format!(
+        "    [JsonPropertyName({:?})]\n{preserve_null}    public {required}{field_type} {property} {{ get; init; }}\n",
+        field.name
+    )
+}
+
+fn render_model_parts(
+    schema: &Schema,
+    namespace: &str,
+    open_enums: bool,
+    index: usize,
+) -> Result<Vec<(String, String)>> {
+    let whole = render_model_with_policy(schema, namespace, open_enums);
+    let filename = bounded_filename(&schema.name, index, "cs");
+    let SchemaKind::Object {
+        fields,
+        additional_properties,
+    } = &schema.value.kind
+    else {
+        return Ok(vec![(filename, whole)]);
+    };
+    if whole.len() <= 128 * 1024 {
+        return Ok(vec![(filename, whole)]);
+    }
+    let name = pascal_case(&schema.name);
+    let names = native_names::field_names(fields, pascal_case, &[&name, "EqualityContract"]);
+    let properties = fields
+        .iter()
+        .map(|field| render_object_property(field, &names[&field.name]))
+        .collect::<Vec<_>>();
+    let header = format!(
+        "{NOTICE}\nusing System.Text.Json;\nusing System.Text.Json.Serialization;\nnamespace {namespace};\npublic sealed partial record {name}\n{{\n"
+    );
+    let mut extra = String::new();
+    if !matches!(additional_properties, AdditionalProperties::Forbidden) {
+        let mut property = "AdditionalProperties".to_owned();
+        while fields.iter().any(|field| names[&field.name] == property) {
+            property.push('_');
+        }
+        extra = format!(
+            "    [JsonExtensionData]\n    public Dictionary<string, JsonElement>? {property} {{ get; init; }}\n"
+        );
+    }
+    let units = properties
+        .iter()
+        .zip(fields)
+        .map(|(source, field)| kaji_core::source_layout::SourceUnit {
+            bytes: source.len() + if field.required { 0 } else { 128 },
+            resource: None,
+        })
+        .collect::<Vec<_>>();
+    let groups = kaji_core::source_layout::SourceLayout::default()
+        .groups(&units, header.len() + extra.len() + 2)?;
+    Ok(groups
+        .iter()
+        .enumerate()
+        .map(|(part, indices)| {
+            let mut source = header.clone();
+            for index in indices {
+                source.push_str(&properties[*index]);
+            }
+            if part == 0 {
+                source.push_str(&extra);
+            }
+            source.push_str("}\n");
+            let path = if part == 0 {
+                filename.clone()
+            } else {
+                format!("{}.part{part:03}.cs", filename.trim_end_matches(".cs"))
+            };
+            (path, source)
+        })
+        .collect())
+}
+
 fn render_schema_with_policy(output: &mut String, schema: &Schema, open_enums: bool) {
     let name = pascal_case(&schema.name);
     match &schema.value.kind {
@@ -217,25 +395,7 @@ fn render_schema_with_policy(output: &mut String, schema: &Schema, open_enums: b
             let _ = writeln!(output, "public sealed record {name}");
             output.push_str("{\n");
             for field in fields {
-                let property = names[&field.name].clone();
-                let field_type = csharp_type(&field.value, !field.required);
-                let required = if field.required && is_reference_type(&field.value) {
-                    "required "
-                } else {
-                    ""
-                };
-                let preserve_null = if field.required
-                    && (field.value.nullable || field.value.optional || field.value.nullish)
-                {
-                    "    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]\n"
-                } else {
-                    ""
-                };
-                let _ = writeln!(
-                    output,
-                    "    [JsonPropertyName({:?})]\n{preserve_null}    public {required}{field_type} {property} {{ get; init; }}",
-                    field.name,
-                );
+                output.push_str(&render_object_property(field, &names[&field.name]));
             }
             if !matches!(additional_properties, AdditionalProperties::Forbidden) {
                 let mut property = "AdditionalProperties".to_owned();
@@ -2146,7 +2306,7 @@ mod tests {
                 }],
             });
         let tree = render_test_sdk(&source, "sdk/dotnet", None).unwrap();
-        let errors = tree.get("sdk/dotnet/ApiException.cs").unwrap();
+        let errors = tree.get("sdk/dotnet/Errors/DeclaredErrors000.cs").unwrap();
         let client = tree
             .get("sdk/dotnet/Operations/KajiClientOperations000.cs")
             .unwrap();
@@ -2398,3 +2558,6 @@ pub use package::DotNet;
 pub use package::{CSharp, PackageExt, Sdk, Settings, dotnet_package, package, sdk};
 
 mod bundled_middleware;
+
+#[cfg(test)]
+mod source_layout_tests;

@@ -156,6 +156,74 @@ class CorpusTests(unittest.TestCase):
             self.assertEqual(result['generated_bytes'], 0)
             self.assertIsNone(result['file_warning_bytes'])
 
+    def test_peak_memory_formats_have_explicit_units_and_unavailable_states(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / 'memory.log'
+            log.write_text('12345  maximum resident set size\n')
+            self.assertEqual(corpus.peak_memory(log, 'bsd-time')['peak_bytes'], 12345)
+            log.write_text('Maximum resident set size (kbytes): 12345\n')
+            self.assertEqual(corpus.peak_memory(log, 'gnu-time')['peak_bytes'], 12345 * 1024)
+            self.assertEqual(corpus.peak_memory(log, None)['reason'], 'measurement_unavailable_on_host')
+            self.assertEqual(corpus.peak_memory(log, 'gnu-time', True)['reason'], 'interrupted_phase')
+            log.write_text('no measurement emitted')
+            self.assertEqual(corpus.peak_memory(log, 'bsd-time')['status'], 'unavailable')
+
+    def test_denied_measurement_probe_preserves_original_command(self):
+        command = [sys.executable, '-c', 'print("work succeeds")']
+        with patch.object(corpus.sys, 'platform', 'darwin'), \
+             patch.object(corpus.subprocess, 'run', return_value=subprocess.CompletedProcess([], 1)):
+            wrapped, method = corpus.memory_command(command)
+        self.assertEqual(wrapped, command)
+        self.assertIsNone(method)
+
+    def test_real_subprocess_reports_measured_peak_memory_when_supported(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = corpus.run_logged([sys.executable, '-c',
+                                       'x=bytearray(8*1024*1024); print(len(x))'],
+                                       dict(os.environ), Path(directory) / 'memory.log', 10)
+            self.assertEqual(result['exit_code'], 0)
+            memory = result['peak_memory']
+            if corpus.memory_command([])[1] is None:
+                self.assertEqual(memory['status'], 'unavailable')
+            else:
+                self.assertEqual(memory['status'], 'measured')
+                self.assertGreater(memory['peak_bytes'], 8 * 1024 * 1024)
+
+    def test_fingerprint_catches_hidden_runtime_changes_and_stale_chunks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / '.kaji').mkdir()
+            (root / '.kaji/runtime.ts').write_text('export const value=1')
+            (root / 'old_chunk.ts').write_text('old')
+            lock = root / '.kaji/generation.lock.json'
+            lock.write_text('first timestamp')
+            before = corpus.output_fingerprint(root)
+            lock.write_text('second timestamp')
+            self.assertEqual(corpus.compare_fingerprints(before, corpus.output_fingerprint(root))['status'], 'passed')
+            (root / '.kaji/runtime.ts').write_text('export const value=2')
+            (root / 'old_chunk.ts').unlink()
+            result = corpus.compare_fingerprints(before, corpus.output_fingerprint(root))
+            self.assertEqual(result['changed_paths'], ['.kaji/runtime.ts', 'old_chunk.ts'])
+
+    def test_regeneration_drift_fails_case_even_when_native_compile_passes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            contract = self.fixture(root)
+            generations = []
+            def run(command, env, log, timeout):
+                if command[-1] == 'generate':
+                    package = Path(env['KAJI_PUBLIC_CONTRACT_ROOT']) / 'sample/go'
+                    package.mkdir(parents=True, exist_ok=True)
+                    generations.append(True)
+                    (package / 'client.go').write_text('package sdk' + str(len(generations)))
+                return {'exit_code': 0}
+            with patch.object(corpus, 'run_logged', side_effect=run):
+                result = corpus.run_case(contract, 'go', root / 'manifest', root, {}, 10,
+                                         False, verify_regeneration=True)
+            self.assertEqual(result['status'], 'failed')
+            self.assertEqual(result['native']['exit_code'], 0)
+            self.assertEqual(result['regeneration']['changed_paths'], ['client.go'])
+
     def test_existing_output_is_not_overwritten(self):
         with tempfile.TemporaryDirectory() as directory:
             marker = Path(directory) / 'report.json'

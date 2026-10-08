@@ -145,7 +145,7 @@ fn terraform_cli_polling_local_mock_lifecycle() {
     );
     fs::write(
         root.path().join("mock.py"),
-        r#"import http.server,json,sys
+        r#"import http.server,json,sys,pathlib
 state={'id':'child/id','organizationId':'a/b','name':'planned','status':'ready'}
 pending=0
 deleting=False
@@ -157,12 +157,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
  def do_GET(self):
   global pending
   if self.path!='/organizations/a%2Fb/things/child%2Fid':return self.respond(404)
-  pending=max(0,pending-1)
+  if pathlib.Path(sys.argv[3]).read_text()!='timeout':pending=max(0,pending-1)
   if deleting and pending==0:return self.respond(404)
   state['status']='pending' if pending else 'ready'
   self.respond(200,state)
  def mutation(self):
   global pending
+  if self.headers.get('Authorization')!='Bearer private-token':return self.respond(401)
   with open(sys.argv[2],'a') as log:log.write(self.command+'\n')
   if self.command!='DELETE':
    payload=json.loads(self.rfile.read(int(self.headers.get('Content-Length','0'))))
@@ -182,11 +183,13 @@ server.serve_forever()
 "#,
     )
     .unwrap();
+    fs::write(root.path().join("mode"), "normal").unwrap();
     let mut child =
         Command::new(std::env::var("KAJI_TEST_PYTHON").unwrap_or_else(|_| "python3".into()))
             .arg(root.path().join("mock.py"))
             .arg(root.path().join("port"))
             .arg(root.path().join("mutations"))
+            .arg(root.path().join("mode"))
             .spawn()
             .unwrap();
     struct Cleanup<'a>(&'a mut std::process::Child);
@@ -212,7 +215,7 @@ server.serve_forever()
     };
     fs::write(root.path().join("main.tf"), config("planned")).unwrap();
     let terraform = std::env::var("KAJI_TERRAFORM_BIN").unwrap_or_else(|_| "terraform".into());
-    let run = |args: &[&str]| {
+    let run_expected = |args: &[&str], code: i32| {
         let output = Command::new(&terraform)
             .args(args)
             .current_dir(root.path())
@@ -222,16 +225,35 @@ server.serve_forever()
             .output()
             .unwrap();
         assert!(
-            output.status.success(),
+            output.status.code() == Some(code),
             "{}{}",
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
+        output
     };
+    let run = |args: &[&str]| run_expected(args, 0);
     run(&["validate", "-no-color"]);
     run(&["apply", "-auto-approve", "-input=false", "-no-color"]);
     run(&["plan", "-detailed-exitcode", "-input=false", "-no-color"]);
     fs::write(root.path().join("main.tf"), config("updated")).unwrap();
+    fs::write(root.path().join("mode"), "timeout").unwrap();
+    let failure = run_expected(&["apply", "-auto-approve", "-input=false", "-no-color"], 1);
+    let failure_text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&failure.stdout),
+        String::from_utf8_lossy(&failure.stderr)
+    );
+    assert!(!failure_text.contains("private-token"));
+    assert!(
+        String::from_utf8_lossy(&run(&["state", "list"]).stdout).contains("example_thing.test")
+    );
+    assert_eq!(
+        fs::read_to_string(root.path().join("mutations")).unwrap(),
+        "POST\nPATCH\n",
+        "timeout must not replay the update"
+    );
+    fs::write(root.path().join("mode"), "normal").unwrap();
     run(&["apply", "-auto-approve", "-input=false", "-no-color"]);
     run(&["plan", "-detailed-exitcode", "-input=false", "-no-color"]);
     run(&["destroy", "-auto-approve", "-input=false", "-no-color"]);

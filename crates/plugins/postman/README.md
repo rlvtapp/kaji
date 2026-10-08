@@ -31,6 +31,10 @@ parameter styles, nested form encodings, unknown security schemes and ambiguous
 headers generate errors. OAuth/OpenID placeholders require an independently
 acquired bearer token. No login/refresh scripts are generated.
 
+Use `.split_by_group(true)` to also emit standalone `collections/group-0000.json`
+exports per folder, retaining aggregate request IDs and shared blank variables.
+The aggregate collection contract remains available to dependent plugins.
+
 Requests group by their first tag; `.group_by_tag(false)` groups by their first
 path segment. Alternative request media and OR security requirements produce
 separate deterministic request IDs. AND security requirements combine compatible

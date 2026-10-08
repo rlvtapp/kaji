@@ -26,7 +26,10 @@ pub(crate) fn prepare(
         let base = type_name(&raw);
         let mut candidate = base.clone();
         let mut suffix = 2;
-        if candidate.ends_with("Resource") || used.contains(&candidate.to_ascii_lowercase()) {
+        if candidate.ends_with("Resource")
+            || candidate.starts_with("KajiModelPart")
+            || used.contains(&candidate.to_ascii_lowercase())
+        {
             candidate = format!("{base}Model");
         }
         while used.contains(&candidate.to_ascii_lowercase())

@@ -1,0 +1,47 @@
+import { QueryClient, InfiniteQueryObserver, dehydrate, hydrate, type InfiniteQueryObserverOptions, type InfiniteData, type QueryKey } from '@tanstack/react-query';
+import { unref } from 'vue';
+import { createClient } from './.kaji/client.js';
+import { cursorContactsInfiniteOptions, cursorContactsInfiniteKey, pageContactsInfiniteOptions, offsetContactsInfiniteOptions, urlContactsInfiniteOptions, cursorContactsInfinitePrefetch, useCursorContactsSuspenseInfinite, listContactsPrefetch, useListContactsSuspense } from './ui/react.js';
+import { cursorContactsInfiniteOptions as vueInfinite } from './ui/vue.js';
+import { cursorContactsInfiniteOptions as swrInfinite, createContactMutationOptions } from './ui/swr.js';
+const check = (value: unknown, message: string) => { if (!value) throw new Error(message); };
+const seen: string[] = [];
+const client = createClient({ baseUrl: 'https://unit.invalid', fetch: async (input) => {
+ const url = new URL(input instanceof Request ? input.url : String(input)); seen.push(url.href);
+ let body: unknown;
+ if (url.pathname.includes('cursor')) body = { next: url.searchParams.has('cursor') ? null : 'next-token', items: [1, 2] };
+ else if (url.pathname.includes('url')) body = { next: url.searchParams.has('second') ? null : '/urlContacts?second=1' };
+ else { const value = Number(url.searchParams.get('page') ?? url.searchParams.get('offset') ?? 0); body = {items: value < 2 ? [1,2] : [3]}; }
+ return new Response(JSON.stringify(body), { status: 200, headers: {'Content-Type':'application/json'} });
+} });
+const cache = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+const options = cursorContactsInfiniteOptions({client}, {}, 'tenant');
+const observer = new InfiniteQueryObserver(cache, options);
+const unsubscribe = observer.subscribe(() => {});
+await observer.refetch(); await observer.fetchNextPage();
+check(observer.getCurrentResult().data?.pages.length === 2 && !observer.getCurrentResult().hasNextPage, 'cursor traversal/termination');
+check(seen.some(url=>url.includes('cursor=next-token')), 'cursor input not forwarded');
+check(JSON.stringify(options.initialPageParam) === 'null', 'page parameters should be serializable');
+check(JSON.stringify(options.queryKey) !== JSON.stringify(cursorContactsInfiniteKey({client}, 'other')), 'tenant scope');
+const dehydrated = JSON.parse(JSON.stringify(dehydrate(cache))); const restored = new QueryClient(); hydrate(restored, dehydrated);
+check(restored.getQueryData(options.queryKey) !== undefined, 'SSR hydration lost pages');
+const vue = vueInfinite({client}, {select: data=>data.pages.length}, 'vue');
+const first = await vue.queryFn({pageParam:vue.initialPageParam,signal:new AbortController().signal,queryKey:vue.queryKey,client:cache,meta:undefined,direction:'forward'});
+check(unref(vue.select)?.({pages:[first],pageParams:[null]})===1, 'Vue selected pages');
+async function checkNumeric<TData, TKey extends QueryKey>(paged: InfiniteQueryObserverOptions<TData, Error, InfiniteData<TData, string | number | null>, TKey, string | number | null>) {
+ const current = new InfiniteQueryObserver(cache, paged); const stop=current.subscribe(()=>{});
+ await current.refetch(); await current.fetchNextPage(); if(current.getCurrentResult().hasNextPage)await current.fetchNextPage();
+ check(current.getCurrentResult().data?.pages.length === 2, 'numeric page traversal'); stop();current.destroy();
+}
+await checkNumeric(pageContactsInfiniteOptions({client,query:{limit:2}}, {}, 'page'));
+await checkNumeric(offsetContactsInfiniteOptions({client,query:{limit:2}}, {}, 'offset'));
+const urlOptions=urlContactsInfiniteOptions({client}, {}, 'urls', {baseUrl:'https://unit.invalid'});
+const urls = new InfiniteQueryObserver(cache,urlOptions); const stopUrls=urls.subscribe(()=>{}); await urls.refetch();await urls.fetchNextPage();
+check(!urls.getCurrentResult().hasNextPage && seen.some(url=>url.includes('second=1')), 'URL traversal');
+let unsafe=false; try {await urlOptions.queryFn({pageParam:'https://evil.invalid/steal',signal:new AbortController().signal,queryKey:urlOptions.queryKey,client:cache,meta:undefined,direction:'forward'});} catch { unsafe=true; } check(unsafe,'URL origin escape');
+const swr=swrInfinite({client},'swr'); const key=swr.getKey(0,null)!; const swrFirst=await swr.fetcher(key); const next=swr.getKey(1,swrFirst)!; const swrLast=await swr.fetcher(next); check(swr.getKey(2,swrLast)===null,'SWR cursor traversal');
+const mutation=createContactMutationOptions('write'); await mutation.fetcher(mutation.key,{arg:{client}});
+await cursorContactsInfinitePrefetch(cache,{client},'prefetch'); await listContactsPrefetch(cache,{client},'ordinary-prefetch');
+void useCursorContactsSuspenseInfinite; void useListContactsSuspense;
+unsubscribe();stopUrls();observer.destroy();urls.destroy();cache.clear();restored.clear();
+console.log('pagination, suspense types, SSR, native framework options and SWR mutation pass');

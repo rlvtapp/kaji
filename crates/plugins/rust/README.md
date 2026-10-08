@@ -28,3 +28,12 @@ For an in-memory API with named security schemes, supply its security catalog;
 
 [Configuration reference](../../../docs/configuration.md) ·
 [Generated SDKs](../../../docs/generated-sdks.md)
+
+Operations and resource facades group complete request/error/method declarations
+under a 128 KiB byte budget, in addition to the existing declaration-count limit.
+Model structs retain their native public fields in individual files. An atomic
+struct, enum or operation larger than the budget is retained intact and reported
+in `.kaji/source-layout-model-diagnostics.json` or
+`.kaji/source-layout-operation-diagnostics.json`. This avoids changing field access
+or replacing typed models with generic JSON to meet a physical file limit.
+Generated-file ownership protects local edits during regeneration.
