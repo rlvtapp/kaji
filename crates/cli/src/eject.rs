@@ -218,7 +218,7 @@ mod tests {
             "crates/cli/build.rs",
             "crates/plugins/ruby/src/lib.rs",
             "openapi/go.mod",
-            "packages/sdk-check/check.mjs",
+            "packages/internal/sdk-check/check.mjs",
         ] {
             ensure!(out.join(path).is_file(), "missing {path}");
         }

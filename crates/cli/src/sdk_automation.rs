@@ -342,7 +342,7 @@ impl WorkflowSettings {
         } else {
             let (repo, reference) = self.action_ref.rsplit_once('@').unwrap();
             format!(
-                "{repo}/packages/{}@{reference}",
+                "{repo}/packages/internal/{}@{reference}",
                 match part {
                     "check" => "sdk-check",
                     "publish" => "sdk-publish",
@@ -543,14 +543,14 @@ fn scaffold(
         for (name, action, helper, filename) in [
             (
                 "check",
-                include_str!("../../../packages/sdk-check/action.yml"),
-                include_str!("../../../packages/sdk-check/check.mjs"),
+                include_str!("../../../packages/internal/sdk-check/action.yml"),
+                include_str!("../../../packages/internal/sdk-check/check.mjs"),
                 "check.mjs",
             ),
             (
                 "publish",
-                include_str!("../../../packages/sdk-publish/action.yml"),
-                include_str!("../../../packages/sdk-publish/publish.mjs"),
+                include_str!("../../../packages/internal/sdk-publish/action.yml"),
+                include_str!("../../../packages/internal/sdk-publish/publish.mjs"),
                 "publish.mjs",
             ),
         ] {
@@ -566,11 +566,11 @@ fn scaffold(
         if settings.auth == "broker" {
             files.insert(
                 ".github/actions/poolster-token/action.yml".into(),
-                include_str!("../../../packages/github-app-broker/action.yml").into(),
+                include_str!("../../../packages/internal/github-app-broker/action.yml").into(),
             );
             files.insert(
                 ".github/actions/poolster-token/client.mjs".into(),
-                include_str!("../../../packages/github-app-broker/client.mjs").into(),
+                include_str!("../../../packages/internal/github-app-broker/client.mjs").into(),
             );
         }
     }
@@ -2241,20 +2241,20 @@ fn connect_scaffold(options: &Options) -> Result<BTreeMap<PathBuf, String>> {
     if settings.local_actions {
         files.insert(
             ".github/actions/poolster-spec-sync/action.yml".into(),
-            include_str!("../../../packages/spec-sync/action.yml").into(),
+            include_str!("../../../packages/internal/spec-sync/action.yml").into(),
         );
         files.insert(
             ".github/actions/poolster-spec-sync/sync.mjs".into(),
-            include_str!("../../../packages/spec-sync/sync.mjs").into(),
+            include_str!("../../../packages/internal/spec-sync/sync.mjs").into(),
         );
         if settings.auth == "broker" {
             files.insert(
                 ".github/actions/poolster-token/action.yml".into(),
-                include_str!("../../../packages/github-app-broker/action.yml").into(),
+                include_str!("../../../packages/internal/github-app-broker/action.yml").into(),
             );
             files.insert(
                 ".github/actions/poolster-token/client.mjs".into(),
-                include_str!("../../../packages/github-app-broker/client.mjs").into(),
+                include_str!("../../../packages/internal/github-app-broker/client.mjs").into(),
             );
         }
     }
@@ -2428,7 +2428,7 @@ mod tests {
                 .unwrap()
                 .last()
                 .unwrap()["uses"],
-            "acme/kaji/packages/spec-sync@commit123"
+            "acme/kaji/packages/internal/spec-sync@commit123"
         );
     }
 

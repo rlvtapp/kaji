@@ -383,7 +383,7 @@ fn validates_actual_official_draft04_schema() {
 }
 
 #[test]
-#[ignore = "requires npm ci in packages/postman-execute and permission for ephemeral loopback mock"]
+#[ignore = "requires npm ci in packages/internal/postman-execute and permission for ephemeral loopback mock"]
 fn generated_collection_executes_with_newman_local_mock() {
     let root = tempfile::tempdir().unwrap();
     let aggregate = document(&generate(&api(), None));
@@ -398,7 +398,7 @@ fn generated_collection_executes_with_newman_local_mock() {
         )
         .arg(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../../../packages/postman-execute/run.mjs"
+            "/../../../packages/internal/postman-execute/run.mjs"
         ))
         .arg(path)
         .output()
