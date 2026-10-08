@@ -6,18 +6,18 @@ import subprocess
 import tempfile
 
 root = Path(__file__).resolve().parent.parent
-cli = root / "target/debug/kaji"
+cli = root / "target/debug/poolster"
 
-workspace = tempfile.TemporaryDirectory(prefix="kaji-release-examples-")
+workspace = tempfile.TemporaryDirectory(prefix="poolster-release-examples-")
 examples = Path(workspace.name)
 for name in ["symfony-sdk", "manifest-merging", "rust-cli"]:
     target = examples / name
     target.mkdir()
-    for filename in ["kaji.json", "openapi.yaml"]:
+    for filename in ["poolster.json", "openapi.yaml"]:
         shutil.copyfile(root / "examples" / name / filename, target / filename)
 
 def generate(name):
-    subprocess.run([str(cli), "generate", "--config", str(examples / name / "kaji.json")], check=True)
+    subprocess.run([str(cli), "generate", "--config", str(examples / name / "poolster.json")], check=True)
 
 for name in ["symfony-sdk", "manifest-merging", "rust-cli"]:
     generate(name)

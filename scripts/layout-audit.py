@@ -17,11 +17,42 @@ corpus = importlib.util.module_from_spec(loader)
 loader.loader.exec_module(corpus)
 PROFILES = ('go', 'typescript', 'auxiliary', 'typescript-cli', 'rust-cli')
 AUXILIARY = ('zod', 'tanstack-react-query', 'tanstack-vue-query', 'swr', 'faker', 'msw', 'cypress')
+SOURCE_SUFFIXES = {'.rs', '.go', '.py', '.js', '.cjs', '.mjs', '.ts'}
+SOURCE_EXCLUSIONS = {'test', 'tests', 'fixtures', 'generated', 'dist', 'node_modules', 'target', 'templates'}
+SOURCE_LINE_LIMIT = 400
+
+
+def source_files(project):
+    """Yield authored implementation files; generated output and probes have separate audits."""
+    for root in ('crates', 'packages', 'scripts', 'openapi'):
+        for path in (project / root).rglob('*'):
+            relative = path.relative_to(project)
+            if (not path.is_file() or path.suffix not in SOURCE_SUFFIXES or
+                    SOURCE_EXCLUSIONS.intersection(relative.parts)):
+                continue
+            if root == 'crates' and 'src' not in relative.parts:
+                continue
+            yield relative, path
+
+
+def source_size_audit(project, baseline):
+    """Reject new oversized files and growth in recorded legacy files."""
+    budgets = json.loads(baseline.read_text())['legacy_line_budgets']
+    violations = []
+    checked = 0
+    for relative, path in source_files(project):
+        checked += 1
+        with path.open(encoding='utf8', errors='replace') as source:
+            lines = sum(1 for _ in source)
+        limit = max(SOURCE_LINE_LIMIT, budgets.get(relative.as_posix(), 0))
+        if lines > limit:
+            violations.append({'path': relative.as_posix(), 'lines': lines, 'limit': limit})
+    return {'checked': checked, 'line_limit': SOURCE_LINE_LIMIT, 'violations': violations}
 
 
 def package(profile):
     if profile == 'auxiliary':
-        return {'language': 'typescript', 'path': profile, 'name': '@kaji/layout-probe',
+        return {'language': 'typescript', 'path': profile, 'name': '@poolster/layout-probe',
                 'plugins': [{'name': 'sdk'}, *[{'name': name, 'output': name} for name in AUXILIARY]]}
     return {'language': profile, 'path': profile, 'name': 'layout-probe',
             'plugins': [{'name': 'cli' if profile.endswith('-cli') else 'sdk', **({'jobs': 1} if profile == 'go' else {})}]}
@@ -45,7 +76,7 @@ def native_check(profile, output, environment, log, timeout, node_modules=None):
         config = output / '.layout-audit-tsconfig.json'
         config.write_text(json.dumps({'compilerOptions': {'target': 'ES2022', 'module': 'NodeNext',
                           'moduleResolution': 'NodeNext', 'strict': True, 'skipLibCheck': True,
-                          'noEmit': True, 'esModuleInterop': True}, 'include': ['**/*.ts', '.kaji/**/*.ts']}))
+                          'noEmit': True, 'esModuleInterop': True}, 'include': ['**/*.ts', '.poolster/**/*.ts']}))
     return corpus.run_logged(['node', str(node_modules / 'typescript/lib/tsc.js'), '-p', str(config), '--noEmit'],
                              environment, log, timeout)
 
@@ -56,7 +87,7 @@ def audit_case(source, name, profile, root, binary, environment, timeout, warnin
     case_root.mkdir(parents=True)
     config = {'openapi': {'input': str(source.resolve()), 'name': 'Layout Probe', 'version': '1.0.0'},
               'output': {'path': str(case_root / 'generated')}, 'packages': [package(profile)]}
-    config_path = case_root / 'kaji.json'
+    config_path = case_root / 'poolster.json'
     config_path.write_text(json.dumps(config, indent=2) + '\n')
     command = [str(binary), 'generate', '--config', str(config_path), '--color', 'never']
     first = corpus.run_logged(command, environment, case_root / 'generate.log', timeout)
@@ -109,8 +140,12 @@ def audit_case(source, name, profile, root, binary, environment, timeout, warnin
 
 def main(arguments=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--binary', type=Path, default=Path(os.environ.get('KAJI_BINARY', corpus.PROJECT / 'target/debug/kaji')))
+    parser.add_argument('--output', type=Path)
+    parser.add_argument('--check-source-size', action='store_true',
+                        help='check authored source against the 400-line limit and legacy ratchet')
+    parser.add_argument('--source-size-baseline', type=Path,
+                        default=Path(__file__).with_name('source-size-baseline.json'))
+    parser.add_argument('--binary', type=Path, default=Path(os.environ.get('POOLSTER_BINARY', corpus.PROJECT / 'target/debug/poolster')))
     parser.add_argument('--manifest', type=Path, default=corpus.PROJECT / 'scripts/fixtures/guru-contracts.json')
     parser.add_argument('--spec-cache', type=Path)
     parser.add_argument('--contracts', default='stripe,github,mailchimp,azure-compute')
@@ -122,6 +157,15 @@ def main(arguments=None):
     parser.add_argument('--native', action='store_true')
     parser.add_argument('--node-modules', type=Path)
     args = parser.parse_args(arguments)
+    if args.check_source_size:
+        report = source_size_audit(corpus.PROJECT, args.source_size_baseline)
+        for violation in report['violations']:
+            print(f"{violation['path']}: {violation['lines']} lines exceeds {violation['limit']}")
+        print(f"Checked {report['checked']} authored source files; "
+              f"{len(report['violations'])} size violations")
+        return int(bool(report['violations']))
+    if args.output is None:
+        parser.error('--output is required for generated layout audits')
     profiles = args.profiles.split(',')
     if any(profile not in PROFILES for profile in profiles):
         parser.error('unknown profile')
@@ -156,10 +200,10 @@ def main(arguments=None):
     report = {'schema_version': 1, 'host_platform': sys.platform,
               'manifest': str(args.manifest.resolve()), 'source_provenance': provenance,
               'environment': {key: environment[key] for key in
-                              ('KAJI_OPENAPI_BIN', 'CARGO_TARGET_DIR', 'CARGO_BUILD_JOBS',
+                              ('POOLSTER_OPENAPI_BIN', 'CARGO_TARGET_DIR', 'CARGO_BUILD_JOBS',
                                'CARGO_NET_OFFLINE', 'GOCACHE') if key in environment},
               'binary_sha256': file_digest(args.binary),
-              'compiler_sha256': file_digest(Path(environment.get('KAJI_OPENAPI_BIN', args.binary.parent / 'kaji-openapi'))),
+              'compiler_sha256': file_digest(Path(environment.get('POOLSTER_OPENAPI_BIN', args.binary.parent / 'poolster-openapi'))),
               'cases': []}
     for name, source in sources:
         for profile in profiles:

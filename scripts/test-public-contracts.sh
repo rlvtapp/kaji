@@ -8,13 +8,13 @@ manifest="${KAJI_PUBLIC_CONTRACT_MANIFEST:-$project_root/scripts/fixtures/public
 if [[ "$mode" == generate ]]; then
   mkdir -p "$contract_root/specs"
   python3 "$project_root/scripts/public-contracts.py" fetch "$manifest" "$contract_root/specs" "${KAJI_PUBLIC_SPEC_DIR:-}"
-  if [[ -z "${KAJI_BINARY:-}" ]]; then
-    cargo build --manifest-path "$project_root/Cargo.toml" --locked -p kaji-cli
+  if [[ -z "${POOLSTER_BINARY:-}" ]]; then
+    cargo build --manifest-path "$project_root/Cargo.toml" --locked -p poolster-cli
   fi
-  kaji_binary="${KAJI_BINARY:-$project_root/target/debug/kaji}"
+  poolster_binary="${POOLSTER_BINARY:-$project_root/target/debug/poolster}"
   listing="$(python3 "$project_root/scripts/public-contracts.py" list "$manifest" "$contract_root/specs")"
   while IFS=$'\t' read -r contract source_path; do
-    "$kaji_binary" generate "$source_path" --output "$contract_root/$contract" \
+    "$poolster_binary" generate "$source_path" --output "$contract_root/$contract" \
       --language "${KAJI_PUBLIC_LANGUAGES:-rust,typescript,go,python,php,java,csharp,elixir,ruby,swift}" \
       --name 'Public Contract' --color never
   done <<< "$listing"
@@ -35,7 +35,7 @@ elif [[ "$mode" == check ]]; then
           if [[ -n "${KAJI_TSC_JS:-}" ]]; then node "$KAJI_TSC_JS" -p tsconfig.json
           else npm install --ignore-scripts && npm run build; fi ;;
         go) go test ./... ;;
-        python) "${KAJI_TEST_PYTHON:-python3}" -m compileall -q src && PYTHONPATH=src "${KAJI_TEST_PYTHON:-python3}" -c 'import public_contract_sdk' ;;
+        python) "${POOLSTER_TEST_PYTHON:-python3}" -m compileall -q src && PYTHONPATH=src "${POOLSTER_TEST_PYTHON:-python3}" -c 'import public_contract_sdk' ;;
         ruby)
           while IFS= read -r -d '' source; do ruby -c "$source"; done < <(find lib -name '*.rb' -print0)
           ruby -Ilib -e 'require "public_contract_sdk"' ;;

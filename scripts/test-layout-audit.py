@@ -14,6 +14,24 @@ loader.loader.exec_module(audit)
 
 
 class LayoutAuditTests(unittest.TestCase):
+    def test_source_size_ratchet_rejects_new_oversized_files_and_legacy_growth(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / 'crates/example/src'
+            source.mkdir(parents=True)
+            old = source / 'legacy.rs'
+            new = source / 'new.rs'
+            old.write_text('x\n' * 450)
+            new.write_text('x\n' * 401)
+            baseline = root / 'baseline.json'
+            baseline.write_text(json.dumps({'legacy_line_budgets': {'crates/example/src/legacy.rs': 450}}))
+            report = audit.source_size_audit(root, baseline)
+            self.assertEqual([item['path'] for item in report['violations']], ['crates/example/src/new.rs'])
+            old.write_text('x\n' * 451)
+            report = audit.source_size_audit(root, baseline)
+            self.assertEqual({item['path'] for item in report['violations']},
+                             {'crates/example/src/legacy.rs', 'crates/example/src/new.rs'})
+
     def fake_generation(self, mutate=False, remove_authored=False):
         generations = []
         def run(command, environment, log, timeout):
@@ -68,9 +86,9 @@ class LayoutAuditTests(unittest.TestCase):
             self.assertEqual(result['status'], 'unavailable')
             self.assertIn('node_modules', result['reason'])
 
-    @unittest.skipUnless(os.environ.get('KAJI_TEST_LAYOUT_BIN'), 'set KAJI_TEST_LAYOUT_BIN for actual generator cleanup probe')
+    @unittest.skipUnless(os.environ.get('POOLSTER_TEST_LAYOUT_BIN'), 'set POOLSTER_TEST_LAYOUT_BIN for actual generator cleanup probe')
     def test_real_generation_removes_stale_chunks_and_preserves_authored_file(self):
-        binary = Path(os.environ['KAJI_TEST_LAYOUT_BIN']).resolve()
+        binary = Path(os.environ['POOLSTER_TEST_LAYOUT_BIN']).resolve()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / 'source.json'
@@ -79,7 +97,7 @@ class LayoutAuditTests(unittest.TestCase):
                     'paths': {'/items/' + str(i): {'get': {'operationId': 'getItem' + str(i),
                               'responses': {'200': {'description': 'ok'}}}} for i in range(count)}}))
             write_source(205)
-            config = root / 'kaji.json'
+            config = root / 'poolster.json'
             config.write_text(json.dumps({'openapi': {'input': str(source)},
                 'output': {'path': str(root / 'generated')},
                 'packages': [{'language': 'typescript-cli', 'path': 'cli',

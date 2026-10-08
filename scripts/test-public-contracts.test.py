@@ -22,7 +22,7 @@ class PublicContractRunnerTests(unittest.TestCase):
             output = root / "output"
             result = subprocess.run(["bash", str(SCRIPT), "generate"], env={**os.environ,
                 "KAJI_PUBLIC_CONTRACT_ROOT": str(output), "KAJI_PUBLIC_SPEC_DIR": str(cache),
-                "KAJI_BINARY": str(root / "must-not-execute")}, capture_output=True, text=True)
+                "POOLSTER_BINARY": str(root / "must-not-execute")}, capture_output=True, text=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("checksum mismatch", result.stderr)
             self.assertFalse((output / "forecast").exists())
