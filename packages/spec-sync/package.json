@@ -1,5 +1,5 @@
 {
-  "name": "@relevate/kaji-spec-sync-action",
+  "name": "@relevate/poolster-spec-sync-action",
   "private": true,
   "type": "module",
   "engines": { "node": ">=24" },

@@ -53,8 +53,8 @@ def check(collection, environment=None):
 
 def main():
     root = os.environ.get('GITHUB_WORKSPACE', os.getcwd())
-    collection = json.loads(checkout_file(root, os.environ['KAJI_COLLECTION']).read_text())
-    name = os.environ.get('KAJI_ENVIRONMENT')
+    collection = json.loads(checkout_file(root, os.environ['POOLSTER_COLLECTION']).read_text())
+    name = os.environ.get('POOLSTER_ENVIRONMENT')
     environment = json.loads(checkout_file(root, name).read_text()) if name else None
     count = check(collection, environment)
     print(f'Validated {count} Postman requests; no API requests executed')

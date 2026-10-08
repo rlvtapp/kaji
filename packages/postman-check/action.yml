@@ -1,4 +1,4 @@
-name: Kaji Postman collection checks
+name: Poolster Postman collection checks
 description: Validate portable Postman exports without executing API requests.
 inputs:
   collection:
@@ -19,7 +19,7 @@ runs:
     - name: Check collection and blank environment
       shell: bash
       env:
-        KAJI_ACTION_PATH: ${{ github.action_path }}
-        KAJI_COLLECTION: ${{ inputs.collection }}
-        KAJI_ENVIRONMENT: ${{ inputs.environment }}
-      run: python "$KAJI_ACTION_PATH/check.py"
+        POOLSTER_ACTION_PATH: ${{ github.action_path }}
+        POOLSTER_COLLECTION: ${{ inputs.collection }}
+        POOLSTER_ENVIRONMENT: ${{ inputs.environment }}
+      run: python "$POOLSTER_ACTION_PATH/check.py"

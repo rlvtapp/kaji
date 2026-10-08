@@ -15,7 +15,7 @@ inputs:
     required: true
   branch:
     description: Existing or new review branch; commits are preserved without force pushes.
-    default: codex/kaji-spec-sync
+    default: poolster/spec-sync
   base:
     description: Destination pull-request base branch.
     default: main
@@ -36,11 +36,11 @@ runs:
       id: sync
       shell: bash
       env:
-        KAJI_ACTION_PATH: ${{ github.action_path }}
-        KAJI_SPEC_REPOSITORY: ${{ inputs.repository }}
-        KAJI_SPEC_SOURCE: ${{ inputs.source-path }}
-        KAJI_SPEC_TARGET: ${{ inputs.target-path }}
-        KAJI_SPEC_TOKEN: ${{ inputs.token }}
-        KAJI_SPEC_BRANCH: ${{ inputs.branch }}
-        KAJI_SPEC_BASE: ${{ inputs.base }}
-      run: node "$KAJI_ACTION_PATH/sync.mjs"
+        POOLSTER_ACTION_PATH: ${{ github.action_path }}
+        POOLSTER_SPEC_REPOSITORY: ${{ inputs.repository }}
+        POOLSTER_SPEC_SOURCE: ${{ inputs.source-path }}
+        POOLSTER_SPEC_TARGET: ${{ inputs.target-path }}
+        POOLSTER_SPEC_TOKEN: ${{ inputs.token }}
+        POOLSTER_SPEC_BRANCH: ${{ inputs.branch }}
+        POOLSTER_SPEC_BASE: ${{ inputs.base }}
+      run: node "$POOLSTER_ACTION_PATH/sync.mjs"

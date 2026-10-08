@@ -9,7 +9,7 @@ import {execute} from './runner.mjs';
 const fixture=process.env.KAJI_PACKAGE_FIXTURE;
 const compiler=process.env.KAJI_TSC_JS;
 test('installed TypeScript ESM package exposes executable root/subpath exports and customer types', {skip:!fixture||!compiler}, async t=>{
-  const root=await mkdtemp(join(tmpdir(),'kaji-installed-consumer-'));
+  const root=await mkdtemp(join(tmpdir(),'poolster-installed-consumer-'));
   t.after(()=>rm(root,{recursive:true,force:true}));
   const sdk=join(root,'sdk');await cp(resolve(fixture),sdk,{recursive:true});
   await execute('node',[compiler,'-p','tsconfig.json'],{cwd:sdk});
@@ -19,14 +19,14 @@ test('installed TypeScript ESM package exposes executable root/subpath exports a
   assert(packed[0].files.some(file=>file.path==='dist/index.js'));
   assert(packed[0].files.some(file=>file.path==='dist/index.d.ts'));
   const consumer=join(root,'consumer');await mkdir(consumer);
-  await writeFile(join(consumer,'package.json'),JSON.stringify({name:'kaji-local-consumer',private:true,type:'module'}));
+  await writeFile(join(consumer,'package.json'),JSON.stringify({name:'poolster-local-consumer',private:true,type:'module'}));
   await execute('npm',['install','--offline','--ignore-scripts','--omit=dev','--no-audit','--no-fund',join(archives,packed[0].filename)],{cwd:consumer,env:{npm_config_cache:join(root,'npm-cache')}});
   const {name}=JSON.parse(await readFile(join(sdk,'package.json'),'utf8'));
-  const imports=`import {KajiContract} from ${JSON.stringify(name)};\nimport {createContact} from ${JSON.stringify(`${name}/clients/contacts/createContact`)};\n`;
+  const imports=`import {PoolsterContract} from ${JSON.stringify(name)};\nimport {createContact} from ${JSON.stringify(`${name}/clients/contacts/createContact`)};\n`;
   await writeFile(join(consumer,'probe.mjs'),imports+`
 import assert from 'node:assert/strict';
 let calls=0;
-const client=new KajiContract({baseUrl:'https://unused.test',auth:{Bearer:'test-token'},retry:false,fetch:async(url,request)=>{
+const client=new PoolsterContract({baseUrl:'https://unused.test',auth:{Bearer:'test-token'},retry:false,fetch:async(url,request)=>{
   calls++;assert.equal(request.headers.get('authorization'),'Bearer test-token');
   return new Response(JSON.stringify({id:'installed'}),{status:200,headers:{'content-type':'application/json'}});
 }});
@@ -38,7 +38,7 @@ const created=await createContact({client:async request=>{
 `);
   await execute('node',['probe.mjs'],{cwd:consumer});
   await writeFile(join(consumer,'probe.mts'),imports+`
-const client=new KajiContract({baseUrl:'https://unused.test'});
+const client=new PoolsterContract({baseUrl:'https://unused.test'});
 const result=await client.contacts.get({throwOnError:true});
 const id:string=result.id;
 void id; void createContact;

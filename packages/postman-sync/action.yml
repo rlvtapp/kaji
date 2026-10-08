@@ -1,4 +1,4 @@
-name: Kaji Postman synchronization
+name: Poolster Postman synchronization
 description: Compare or publish an explicitly reviewed collection to an existing Postman collection
 inputs:
   collection:
@@ -24,9 +24,9 @@ runs:
         node-version: '22'
     - shell: bash
       env:
-        KAJI_POSTMAN_COLLECTION: ${{ inputs.collection }}
-        KAJI_POSTMAN_UID: ${{ inputs.uid }}
-        KAJI_POSTMAN_API_KEY: ${{ inputs.api-key }}
-        KAJI_POSTMAN_MODE: ${{ inputs.mode }}
-        KAJI_POSTMAN_EXPECTED_HASH: ${{ inputs.expected-hash }}
+        POOLSTER_POSTMAN_COLLECTION: ${{ inputs.collection }}
+        POOLSTER_POSTMAN_UID: ${{ inputs.uid }}
+        POOLSTER_POSTMAN_API_KEY: ${{ inputs.api-key }}
+        POOLSTER_POSTMAN_MODE: ${{ inputs.mode }}
+        POOLSTER_POSTMAN_EXPECTED_HASH: ${{ inputs.expected-hash }}
       run: node "$GITHUB_ACTION_PATH/sync.mjs"

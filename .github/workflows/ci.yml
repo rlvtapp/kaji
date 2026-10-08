@@ -144,7 +144,7 @@ jobs:
       - name: Verify portable API artifacts
         run: |
           target/debug/poolster generate --config examples/api-artifacts/poolster.json
-          KAJI_COLLECTION=examples/api-artifacts/generated/postman/widgets.postman_collection.json KAJI_ENVIRONMENT=examples/api-artifacts/generated/postman/widgets.postman_environment.json python packages/postman-check/check.py
+          POOLSTER_COLLECTION=examples/api-artifacts/generated/postman/widgets.postman_collection.json POOLSTER_ENVIRONMENT=examples/api-artifacts/generated/postman/widgets.postman_environment.json python packages/postman-check/check.py
           (cd examples/api-artifacts/generated/terraform && go mod tidy && go test ./... && go build ./...)
           target/debug/poolster generate --config examples/api-artifacts/poolster.json --check --format json
       - name: Verify release examples

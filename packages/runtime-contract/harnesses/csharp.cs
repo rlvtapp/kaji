@@ -1,8 +1,8 @@
 using System.Text.Json;
-using Kaji.ContractSdk;
+using Poolster.ContractSdk;
 
 using var native = new HttpClient(new Policy { InnerHandler = new HttpClientHandler() });
-var client = new KajiClient(native, new KajiClientOptions { BaseUrl = Environment.GetEnvironmentVariable("KAJI_CONTRACT_URL")!, ApiKey = Environment.GetEnvironmentVariable("KAJI_CONTRACT_CASE") });
+var client = new PoolsterClient(native, new PoolsterClientOptions { BaseUrl = Environment.GetEnvironmentVariable("KAJI_CONTRACT_URL")!, ApiKey = Environment.GetEnvironmentVariable("KAJI_CONTRACT_CASE") });
 using var document = JsonDocument.Parse(Environment.GetEnvironmentVariable("KAJI_CONTRACT_SCENARIO") ?? "{}");
 var scenario = document.RootElement;
 var action = scenario.TryGetProperty("action", out var actionValue) ? actionValue.GetString() : "getContact";

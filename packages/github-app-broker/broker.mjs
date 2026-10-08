@@ -180,7 +180,7 @@ export function createBroker({ policy: input, appId, privateKey, replayStore, fe
     return { source, targets };
   }
   async function github(path, token, options = {}) {
-    return request(`${GITHUB_API}${path}`, { ...options, headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'X-GitHub-Api-Version': API_VERSION, 'User-Agent': 'kaji-github-app-broker', 'Content-Type': 'application/json' } });
+    return request(`${GITHUB_API}${path}`, { ...options, headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'X-GitHub-Api-Version': API_VERSION, 'User-Agent': 'poolster-github-app-broker', 'Content-Type': 'application/json' } });
   }
   async function exchange(oidcToken, repositories) {
     const claims = await verifyOidc(oidcToken);

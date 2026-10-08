@@ -1,11 +1,11 @@
 # SDK delivery verification harness
 
-Run from the repository root with Node 20+ and a built Kaji CLI:
+Run from the repository root with Node 20+ and a built Poolster CLI:
 
 ```sh
-cargo build -p kaji-cli
+cargo build -p poolster-cli
 node --test packages/sdk-delivery-test/test/delivery.test.mjs
-node packages/sdk-delivery-test/delivery.mjs --mode local --binary "$PWD/target/debug/kaji"
+node packages/sdk-delivery-test/delivery.mjs --mode local --binary "$PWD/target/debug/poolster"
 ```
 
 The local run creates a temporary contract and recipe, generates a TypeScript
@@ -20,7 +20,7 @@ repository and registry label:
 
 ```sh
 node packages/sdk-delivery-test/delivery.mjs --mode live \
-  --binary "$PWD/target/debug/kaji" \
+  --binary "$PWD/target/debug/poolster" \
   --repository YOUR_ORG/DISPOSABLE_SDK_TEST_REPO --registry TEST_REGISTRY
 ```
 
@@ -35,25 +35,25 @@ as part of the implementation tests.
 ## Prepare a manually approved disposable delivery workflow
 
 Copy [workflow.yml.template](workflow.yml.template) into the workflow repository
-as `.github/workflows/kaji-delivery-test.yml`; retain this package's validation
-script in that repository. Configure an environment named `kaji-delivery-test`
+as `.github/workflows/poolster-delivery-test.yml`; retain this package's validation
+script in that repository. Configure an environment named `poolster-delivery-test`
 with required reviewers before dispatching. GitHub environment approvals are
 repository settings; the template cannot create or enforce those rules itself.
 
 Set repository variables to JSON arrays containing only disposable test targets:
 
-- `KAJI_DELIVERY_TEST_REPOSITORIES`: source and destination `OWNER/REPO` names.
-- `KAJI_DELIVERY_TEST_PACKAGE_PREFIXES`: registry package prefixes reserved for
-  tests, for example `["@YOUR_TEST_SCOPE/kaji-delivery-"]`.
+- `POOLSTER_DELIVERY_TEST_REPOSITORIES`: source and destination `OWNER/REPO` names.
+- `POOLSTER_DELIVERY_TEST_PACKAGE_PREFIXES`: registry package prefixes reserved for
+  tests, for example `["@YOUR_TEST_SCOPE/poolster-delivery-"]`.
 
-Set environment secrets `KAJI_TEST_SOURCE_READ_TOKEN` (source contents read only)
-and `KAJI_TEST_SDK_WRITE_TOKEN` (only disposable destination contents/PR write).
+Set environment secrets `POOLSTER_TEST_SOURCE_READ_TOKEN` (source contents read only)
+and `POOLSTER_TEST_SDK_WRITE_TOKEN` (only disposable destination contents/PR write).
 Use short-lived installation tokens or scoped credentials. Do not put registry
 credentials in the source verification job. Registry trust belongs in the
 reviewed normal release workflow of the disposable destination repository.
 Install that SDK repository's regular CI/Release Please/publishing scaffold first.
 
-Dispatch with an existing immutable source tag, exact released Kaji version,
+Dispatch with an existing immutable source tag, exact released Poolster version,
 selected SDK language, registry and allowlisted prefix. `preview` is the default:
 it validates identities, checks out that exact tag, generates in a disposable
 copy, checks drift, runs native metadata checks, and prints delivery/PR previews.

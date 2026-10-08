@@ -6,14 +6,14 @@ SHA-256 fingerprints and exits nonzero on drift. It does not create collections,
 delete collections or synchronize environment secrets.
 
 ```sh
-KAJI_POSTMAN_COLLECTION=generated/postman/api.postman_collection.json \
-KAJI_POSTMAN_UID=YOUR_COLLECTION_UID \
-KAJI_POSTMAN_API_KEY=YOUR_SECRET \
+POOLSTER_POSTMAN_COLLECTION=generated/postman/api.postman_collection.json \
+POOLSTER_POSTMAN_UID=YOUR_COLLECTION_UID \
+POOLSTER_POSTMAN_API_KEY=YOUR_SECRET \
 node packages/postman-sync/sync.mjs
 ```
 
-After reviewing both documents, use `KAJI_POSTMAN_MODE=publish` and set
-`KAJI_POSTMAN_EXPECTED_HASH` to the check's `remoteHash`. Changed publication
+After reviewing both documents, use `POOLSTER_POSTMAN_MODE=publish` and set
+`POOLSTER_POSTMAN_EXPECTED_HASH` to the check's `remoteHash`. Changed publication
 requires this hash, checks it again, replaces the collection and reads it back.
 The Postman API provides no atomic compare-and-swap here: avoid simultaneous
 manual edits or publishing jobs between the check and update. A read-back failure
@@ -33,9 +33,9 @@ node --test packages/postman-sync/test/*.mjs
 
 ## Existing environment sync
 
-Use `node packages/postman-sync/environment.mjs` with `KAJI_POSTMAN_ENVIRONMENT`,
-`KAJI_POSTMAN_UID`, `KAJI_POSTMAN_API_KEY`, and the same `KAJI_POSTMAN_MODE` /
-`KAJI_POSTMAN_EXPECTED_HASH` review flow as collections. The composite action is
+Use `node packages/postman-sync/environment.mjs` with `POOLSTER_POSTMAN_ENVIRONMENT`,
+`POOLSTER_POSTMAN_UID`, `POOLSTER_POSTMAN_API_KEY`, and the same `POOLSTER_POSTMAN_MODE` /
+`POOLSTER_POSTMAN_EXPECTED_HASH` review flow as collections. The composite action is
 `./packages/postman-sync/environment` with `environment`, `uid`, `api-key`,
 `mode`, and `expected-hash` inputs.
 

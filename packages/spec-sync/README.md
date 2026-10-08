@@ -2,7 +2,7 @@
 
 Run this action in the API source repository after checking out the commit containing the specification. It copies one local spec to a destination SDK repository, records provenance and creates or updates a reviewable PR. The destination's existing generation workflow can regenerate SDKs from the spec change. This action does not merge PRs or publish SDK packages.
 
-The action and `sync.mjs` are readable and editable. Copy this directory into your source repository as `.github/actions/kaji-spec-sync`, or reference the version of this action your organization distributes.
+The action and `sync.mjs` are readable and editable. Copy this directory into your source repository as `.github/actions/poolster-spec-sync`, or reference the version of this action your organization distributes.
 
 ## Inputs
 
@@ -10,9 +10,9 @@ The action and `sync.mjs` are readable and editable. Copy this directory into yo
 | --- | --- |
 | `repository` | Destination SDK repository, `owner/name`. |
 | `source-path` | Checkout-relative local `.yaml`, `.yml` or JSON OpenAPI file. |
-| `target-path` | Repository-relative destination spec path. It cannot address `.github`, `.git` or `.kaji`. |
+| `target-path` | Repository-relative destination spec path. It cannot address `.github`, `.git` or `.poolster`. |
 | `token` | GitHub App installation or fine-grained token for the destination, with **Contents: write** and **Pull requests: write**. |
-| `branch` | Review branch; default `codex/kaji-spec-sync`. Existing commits are preserved. |
+| `branch` | Review branch; default `poolster/spec-sync`. Existing commits are preserved. |
 | `base` | Destination PR base; default `main`. Must differ from the review branch. |
 
 Outputs are `pull-request-url` (empty when there is no difference requiring a PR) and `changed` (whether this run committed file updates).
@@ -20,13 +20,13 @@ Outputs are `pull-request-url` (empty when there is no difference requiring a PR
 After checking out the API source commit and obtaining a destination-scoped token, invoke the local action:
 
 ```yaml
-- uses: ./.github/actions/kaji-spec-sync
+- uses: ./.github/actions/poolster-spec-sync
   with:
     repository: acme/customer-sdks
     source-path: api/openapi.yaml
     target-path: specs/openapi.yaml
     token: ${{ secrets.SDK_SPEC_SYNC_TOKEN }}
-    branch: codex/kaji-spec-sync
+    branch: poolster/spec-sync
     base: main
 ```
 
@@ -36,7 +36,7 @@ The source repository's default `GITHUB_TOKEN` generally cannot write a differen
 
 1. Validate the local source path, UTF-8 contents and reference shape. Reject symlinks and checkout escapes before contacting GitHub.
 2. Read the destination base and review branch. An existing branch's current commit becomes the parent; a new branch starts from the configured base.
-3. Compare the spec and `.kaji/spec-source.json` provenance. Existing provenance must identify the same source repository/path, and its digest must match the destination spec. Manual edits or another connection stop the sync without overwriting files.
+3. Compare the spec and `.poolster/spec-source.json` provenance. Existing provenance must identify the same source repository/path, and its digest must match the destination spec. Manual edits or another connection stop the sync without overwriting files.
 4. Create blobs and a tree based on the existing branch tree, touching only the spec and provenance. Create a commit and update the ref without force. Concurrent branch changes fail; rerun to start from the new head.
 5. Update the matching open PR, or create one if the review branch has commits ahead of base. A merged branch with no new difference does not produce an empty PR.
 

@@ -1,4 +1,4 @@
-# Kaji GitHub App broker
+# Poolster GitHub App broker
 
 An optional, self-hosted GitHub Actions OIDC exchange service. It issues GitHub
 App installation tokens for administrator-configured source-to-target mappings.

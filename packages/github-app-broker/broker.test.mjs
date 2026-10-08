@@ -15,10 +15,10 @@ const appPem = appKeys.privateKey.export({ type: 'pkcs8', format: 'pem' });
 const jwk = { ...oidcKeys.publicKey.export({ format: 'jwk' }), kid: 'github-fixture', alg: 'RS256', use: 'sig' };
 const epoch = Date.UTC(2026, 9, 7, 12, 0, 0);
 const policy = {
-  version: 1, audience: 'kaji', sources: [{
+  version: 1, audience: 'poolster', sources: [{
     repository: 'example/api', repository_id: '123456', repository_owner_id: '123',
     subjects: ['repo:example@123/api@123456:ref:refs/heads/main'],
-    workflow_ref: 'example/api/.github/workflows/kaji-sdk.yml@refs/heads/main',
+    workflow_ref: 'example/api/.github/workflows/poolster-sdk.yml@refs/heads/main',
     refs: ['refs/heads/main'], events: ['push', 'workflow_dispatch'], runner_environment: 'github-hosted',
     permissions: { contents: 'write', pull_requests: 'write' }, targets: [
       { repository: 'example/typescript-sdk', repository_id: '234567', installation_id: '345678' },
@@ -28,7 +28,7 @@ const policy = {
 };
 function claims(overrides = {}) {
   const time = Math.floor(epoch / 1000);
-  return { iss: ISSUER, aud: 'kaji', sub: policy.sources[0].subjects[0], iat: time - 10, nbf: time - 10, exp: time + 290, jti: 'single-use-token-1', repository: 'example/api', repository_id: '123456', repository_owner: 'example', repository_owner_id: '123', workflow_ref: policy.sources[0].workflow_ref, workflow_sha: 'a'.repeat(40), ref: 'refs/heads/main', ref_type: 'branch', ref_protected: 'true', event_name: 'push', head_ref: '', base_ref: '', sha: 'a'.repeat(40), run_id: '1111', run_attempt: '1', runner_environment: 'github-hosted', ...overrides };
+  return { iss: ISSUER, aud: 'poolster', sub: policy.sources[0].subjects[0], iat: time - 10, nbf: time - 10, exp: time + 290, jti: 'single-use-token-1', repository: 'example/api', repository_id: '123456', repository_owner: 'example', repository_owner_id: '123', workflow_ref: policy.sources[0].workflow_ref, workflow_sha: 'a'.repeat(40), ref: 'refs/heads/main', ref_type: 'branch', ref_protected: 'true', event_name: 'push', head_ref: '', base_ref: '', sha: 'a'.repeat(40), run_id: '1111', run_attempt: '1', runner_environment: 'github-hosted', ...overrides };
 }
 function jwt(payload = claims(), { header = {}, key = oidcKeys.privateKey } = {}) {
   const head = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT', kid: 'github-fixture', ...header })).toString('base64url');
@@ -93,7 +93,7 @@ test('signature validation rejects forged tokens and JOSE algorithm/key URL tric
 
 test('issuer audience expiration issue time and required claims fail closed', async () => {
   const seconds = Math.floor(epoch / 1000);
-  for (const override of [{ iss: 'https://attacker.example' }, { aud: 'different' }, { aud: ['kaji'] }, { exp: seconds }, { exp: seconds + 900 }, { iat: seconds + 60 }, { nbf: seconds + 60 }, { iat: seconds - 1000 }, { exp: '9999999999' }, { nbf: undefined }, { jti: '' }]) {
+  for (const override of [{ iss: 'https://attacker.example' }, { aud: 'different' }, { aud: ['poolster'] }, { exp: seconds }, { exp: seconds + 900 }, { iat: seconds + 60 }, { nbf: seconds + 60 }, { iat: seconds - 1000 }, { exp: '9999999999' }, { nbf: undefined }, { jti: '' }]) {
     const code = Object.hasOwn(override, 'iss') || Object.hasOwn(override, 'aud') ? 'invalid_oidc_issuer_or_audience' : Object.hasOwn(override, 'jti') ? 'invalid_oidc_identity' : 'invalid_oidc_time';
     await denied({}, jwt(claims(override)), ['example/typescript-sdk'], code);
   }
@@ -159,7 +159,7 @@ test('single-use identifiers reject concurrent replays and JWKS cache bounds ref
 });
 
 test('persistent replay store survives a restart and does not remove empty in-progress markers', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'kaji-broker-replay-'));
+  const directory = await mkdtemp(join(tmpdir(), 'poolster-broker-replay-'));
   try {
     const first = new FileReplayStore(directory, { now: () => epoch });
     await first.consume('same-jti', epoch + 300000);
@@ -188,15 +188,15 @@ test('HTTP endpoint limits input shape and never records bearer or installation 
 });
 
 test('composite client requests official OIDC, sends JSON scope and masks file outputs', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'kaji-broker-action-')); const output = join(directory, 'output'); const logs = []; const calls = [];
+  const directory = await mkdtemp(join(tmpdir(), 'poolster-broker-action-')); const output = join(directory, 'output'); const logs = []; const calls = [];
   const clientFetch = async (url, options) => {
     calls.push({ url: String(url), options }); assert.equal(options.redirect, 'error');
-    if (String(url).startsWith('https://pipelines.actions.githubusercontent.com/')) { assert.equal(new URL(url).searchParams.get('audience'), 'kaji'); return Response.json({ value: jwt() }); }
-    assert.equal(String(url), 'https://broker.example/kaji/token'); assert.deepEqual(JSON.parse(options.body), { repositories: ['example/typescript-sdk'] });
+    if (String(url).startsWith('https://pipelines.actions.githubusercontent.com/')) { assert.equal(new URL(url).searchParams.get('audience'), 'poolster'); return Response.json({ value: jwt() }); }
+    assert.equal(String(url), 'https://broker.example/poolster/token'); assert.deepEqual(JSON.parse(options.body), { repositories: ['example/typescript-sdk'] });
     return Response.json({ token: 'ghs_555.JWT.fixture', expires_at: new Date(epoch + 3600000).toISOString(), repositories: ['example/typescript-sdk'], permissions: { contents: 'write', pull_requests: 'write' } });
   };
   try {
-    await run({ GITHUB_OUTPUT: output, KAJI_BROKER_URL: 'https://broker.example/kaji', KAJI_BROKER_REPOSITORIES: '["example/typescript-sdk"]', ACTIONS_ID_TOKEN_REQUEST_URL: 'https://pipelines.actions.githubusercontent.com/oidc?api-version=2', ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'request-secret' }, { fetch: clientFetch, log: message => logs.push(message) });
+    await run({ GITHUB_OUTPUT: output, POOLSTER_BROKER_URL: 'https://broker.example/poolster', POOLSTER_BROKER_REPOSITORIES: '["example/typescript-sdk"]', ACTIONS_ID_TOKEN_REQUEST_URL: 'https://pipelines.actions.githubusercontent.com/oidc?api-version=2', ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'request-secret' }, { fetch: clientFetch, log: message => logs.push(message) });
     assert.equal(logs[0], '::add-mask::ghs_555.JWT.fixture');
     assert.ok((await readFile(output, 'utf8')).includes('token=ghs_555.JWT.fixture\n')); assert.equal(calls.length, 2);
     await assert.rejects(requestInstallationToken({ brokerUrl: 'http://broker.example', repositories: ['example/typescript-sdk'] }), /HTTPS/);

@@ -46,13 +46,13 @@ export function createBrokerServer(broker, { now = () => Date.now(), audit = eve
 }
 
 export async function start(environment = process.env) {
-  const configPath = environment.KAJI_BROKER_POLICY;
-  if (!configPath) throw new Error('Set KAJI_BROKER_POLICY to an administrator-owned policy JSON file');
+  const configPath = environment.POOLSTER_BROKER_POLICY;
+  if (!configPath) throw new Error('Set POOLSTER_BROKER_POLICY to an administrator-owned policy JSON file');
   const policy = JSON.parse(await readFile(configPath, 'utf8'));
   const privateKey = environment.GITHUB_APP_PRIVATE_KEY ?? (environment.GITHUB_APP_PRIVATE_KEY_FILE ? await readFile(environment.GITHUB_APP_PRIVATE_KEY_FILE, 'utf8') : undefined);
   if (!privateKey || !environment.GITHUB_APP_ID) throw new Error('Set GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY or GITHUB_APP_PRIVATE_KEY_FILE');
-  const replayDirectory = environment.KAJI_BROKER_REPLAY_DIRECTORY;
-  if (!replayDirectory) throw new Error('Set KAJI_BROKER_REPLAY_DIRECTORY to a private persistent replay-marker directory');
+  const replayDirectory = environment.POOLSTER_BROKER_REPLAY_DIRECTORY;
+  if (!replayDirectory) throw new Error('Set POOLSTER_BROKER_REPLAY_DIRECTORY to a private persistent replay-marker directory');
   const broker = createBroker({ policy, appId: environment.GITHUB_APP_ID, privateKey, replayStore: new FileReplayStore(resolve(replayDirectory)) });
   const server = createBrokerServer(broker);
   const port = Number(environment.PORT ?? 8787);

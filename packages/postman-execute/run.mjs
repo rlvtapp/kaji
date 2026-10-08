@@ -54,7 +54,7 @@ export async function executeLocal(original) {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     const file = process.argv[2]
-    if (process.env.KAJI_ACTION_PATH && path.isAbsolute(file ?? '')) throw new Error('Action collection path must be checkout relative')
+    if (process.env.POOLSTER_ACTION_PATH && path.isAbsolute(file ?? '')) throw new Error('Action collection path must be checkout relative')
     if (!file || file.split(/[\\/]/).includes('..')) throw new Error('Invalid collection path')
     const resolved=fs.realpathSync(file)
     if (!path.isAbsolute(file) && !resolved.startsWith(fs.realpathSync(process.cwd()) + path.sep)) throw new Error('Collection must remain within checkout')

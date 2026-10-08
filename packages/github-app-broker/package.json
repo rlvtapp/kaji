@@ -1,5 +1,5 @@
 {
-  "name": "@kaji/github-app-broker",
+  "name": "@poolster/github-app-broker",
   "version": "0.1.0",
   "private": true,
   "type": "module",

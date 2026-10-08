@@ -29,7 +29,7 @@ test('mock serves the manifest responses and verifies native wire attempts',asyn
 test('Java harness preparation copies source and preserves its classpath',async()=>{
     const {mkdtemp,mkdir,writeFile,readFile,rm}=await import('node:fs/promises')
     const {tmpdir}=await import('node:os');const {join}=await import('node:path')
-    const root=await mkdtemp(join(tmpdir(),'kaji-java-plan-'));const sdk=join(root,'sdk');await mkdir(sdk)
+    const root=await mkdtemp(join(tmpdir(),'poolster-java-plan-'));const sdk=join(root,'sdk');await mkdir(sdk)
     const commands=[]
     try{
         const result=await prepare('java',sdk,root,async(program,args)=>{

@@ -1,4 +1,4 @@
-name: Kaji local Postman execution
+name: Poolster local Postman execution
 description: Execute portable collections against an ephemeral loopback mock only.
 inputs:
   collection:
@@ -13,11 +13,11 @@ runs:
     - name: Install pinned Newman runner
       shell: bash
       env:
-        KAJI_ACTION_PATH: ${{ github.action_path }}
-      run: npm ci --prefix "$KAJI_ACTION_PATH" --ignore-scripts --no-audit --no-fund
+        POOLSTER_ACTION_PATH: ${{ github.action_path }}
+      run: npm ci --prefix "$POOLSTER_ACTION_PATH" --ignore-scripts --no-audit --no-fund
     - name: Execute against local mock
       shell: bash
       env:
-        KAJI_ACTION_PATH: ${{ github.action_path }}
-        KAJI_COLLECTION: ${{ inputs.collection }}
-      run: node "$KAJI_ACTION_PATH/run.mjs" "$KAJI_COLLECTION"
+        POOLSTER_ACTION_PATH: ${{ github.action_path }}
+        POOLSTER_COLLECTION: ${{ inputs.collection }}
+      run: node "$POOLSTER_ACTION_PATH/run.mjs" "$POOLSTER_COLLECTION"

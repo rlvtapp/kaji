@@ -22,8 +22,8 @@ not endpoint availability, API authorization, or multi-request scenarios.
 For local verification with jsonschema installed:
 
 ```sh
-KAJI_COLLECTION=generated/postman/collection.json \
-KAJI_ENVIRONMENT=generated/postman/environment.json \
+POOLSTER_COLLECTION=generated/postman/collection.json \
+POOLSTER_ENVIRONMENT=generated/postman/environment.json \
 python3 packages/postman-check/check.py
 python3 -m unittest discover -s packages/postman-check/test -v
 ```

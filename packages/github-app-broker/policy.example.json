@@ -1,13 +1,13 @@
 {
   "version": 1,
-  "audience": "kaji",
+  "audience": "poolster",
   "sources": [
     {
       "repository": "example/api",
       "repository_id": "123456",
       "repository_owner_id": "123",
       "subjects": ["repo:example@123/api@123456:ref:refs/heads/main"],
-      "workflow_ref": "example/api/.github/workflows/kaji-sdk.yml@refs/heads/main",
+      "workflow_ref": "example/api/.github/workflows/poolster-sdk.yml@refs/heads/main",
       "refs": ["refs/heads/main"],
       "events": ["push", "workflow_dispatch"],
       "runner_environment": "github-hosted",

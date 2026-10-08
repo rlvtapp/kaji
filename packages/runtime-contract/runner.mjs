@@ -116,7 +116,7 @@ export async function prepare(language,sdk,root,exec=execute){
 export async function run(language,source){
     assert.ok(manifest.coverage[language],`unknown language ${language}`)
     assert.ok(manifest.coverage[language].supported.length,`No executable wire harness for ${language}`)
-    const root=await mkdtemp(join(tmpdir(),'kaji-runtime-contract-'))
+    const root=await mkdtemp(join(tmpdir(),'poolster-runtime-contract-'))
     let server
     try{
         const sdk=join(root,'sdk');await cp(resolve(source),sdk,{recursive:true})

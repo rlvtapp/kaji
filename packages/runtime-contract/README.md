@@ -5,9 +5,9 @@ This suite generates one neutral API and drives its public read, mutation, pagin
 Generate all fixtures from the repository root:
 
 ```sh
-KAJI_RUNTIME_EXPORT=/tmp/kaji-runtime-fixture cargo test -p kaji --test runtime_conformance
-node packages/runtime-contract/runner.mjs go /tmp/kaji-runtime-fixture/sdk/go
-node packages/runtime-contract/runner.mjs python /tmp/kaji-runtime-fixture/sdk/python
+KAJI_RUNTIME_EXPORT=/tmp/poolster-runtime-fixture cargo test -p poolster --test runtime_conformance
+node packages/runtime-contract/runner.mjs go /tmp/poolster-runtime-fixture/sdk/go
+node packages/runtime-contract/runner.mjs python /tmp/poolster-runtime-fixture/sdk/python
 ```
 
 `runner.mjs` accepts a language and that generated package's directory. It copies the package into a temporary workspace before adding the probe/building, and removes the workspace on completion. The generated source artifact remains unchanged. Child failures, timeouts, missing requests and wire mismatches fail the run; they cannot pass as an SDK's expected error outcome.
@@ -42,7 +42,7 @@ For CI, export the fixture once, upload `sdk/` as an artifact, and run each lang
 Test the artifact a customer actually installs, including ESM root/subpath exports and NodeNext consumer types:
 
 ```sh
-KAJI_PACKAGE_FIXTURE=/tmp/kaji-runtime-fixture/sdk/typescript \
+KAJI_PACKAGE_FIXTURE=/tmp/poolster-runtime-fixture/sdk/typescript \
 KAJI_TSC_JS=/path/to/typescript/lib/tsc.js \
 node --test packages/runtime-contract/package-consumer.test.mjs
 ```

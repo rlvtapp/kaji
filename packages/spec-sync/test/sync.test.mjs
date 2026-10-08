@@ -8,7 +8,7 @@ import { syncSpec, validateReferences, safePath } from '../sync.mjs';
 const source = 'openapi: 3.1.0\ncomponents:\n  schemas:\n    Note:\n      $ref: "#/components/schemas/Other"\n';
 const sourceSha = 'a'.repeat(40);
 async function fixture(t) {
-  const workspace = await mkdtemp(path.join(os.tmpdir(), 'kaji-spec-'));
+  const workspace = await mkdtemp(path.join(os.tmpdir(), 'poolster-spec-'));
   t.after(() => rm(workspace, { recursive: true, force: true }));
   await writeFile(path.join(workspace, 'openapi.yaml'), source);
   return { workspace, repository: 'acme/sdk', sourceRepository: 'acme/api', sourceSha, sourcePath: 'openapi.yaml', targetPath: 'specs/openapi.yaml', token: 'secret-never-log' };
@@ -23,7 +23,7 @@ function mock({ branch = true, spec = null, provenance = null, pr = false, fail 
     else if (route === '/git/ref/heads/main') value = { object: { sha: 'base' } };
     else if (route.startsWith('/git/ref/heads/')) { if (branch) value = { object: { sha: 'review-parent' } }; else status = 404; }
     else if (route.startsWith('/git/commits/') && options.method === 'GET') value = { tree: { sha: 'original-tree' } };
-    else if (route.startsWith('/contents/')) { const content = route.endsWith('.kaji/spec-source.json') ? provenance : spec; if (content === null) status = 404; else value = { type: 'file', encoding: 'base64', content: Buffer.from(content).toString('base64') }; }
+    else if (route.startsWith('/contents/')) { const content = route.endsWith('.poolster/spec-source.json') ? provenance : spec; if (content === null) status = 404; else value = { type: 'file', encoding: 'base64', content: Buffer.from(content).toString('base64') }; }
     else if (route === '/git/blobs') value = { sha: `blob-${calls.length}` };
     else if (route === '/git/trees') value = { sha: 'new-tree' };
     else if (route === '/git/commits') value = { sha: 'new-commit' };
@@ -43,7 +43,7 @@ test('existing review branch preserves its parent/tree and uses a nonforce ref u
   const commit = api.calls.find(call => call.method === 'POST' && call.url.endsWith('/git/commits'));
   assert.deepEqual(commit.body.parents, ['review-parent']);
   const tree = api.calls.find(call => call.url.endsWith('/git/trees'));
-  assert.equal(tree.body.base_tree, 'original-tree'); assert.deepEqual(tree.body.tree.map(item => item.path), ['specs/openapi.yaml', '.kaji/spec-source.json']);
+  assert.equal(tree.body.base_tree, 'original-tree'); assert.deepEqual(tree.body.tree.map(item => item.path), ['specs/openapi.yaml', '.poolster/spec-source.json']);
   assert.deepEqual(api.calls.find(call => call.method === 'PATCH' && call.url.includes('/git/refs')).body, { sha: 'new-commit', force: false });
   assert.equal(api.calls.filter(call => call.method === 'POST' && call.url.endsWith('/pulls')).length, 0);
   const recorded = JSON.parse(Buffer.from(api.calls.filter(call => call.url.endsWith('/git/blobs'))[1].body.content, 'base64'));
@@ -54,9 +54,9 @@ test('new branch starts at base and opens a PR without force pushing', async t =
   const input = await fixture(t), api = mock({ branch: false });
   await syncSpec(input, api);
   assert.deepEqual(api.calls.find(call => call.url.endsWith('/git/commits') && call.method === 'POST').body.parents, ['base']);
-  assert.deepEqual(api.calls.find(call => call.url.endsWith('/git/refs')).body, { ref: 'refs/heads/codex/kaji-spec-sync', sha: 'new-commit' });
+  assert.deepEqual(api.calls.find(call => call.url.endsWith('/git/refs')).body, { ref: 'refs/heads/poolster/spec-sync', sha: 'new-commit' });
   const pr = api.calls.find(call => call.url.endsWith('/pulls') && call.method === 'POST');
-  assert.equal(pr.body.base, 'main'); assert.equal(pr.body.head, 'codex/kaji-spec-sync');
+  assert.equal(pr.body.base, 'main'); assert.equal(pr.body.head, 'poolster/spec-sync');
 });
 test('identical source and provenance do not create another commit', async t => {
   const input = await fixture(t);
@@ -73,7 +73,7 @@ test('concurrent branch updates fail without creating a PR or retrying with forc
 });
 test('source symlinks, path escapes and workflow targets are rejected before GitHub access', async t => {
   const input = await fixture(t); await symlink(path.join(input.workspace, 'openapi.yaml'), path.join(input.workspace, 'linked.yaml'));
-  for (const changed of [{sourcePath:'linked.yaml'}, {sourcePath:'../outside.yaml'}, {targetPath:'.github/workflows/release.yml'}, {targetPath:'.git/config'}, {targetPath:'.kaji/spec-source.json'}, {branch:'main'}]) {
+  for (const changed of [{sourcePath:'linked.yaml'}, {sourcePath:'../outside.yaml'}, {targetPath:'.github/workflows/release.yml'}, {targetPath:'.git/config'}, {targetPath:'.poolster/spec-source.json'}, {branch:'main'}]) {
     const api = mock(); await assert.rejects(syncSpec({...input, ...changed}, api)); assert.equal(api.calls.length, 0);
   }
   for (const value of ['a/../b', '/tmp/a', 'a\\b', 'a//b', '.GITHUB/spec.yaml']) assert.throws(() => safePath(value));
@@ -88,8 +88,8 @@ test('network failure output cannot expose the token', async t => {
 });
 test('action uses env inputs with editable fixed helper commands', async () => {
   const action = await readFile(new URL('../action.yml', import.meta.url), 'utf8');
-  assert.ok(action.includes('KAJI_SPEC_TOKEN: ${{ inputs.token }}'));
-  assert.ok(action.includes('run: node "$KAJI_ACTION_PATH/sync.mjs"'));
+  assert.ok(action.includes('POOLSTER_SPEC_TOKEN: ${{ inputs.token }}'));
+  assert.ok(action.includes('run: node "$POOLSTER_ACTION_PATH/sync.mjs"'));
   assert.ok(!/^\s*run:.*\$\{\{/m.test(action));
 });
 

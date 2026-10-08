@@ -3,7 +3,7 @@ import { readFile, realpath, lstat, appendFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 
-const PROVENANCE = '.kaji/spec-source.json';
+const PROVENANCE = '.poolster/spec-source.json';
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 function text(value, label) {
   if (typeof value !== 'string' || !value || /[\x00-\x1f\x7f]/.test(value)) throw new Error(`Invalid ${label}`);
@@ -74,11 +74,11 @@ export async function syncSpec(input, dependencies = {}) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(sourceRepository)) throw new Error('Source repository must be owner/name');
   const sourceSha = text(input.sourceSha, 'source SHA');
   if (!/^[a-f0-9]{40}$/i.test(sourceSha)) throw new Error('Source SHA must be a full Git commit SHA');
-  const branch = branchName(input.branch ?? 'codex/kaji-spec-sync');
+  const branch = branchName(input.branch ?? 'poolster/spec-sync');
   const base = branchName(input.base ?? 'main');
   if (branch === base) throw new Error('Review branch must differ from the base branch');
   const target = safePath(input.targetPath, 'target-path');
-  if (target.split('/').some(part => part.toLowerCase() === '.kaji') || !/\.(json|ya?ml)$/i.test(target)) throw new Error('Target must be a JSON/YAML specification file, not provenance');
+  if (target.split('/').some(part => part.toLowerCase() === '.poolster') || !/\.(json|ya?ml)$/i.test(target)) throw new Error('Target must be a JSON/YAML specification file, not provenance');
   const token = text(input.token, 'token');
   const bytes = await loadSource(input.workspace, input.sourcePath);
   let provenance = Buffer.from(`${JSON.stringify({ schema_version: 1, source_repository: sourceRepository, source_sha: sourceSha, source_path: input.sourcePath, spec_sha256: sha256(bytes) }, null, 2)}\n`);
@@ -87,7 +87,7 @@ export async function syncSpec(input, dependencies = {}) {
   async function api(method, route, body, allowMissing = false) {
     let response;
     try { response = await fetcher(`https://api.github.com${prefix}${route}`, {
-      method, headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'kaji-spec-sync', ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      method, headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'poolster-spec-sync', ...(body ? { 'Content-Type': 'application/json' } : {}) },
       ...(body ? { body: JSON.stringify(body) } : {}), redirect: 'error', signal: AbortSignal.timeout(30000),
     }); } catch { throw new Error("GitHub request failed before receiving a response"); }
     if (allowMissing && response.status === 404) return null;
@@ -148,7 +148,7 @@ export async function syncSpec(input, dependencies = {}) {
   return { changed, pullRequestUrl: pr?.html_url ?? '', branch, specSha256: sha256(bytes) };
 }
 async function main() {
-  const result = await syncSpec({ repository: process.env.KAJI_SPEC_REPOSITORY, sourcePath: process.env.KAJI_SPEC_SOURCE, targetPath: process.env.KAJI_SPEC_TARGET, token: process.env.KAJI_SPEC_TOKEN, branch: process.env.KAJI_SPEC_BRANCH, base: process.env.KAJI_SPEC_BASE, workspace: process.env.GITHUB_WORKSPACE, sourceRepository: process.env.GITHUB_REPOSITORY, sourceSha: process.env.GITHUB_SHA });
+  const result = await syncSpec({ repository: process.env.POOLSTER_SPEC_REPOSITORY, sourcePath: process.env.POOLSTER_SPEC_SOURCE, targetPath: process.env.POOLSTER_SPEC_TARGET, token: process.env.POOLSTER_SPEC_TOKEN, branch: process.env.POOLSTER_SPEC_BRANCH, base: process.env.POOLSTER_SPEC_BASE, workspace: process.env.GITHUB_WORKSPACE, sourceRepository: process.env.GITHUB_REPOSITORY, sourceSha: process.env.GITHUB_SHA });
   if (process.env.GITHUB_OUTPUT) await appendFile(process.env.GITHUB_OUTPUT, `changed=${result.changed}\npull-request-url=${result.pullRequestUrl ? text(result.pullRequestUrl, 'pull request URL') : ''}\n`);
   console.log(JSON.stringify({ changed: result.changed, branch: result.branch, pullRequestUrl: result.pullRequestUrl }));
 }

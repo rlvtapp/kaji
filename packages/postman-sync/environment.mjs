@@ -69,11 +69,11 @@ export async function syncEnvironment(input,{fetch:request=globalThis.fetch}={})
 }
 if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href) {
   try {
-    if(!process.env.KAJI_POSTMAN_ENVIRONMENT)throw new Error('KAJI_POSTMAN_ENVIRONMENT is required');
-    const bytes=await readFile(process.env.KAJI_POSTMAN_ENVIRONMENT);
+    if(!process.env.POOLSTER_POSTMAN_ENVIRONMENT)throw new Error('POOLSTER_POSTMAN_ENVIRONMENT is required');
+    const bytes=await readFile(process.env.POOLSTER_POSTMAN_ENVIRONMENT);
     if(bytes.length>10*1024*1024)throw new Error('Environment exceeds 10 MiB');
-    const result=await syncEnvironment({environment:JSON.parse(bytes),uid:process.env.KAJI_POSTMAN_UID,token:process.env.KAJI_POSTMAN_API_KEY,mode:process.env.KAJI_POSTMAN_MODE??'check',expectedHash:process.env.KAJI_POSTMAN_EXPECTED_HASH});
+    const result=await syncEnvironment({environment:JSON.parse(bytes),uid:process.env.POOLSTER_POSTMAN_UID,token:process.env.POOLSTER_POSTMAN_API_KEY,mode:process.env.POOLSTER_POSTMAN_MODE??'check',expectedHash:process.env.POOLSTER_POSTMAN_EXPECTED_HASH});
     console.log(JSON.stringify(result));
-    if(process.env.KAJI_POSTMAN_MODE!=='publish' && result.changed)process.exitCode=1;
+    if(process.env.POOLSTER_POSTMAN_MODE!=='publish' && result.changed)process.exitCode=1;
   } catch(error) {console.error(error instanceof SyntaxError?'Environment is invalid JSON':error.message);process.exitCode=1;}
 }

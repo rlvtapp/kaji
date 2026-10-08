@@ -17,7 +17,7 @@ async function json(response, description) {
   for await (const chunk of response.body ?? []) { size += chunk.length; requireThat(size <= 32768, `${description} response is too large`); chunks.push(chunk); }
   try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw new Error(`${description} returned invalid JSON`); }
 }
-export async function requestInstallationToken({ brokerUrl, audience = 'kaji', repositories, oidcUrl, oidcRequestToken, fetch: fetcher = globalThis.fetch }) {
+export async function requestInstallationToken({ brokerUrl, audience = 'poolster', repositories, oidcUrl, oidcRequestToken, fetch: fetcher = globalThis.fetch }) {
   const broker = httpsUrl(brokerUrl, 'Broker URL');
   requireThat(!broker.search, 'Broker URL must not contain a query');
   requireThat(typeof audience === 'string' && audience.length > 0 && audience.length <= 200, 'Audience is required');
@@ -38,15 +38,15 @@ export async function requestInstallationToken({ brokerUrl, audience = 'kaji', r
 }
 export async function revokeInstallationToken(token, fetcher = globalThis.fetch) {
   requireThat(typeof token === 'string' && token.length > 0 && token.length <= 8192 && !/\s/.test(token), 'An installation token is required for revocation');
-  const response = await fetcher('https://api.github.com/installation/token', { method: 'DELETE', redirect: 'error', signal: AbortSignal.timeout(15000), headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2026-03-10', 'User-Agent': 'kaji-github-app-broker-client' } });
+  const response = await fetcher('https://api.github.com/installation/token', { method: 'DELETE', redirect: 'error', signal: AbortSignal.timeout(15000), headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2026-03-10', 'User-Agent': 'poolster-github-app-broker-client' } });
   requireThat(response.status === 204 || response.status === 401, `Installation token revocation failed (HTTP ${response.status})`);
 }
 export async function run(environment = process.env, { fetch: fetcher = globalThis.fetch, log = message => console.log(message) } = {}) {
-  if (process.argv.includes('--revoke')) { await revokeInstallationToken(environment.KAJI_INSTALLATION_TOKEN, fetcher); return; }
+  if (process.argv.includes('--revoke')) { await revokeInstallationToken(environment.POOLSTER_INSTALLATION_TOKEN, fetcher); return; }
   requireThat(environment.GITHUB_OUTPUT, 'This client must run in a GitHub Actions step with GITHUB_OUTPUT');
   let repositories;
-  try { repositories = JSON.parse(environment.KAJI_BROKER_REPOSITORIES ?? ''); } catch { throw new Error('Repositories input must be a JSON array'); }
-  const result = await requestInstallationToken({ brokerUrl: environment.KAJI_BROKER_URL, audience: environment.KAJI_BROKER_AUDIENCE ?? 'kaji', repositories, oidcUrl: environment.ACTIONS_ID_TOKEN_REQUEST_URL, oidcRequestToken: environment.ACTIONS_ID_TOKEN_REQUEST_TOKEN, fetch: fetcher });
+  try { repositories = JSON.parse(environment.POOLSTER_BROKER_REPOSITORIES ?? ''); } catch { throw new Error('Repositories input must be a JSON array'); }
+  const result = await requestInstallationToken({ brokerUrl: environment.POOLSTER_BROKER_URL, audience: environment.POOLSTER_BROKER_AUDIENCE ?? 'poolster', repositories, oidcUrl: environment.ACTIONS_ID_TOKEN_REQUEST_URL, oidcRequestToken: environment.ACTIONS_ID_TOKEN_REQUEST_TOKEN, fetch: fetcher });
   const mask = result.token.replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A');
   log(`::add-mask::${mask}`);
   await appendFile(environment.GITHUB_OUTPUT, `token=${result.token}\nexpires-at=${result.expires_at}\n`, { encoding: 'utf8', mode: 0o600 });

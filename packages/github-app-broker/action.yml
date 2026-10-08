@@ -1,13 +1,13 @@
-name: Kaji SDK installation token
+name: Poolster SDK installation token
 description: Exchange a trusted GitHub Actions OIDC token for a narrowly scoped SDK repository token.
 inputs:
   broker-url:
-    description: HTTPS base URL of your configured Kaji GitHub App broker.
+    description: HTTPS base URL of your configured Poolster GitHub App broker.
     required: true
   audience:
     description: Exact OIDC audience configured by your broker.
     required: false
-    default: kaji
+    default: poolster
   repositories:
     description: JSON array of allowed destination repositories, such as ["example/typescript-sdk"].
     required: true
@@ -24,7 +24,7 @@ runs:
     - id: token
       shell: bash
       env:
-        KAJI_BROKER_URL: ${{ inputs.broker-url }}
-        KAJI_BROKER_AUDIENCE: ${{ inputs.audience }}
-        KAJI_BROKER_REPOSITORIES: ${{ inputs.repositories }}
+        POOLSTER_BROKER_URL: ${{ inputs.broker-url }}
+        POOLSTER_BROKER_AUDIENCE: ${{ inputs.audience }}
+        POOLSTER_BROKER_REPOSITORIES: ${{ inputs.repositories }}
       run: node "$GITHUB_ACTION_PATH/client.mjs"

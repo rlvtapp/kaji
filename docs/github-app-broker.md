@@ -94,11 +94,11 @@ Requires Node.js 22 or newer. Supply:
 
 | Variable | Purpose |
 | --- | --- |
-| `KAJI_BROKER_POLICY` | Administrator-owned policy JSON file |
+| `POOLSTER_BROKER_POLICY` | Administrator-owned policy JSON file |
 | `GITHUB_APP_ID` | Numeric GitHub App ID |
 | `GITHUB_APP_PRIVATE_KEY_FILE` | Private mounted RSA PEM file |
 | `GITHUB_APP_PRIVATE_KEY` | Alternative secret-manager injected PEM value |
-| `KAJI_BROKER_REPLAY_DIRECTORY` | Private persistent replay-marker directory |
+| `POOLSTER_BROKER_REPLAY_DIRECTORY` | Private persistent replay-marker directory |
 | `HOST` | Bind address, default `127.0.0.1` |
 | `PORT` | Port, default `8787` |
 
