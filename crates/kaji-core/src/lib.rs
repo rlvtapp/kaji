@@ -6,6 +6,7 @@ pub use api_reference::api_reference;
 pub mod ast;
 pub mod customization;
 pub mod engine;
+pub mod extensions;
 pub mod files;
 pub mod filters;
 pub mod httpmock;
@@ -29,6 +30,7 @@ pub use ast::{
     SchemaKind, SchemaValue, SecurityRequirement, SecurityScheme, SecuritySchemeCatalog,
     SecuritySchemeKind,
 };
+pub use extensions::poolster_extension;
 pub use files::{GeneratedFile, GeneratedTree, OutputChanges};
 pub use filters::{
     OperationContext, OperationFilter, OperationSelection, OverrideFilter, OverrideRule,
