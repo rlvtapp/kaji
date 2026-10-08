@@ -70,7 +70,14 @@ impl Workspace {
                     cx.workspace.transport.as_ref().unwrap().constructor
                 ),
             );
-            cx.files.emit(GeneratedFile::new("client.go", runtime)?)?;
+            let runtime = runtime.replace(&crate::response_validation::render(&prepared), "");
+            let (_, runtime) = runtime.split_once("\n)\n\n").expect("runtime import block");
+            let mut validation = kaji_core::GeneratedTree::default();
+            crate::layout::emit(&mut validation, ".", "client.go", &package, runtime)?;
+            for (path, source) in crate::response_validation::split_files(&prepared) {
+                crate::layout::emit(&mut validation, ".", &path, &package, &source)?;
+            }
+            cx.files.append(validation)?;
         }
         Ok(())
     }

@@ -74,3 +74,48 @@ pub(super) fn render(api: &Api) -> String {
     );
     output
 }
+
+/// Keep descriptors separate from HTTP runtime code. Chunk by declaration count
+/// and serialized bytes; each schema remains atomic so wire validation is unchanged.
+pub(super) fn split_files(api: &Api) -> Vec<(String, String)> {
+    let composed = composition::models(api);
+    let schemas = composed.as_deref().unwrap_or(&api.schemas);
+    let mut chunks = Vec::new();
+    let mut current = serde_json::Map::new();
+    let mut bytes = 0usize;
+    for schema in schemas {
+        let value = shape(&schema.value, schemas);
+        let size = serde_json::to_vec(&value).unwrap().len() + schema.name.len();
+        if !current.is_empty() && (current.len() >= 100 || bytes + size > 128 * 1024) {
+            chunks.push(std::mem::take(&mut current));
+            bytes = 0;
+        }
+        current.insert(go_type_name(&schema.name), value);
+        bytes += size;
+    }
+    if !current.is_empty() {
+        chunks.push(current);
+    }
+    let mut registry = String::from(
+        "var kajiResponseShapes = func() map[string]kajiResponseShape {\nshapes := make(map[string]kajiResponseShape)\n",
+    );
+    let mut files = Vec::new();
+    for (index, chunk) in chunks.into_iter().enumerate() {
+        let name = format!("kajiResponseShapesChunk{index:04}");
+        registry.push_str(&format!(
+            "for name, shape := range {name}() {{ shapes[name] = shape }}\n"
+        ));
+        let literal = serde_json::to_string(&Value::Object(chunk)).unwrap();
+        let escaped = serde_json::to_string(&literal).unwrap();
+        files.push((format!("response_shapes_{index:04}.go"), format!("func {name}() map[string]kajiResponseShape {{\nvar shapes map[string]kajiResponseShape\nif err := json.Unmarshal([]byte({escaped}), &shapes); err != nil {{ panic(\"kaji: invalid generated response descriptors\") }}\nreturn shapes\n}}\n")));
+    }
+    registry.push_str("return shapes\n}()\n");
+    let runtime = include_str!("go_response_validation.txt");
+    let start = runtime.find("var kajiResponseShapes =").unwrap();
+    let end = runtime.find("func kajiValidateResponse").unwrap();
+    files.push((
+        "response_validation.go".into(),
+        format!("{}{}{}", &runtime[..start], registry, &runtime[end..]),
+    ));
+    files
+}

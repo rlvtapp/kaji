@@ -156,10 +156,9 @@ impl Plugin<TypeScriptCli> for Cli {
         )?)?;
         cx.files
             .emit(GeneratedFile::new("tsconfig.json", render_tsconfig())?)?;
-        cx.files.emit(GeneratedFile::new(
-            "src/index.ts",
-            render_index(cx.api, &command_name, &config),
-        )?)?;
+        for (path, source) in render_command_modules(cx.api, &command_name, &config) {
+            cx.files.emit(GeneratedFile::new(path, source)?)?;
+        }
         cx.files
             .emit(GeneratedFile::new("src/runtime.ts", render_runtime())?)?;
         cx.files.emit_custom(GeneratedFile::new(
@@ -271,6 +270,56 @@ fn render_config(
         "oauth": oauth,
         "schemes": schemes,
     }))
+}
+
+/// Keep small CLIs source-compatible, but isolate large command metadata from
+/// startup/runtime code. Bound chunks by both serialized bytes and operation count.
+fn render_command_modules(api: &Api, command_name: &str, config: &Value) -> Vec<(String, String)> {
+    let operations = api
+        .operations
+        .iter()
+        .map(|op| operation_json(api, op, command_name))
+        .collect::<Vec<_>>();
+    let literal = serde_json::to_string_pretty(&operations).unwrap();
+    let index = render_index(api, command_name, config);
+    if operations.len() <= 50 && literal.len() <= 128 * 1024 {
+        return vec![("src/index.ts".into(), index)];
+    }
+    let mut chunks = Vec::new();
+    let mut current = Vec::new();
+    let mut bytes = 0usize;
+    for operation in operations {
+        let size = serde_json::to_string_pretty(&operation).unwrap().len();
+        if !current.is_empty() && (current.len() >= 50 || bytes + size > 128 * 1024) {
+            chunks.push(std::mem::take(&mut current));
+            bytes = 0;
+        }
+        bytes += size;
+        current.push(operation);
+    }
+    if !current.is_empty() {
+        chunks.push(current);
+    }
+    let mut imports = String::new();
+    let mut references = Vec::new();
+    let mut files = Vec::new();
+    for (index, chunk) in chunks.into_iter().enumerate() {
+        let name = format!("operations{index:04}");
+        imports.push_str(&format!(
+            "import {{ {name} }} from './commands/chunk_{index:04}.js';\n"
+        ));
+        references.push(format!("...{name}"));
+        files.push((format!("src/commands/chunk_{index:04}.ts"), format!("{NOTICE}import type {{ Operation }} from '../runtime.js';\nexport const {name}: readonly Operation[] = {};\n",serde_json::to_string_pretty(&chunk).unwrap())));
+    }
+    let index = index.replace(
+        &format!("const operations: readonly Operation[] = {literal};"),
+        &format!(
+            "const operations: readonly Operation[] = [{}];",
+            references.join(", ")
+        ),
+    );
+    files.insert(0, ("src/index.ts".into(), format!("{imports}{index}")));
+    files
 }
 
 fn render_index(api: &Api, command_name: &str, config: &Value) -> String {
@@ -897,6 +946,68 @@ mod tests {
         SchemaKind, SchemaValue, SecurityRequirement,
     };
     use std::collections::BTreeMap;
+
+    fn large_api() -> Api {
+        Api {
+            name: "Chunk probe".into(),
+            version: "1.0.0".into(),
+            operations: (0..101)
+                .map(|index| Operation {
+                    id: format!("listItems{index}"),
+                    method: HttpMethod::Get,
+                    path: format!("/resource{index}"),
+                    ..Operation::default()
+                })
+                .collect(),
+            ..Api::default()
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[ignore = "requires KAJI_TSC_JS and KAJI_TS_CLI_NODE_MODULES"]
+    fn split_commands_compile_and_show_last_chunk_in_help() {
+        let root = tempfile::tempdir().unwrap();
+        Packages::new()
+            .package(package("cli").with(cli().command_name("probe")))
+            .generate(&large_api(), None)
+            .unwrap()
+            .write_to(root.path())
+            .unwrap();
+        let package = root.path().join("cli");
+        std::os::unix::fs::symlink(
+            std::env::var_os("KAJI_TS_CLI_NODE_MODULES").expect("set CLI dependency directory"),
+            package.join("node_modules"),
+        )
+        .unwrap();
+        let compile = std::process::Command::new("node")
+            .arg(std::env::var_os("KAJI_TSC_JS").expect("set TypeScript compiler path"))
+            .args(["-p", "tsconfig.json"])
+            .current_dir(&package)
+            .output()
+            .unwrap();
+        assert!(
+            compile.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&compile.stdout),
+            String::from_utf8_lossy(&compile.stderr)
+        );
+        let output = std::process::Command::new("node")
+            .args(["dist/index.js", "--help"])
+            .current_dir(&package)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let help = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            help.contains("resource0") && help.contains("resource100"),
+            "{help}"
+        );
+    }
 
     #[test]
     fn emits_auth_commands_and_openapi_operation_flags() {

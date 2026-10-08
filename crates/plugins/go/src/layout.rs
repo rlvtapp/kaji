@@ -11,9 +11,13 @@ pub(super) fn generate(
     style: SdkClientStyle,
     jobs: usize,
 ) -> Result<()> {
-    let runtime = render_runtime(api, package, style);
+    let runtime =
+        render_runtime(api, package, style).replace(&response_validation::render(api), "");
     let (_, runtime) = runtime.split_once("\n)\n\n").expect("runtime import block");
     emit(tree, directory, "client.go", package, runtime)?;
+    for (path, source) in response_validation::split_files(api) {
+        emit(tree, directory, &path, package, &source)?;
+    }
     tree.append(parallel_files(schemas, jobs, |schema, tree| {
         let mut body = String::new();
         render_schema(&mut body, schema);
@@ -251,6 +255,44 @@ mod tests {
                 "// fmt.String\n/* json.RawMessage */\n`json:\"io.ReadCloser\"`\n\"strings.Replace\"\nhttp.Header{}\ncontext . Context"
             ),
             BTreeSet::from(["http", "context"])
+        );
+    }
+
+    #[test]
+    fn split_response_registry_retains_shapes_across_chunk_boundaries() {
+        let api = Api {
+            schemas: (0..201)
+                .map(|index| {
+                    Schema::new(
+                        format!("Model{index}"),
+                        SchemaValue::new(SchemaKind::String),
+                    )
+                })
+                .collect(),
+            ..Api::default()
+        };
+        let root = tempfile::tempdir().unwrap();
+        render_sdk(&api, "sdk", Some("probe"), SdkClientStyle::Flat, 0)
+            .unwrap()
+            .write_to(root.path())
+            .unwrap();
+        std::fs::write(root.path().join("sdk/registry_test.go"), r#"package probe
+import ("reflect"; "testing")
+func TestAllDescriptorChunks(t *testing.T) {
+ if len(kajiResponseShapes) != 201 { t.Fatalf("missing descriptors: %d",len(kajiResponseShapes)) }
+ for _, name := range []string{"Model0","Model100","Model200"} { if kajiResponseShapes[name].Kind != "string" { t.Fatalf("missing %s",name) } }
+ if err := kajiValidateResponse("ok",reflect.TypeOf(Model200("")),"$",0); err != nil {t.Fatal(err)}
+ if err := kajiValidateResponse(true,reflect.TypeOf(Model200("")),"$",0); err == nil {t.Fatal("validation lost across chunk boundary")}
+}
+"#).unwrap();
+        assert!(
+            Command::new("go")
+                .args(["test", "./..."])
+                .env("GOCACHE", "/private/tmp/kaji-go-cache")
+                .current_dir(root.path().join("sdk"))
+                .status()
+                .unwrap()
+                .success()
         );
     }
 

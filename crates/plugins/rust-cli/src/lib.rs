@@ -82,15 +82,14 @@ impl Plugin<RustCli> for Cli {
             "Cargo.toml",
             cargo_toml(&package, &command, &cx.api.version),
         )?)?;
-        cx.files.emit(GeneratedFile::new(
-            "src/main.rs",
-            render_main(
-                cx.api,
-                &command,
-                self.base_url.as_deref(),
-                cx.security_schemes,
-            ),
-        )?)?;
+        for (path, source) in render_command_modules(
+            cx.api,
+            &command,
+            self.base_url.as_deref(),
+            cx.security_schemes,
+        ) {
+            cx.files.emit(GeneratedFile::new(path, source)?)?;
+        }
         cx.files.emit_custom(GeneratedFile::new(
             "src/kaji_extension.rs",
             extension_template(),
@@ -118,6 +117,67 @@ fn cargo_toml(package: &str, command: &str, version: &str) -> String {
     format!(
         "[workspace]\n\n[package]\nname = {package:?}\nversion = {version:?}\nedition = \"2024\"\ndescription = \"Generated API CLI\"\n\n[[bin]]\nname = {command:?}\npath = \"src/main.rs\"\n\n[dependencies]\nanyhow = \"1\"\nclap = {{ version = \"4\", features = [\"std\"] }}\ndialoguer = \"0.11\"\nreqwest = {{ version = \"0.12\", default-features = false, features = [\"blocking\", \"json\", \"rustls-tls\"] }}\nserde_json = \"1\"\n"
     )
+}
+
+fn render_command_modules(
+    api: &Api,
+    command: &str,
+    base_url: Option<&str>,
+    security_schemes: Option<&SecuritySchemeCatalog>,
+) -> Vec<(String, String)> {
+    let operations = api
+        .operations
+        .iter()
+        .map(|op| render_operation(api, op, command))
+        .collect::<Vec<_>>();
+    let literal = operations.join(",\n    ");
+    let main = render_main(api, command, base_url, security_schemes);
+    if operations.len() <= 50 && literal.len() <= 128 * 1024 {
+        return vec![("src/main.rs".into(), main)];
+    }
+    let mut chunks = Vec::new();
+    let mut current = Vec::new();
+    let mut bytes = 0usize;
+    for operation in operations {
+        if !current.is_empty() && (current.len() >= 50 || bytes + operation.len() > 128 * 1024) {
+            chunks.push(std::mem::take(&mut current));
+            bytes = 0;
+        }
+        bytes += operation.len();
+        current.push(operation);
+    }
+    if !current.is_empty() {
+        chunks.push(current);
+    }
+    let mut modules = String::new();
+    let mut references = Vec::new();
+    let mut files = Vec::new();
+    for (index, chunk) in chunks.into_iter().enumerate() {
+        let name = format!("operations{index:04}");
+        modules.push_str(&format!(
+            "#[path = \"commands/chunk_{index:04}.rs\"] mod {name};\n"
+        ));
+        references.push(format!("{name}::OPERATIONS"));
+        files.push((format!("src/commands/chunk_{index:04}.rs"), format!("{NOTICE}use super::Operation;\npub(super) const OPERATIONS: &[Operation] = &[{}];\n", chunk.join(",\n").replace("Parameter {", "super::Parameter {").replace("BodyField {", "super::BodyField {"))));
+    }
+    let main = main
+        .replace(
+            &format!("const OPERATIONS: &[Operation] = &[\n    {literal}\n];"),
+            &format!(
+                "const OPERATIONS: &[&[Operation]] = &[{}];",
+                references.join(", ")
+            ),
+        )
+        .replace(
+            "for operation in OPERATIONS {",
+            "for operation in OPERATIONS.iter().flat_map(|chunk| chunk.iter()) {",
+        )
+        .replace(
+            "OPERATIONS.iter().find(",
+            "OPERATIONS.iter().flat_map(|chunk| chunk.iter()).find(",
+        );
+    files.insert(0, ("src/main.rs".into(), format!("{modules}{main}")));
+    files
 }
 
 fn render_main(
@@ -561,6 +621,52 @@ mod tests {
         SecuritySchemeKind,
     };
     use std::collections::BTreeMap;
+
+    fn large_api() -> Api {
+        Api {
+            name: "Chunk probe".into(),
+            version: "1.0.0".into(),
+            operations: (0..101)
+                .map(|index| Operation {
+                    id: format!("listItems{index}"),
+                    method: HttpMethod::Get,
+                    path: format!("/resource{index}"),
+                    ..Operation::default()
+                })
+                .collect(),
+            ..Api::default()
+        }
+    }
+
+    #[test]
+    #[ignore = "requires native Cargo CLI dependencies"]
+    fn split_commands_compile_and_show_last_chunk_in_help() {
+        let root = tempfile::tempdir().unwrap();
+        Packages::new()
+            .package(package("cli").with(cli().command_name("probe")))
+            .generate(&large_api(), None)
+            .unwrap()
+            .write_to(root.path())
+            .unwrap();
+        let target = std::env::var_os("KAJI_CLI_CARGO_TARGET_DIR")
+            .unwrap_or_else(|| root.path().join("target").into_os_string());
+        let output = std::process::Command::new("cargo")
+            .args(["run", "--offline", "--quiet", "--", "--help"])
+            .env("CARGO_TARGET_DIR", target)
+            .current_dir(root.path().join("cli"))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let help = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            help.contains("resource0") && help.contains("resource100"),
+            "{help}"
+        );
+    }
 
     #[test]
     fn emits_versioned_authentication_extension_with_legacy_fallback() {
