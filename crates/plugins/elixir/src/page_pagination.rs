@@ -320,7 +320,7 @@ mod expanded_tests {
         let root = tempfile::tempdir().unwrap();
         std::fs::write(
             root.path().join("multipart_body.ex"),
-            include_str!("multipart.ex.txt").replace("__KAJI_MODULE__", "Probe"),
+            include_str!("../templates/multipart.ex.tmpl").replace("__POOLSTER_MODULE__", "Probe"),
         )
         .unwrap();
         std::fs::write(root.path().join("client.ex"), render_client("Probe")).unwrap();
@@ -332,8 +332,8 @@ mod expanded_tests {
         )
         .unwrap();
         let helper = render(&offset, &offset.operations[0]).unwrap().unwrap();
-        let script =
-            include_str!("expanded_pagination_probe.exs").replace("__OFFSET_HELPER__", &helper);
+        let script = include_str!("../tests/fixtures/expanded_pagination_probe.exs")
+            .replace("__OFFSET_HELPER__", &helper);
         std::fs::write(root.path().join("probe.exs"), script).unwrap();
         let output = std::process::Command::new("elixir")
             .arg("probe.exs")

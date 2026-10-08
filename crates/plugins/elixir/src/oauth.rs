@@ -25,7 +25,7 @@ impl Plugin<crate::Elixir> for OAuth {
         let app = elixir_identifier(&package);
         cx.files.emit(GeneratedFile::new(
             format!("lib/{app}/oauth.ex"),
-            include_str!("oauth.ex.txt").replace("__KAJI_MODULE__", &module),
+            include_str!("../templates/oauth.ex.tmpl").replace("__POOLSTER_MODULE__", &module),
         )?)
     }
 }
@@ -39,7 +39,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(
             dir.path().join("oauth.ex"),
-            include_str!("oauth.ex.txt").replace("__KAJI_MODULE__", "ProbeSdk"),
+            include_str!("../templates/oauth.ex.tmpl").replace("__POOLSTER_MODULE__", "ProbeSdk"),
         )
         .unwrap();
         std::fs::write(
@@ -48,14 +48,15 @@ mod tests {
                 "{}\n{}\n{}\n{}",
                 crate::render_api_error(&poolster_core::Api::default(), "ProbeSdk"),
                 crate::render_json("ProbeSdk"),
-                include_str!("multipart.ex.txt").replace("__KAJI_MODULE__", "ProbeSdk"),
+                include_str!("../templates/multipart.ex.tmpl")
+                    .replace("__POOLSTER_MODULE__", "ProbeSdk"),
                 crate::render_client("ProbeSdk")
             ),
         )
         .unwrap();
         std::fs::write(
             dir.path().join("probe.exs"),
-            include_str!("oauth_probe.exs"),
+            include_str!("../tests/fixtures/oauth_probe.exs"),
         )
         .unwrap();
         let output = std::process::Command::new("mix")

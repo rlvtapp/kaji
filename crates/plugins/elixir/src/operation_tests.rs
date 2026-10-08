@@ -51,7 +51,7 @@ impl Plugin<crate::Elixir> for OperationTests {
         cx.files.emit(GeneratedFile::new(".poolster/operation-test-diagnostics.json",serde_json::to_string_pretty(&json!({"scope":"bounded buffered JSON success and malformed JSON; native fake transport; not live acceptance", "covered_operations":cases.len(),"diagnostics":diagnostics}))?)?)?;
         cx.files.emit(GeneratedFile::new(
             "test/operations_test.exs",
-            include_str!("operation_tests.exs").replace("__MODULE__", &module),
+            include_str!("../templates/operation_tests.exs.tmpl").replace("__MODULE__", &module),
         )?)
     }
 }

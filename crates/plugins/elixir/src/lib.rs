@@ -80,7 +80,7 @@ fn render_sdk(
         &mut tree,
         root,
         &format!("lib/{app}/multipart_body.ex"),
-        include_str!("multipart.ex.txt").replace("__KAJI_MODULE__", &module),
+        include_str!("../templates/multipart.ex.tmpl").replace("__POOLSTER_MODULE__", &module),
     )?;
 
     insert(
@@ -326,14 +326,14 @@ fn render_json(module: &str) -> String {
 fn render_client(module: &str) -> String {
     format!(
         "{NOTICE}\n{}",
-        r#"defmodule __KAJI_MODULE__.Client do
+        r#"defmodule __POOLSTER_MODULE__.Client do
   @moduledoc "Configurable Finch transport with safe retries and lifecycle hooks."
 
-  alias __KAJI_MODULE__.{ApiError, JSON}
+  alias __POOLSTER_MODULE__.{ApiError, JSON}
 
   @enforce_keys [:base_url]
   defstruct base_url: nil, api_key: nil, api_key_header: "authorization", api_key_prefix: "Bearer",
-            headers: [], finch: __KAJI_MODULE__.Finch, timeout: 30_000,
+            headers: [], finch: __POOLSTER_MODULE__.Finch, timeout: 30_000,
             max_retries: 2, retry_initial_delay_ms: 250, retry_max_delay_ms: 8_000,
             before_request: nil, after_response: nil, on_error: nil,
             transport: nil, middleware: [], stream_transport: nil
@@ -358,7 +358,7 @@ fn render_client(module: &str) -> String {
           base_url: String.trim_trailing(value, "/"), api_key: Keyword.get(options, :api_key),
           api_key_header: Keyword.get(options, :api_key_header, "authorization"),
           api_key_prefix: Keyword.get(options, :api_key_prefix, "Bearer"),
-          headers: Keyword.get(options, :headers, []), finch: Keyword.get(options, :finch, __KAJI_MODULE__.Finch),
+          headers: Keyword.get(options, :headers, []), finch: Keyword.get(options, :finch, __POOLSTER_MODULE__.Finch),
           timeout: non_negative(Keyword.get(options, :timeout, 30_000), 30_000),
           max_retries: non_negative(Keyword.get(options, :max_retries, 2), 2),
           retry_initial_delay_ms: non_negative(Keyword.get(options, :retry_initial_delay_ms, 250), 250),
@@ -720,11 +720,11 @@ fn render_client(module: &str) -> String {
     base = if is_nil(body), do: base, else: [{"content-type", content_type(body_kind)} | base]
     case client.api_key do nil -> base; "" -> base; key -> [{client.api_key_header, credential(client.api_key_prefix, key)} | base] end
   end
-  defp prepare_body(%__KAJI_MODULE__.MultipartBody{} = body, kind) when kind in [:multipart, :multipart_json] do
-    {content_type, bytes} = __KAJI_MODULE__.MultipartBody.encode(body)
+  defp prepare_body(%__POOLSTER_MODULE__.MultipartBody{} = body, kind) when kind in [:multipart, :multipart_json] do
+    {content_type, bytes} = __POOLSTER_MODULE__.MultipartBody.encode(body)
     {bytes, {:multipart, content_type}}
   end
-  defp prepare_body(%__KAJI_MODULE__.MultipartBody{}, _), do: raise(ArgumentError, "operation does not accept multipart/form-data")
+  defp prepare_body(%__POOLSTER_MODULE__.MultipartBody{}, _), do: raise(ArgumentError, "operation does not accept multipart/form-data")
   defp prepare_body(nil, :multipart), do: {nil, :json}
   defp prepare_body(_body, :multipart), do: raise(ArgumentError, "multipart request body must be MultipartBody")
   defp prepare_body(body, :multipart_json), do: {body, :json}
@@ -745,7 +745,7 @@ fn render_client(module: &str) -> String {
 end
 "#
     )
-    .replace("__KAJI_MODULE__", module)
+    .replace("__POOLSTER_MODULE__", module)
 }
 
 fn render_model(module: &str, schema: &Schema) -> String {
@@ -2234,7 +2234,7 @@ if Collision.Models.Page.from_map(nil)!=nil, do: raise("nullable array alias")
             )
             .unwrap();
         }
-        script.push_str(include_str!("multipart_probe.exs.txt"));
+        script.push_str(include_str!("../tests/fixtures/multipart_probe.exs"));
         let path = root.path().join("probe.exs");
         std::fs::write(&path, script).unwrap();
         let project = std::env::var_os("KAJI_ELIXIR_NATIVE_PROJECT")
@@ -2744,7 +2744,7 @@ if Probe.Models.WireInput.to_map(restored)!=expected, do: raise("roundtrip prese
         let root = tempfile::tempdir().unwrap();
         std::fs::write(
             root.path().join("multipart_body.ex"),
-            include_str!("multipart.ex.txt").replace("__KAJI_MODULE__", "Probe"),
+            include_str!("../templates/multipart.ex.tmpl").replace("__POOLSTER_MODULE__", "Probe"),
         )
         .unwrap();
         std::fs::write(

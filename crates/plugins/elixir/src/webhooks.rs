@@ -27,7 +27,7 @@ impl Plugin<crate::Elixir> for Webhooks {
         let app = elixir_identifier(&package);
         cx.files.emit(GeneratedFile::new(
             format!("lib/{app}/webhooks.ex"),
-            include_str!("webhooks.ex").replace("__MODULE__", &namespace),
+            include_str!("../templates/webhooks.ex.tmpl").replace("__MODULE__", &namespace),
         )?)
     }
 }
@@ -65,7 +65,11 @@ mod tests {
     fn generated_webhook_verifier_executes_native_security_cases() {
         let (dir, _) = generate();
         let root = dir.path().join("sdk");
-        std::fs::write(root.join("probe.exs"), include_str!("webhooks_probe.exs")).unwrap();
+        std::fs::write(
+            root.join("probe.exs"),
+            include_str!("../tests/fixtures/webhooks_probe.exs"),
+        )
+        .unwrap();
         let output = std::process::Command::new("elixir")
             .args(["-r", "lib/security_sdk/webhooks.ex", "probe.exs"])
             .current_dir(root)

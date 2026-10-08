@@ -46,9 +46,9 @@ transport = fn request, _options ->
 end
 {:ok, client} = Client.new(base_url: "https://example.test", transport: transport)
 {:ok, [0, false, nil, %{"future" => [0, false, nil]}]} = Client.request(client, :get, "/items", raw, [], nil, :json, :ndjson)
-{:kaji_query, form} = Client.whole_query(%{"tag" => ["a", "b"], "flag" => false, "zero" => 0}, "application/x-www-form-urlencoded")
+{:poolster_query, form} = Client.whole_query(%{"tag" => ["a", "b"], "flag" => false, "zero" => 0}, "application/x-www-form-urlencoded")
 if URI.decode_query(form)["flag"] != "false" or not String.contains?(form, "tag=a&tag=b"), do: raise("form query changed")
-{:kaji_query, encoded_json} = Client.whole_query(%{"future" => false}, "application/json")
+{:poolster_query, encoded_json} = Client.whole_query(%{"future" => false}, "application/json")
 if Jason.decode!(URI.decode_www_form(encoded_json)) != %{"future" => false}, do: raise("JSON query changed")
 for unsafe <- ["#bad", "x=1?next", "x=1\nheader"] do
   try do
@@ -72,5 +72,5 @@ if Jason.decode!(Client.parameter_content(%{"flag" => false, "zero" => 0, "null"
 {:error, {:missing_required_option, :data}} = Client.required([data: nil], :data)
 if Client.parameter_content(nil, "application/json", true) != "null", do: raise("required JSON null lost")
 if Client.parameter_content(nil, "application/json", false) != nil, do: raise("optional JSON nil changed")
-{:kaji_query, "null"} = Client.whole_query(nil, "application/json", true)
-{:kaji_query, ""} = Client.whole_query(nil, "application/json", false)
+{:poolster_query, "null"} = Client.whole_query(nil, "application/json", true)
+{:poolster_query, ""} = Client.whole_query(nil, "application/json", false)

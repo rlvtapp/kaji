@@ -1,4 +1,4 @@
-defmodule __KAJI_MODULE__.MultipartBody do
+defmodule __POOLSTER_MODULE__.MultipartBody do
   @moduledoc "Explicit buffered multipart parts, including repeated names and binary files."
   defstruct parts: [], size: 0, encoding: %{}
   @max_bytes 67_108_864
@@ -27,7 +27,7 @@ defmodule __KAJI_MODULE__.MultipartBody do
 
   def encode(%__MODULE__{} = body, depth \\ 0) do
     if depth > 32, do: raise(ArgumentError, "multipart nesting exceeds 32 levels")
-    boundary = "kaji-" <> Base.encode16(:crypto.strong_rand_bytes(24), case: :lower)
+    boundary = "poolster-" <> Base.encode16(:crypto.strong_rand_bytes(24), case: :lower)
     media_type = body.encoding["content_type"] || body.encoding["contentType"] || "multipart/form-data"
     if not String.starts_with?(media_type, "multipart/") or String.contains?(media_type, ["\r", "\n", <<0>>]), do: raise(ArgumentError, "invalid multipart content type")
     chunks = body.parts |> Enum.reverse() |> Enum.with_index() |> Enum.map(fn {{name, bytes, filename, content_type, headers}, index} ->
