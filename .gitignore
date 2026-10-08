@@ -12,6 +12,8 @@
 
 # Locally assembled native npm distribution packages.
 /packages/cli/npm/
+/packages/cli/sdk/npm/
+/packages/cli/sdk/native/
 *.tgz
 node_modules/
 examples/microsoft-graph/generated/
@@ -21,6 +23,11 @@ examples/typescript-cli/generated/
 examples/cli-multi-package/generated/
 examples/rust-embedded/.kaji/
 examples/rust-embedded/generated/
+examples/node-embedded/.kaji/
+examples/node-embedded/generated/
+examples/node-embedded/generated-filtered/
+examples/node-embedded/generated-from-config/
+examples/node-embedded/generated-native/
 examples/rust-embedded/Cargo.lock
 examples/mock-scenarios/generated/
 examples/react-query-consumer/generated/

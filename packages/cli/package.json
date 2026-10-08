@@ -1,7 +1,7 @@
 {
-  "name": "@relevate/kaji",
+  "name": "kajicli",
   "version": "0.5.0",
-  "description": "Native multi-language OpenAPI SDK generation with Kaji",
+  "description": "Kaji command-line SDK generator",
   "license": "MIT",
   "repository": { "type": "git", "url": "git+https://github.com/rlvtapp/kaji.git" },
   "bin": { "kaji": "bin/kaji.cjs" },
@@ -12,10 +12,10 @@
     "build:native": "node scripts/build-platform.mjs"
   },
   "optionalDependencies": {
-    "@relevate/kaji-darwin-arm64": "0.5.0",
-    "@relevate/kaji-darwin-x64": "0.5.0",
-    "@relevate/kaji-linux-x64-gnu": "0.5.0",
-    "@relevate/kaji-win32-x64-msvc": "0.5.0"
+    "@relevate/kajicli-darwin-arm64": "0.5.0",
+    "@relevate/kajicli-darwin-x64": "0.5.0",
+    "@relevate/kajicli-linux-x64-gnu": "0.5.0",
+    "@relevate/kajicli-win32-x64-msvc": "0.5.0"
   },
   "publishConfig": { "access": "public" }
 }

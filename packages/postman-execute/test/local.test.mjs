@@ -4,3 +4,11 @@ import { executeLocal } from '../run.mjs'
 const fixture = () => ({ info: { name: 'Local', schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json' }, item: [{ name: 'write', request: { method: 'POST', url: { raw: 'https://never-called.invalid/write?term=unused', query: [{key:'term',value:'cat & dog'}] }, body: { mode: 'raw', raw: '{"name":"sample"}' } }, response: [{ code: 201, body: '{"id":"one"}' }] }] })
 test('executes against ephemeral loopback mock instead of source server', async () => assert.deepEqual(await executeLocal(fixture()), {requests:1,assertions:1}))
 test('rejects authored scripts and empty or excessive collection', async () => { const value=fixture();value.item[0].event=[{listen:'prerequest',script:{exec:['fetch("https://never-called.invalid")']}}]; await assert.rejects(executeLocal(value),/scripts/); await assert.rejects(executeLocal({...fixture(),item:[]}),/between/); await assert.rejects(executeLocal({...fixture(),item:Array.from({length:257},()=>fixture().item[0])}),/between/) })
+test('standalone resource exports execute nested requests without credentials', async () => {
+  const source=fixture();
+  source.variable=[{key:'token',value:''},{key:'baseUrl',value:'https://never-called.invalid'}];
+  source.item=[{name:'Pets',item:[{...source.item[0],request:{...source.item[0].request,auth:{type:'bearer',bearer:[{key:'token',value:'{{token}}'}]}}}]}];
+  assert.deepEqual(await executeLocal(source),{requests:1,assertions:1});
+  assert.equal(source.variable[0].value,'');
+  assert.equal(source.item[0].item[0].request.auth.bearer[0].value,'{{token}}');
+});

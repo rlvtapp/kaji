@@ -37,9 +37,9 @@ function resolveLauncher(options) {
   if (options.command) return null;
   if (options.launcher) return path.resolve(options.launcher);
   try {
-    return require.resolve('@relevate/kaji/bin/kaji.cjs');
+    return require.resolve('kajicli/bin/kaji.cjs');
   } catch {
-    throw new Error('Cannot find @relevate/kaji. Install it alongside @relevate/unplugin-kaji, or set `command` to a Kaji executable.');
+    throw new Error('Cannot find kajicli. Install it alongside @relevate/unplugin-kaji, or set `command` to a Kaji executable.');
   }
 }
 

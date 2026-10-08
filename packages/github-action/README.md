@@ -10,6 +10,6 @@ Generate SDKs from `kaji.json` in GitHub Actions:
 ```
 
 Pin a Kaji release tag rather than `main` in production. The action installs
-Node 22 and invokes the published `@relevate/kaji` launcher. Set `version` to
+Node 22 and invokes the published `kajicli` launcher. Set `version` to
 pin the npm package and `working-directory` when the recipe is not at the
 repository root.

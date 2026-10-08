@@ -20,4 +20,28 @@ jobs:
       - run: npm pack --dry-run --ignore-scripts
         working-directory: packages/cli
       - run: npm pack --dry-run --ignore-scripts
-        working-directory: packages/npm
+        working-directory: packages/cli/sdk
+  sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: openapi/go.mod
+          cache-dependency-path: openapi/go.sum
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: node packages/node-plugins/generate.mjs --check
+      - run: node packages/cli/sdk/scripts/build-native.mjs
+      - run: go build -o ../target/debug/kaji-openapi .
+        working-directory: openapi
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 18
+      - run: npm test --prefix packages/cli/sdk
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: npm test --prefix packages/cli/sdk

@@ -46,9 +46,9 @@ test('release updates inherited workspace and lock versions without changing dep
   const launcher = JSON.parse(updated.get('packages/cli/package.json'));
   assert.equal(launcher.version, '0.5.1');
   for (const value of Object.values(launcher.optionalDependencies)) assert.equal(value, '0.5.1');
-  const npm = JSON.parse(updated.get('packages/npm/package.json'));
-  assert.equal(npm.version, '0.5.1');
-  assert.equal(npm.dependencies['@relevate/kaji'], '0.5.1');
+  const sdk = JSON.parse(updated.get('packages/cli/sdk/package.json'));
+  assert.equal(sdk.version, '0.5.1');
+  for (const value of Object.values(sdk.optionalDependencies)) assert.equal(value, '0.5.1');
   assert.match(updated.get('packages/python/setup.py'), /version="0\.5\.1"/);
 });
 

@@ -42,6 +42,19 @@ jobs:
         run: |
           cargo build -p kaji-cli --locked
           (cd openapi && go build -o ../target/debug/kaji-openapi .)
+      - name: Verify Node embedding and plugins
+        run: |
+          node packages/cli/sdk/scripts/build-native.mjs
+          node packages/node-plugins/generate.mjs --check
+          npm test --prefix packages/cli/sdk
+      - name: Compile generated TypeScript with Rust add-ons
+        env:
+          KAJI_EXAMPLE_OUTPUT: ${{ runner.temp }}/kaji-node-mixed
+        run: |
+          node examples/node-embedded/native-contracts.mjs
+          npm install --prefix "$KAJI_EXAMPLE_OUTPUT/web" --ignore-scripts --no-audit --no-fund
+          npm run build --prefix "$KAJI_EXAMPLE_OUTPUT/web"
+          node packages/cli/sdk/test-support/assert-generated-runtime.mjs "$KAJI_EXAMPLE_OUTPUT/web"
       - name: Verify release examples
         run: python scripts/check-release-examples.py
       - name: Generate cross-language SDK fixture
@@ -173,14 +186,25 @@ jobs:
       - run: node --test packages/cli/test/launcher.test.cjs
       - run: node packages/cli/scripts/build-platform.mjs ${{ matrix.platform }}
       - run: node packages/cli/scripts/smoke-native.mjs ${{ matrix.platform }}
+      - run: node packages/cli/sdk/scripts/build-platform.mjs ${{ matrix.platform }}
+      - run: node packages/cli/sdk/scripts/smoke-platform.mjs ${{ matrix.platform }}
+      - run: node packages/cli/scripts/smoke-split.mjs ${{ matrix.platform }}
       - run: node packages/python/scripts/build-wheel.mjs ${{ matrix.platform }}
       - name: Pack native package
         working-directory: packages/cli/npm/${{ matrix.platform }}
+        run: npm pack --ignore-scripts
+      - name: Pack SDK native package
+        working-directory: packages/cli/sdk/npm/${{ matrix.platform }}
         run: npm pack --ignore-scripts
       - uses: actions/upload-artifact@v7
         with:
           name: native-${{ matrix.platform }}
           path: packages/cli/npm/${{ matrix.platform }}/*.tgz
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sdk-native-${{ matrix.platform }}
+          path: packages/cli/sdk/npm/${{ matrix.platform }}/*.tgz
           if-no-files-found: error
       - uses: actions/upload-artifact@v7
         with:
@@ -201,13 +225,32 @@ jobs:
           python-version: '3.12'
       - run: node --test packages/cli/test/launcher.test.cjs
       - run: PYTHONPATH=packages/python/src python -m unittest discover -s packages/python/tests -v
-      - name: Pack scoped launcher
+      - name: Pack CLI
         working-directory: packages/cli
         run: npm pack --ignore-scripts
+      - name: Pack SDK
+        working-directory: packages/cli/sdk
+        run: npm pack --ignore-scripts
+      - name: Pack language plugins
+        run: |
+          node packages/node-plugins/generate.mjs --check
+          for package in packages/node-plugins/*/package.json; do
+            (cd "$(dirname "$package")" && npm pack --ignore-scripts)
+          done
       - uses: actions/upload-artifact@v7
         with:
-          name: scoped-launcher
+          name: node-packages
           path: packages/cli/*.tgz
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          name: node-sdk
+          path: packages/cli/sdk/*.tgz
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          name: node-plugins
+          path: packages/node-plugins/*/*.tgz
           if-no-files-found: error
 
   publish:
@@ -226,8 +269,21 @@ jobs:
           merge-multiple: true
       - uses: actions/download-artifact@v8
         with:
-          name: scoped-launcher
-          path: release-artifacts/scoped-launcher
+          pattern: sdk-native-*
+          path: release-artifacts/sdk-native
+          merge-multiple: true
+      - uses: actions/download-artifact@v8
+        with:
+          name: node-packages
+          path: release-artifacts/cli
+      - uses: actions/download-artifact@v8
+        with:
+          name: node-sdk
+          path: release-artifacts/sdk
+      - uses: actions/download-artifact@v8
+        with:
+          name: node-plugins
+          path: release-artifacts/node-plugins
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -236,13 +292,27 @@ jobs:
         run: |
           tag="${GITHUB_REF_NAME#v}"
           test "$tag" = "$(node -p "require('./packages/cli/package.json').version")"
+          test "$tag" = "$(node -p "require('./packages/cli/sdk/package.json').version")"
+          for package in packages/node-plugins/*/package.json; do
+            test "$tag" = "$(node -p "require('./$package').version")"
+          done
       - name: Publish native packages
         run: |
           for package in release-artifacts/native/*.tgz; do
             npm publish "$package" --access public
           done
-      - name: Publish scoped launcher
-        run: npm publish release-artifacts/scoped-launcher/*.tgz --access public
+          for package in release-artifacts/sdk-native/*.tgz; do
+            npm publish "$package" --access public
+          done
+      - name: Publish CLI and SDK
+        run: |
+          npm publish release-artifacts/cli/*.tgz --access public
+          npm publish release-artifacts/sdk/*.tgz --access public
+      - name: Publish language plugins
+        run: |
+          for package in release-artifacts/node-plugins/*.tgz; do
+            npm publish "$package" --access public
+          done
 
   publish-python:
     name: Publish to PyPI

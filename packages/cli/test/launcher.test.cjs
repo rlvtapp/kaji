@@ -5,11 +5,23 @@ const { spawnSync } = require('node:child_process');
 const path = require('node:path');
 const { platformPackage } = require('../bin/kaji.cjs');
 
+test('CLI package installs only CLI platform runtimes', () => {
+  const manifest = require('../package.json');
+  assert.equal(manifest.name, 'kajicli');
+  assert.deepEqual(Object.keys(manifest.optionalDependencies).sort(), [
+    '@relevate/kajicli-darwin-arm64', '@relevate/kajicli-darwin-x64',
+    '@relevate/kajicli-linux-x64-gnu', '@relevate/kajicli-win32-x64-msvc',
+  ].sort());
+  assert.equal(manifest.dependencies?.['@relevate/kaji'], undefined);
+  assert.deepEqual(Object.keys(manifest.bin), ['kaji']);
+  assert.ok(!manifest.files.some(file => file.startsWith('sdk/')));
+});
+
 test('resolves supported platforms without installing or downloading anything', () => {
-  assert.equal(platformPackage('darwin', 'arm64'), '@relevate/kaji-darwin-arm64');
-  assert.equal(platformPackage('darwin', 'x64'), '@relevate/kaji-darwin-x64');
-  assert.equal(platformPackage('win32', 'x64'), '@relevate/kaji-win32-x64-msvc');
-  assert.equal(platformPackage('linux', 'x64', { getReport: () => ({ header: { glibcVersionRuntime: '2.35' } }) }), '@relevate/kaji-linux-x64-gnu');
+  assert.equal(platformPackage('darwin', 'arm64'), '@relevate/kajicli-darwin-arm64');
+  assert.equal(platformPackage('darwin', 'x64'), '@relevate/kajicli-darwin-x64');
+  assert.equal(platformPackage('win32', 'x64'), '@relevate/kajicli-win32-x64-msvc');
+  assert.equal(platformPackage('linux', 'x64', { getReport: () => ({ header: { glibcVersionRuntime: '2.35' } }) }), '@relevate/kajicli-linux-x64-gnu');
   assert.throws(() => platformPackage('linux', 'x64', { getReport: () => ({ header: {} }) }), /musl/);
   assert.throws(() => platformPackage('linux', 'arm64'), /does not yet provide/);
 });

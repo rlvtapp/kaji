@@ -15,7 +15,7 @@ declare namespace kaji {
     args?: string[];
     /** Working directory used for generation and relative watch paths. */
     cwd?: string;
-    /** A Kaji executable. By default the installed @relevate/kaji launcher is used. */
+    /** A Kaji executable. By default the installed kajicli launcher is used. */
     command?: string;
     /** Path to a Node launcher; mainly useful for local development and tests. */
     launcher?: string;

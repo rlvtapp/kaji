@@ -10,7 +10,7 @@
     KAJI_WORKING_DIRECTORY: .
   script:
     - cd "$KAJI_WORKING_DIRECTORY"
-    - npx --yes "@relevate/kaji@$KAJI_VERSION" generate --config "$KAJI_CONFIG"
+    - npx --yes "kajicli@$KAJI_VERSION" generate --config "$KAJI_CONFIG"
 
 kaji:generate:
   extends: .kaji:generate

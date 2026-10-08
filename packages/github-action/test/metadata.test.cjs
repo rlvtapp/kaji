@@ -11,5 +11,5 @@ test('composite action installs the published launcher without shell-interpolati
   assert.match(metadata, /node-version: 22/);
   assert.match(metadata, /KAJI_CONFIG: \$\{\{ inputs\.config \}\}/);
   assert.match(metadata, /KAJI_VERSION: \$\{\{ inputs\.version \}\}/);
-  assert.match(metadata, /npx --yes "@relevate\/kaji@\$KAJI_VERSION" generate --config "\$KAJI_CONFIG"/);
+  assert.match(metadata, /npx --yes "kajicli@\$KAJI_VERSION" generate --config "\$KAJI_CONFIG"/);
 });

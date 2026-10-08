@@ -16,7 +16,7 @@
         {
           "type": "toml",
           "path": "Cargo.lock",
-          "jsonpath": "$.package[?(@.name.value == \"kaji-core\" || @.name.value == \"kaji\" || @.name.value == \"kaji-cli\" || @.name.value == \"kaji-plugin-rust\" || @.name.value == \"kaji-plugin-typescript\" || @.name.value == \"kaji-plugin-typescript-cli\" || @.name.value == \"kaji-plugin-rust-cli\" || @.name.value == \"kaji-plugin-go\" || @.name.value == \"kaji-plugin-python\" || @.name.value == \"kaji-plugin-php\" || @.name.value == \"kaji-plugin-symfony\" || @.name.value == \"kaji-plugin-terraform\" || @.name.value == \"kaji-plugin-postman\" || @.name.value == \"kaji-plugin-java\" || @.name.value == \"kaji-plugin-csharp\" || @.name.value == \"kaji-plugin-dotnet\" || @.name.value == \"kaji-plugin-elixir\" || @.name.value == \"kaji-plugin-ruby\" || @.name.value == \"kaji-plugin-swift\")].version"
+          "jsonpath": "$.package[?(@.name.value == \"kaji-core\" || @.name.value == \"kaji\" || @.name.value == \"kaji-cli\" || @.name.value == \"kaji-node\" || @.name.value == \"kaji-plugin-rust\" || @.name.value == \"kaji-plugin-typescript\" || @.name.value == \"kaji-plugin-typescript-cli\" || @.name.value == \"kaji-plugin-rust-cli\" || @.name.value == \"kaji-plugin-go\" || @.name.value == \"kaji-plugin-python\" || @.name.value == \"kaji-plugin-php\" || @.name.value == \"kaji-plugin-symfony\" || @.name.value == \"kaji-plugin-terraform\" || @.name.value == \"kaji-plugin-postman\" || @.name.value == \"kaji-plugin-java\" || @.name.value == \"kaji-plugin-csharp\" || @.name.value == \"kaji-plugin-dotnet\" || @.name.value == \"kaji-plugin-elixir\" || @.name.value == \"kaji-plugin-ruby\" || @.name.value == \"kaji-plugin-swift\" || @.name.value == \"kaji-inputs\" || @.name.value == \"kaji-input-graphql\" || @.name.value == \"kaji-input-asyncapi\" || @.name.value == \"kaji-input-arazzo\" || @.name.value == \"kaji-input-protobuf\" || @.name.value == \"kaji-input-capnproto\")].version"
         },
         {
           "type": "json",
@@ -25,13 +25,188 @@
         },
         {
           "type": "json",
-          "path": "packages/npm/package.json",
+          "path": "packages/cli/sdk/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "packages/npm/package.json",
-          "jsonpath": "$.dependencies[\"@relevate/kaji\"]"
+          "path": "packages/node-plugins/typescript/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/typescript/package.json",
+          "jsonpath": "$.peerDependencies[\"@relevate/kaji\"]"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/rust/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/rust/package.json",
+          "jsonpath": "$.peerDependencies[\"@relevate/kaji\"]"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/go/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/go/package.json",
+          "jsonpath": "$.peerDependencies[\"@relevate/kaji\"]"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/python/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/python/package.json",
+          "jsonpath": "$.peerDependencies[\"@relevate/kaji\"]"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/php/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/php/package.json",
+          "jsonpath": "$.peerDependencies[\"@relevate/kaji\"]"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/java/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/java/package.json",
+          "jsonpath": "$.peerDependencies[\"@relevate/kaji\"]"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/csharp/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/csharp/package.json",
+          "jsonpath": "$.peerDependencies[\"@relevate/kaji\"]"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/elixir/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/elixir/package.json",
+          "jsonpath": "$.peerDependencies[\"@relevate/kaji\"]"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/ruby/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/ruby/package.json",
+          "jsonpath": "$.peerDependencies[\"@relevate/kaji\"]"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/swift/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/swift/package.json",
+          "jsonpath": "$.peerDependencies[\"@relevate/kaji\"]"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/all/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/all/package.json",
+          "jsonpath": "$.peerDependencies[\"@relevate/kaji\"]"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/zod/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/zod/package.json",
+          "jsonpath": "$.peerDependencies[\"@relevate/kaji\"]"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/faker/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/faker/package.json",
+          "jsonpath": "$.peerDependencies[\"@relevate/kaji\"]"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/msw/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/msw/package.json",
+          "jsonpath": "$.peerDependencies[\"@relevate/kaji\"]"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/cypress/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/cypress/package.json",
+          "jsonpath": "$.peerDependencies[\"@relevate/kaji\"]"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/react-query/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/react-query/package.json",
+          "jsonpath": "$.peerDependencies[\"@relevate/kaji\"]"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/vue-query/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/vue-query/package.json",
+          "jsonpath": "$.peerDependencies[\"@relevate/kaji\"]"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/swr/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/swr/package.json",
+          "jsonpath": "$.peerDependencies[\"@relevate/kaji\"]"
         },
         {
           "type": "generic",
@@ -39,23 +214,93 @@
         },
         {
           "type": "json",
-          "path": "packages/cli/package.json",
+          "path": "packages/cli/sdk/package.json",
           "jsonpath": "$.optionalDependencies[\"@relevate/kaji-darwin-arm64\"]"
         },
         {
           "type": "json",
-          "path": "packages/cli/package.json",
+          "path": "packages/cli/sdk/package.json",
           "jsonpath": "$.optionalDependencies[\"@relevate/kaji-darwin-x64\"]"
         },
         {
           "type": "json",
-          "path": "packages/cli/package.json",
+          "path": "packages/cli/sdk/package.json",
           "jsonpath": "$.optionalDependencies[\"@relevate/kaji-linux-x64-gnu\"]"
         },
         {
           "type": "json",
-          "path": "packages/cli/package.json",
+          "path": "packages/cli/sdk/package.json",
           "jsonpath": "$.optionalDependencies[\"@relevate/kaji-win32-x64-msvc\"]"
+        },
+        {
+          "type": "json",
+          "path": "packages/cli/package.json",
+          "jsonpath": "$.optionalDependencies[\"@relevate/kajicli-darwin-arm64\"]"
+        },
+        {
+          "type": "json",
+          "path": "packages/cli/package.json",
+          "jsonpath": "$.optionalDependencies[\"@relevate/kajicli-darwin-x64\"]"
+        },
+        {
+          "type": "json",
+          "path": "packages/cli/package.json",
+          "jsonpath": "$.optionalDependencies[\"@relevate/kajicli-linux-x64-gnu\"]"
+        },
+        {
+          "type": "json",
+          "path": "packages/cli/package.json",
+          "jsonpath": "$.optionalDependencies[\"@relevate/kajicli-win32-x64-msvc\"]"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/input-graphql/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/input-graphql/package.json",
+          "jsonpath": "$.peerDependencies[\"@relevate/kaji\"]"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/input-asyncapi/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/input-asyncapi/package.json",
+          "jsonpath": "$.peerDependencies[\"@relevate/kaji\"]"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/input-arazzo/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/input-arazzo/package.json",
+          "jsonpath": "$.peerDependencies[\"@relevate/kaji\"]"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/input-protobuf/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/input-protobuf/package.json",
+          "jsonpath": "$.peerDependencies[\"@relevate/kaji\"]"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/input-capnproto/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "packages/node-plugins/input-capnproto/package.json",
+          "jsonpath": "$.peerDependencies[\"@relevate/kaji\"]"
         }
       ],
       "version-file": "version.txt",

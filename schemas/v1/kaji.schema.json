@@ -38,6 +38,10 @@
       "properties": {
         "client_style": {
           "$ref": "#/$defs/clientStyle"
+        },
+        "layout": {
+          "$ref": "#/$defs/sourceLayout",
+          "description": "Shared layout for plugins supporting configurable source layouts. Plugin settings override package settings, which override project defaults."
         }
       }
     },
@@ -318,6 +322,10 @@
         "idempotency": {
           "$ref": "#/$defs/idempotencyConfig",
           "description": "Opt-in package-local idempotency. Absent policies are disabled. Defaults override operation x-kaji-idempotency extensions; operation rules override defaults. Automatic key generation is disabled unless requested."
+        },
+        "layout": {
+          "$ref": "#/$defs/sourceLayout",
+          "description": "Shared layout for plugins supporting configurable source layouts. Plugin settings override package settings, which override project defaults."
         }
       }
     },
@@ -533,6 +541,110 @@
           "minimum": 1,
           "default": 50,
           "description": "React Query, Vue Query and SWR helper module operation budget; stable aggregate entrypoint is retained."
+        },
+        "layout": {
+          "$ref": "#/$defs/sourceLayout"
+        },
+        "include_operations": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "operation_kinds": {
+          "type": "object",
+          "additionalProperties": {
+            "enum": [
+              "query",
+              "mutation"
+            ]
+          }
+        },
+        "operation_names": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "fixture_options": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "seed": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "max_depth": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_attempts": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "overrides": {
+              "type": "object"
+            }
+          }
+        },
+        "cypress_options": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "base_url": {
+              "type": "string"
+            },
+            "headers": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "include_mutations": {
+              "type": "boolean",
+              "default": false
+            },
+            "timeout_ms": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "operation_overrides": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "query": {
+                    "type": "object"
+                  },
+                  "headers": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "body": {},
+                  "expected_statuses": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 100,
+                      "maximum": 599
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -1011,6 +1123,10 @@
           "type": "boolean",
           "default": true
         },
+        "split_by_group": {
+          "type": "boolean",
+          "default": false
+        },
         "base_url": {
           "type": "string",
           "minLength": 1
@@ -1379,6 +1495,62 @@
           }
         }
       }
+    },
+    "sourceLayout": {
+      "type": "object",
+      "required": [
+        "mode"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "enum": [
+            "single-file",
+            "chunked",
+            "per-operation",
+            "per-resource"
+          ]
+        },
+        "max_file_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 131072
+        },
+        "max_declarations": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "enum": [
+                  "single-file",
+                  "per-operation"
+                ]
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "max_file_bytes"
+                  ]
+                },
+                {
+                  "required": [
+                    "max_declarations"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
     }
   }
 }

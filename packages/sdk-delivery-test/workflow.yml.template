@@ -74,7 +74,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/$SOURCE_TAG^{commit}")"
           test -z "$(git status --porcelain)"
       - name: Install exact launcher
-        run: npm install --global "@relevate/kaji@$KAJI_VERSION"
+        run: npm install --global "kajicli@$KAJI_VERSION"
       - name: Validate recipe before generating in a disposable copy
         run: |
           cp -R source probe

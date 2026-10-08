@@ -37,7 +37,7 @@ fs.copyFileSync(path.join(cargoDirectory, target, 'release', `kaji${exe}`), path
 for (const binary of [`kaji${exe}`, `kaji-openapi${exe}`]) if (!exe) fs.chmodSync(path.join(output, binary), 0o755);
 fs.copyFileSync(path.join(root, 'LICENSE'), path.join(output, 'LICENSE'));
 const nativeManifest = {
-  name: `@relevate/kaji-${key}`, version: manifest.version,
+  name: `@relevate/kajicli-${key}`, version: manifest.version,
   description: `Native Kaji executables for ${key}`, license: manifest.license,
   repository: manifest.repository, os: [key.split('-')[0]], cpu: [key.split('-')[1]],
   ...(goos === 'linux' ? { libc: ['glibc'] } : {}),

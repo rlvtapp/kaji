@@ -2,11 +2,11 @@
 
 Generate Kaji SDKs as part of a Vite, Rollup, webpack, esbuild, Rspack,
 Rolldown, Farm, Nuxt, or Astro build. The
-plugin runs the installed native `@relevate/kaji` CLI before each build and
+plugin runs the installed native `kajicli` CLI before each build and
 regenerates when the recipe or local OpenAPI source changes.
 
 ```sh
-npm install --save-dev @relevate/kaji @relevate/unplugin-kaji unplugin
+npm install --save-dev kajicli @relevate/unplugin-kaji unplugin
 ```
 
 ## Vite
@@ -59,7 +59,7 @@ kaji({
 
 Other options are `cwd`, `env`, `watch` (defaults to `true`), `silent`, and
 `onGenerate`. `command` can point to a local Kaji executable; by default the
-plugin resolves the `@relevate/kaji` launcher from the consuming project.
+plugin resolves the `kajicli` launcher from the consuming project.
 
 The plugin never serves generated code as a virtual module. Point normal source
 imports at Kaji's configured output directory. Remote OpenAPI URLs are generated

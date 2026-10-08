@@ -1,8 +1,8 @@
-# @relevate/kaji
+# kajicli
 
-Thin Node launcher for Kaji's native SDK generator. SDK generation runs in Rust;
-OpenAPI parsing runs in Kaji's bundled Go compiler. Node only selects and launches
-the correct executable. End users do not need Rust or Go installed.
+The `kajicli` npm package provides the native CLI. SDK generation runs in Rust;
+OpenAPI parsing runs in the bundled Go compiler.
+End users do not need Rust or Go installed.
 
 This directory prepares the npm distribution; the package and native platform
 artifacts must be built and published before the install command below works.
@@ -11,11 +11,23 @@ No npm release is implied by this source tree.
 After publication:
 
 ```sh
-npm install --save-dev @relevate/kaji
-npx @relevate/kaji generate ./openapi.yaml --output ./sdk --language go,typescript
-npx @relevate/kaji languages
-npx @relevate/kaji --help
+npm install --save-dev kajicli
+npx kaji generate ./openapi.yaml --output ./sdk --language go,typescript
+npx kaji languages
+npx kaji --help
 ```
+
+For `kaji.config.mjs`, JavaScript input/output plugins, and Rust plugins selected
+from JavaScript, install `@relevate/kaji` and use the [Node API](sdk/README.md):
+
+```js
+import { defineConfig } from '@relevate/kaji/sdk';
+import { pluginTypeScript } from '@relevate/kaji/sdk/plugins';
+```
+
+The `/sdk/plugins` entry point exports the bundled factories; individual input and
+output plugin packages remain available for separate installs. Each plugin must
+still be added explicitly to the config.
 
 The generator accepts a local OpenAPI file or `--artifacts` directory, not a URL.
 Download remote specifications first, preserving local files referenced by `$ref`.
