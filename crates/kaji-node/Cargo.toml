@@ -1,0 +1,24 @@
+[package]
+name = "kaji-node"
+version.workspace = true
+edition = "2024"
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+anyhow = "1.0.102"
+kaji = { path = "../kaji" }
+kaji-core = { path = "../kaji-core" }
+kaji-inputs = { path = "../kaji-inputs" }
+napi = { version = "3", default-features = false, features = ["napi4", "async", "compat-mode"] }
+napi-derive = "3"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.138"
+
+[build-dependencies]
+napi-build = "2"

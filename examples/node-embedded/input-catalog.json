@@ -1,0 +1,4 @@
+{
+  "title": "Example catalog",
+  "items": [{ "name": "Widgets" }, { "name": "Gadgets" }]
+}

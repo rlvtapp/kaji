@@ -1,0 +1,24 @@
+import api from './plugins.cjs';
+
+export const pluginTypeScript = api.pluginTypeScript;
+export const pluginRust = api.pluginRust;
+export const pluginGo = api.pluginGo;
+export const pluginPython = api.pluginPython;
+export const pluginPhp = api.pluginPhp;
+export const pluginJava = api.pluginJava;
+export const pluginCSharp = api.pluginCSharp;
+export const pluginElixir = api.pluginElixir;
+export const pluginRuby = api.pluginRuby;
+export const pluginSwift = api.pluginSwift;
+export const pluginZod = api.pluginZod;
+export const pluginFaker = api.pluginFaker;
+export const pluginMsw = api.pluginMsw;
+export const pluginCypress = api.pluginCypress;
+export const pluginReactQuery = api.pluginReactQuery;
+export const pluginVueQuery = api.pluginVueQuery;
+export const pluginSwr = api.pluginSwr;
+export const inputGraphql = api.inputGraphql;
+export const inputAsyncApi = api.inputAsyncApi;
+export const inputArazzo = api.inputArazzo;
+export const inputProtobuf = api.inputProtobuf;
+export const inputCapnProto = api.inputCapnProto;
