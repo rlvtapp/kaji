@@ -56,7 +56,7 @@ capabilities and release checklists.
 | Pipeline | Native parsing/inspection | Usable package generation | Remaining work |
 | --- | --- | --- | --- |
 | OpenAPI → existing languages | Existing compiler and adapter | Existing SDK pipelines preserved | Existing target-specific limits still apply |
-| GraphQL → TypeScript / Rust | Validated SDL and operation documents | Selected query/mutation clients; TypeScript/Rust scalar mappings; TypeScript injected subscriptions | Runtime codecs, bundled subscriptions, introspection/imports, incremental delivery and other outputs |
+| GraphQL → all ten SDK languages | Validated SDL and operation documents | Selected query/mutation clients; TypeScript/Rust scalar mappings; TypeScript injected subscriptions | Runtime codecs, bundled subscriptions, introspection/imports, incremental delivery and other native output contracts |
 | Protobuf → Go gRPC | Proto2/proto3 descriptors, imports and RPC metadata | Official messages, clients and server interfaces; unary and all streaming directions | Editions, broader official fixture coverage and additional output languages |
 | AsyncAPI → TypeScript | 2.6/3.0/3.1 native document and message blocks | 3.0/3.1 JSON messages and Kafka producer/consumer | Types-only output, broader schemas/bindings, security and other brokers |
 | Arazzo → TypeScript | Native document and explicit local source resolution | Sequential HTTP runners with local workflow dependencies | Actions/retries, richer expressions/criteria and additional source types |
@@ -265,12 +265,13 @@ servers. This does not establish support for the complete upstream OAuth workflo
 
 | Input | Package language | Recipe plugin name | Required configuration |
 | --- | --- | --- | --- |
-| GraphQL | `typescript` or `rust` | `graphql` | `input.options.operation_files`; language-specific scalar mappings; injected subscriptions are TypeScript-only |
+| GraphQL | `typescript`, `rust`, `go`, `python`, `php`, `java`, `csharp`, `dotnet`, `ruby`, `swift`, `elixir` | `graphql` | `input.options.operation_files`; TypeScript/Rust scalar mappings; injected subscriptions are TypeScript-only |
 | Protobuf | `go` | `grpc` | Plugin `module`; toolchain paths if not on PATH; source `go_package` or plugin `go_packages` |
 | AsyncAPI | `typescript` | `asyncapi` | Supported Kafka servers or `input.options.broker` |
 | Arazzo | `typescript` | `workflow` | `input.options.workflow_sources` |
 
-A supported native CLI package currently selects exactly one matching generator.
+A supported native CLI package selects one matching generator; TypeScript GraphQL
+can also select its supported companion plugins.
 Rust composition permits additional typed consumers. Incompatible CLI packages
 succeed with warnings and a structured skip report; invalid input or unsupported
 features within a selected supported pipeline are errors. CLI recipes still select
@@ -324,12 +325,13 @@ These are the remaining implementation and release gaps:
 - [x] **GRAPHQL-RUST:** Selection-specific Rust query/mutation clients with
   presence/nullability, explicit partial/errors, Reqwest transport and clean
   package compilation/local-server execution; CLI and npm entry points wired.
-- [ ] **GRAPHQL-LANGUAGES:** Add GraphQL client generators to remaining language output
+- [x] **GRAPHQL-LANGUAGES:** Add GraphQL client generators to remaining language output
   packages using the existing `GraphqlOperations` contract. Each output needs
   selection-specific variables/results, its own transport/error/partial-result
-  representation, scalar mappings and local-server compile/runtime tests.
-  Current outputs other than TypeScript and Rust support HTTP, not GraphQL. Prioritize one language
-  at a time; do not infer GraphQL support from an existing HTTP SDK.
+  representation, explicit scalar boundaries and local-server compile/runtime tests.
+  All ten SDK languages now have raw, flat and grouped fixed-operation clients.
+  Keep per-language limits explicit; scalar mapping codecs and abstract variants
+  vary by target. HTTP auxiliary plugin support does not establish GraphQL parity.
 - [ ] **NODE-1:** Expose native generation and versioned typed hook envelopes through
   the npm engine; GraphQL client generation is wired separately, but this does not
   provide general contract/block hook dispatch for every native pipeline.

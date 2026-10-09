@@ -1,0 +1,61 @@
+import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+public enum GraphqlField<T> { case omitted, null, value(T) }
+public enum GraphqlJSON: Codable {
+    case null, bool(Bool), number(Double), string(String), array([GraphqlJSON]), object([String:GraphqlJSON])
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if c.decodeNil() { self = .null }
+        else if let v = try? c.decode(Bool.self) { self = .bool(v) }
+        else if let v = try? c.decode(Double.self) { self = .number(v) }
+        else if let v = try? c.decode(String.self) { self = .string(v) }
+        else if let v = try? c.decode([GraphqlJSON].self) { self = .array(v) }
+        else { self = .object(try c.decode([String:GraphqlJSON].self)) }
+    }
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        switch self { case .null: try c.encodeNil(); case .bool(let v):try c.encode(v); case .number(let v):try c.encode(v); case .string(let v):try c.encode(v); case .array(let v):try c.encode(v); case .object(let v):try c.encode(v) }
+    }
+}
+public struct GraphqlError: Codable {
+    public let message: String
+    public let path: [GraphqlJSON]?
+    public let locations: [GraphqlJSON]?
+    public let extensions: GraphqlJSON?
+}
+public struct GraphqlResponse<T: Decodable>: Decodable {
+    public let data: T?
+    public let errors: [GraphqlError]?
+    public let extensions: GraphqlJSON?
+    enum CodingKeys: String, CodingKey { case data, errors, extensions }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        guard c.contains(.data) || c.contains(.errors) else { throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Invalid GraphQL envelope")) }
+        data = try c.decodeIfPresent(T.self, forKey:.data)
+        errors = try c.decodeIfPresent([GraphqlError].self, forKey:.errors)
+        extensions = try c.decodeIfPresent(GraphqlJSON.self, forKey:.extensions)
+    }
+    public func ensureSuccess() throws { if let errors = errors, !errors.isEmpty { throw GraphqlFailure(errors: errors) } }
+}
+public struct GraphqlFailure: Error { public let errors: [GraphqlError] }
+public struct GraphqlHTTPError: Error { public let statusCode: Int; public let body: Data }
+private struct GraphqlRequest<V: Encodable>: Encodable { let query: String; let operationName: String; let variables: V }
+private struct GraphqlEmptyVariables: Encodable {}
+public final class GraphqlClient {
+    private let endpoint: URL
+    private let session: URLSession
+    private let headers: [String:String]
+    public init(endpoint: URL, session: URLSession = .shared, headers: [String:String] = [:]) { self.endpoint = endpoint; self.session = session; self.headers = headers }
+    public func execute<T:Decodable,V:Encodable>(operationName: String, document: String, variables: V, resultType: T.Type) async throws -> GraphqlResponse<T> {
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"; request.setValue("application/json",forHTTPHeaderField:"Content-Type")
+        for (name,value) in headers { request.setValue(value,forHTTPHeaderField:name) }
+        request.httpBody = try JSONEncoder().encode(GraphqlRequest(query:document,operationName:operationName,variables:variables))
+        let (data,response) = try await session.data(for:request)
+        guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        guard (200...299).contains(http.statusCode) else { throw GraphqlHTTPError(statusCode:http.statusCode,body:data) }
+        return try JSONDecoder().decode(GraphqlResponse<T>.self,from:data)
+    }
+}

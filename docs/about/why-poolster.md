@@ -15,7 +15,7 @@ Choose the artifacts your project needs and generate them together:
 | Source | Implemented pipelines in the current checkout |
 | --- | --- |
 | OpenAPI | HTTP SDKs in multiple languages, query hooks, validators, fixtures, mocks and other tooling |
-| GraphQL schema + operations | TypeScript, Rust, Go and Python clients; TypeScript query hooks, validators, fixtures and testing helpers |
+| GraphQL schema + operations | Clients for all ten SDK languages; TypeScript query hooks, validators, fixtures and testing helpers |
 | Protobuf | Go messages and gRPC clients/server interfaces, including streaming |
 | AsyncAPI | TypeScript Kafka message models and producer/consumer support |
 | Arazzo | TypeScript sequential workflow runners with resolved local OpenAPI sources |

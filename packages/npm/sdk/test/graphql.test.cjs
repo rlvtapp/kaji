@@ -23,26 +23,25 @@ test('native GraphQL generates through the existing TypeScript package and regen
   assert.ok(first.files.some((file) => /"joinedAt": \(string\)/.test(file.contents)));
   assert.deepEqual((await generate(configuration)).changes,{added:[],modified:[],removed:[]});
 });
-test('unsupported GraphQL outputs warn and leave prior files intact', async (t) => {
+test('Java GraphQL output generates and preserves unrelated files', async (t) => {
   const {dir,input} = await fixture(t);
+  delete input.scalars;
   const output = path.join(dir,'out');
   await fs.mkdir(output); await fs.writeFile(path.join(output,'local.txt'),'keep');
-  input.path=path.join(dir,'missing.graphql');
-  const result = await generate({input,output,plugins:[bundle.pluginJava()]});
-  assert.equal(result.skipped.length,1);
-  assert.deepEqual(result.changes,{added:[],modified:[],removed:[]});
+  const config = {input,output,plugins:[bundle.pluginJava()]};
+  const result = await generate(config);
+  assert.deepEqual(result.skipped,[]);
+  assert.ok(result.files.some(file => file.path.endsWith('.java')));
   assert.equal(await fs.readFile(path.join(output,'local.txt'),'utf8'),'keep');
+  assert.deepEqual((await generate(config)).changes,{added:[],modified:[],removed:[]});
 });
-test('mixed GraphQL generation preserves skipped owned outputs and local edits', async (t) => {
+test('mixed TypeScript and Java GraphQL generation emits both consumers', async (t) => {
   const {dir,input} = await fixture(t);
-  const output=path.join(dir,'out');
-  const binding=require(process.env.POOLSTER_NODE_BINARY);
-  await binding.materialize(JSON.stringify([{path:'java/Client.java',contents:'old',owner:'java-sdk',preserveExisting:false}]),output,true);
-  await fs.writeFile(path.join(output,'java/Client.java'),'locally edited');
-  const result=await generate({input,output,plugins:[bundle.pluginTypeScript(),bundle.pluginJava()]});
-  assert.equal(result.skipped.length,1);
-  assert.equal(await fs.readFile(path.join(output,'java/Client.java'),'utf8'),'locally edited');
+  delete input.scalars;
+  const result=await generate({input,output:path.join(dir,'out'),plugins:[bundle.pluginTypeScript(),bundle.pluginJava()]});
+  assert.deepEqual(result.skipped,[]);
   assert.ok(result.files.some(file=>file.path.endsWith('graphql.ts')));
+  assert.ok(result.files.some(file=>file.path.endsWith('.java')));
 });
 test('GraphQL invalid operations fail before output is written', async (t) => {
   const {dir,input} = await fixture(t);
@@ -178,4 +177,21 @@ test('GraphQL Go and Python packages use existing factories and regenerate witho
   assert.deepEqual((await generate(configuration)).changes, { added: [], modified: [], removed: [] });
   configuration.plugins = [bundle.pluginPython({ contracts: { graphql: { scalars: { DateTime: { input: 'str', output: 'str' } } } } })];
   await assert.rejects(generate(configuration, { write: false }), /custom scalar mappings/);
+});
+
+test('Other language GraphQL factories share the native input and regenerate', async (t) => {
+  const {dir,input} = await fixture(t);
+  delete input.scalars;
+  const configuration = {input, output:path.join(dir,'other-languages'), plugins:[
+    bundle.pluginPhp({contracts:{graphql:{style:'raw'}}}),
+    bundle.pluginJava({contracts:{graphql:{style:'flat'}}}),
+    bundle.pluginCSharp({contracts:{graphql:{style:'grouped',groups:{users:{read:'Joined'}}}}}),
+    bundle.pluginRuby({contracts:{graphql:{style:'flat'}}}),
+    bundle.pluginSwift({contracts:{graphql:{style:'flat'}}}),
+    bundle.pluginElixir({contracts:{graphql:{style:'grouped'}}}),
+  ]};
+  const result = await generate(configuration);
+  assert.deepEqual(result.skipped,[]);
+  for (const ext of ['.php','.java','.cs','.rb','.swift','.ex']) assert.ok(result.files.some(file => file.path.endsWith(ext)),ext);
+  assert.deepEqual((await generate(configuration)).changes,{added:[],modified:[],removed:[]});
 });

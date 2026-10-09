@@ -1,0 +1,64 @@
+<?php
+declare(strict_types=1);
+namespace __NAMESPACE__;
+/** Missing and explicit null are distinct. @template T */
+final readonly class Presence implements \JsonSerializable {
+    private function __construct(public bool $present, public mixed $value) {}
+    public static function missing(): self { return new self(false, null); }
+    public static function of(mixed $value): self { return new self(true, $value); }
+    public function jsonSerialize(): mixed { if (!$this->present) throw new \LogicException('Missing presence must be omitted'); return $this->value; }
+}
+/** @template T */
+final readonly class GraphqlResponse {
+    /** @param Presence<T> $data @param list<array<string,mixed>> $errors */
+    public function __construct(public Presence $data, public array $errors, public mixed $extensions) {}
+    /** Returns data only when no GraphQL errors occurred. @return T */
+    public function requireData(): mixed { if ($this->errors !== []) throw new GraphqlException($this); if (!$this->data->present || $this->data->value === null) throw new \RuntimeException('GraphQL data unavailable'); return $this->data->value; }
+}
+final class GraphqlException extends \RuntimeException {
+    public function __construct(public readonly GraphqlResponse $response) { parent::__construct('GraphQL operation returned errors'); }
+}
+/** Unknown custom scalars remain JSON values; configure them outside the generated transport. */
+function decodeValue(mixed $value, array $type): mixed {
+    if ($value === null) { if (!$type['nullable']) throw new \UnexpectedValueException('Non-null GraphQL value is null'); return null; }
+    $kind=$type['kind'];
+    if ($kind==='object') { if ($value instanceof \stdClass) $value=(array)$value; if (!is_array($value)) throw new \UnexpectedValueException('Expected object'); return ($type['class'])::fromArray($value); }
+    if ($kind==='list') { if (!is_array($value) || !array_is_list($value)) throw new \UnexpectedValueException('Expected list'); return array_map(fn($item)=>decodeValue($item,$type['item']),$value); }
+    if ($kind==='enum' || $kind==='literal') { if (!in_array($value,$type['values'],true)) throw new \UnexpectedValueException('Invalid GraphQL enum/literal'); return $value; }
+    if ($kind==='union') { foreach($type['members'] as $member) { try { return decodeValue($value,$member); } catch (\UnexpectedValueException|\TypeError $e) {} } throw new \UnexpectedValueException('No GraphQL union member matches'); }
+    $valid=match($type['name']) { 'String'=>is_string($value),'ID'=>is_string($value)||(($type['input']??false)&&is_int($value)), 'Boolean'=>is_bool($value), 'Int'=>is_int($value)&&$value>=-2147483648&&$value<=2147483647, 'Float'=>is_float($value)||is_int($value), default=>true };
+    if (!$valid) throw new \UnexpectedValueException('Invalid GraphQL scalar '.$type['name']); return $value;
+}
+function encodeValue(mixed $value): mixed {
+    if ($value instanceof Presence) { if (!$value->present) throw new \LogicException('Missing list value'); return encodeValue($value->value); }
+    if ($value instanceof \JsonSerializable) return (object)encodeValue((array)$value->jsonSerialize());
+    if (is_array($value)) { $out=[]; foreach($value as $key=>$item) { if($item instanceof Presence && !$item->present) continue; $out[$key]=encodeValue($item); } return $out; }
+    return $value;
+}
+class Client {
+    /** Standard PHP HTTP streams; a callable transport may replace it for PSR-18 or framework clients. */
+    public function __construct(private string $endpoint, private array $headers=[], private float $timeout=30, private mixed $transport=null) {
+        if ($timeout<=0 || ($transport!==null&&!is_callable($transport))) throw new \InvalidArgumentException('Positive timeout and callable transport required');
+        if (!in_array(parse_url($endpoint,PHP_URL_SCHEME),['http','https'],true)) throw new \InvalidArgumentException('HTTP(S) endpoint required');
+        foreach($headers as $name=>$value) if(preg_match('/[\r\n]/',(string)$name.(string)$value)) throw new \InvalidArgumentException('Invalid HTTP header');
+    }
+    /** @template T @param class-string<T> $result @return GraphqlResponse<T> */
+    public function execute(string $operation, string $document, \JsonSerializable $variables, string $result): GraphqlResponse {
+        $body=json_encode(['operationName'=>$operation,'query'=>$document,'variables'=>$variables],JSON_THROW_ON_ERROR);
+        if($this->transport !== null) { [$status,$text]=($this->transport)($this->endpoint,$body,$this->headers,$this->timeout); }
+        else {
+            $headers=['Content-Type: application/json','Accept: application/graphql-response+json, application/json']; foreach($this->headers as $name=>$value) $headers[]=$name.': '.$value;
+            $context=stream_context_create(['http'=>['method'=>'POST','header'=>implode("\r\n",$headers),'content'=>$body,'timeout'=>$this->timeout,'ignore_errors'=>true,'follow_location'=>0]]);
+            $text=@file_get_contents($this->endpoint,false,$context); if($text===false) throw new \RuntimeException('GraphQL HTTP transport failed');
+            $status=0; foreach($http_response_header??[] as $line) if(preg_match('/^HTTP\/\S+ (\d{3})/',$line,$match)) $status=(int)$match[1];
+        }
+        if($status<200 || $status>=300) throw new \RuntimeException('GraphQL HTTP status '.$status);
+        $envelope=json_decode($text,true,512,JSON_THROW_ON_ERROR);
+        if(!is_array($envelope) || (!array_key_exists('data',$envelope)&&!array_key_exists('errors',$envelope))) throw new \UnexpectedValueException('Malformed GraphQL response');
+        $errors=array_key_exists('errors',$envelope)?$envelope['errors']:[]; if(!is_array($errors)||!array_is_list($errors)) throw new \UnexpectedValueException('Malformed GraphQL errors');
+        foreach($errors as $error) if(!is_array($error)||!is_string($error['message']??null)) throw new \UnexpectedValueException('Malformed GraphQL error');
+        $data=array_key_exists('data',$envelope)?Presence::of($envelope['data']===null?null:$result::fromArray($envelope['data'])):Presence::missing();
+        return new GraphqlResponse($data,$errors,$envelope['extensions']??null);
+    }
+__CLIENT_METHODS__
+}

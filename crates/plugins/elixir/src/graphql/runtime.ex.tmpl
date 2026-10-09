@@ -1,0 +1,67 @@
+defmodule __POOLSTER__.Application do
+ use Application
+ def start(_type,_args), do: Finch.start_link(name: __POOLSTER__.Finch)
+end
+defmodule __POOLSTER__.Client do
+ @enforce_keys [:endpoint]
+ defstruct endpoint: nil, headers: [], timeout: 30_000, finch: __POOLSTER__.Finch, transport: nil
+ @type t :: %__MODULE__{endpoint: String.t(),headers: [{String.t(),String.t()}],timeout: pos_integer(),finch: atom(),transport: (term() -> term()) | nil}
+ def new(endpoint, options \\ []) do
+  %__MODULE__{endpoint: endpoint,headers: Keyword.get(options,:headers,[]),timeout: Keyword.get(options,:timeout,30_000),finch: Keyword.get(options,:finch,__POOLSTER__.Finch),transport: Keyword.get(options,:transport)}
+ end
+end
+defmodule __POOLSTER__.Envelope do
+ defstruct data_present: false, data: nil, errors: [], extensions: nil, status: nil
+ @type t(data) :: %__MODULE__{data_present: boolean(),data: data | nil,errors: [map()],extensions: term(),status: integer()}
+end
+defmodule __POOLSTER__.Runtime do
+ def execute(client,document,operation,variables,decoder) do
+  request=Finch.build(:post,client.endpoint,[{"content-type","application/json"},{"accept","application/graphql-response+json, application/json"}]++client.headers,Jason.encode!(%{"query"=>document,"operationName"=>operation,"variables"=>variables}))
+  response=if client.transport,do: client.transport.(request),else: Finch.request(request,client.finch,receive_timeout: client.timeout)
+  case response do
+   {:ok,%{status: status,body: body}} ->
+    case Jason.decode(body) do
+      {:ok,value} -> decode_response(value,status,decoder)
+      {:error,reason} -> {:error,{:protocol,reason}}
+    end
+   {:error,reason} -> {:error,{:transport,reason}}
+   other -> {:error,{:protocol,other}}
+  end
+ rescue
+  e in [ArgumentError,KeyError] -> {:error,{:protocol,Exception.message(e)}}
+ end
+ defp decode_response(value,status,decoder) when is_map(value) do
+  errors=Map.get(value,"errors",[])
+  cond do
+   not is_list(errors) or (Map.has_key?(value,"errors") and errors==[]) or not Enum.all?(errors,&(is_map(&1) and is_binary(&1["message"]))) -> {:error,{:protocol,:invalid_errors}}
+   not Map.has_key?(value,"data") and errors==[] -> {:error,{:protocol,:missing_data}}
+   (status<200 or status>=300) and errors==[] -> {:error,{:http,status}}
+   true ->
+    data=case Map.get(value,"data") do nil -> nil;node -> decoder.(node) end
+    {:ok,%__POOLSTER__.Envelope{data_present: Map.has_key?(value,"data"),data: data,errors: errors,extensions: value["extensions"],status: status}}
+  end
+ end
+ defp decode_response(_value,_status,_decoder),do: {:error,{:protocol,:invalid_response}}
+ def require_data(%__POOLSTER__.Envelope{data_present: true,data: data,errors: []}) when not is_nil(data),do: {:ok,data}
+ def require_data(%__POOLSTER__.Envelope{}=response),do: {:error,{:graphql,response}}
+ def field(map,key) when is_map(map),do: Map.fetch!(map,key)
+ def field(_map,_key),do: raise(ArgumentError,"Expected GraphQL object")
+ def scalar(value,:string) when is_binary(value),do: value
+ def scalar(value,:int) when is_integer(value) and value>=-2147483648 and value<=2147483647,do: value
+ def scalar(value,:float) when is_number(value),do: value
+ def scalar(value,:bool) when is_boolean(value),do: value
+ def scalar(nil,:custom),do: raise(ArgumentError,"Non-null GraphQL scalar")
+ def scalar(value,:custom),do: value
+ def scalar(_value,_kind),do: raise(ArgumentError,"Invalid GraphQL scalar")
+ def enum(value,values),do: if(value in values,do: value,else: raise(ArgumentError,"Invalid GraphQL enum/literal"))
+ def nullable(nil,_decoder),do: nil
+ def nullable(value,decoder),do: decoder.(value)
+ def list(value,decoder) when is_list(value),do: Enum.map(value,decoder)
+ def list(_value,_decoder),do: raise(ArgumentError,"Expected GraphQL list")
+ def input(value) when is_struct(value),do: value.__struct__.to_wire(value)
+ def input(value) when is_list(value),do: Enum.map(value,&input/1)
+ def input(value),do: value
+ def required(:poolster_absent),do: raise(ArgumentError,"Missing required GraphQL input")
+ def required(nil),do: raise(ArgumentError,"Non-null GraphQL input")
+ def required(value),do: input(value)
+end

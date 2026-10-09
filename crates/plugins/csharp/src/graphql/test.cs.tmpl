@@ -1,0 +1,24 @@
+using TestSdk;
+using System.Text.Json;
+using var http = new HttpClient();
+var client = new GraphqlClient(http, new Uri("ENDPOINT"));
+if ((await PING_CALL).Data?.Ping != "pong") throw new Exception("no-variable mutation");
+var variables = new ReadUserVariables { Id = "read" };
+if (JsonSerializer.Serialize(variables, GraphqlClient.Json).Contains("nickname")) throw new Exception("optional omission");
+var result = await CALL;
+if (result.Data?.ReadUser?.Name != "read" || result.Errors != null || !result.Data.ReadUser.Nickname.IsSet || result.Data.ReadUser.Nickname.Value != null) throw new Exception("result decoding");
+variables = new ReadUserVariables { Id = "read", Nickname = Optional<string?>.Some("nick") };
+result = await CALL;
+if (result.Data?.ReadUser?.Nickname.Value != "nick") throw new Exception("input presence");
+variables = new ReadUserVariables { Id = "partial", Nickname = Optional<string?>.Null() };
+if (JsonDocument.Parse(JsonSerializer.Serialize(variables, GraphqlClient.Json)).RootElement.GetProperty("nickname").ValueKind != JsonValueKind.Null) throw new Exception("explicit null");
+result = await CALL;
+if (result.Data?.ReadUser?.Name != "partial" || result.Errors?[0].Message != "partial failure") throw new Exception("partial result");
+try { result.EnsureSuccess(); throw new Exception("missing GraphQL error"); } catch(GraphqlException) {}
+client = new GraphqlClient(http, new Uri("ENDPOINT/http"));
+try { await CALL; throw new Exception("missing HTTP error"); } catch(HttpRequestException) {}
+client = new GraphqlClient(http, new Uri("ENDPOINT/malformed"));
+try { await CALL; throw new Exception("missing malformed response error"); } catch(JsonException) {}
+using var cts = new CancellationTokenSource(); cts.Cancel();
+try { await client.ExecuteAsync<ReadUserResult>("ReadUser", "query ReadUser { readUser(id: \"x\") { name } }", new {}, cts.Token); throw new Exception("missing cancellation"); } catch(OperationCanceledException) {}
+Console.WriteLine("C# GraphQL runtime passed");

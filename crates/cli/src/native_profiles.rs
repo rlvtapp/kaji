@@ -19,11 +19,20 @@ pub(super) fn pipeline(format: &str) -> Option<(&'static str, &'static str)> {
     }
 }
 pub(super) fn language_compatible(format: &str, language: &str) -> bool {
-    (format == "graphql" && ["rust", "go", "python"].contains(&language))
+    (format == "graphql"
+        && [
+            "rust", "go", "python", "php", "java", "csharp", "dotnet", "ruby", "swift", "elixir",
+        ]
+        .contains(&language))
         || pipeline(format).is_some_and(|(target, _)| language == target)
 }
 pub(super) fn compatible(format: &str, package: &PackageConfig) -> bool {
-    if format == "graphql" && ["rust", "go", "python"].contains(&package.language.as_str()) {
+    if format == "graphql"
+        && [
+            "rust", "go", "python", "php", "java", "csharp", "dotnet", "ruby", "swift", "elixir",
+        ]
+        .contains(&package.language.as_str())
+    {
         return package.plugins.len() == 1
             && matches!(package.plugins[0].name.as_str(), "graphql" | "sdk");
     }
@@ -173,6 +182,167 @@ pub(super) fn build(options: &Generate, input: &NativeInputConfig) -> Result<Pro
                 generator.idiomatic()
             };
             let mut package = python::package(path)
+                .common(common)
+                .with(generator)
+                .with(input_provider);
+            if let Some(name) = name {
+                package = package.name(name);
+            }
+            old.package(package)
+        } else if input.format == "graphql" && language == "php" {
+            ensure!(
+                plugin.is_none_or(|p| p.scalars.is_empty()),
+                "php GraphQL custom scalar mappings are not supported"
+            );
+            let input_provider = provider::<GraphqlOperations>(input, registry.clone());
+            let generator = php::graphql(Some(input_provider.handle()))
+                .groups(plugin.map(|p| p.groups.clone()).unwrap_or_default());
+            let generator = if raw || style == "raw" {
+                generator.raw()
+            } else if style == "flat" {
+                generator.flat()
+            } else {
+                generator.idiomatic()
+            };
+            let mut package = php::package(path)
+                .common(common)
+                .with(generator)
+                .with(input_provider);
+            if let Some(name) = name {
+                package = package.name(name);
+            }
+            old.package(package)
+        } else if input.format == "graphql" && language == "java" {
+            ensure!(
+                plugin.is_none_or(|p| p.scalars.is_empty()),
+                "java GraphQL custom scalar mappings are not supported"
+            );
+            let input_provider = provider::<GraphqlOperations>(input, registry.clone());
+            let generator = java::graphql(Some(input_provider.handle()))
+                .groups(plugin.map(|p| p.groups.clone()).unwrap_or_default());
+            let generator = if raw || style == "raw" {
+                generator.raw()
+            } else if style == "flat" {
+                generator.flat()
+            } else {
+                generator.idiomatic()
+            };
+            let mut package = java::package(path)
+                .common(common)
+                .with(generator)
+                .with(input_provider);
+            if let Some(name) = name {
+                package = package.name(name);
+            }
+            old.package(package)
+        } else if input.format == "graphql" && language == "csharp" {
+            ensure!(
+                plugin.is_none_or(|p| p.scalars.is_empty()),
+                "csharp GraphQL custom scalar mappings are not supported"
+            );
+            let input_provider = provider::<GraphqlOperations>(input, registry.clone());
+            let generator = csharp::graphql(Some(input_provider.handle()))
+                .groups(plugin.map(|p| p.groups.clone()).unwrap_or_default());
+            let generator = if raw || style == "raw" {
+                generator.raw()
+            } else if style == "flat" {
+                generator.flat()
+            } else {
+                generator.idiomatic()
+            };
+            let mut package = csharp::package(path)
+                .common(common)
+                .with(generator)
+                .with(input_provider);
+            if let Some(name) = name {
+                package = package.name(name);
+            }
+            old.package(package)
+        } else if input.format == "graphql" && language == "dotnet" {
+            ensure!(
+                plugin.is_none_or(|p| p.scalars.is_empty()),
+                "dotnet GraphQL custom scalar mappings are not supported"
+            );
+            let input_provider = provider::<GraphqlOperations>(input, registry.clone());
+            let generator = dotnet::graphql(Some(input_provider.handle()))
+                .groups(plugin.map(|p| p.groups.clone()).unwrap_or_default());
+            let generator = if raw || style == "raw" {
+                generator.raw()
+            } else if style == "flat" {
+                generator.flat()
+            } else {
+                generator.idiomatic()
+            };
+            let mut package = dotnet::package(path)
+                .common(common)
+                .with(generator)
+                .with(input_provider);
+            if let Some(name) = name {
+                package = package.name(name);
+            }
+            old.package(package)
+        } else if input.format == "graphql" && language == "ruby" {
+            ensure!(
+                plugin.is_none_or(|p| p.scalars.is_empty()),
+                "ruby GraphQL custom scalar mappings are not supported"
+            );
+            let input_provider = provider::<GraphqlOperations>(input, registry.clone());
+            let generator = ruby::graphql(Some(input_provider.handle()))
+                .groups(plugin.map(|p| p.groups.clone()).unwrap_or_default());
+            let generator = if raw || style == "raw" {
+                generator.raw()
+            } else if style == "flat" {
+                generator.flat()
+            } else {
+                generator.idiomatic()
+            };
+            let mut package = ruby::package(path)
+                .common(common)
+                .with(generator)
+                .with(input_provider);
+            if let Some(name) = name {
+                package = package.name(name);
+            }
+            old.package(package)
+        } else if input.format == "graphql" && language == "swift" {
+            ensure!(
+                plugin.is_none_or(|p| p.scalars.is_empty()),
+                "swift GraphQL custom scalar mappings are not supported"
+            );
+            let input_provider = provider::<GraphqlOperations>(input, registry.clone());
+            let generator = swift::graphql(Some(input_provider.handle()))
+                .groups(plugin.map(|p| p.groups.clone()).unwrap_or_default());
+            let generator = if raw || style == "raw" {
+                generator.raw()
+            } else if style == "flat" {
+                generator.flat()
+            } else {
+                generator.idiomatic()
+            };
+            let mut package = swift::package(path)
+                .common(common)
+                .with(generator)
+                .with(input_provider);
+            if let Some(name) = name {
+                package = package.name(name);
+            }
+            old.package(package)
+        } else if input.format == "graphql" && language == "elixir" {
+            ensure!(
+                plugin.is_none_or(|p| p.scalars.is_empty()),
+                "elixir GraphQL custom scalar mappings are not supported"
+            );
+            let input_provider = provider::<GraphqlOperations>(input, registry.clone());
+            let generator = elixir::graphql(Some(input_provider.handle()))
+                .groups(plugin.map(|p| p.groups.clone()).unwrap_or_default());
+            let generator = if raw || style == "raw" {
+                generator.raw()
+            } else if style == "flat" {
+                generator.flat()
+            } else {
+                generator.idiomatic()
+            };
+            let mut package = elixir::package(path)
                 .common(common)
                 .with(generator)
                 .with(input_provider);
@@ -389,7 +559,11 @@ pub(super) fn validate_recipe(document: &serde_json::Value, config: &ProjectConf
             "native client style/raw applies only to GraphQL"
         );
         if input.format == "graphql"
-            && ["rust", "go", "python"].contains(&package.language.as_str())
+            && [
+                "rust", "go", "python", "php", "java", "csharp", "dotnet", "ruby", "swift",
+                "elixir",
+            ]
+            .contains(&package.language.as_str())
         {
             ensure!(
                 plugin.subscriptions != Some(true),

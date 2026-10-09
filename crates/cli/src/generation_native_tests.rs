@@ -36,7 +36,7 @@ fn incompatible_outputs_warn_without_reading_schema_or_writing() {
     let directory = tempfile::tempdir().unwrap();
     let path = recipe(
         directory.path(),
-        serde_json::json!([{"language":"java","path":"sdk","plugins":[{"name":"sdk"}]}]),
+        serde_json::json!([{"language":"postman","path":"sdk","plugins":[{"name":"sdk"}]}]),
     );
     std::fs::remove_file(directory.path().join("schema.graphql")).unwrap();
     generate_from_config(&path, ColorChoice::Never, false, false).unwrap();
@@ -49,21 +49,27 @@ fn mixed_recipe_preserves_skipped_owned_files_including_local_edits() {
     let output = directory.path().join("generated");
     let mut previous = GeneratedTree::default();
     previous
-        .insert(GeneratedFile::new("java/Client.java", "old generated content").unwrap())
+        .insert(GeneratedFile::new("postman/collection.json", "old generated content").unwrap())
         .unwrap();
-    previous.set_owner("java/Client.java", "java-sdk").unwrap();
+    previous
+        .set_owner("postman/collection.json", "postman-sdk")
+        .unwrap();
     previous.write_to(&output).unwrap();
-    std::fs::write(output.join("java/Client.java"), "local edits must survive").unwrap();
+    std::fs::write(
+        output.join("postman/collection.json"),
+        "local edits must survive",
+    )
+    .unwrap();
     let path = recipe(
         directory.path(),
         serde_json::json!([
             {"language":"typescript","path":"ts","plugins":[{"name":"graphql"}]},
-            {"language":"java","path":"java","plugins":[{"name":"sdk"}]}
+            {"language":"postman","path":"postman","plugins":[{"name":"sdk"}]}
         ]),
     );
     generate_from_config(&path, ColorChoice::Never, false, false).unwrap();
     assert_eq!(
-        std::fs::read_to_string(output.join("java/Client.java")).unwrap(),
+        std::fs::read_to_string(output.join("postman/collection.json")).unwrap(),
         "local edits must survive"
     );
     assert!(output.join("ts/package.json").exists());
@@ -213,5 +219,23 @@ fn graphql_go_python_packages_generate_and_regenerate_through_recipe() {
             .join("generated/python/pyproject.toml")
             .exists()
     );
+    generate_from_config(&path, ColorChoice::Never, true, false).unwrap();
+}
+
+#[test]
+fn graphql_other_language_packages_generate_and_regenerate_through_recipe() {
+    let directory = tempfile::tempdir().unwrap();
+    let languages = ["php", "java", "csharp", "dotnet", "ruby", "swift", "elixir"];
+    let packages: Vec<_> = languages.iter().map(|language| serde_json::json!({
+        "language":language,"path":language,"plugins":[{"name":"sdk","contracts":{"graphql":{"style":"grouped","groups":{"users":{"read":"Hello"}}}}}]
+    })).collect();
+    let path = recipe(directory.path(), serde_json::json!(packages));
+    generate_from_config(&path, ColorChoice::Never, false, false).unwrap();
+    for language in languages {
+        assert!(
+            directory.path().join("generated").join(language).is_dir(),
+            "{language}"
+        );
+    }
     generate_from_config(&path, ColorChoice::Never, true, false).unwrap();
 }

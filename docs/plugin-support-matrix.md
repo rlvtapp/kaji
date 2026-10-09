@@ -10,12 +10,13 @@ have separate generated compilation and runtime checks. These checks establish
 the documented GraphQL subset, rather than every existing HTTP plugin option.
 See the [integration guide](reference/outputs/graphql-integrations.md) for API and limitations.
 
-GraphQL clients are implemented for TypeScript, Rust, Go and Python. TypeScript
-and Rust support separate input/output scalar mappings. Unmapped Rust custom scalars retain JSON values. All four are wired through the CLI and existing npm language plugin packages.
-Packaged clients compile and execute against local GraphQL servers. These changes
-are not yet published; see the [TypeScript guide](reference/outputs/graphql-typescript.md),
-[Rust guide](reference/outputs/graphql-rust.md), [Go guide](reference/outputs/graphql-go.md),
-[Python guide](reference/outputs/graphql-python.md) and [verification](verification/verification.md#graphql-client-completion-checks).
+GraphQL clients are implemented for all ten SDK languages: TypeScript, Rust, Go,
+Python, PHP, Java, C#, Ruby, Swift and Elixir. The deprecated `dotnet` target aliases
+C#. All use the existing language plugin packages through Rust, CLI and npm entry points.
+TypeScript and Rust have separate input/output scalar mappings; other languages
+retain custom scalar JSON values without mapping codecs. All styles use fixed operation documents.
+See the [language guides](reference/README.md) and [verification](verification/verification.md#graphql-client-completion-checks)
+for tested features and per-language limits. These additions are not yet published.
 
 ✅ = implemented for the stated contract; — = no bundled generation support.
 A check does not imply support for every feature of a specification. Target-specific
@@ -36,14 +37,14 @@ limitations still apply. GraphQL is a separate contract even when its transport 
 | Go | HTTP SDK; GraphQL client; official Protobuf messages and gRPC clients/server interfaces | ✅ | ✅ | ✅ | — | — | — |
 | Rust | HTTP SDK; selection-specific GraphQL query/mutation client | ✅ | ✅ | — | — | — | — |
 | Python | HTTP SDK; synchronous GraphQL client | ✅ | ✅ | — | — | — | — |
-| Java | Java SDK | ✅ | — | — | — | — | — |
-| C# | C# SDK | ✅ | — | — | — | — | — |
-| .NET | .NET SDK | ✅ | — | — | — | — | — |
-| PHP | PHP SDK | ✅ | — | — | — | — | — |
+| Java | Java HTTP SDK; GraphQL client | ✅ | ✅ | — | — | — | — |
+| C# | C# HTTP SDK; GraphQL client | ✅ | ✅ | — | — | — | — |
+| .NET | Deprecated C# target alias | ✅ | ✅ | — | — | — | — |
+| PHP | PHP HTTP SDK; GraphQL client | ✅ | ✅ | — | — | — | — |
 | Symfony | Symfony/PHP package | ✅ | — | — | — | — | — |
-| Ruby | Ruby SDK | ✅ | — | — | — | — | — |
-| Elixir | Elixir SDK | ✅ | — | — | — | — | — |
-| Swift | Swift SDK | ✅ | — | — | — | — | — |
+| Ruby | Ruby HTTP SDK; GraphQL client with RBS | ✅ | ✅ | — | — | — | — |
+| Elixir | Elixir HTTP SDK; GraphQL client | ✅ | ✅ | — | — | — | — |
+| Swift | Swift HTTP SDK; GraphQL client | ✅ | ✅ | — | — | — | — |
 | Rust CLI | Rust command-line client | ✅ | — | — | — | — | — |
 | TypeScript CLI | TypeScript command-line client | ✅ | — | — | — | — | — |
 | Postman | Collections, environments and examples | ✅ | — | — | — | — | — |
@@ -75,14 +76,14 @@ selection, block consumption, finalization and compatibility boundaries.
 | Input format | Parsing / inspection | Usable bundled output |
 | --- | :---: | --- |
 | OpenAPI | ✅ | HTTP output plugins above |
-| GraphQL SDL + operation documents | ✅ | TypeScript, Rust, Go and Python through Rust API, CLI and npm entry points |
+| GraphQL SDL + operation documents | ✅ | All ten SDK languages through Rust API, CLI and npm entry points |
 | Protobuf proto2/proto3 | ✅ | Go messages and gRPC clients/server interfaces |
 | AsyncAPI 2.6 / 3.0 / 3.1 | ✅ | TypeScript Kafka for the supported 3.0/3.1 subset |
 | Arazzo 1.0.0 / 1.0.1 / 1.1.0 | ✅ | TypeScript sequential runners with resolved local OpenAPI sources |
 | Cap’n Proto | ✅ | — |
 
 The npm input wrappers expose parsing/inspection and GraphQL client generation
-through the existing TypeScript/Rust language packages. Other native package
+through the existing language packages. Other native package
 pipelines are exposed through Rust / CLI; general typed Node hooks remain open. CLI recipes currently
 select one input source; Rust plugins can compose multiple typed contracts.
 
@@ -135,7 +136,7 @@ failures and successful retries remain in the audit trail. See
 - [x] Revision/provenance checks, completeness checks, typed hooks and opt-in deterministic symbol planning.
 - [x] Complete the frozen pre-output-migration OpenAPI corpus: 2,050 effective passes.
 - [ ] Run the corpus against final migrated binaries.
-- [x] GraphQL generation through existing TypeScript/Rust npm plugin packages.
+- [x] GraphQL generation through all ten existing npm SDK language plugin packages.
 - [ ] Broaden native protocol features and expose other pipelines/general typed hooks through npm.
 - [ ] Cap’n Proto → Rust messages/capability RPC using the official toolchain.
 - [ ] Schema-level JSONPath overlays.
@@ -157,3 +158,30 @@ completeness, emitted files or timings. Execution tracing and a full Node native
 graph bridge remain follow-up work.
 
 Go and Python GraphQL boundaries: [Go](reference/outputs/graphql-go.md) · [Python](reference/outputs/graphql-python.md).
+
+## GraphQL language boundaries
+
+All SDK languages provide raw operations, flat client APIs and grouped APIs with
+explicit custom group mappings. Grouping follows language conventions: Elixir uses
+modules, while object-oriented outputs use client methods/accessors. No schema-field
+heuristic invents resource groups.
+
+| Language | Custom scalar fallback | Abstract result variants | Runtime model validation |
+| --- | --- | --- | --- |
+| TypeScript | Configurable input/output types | Selected concrete alternatives | Static types; optional Zod validators |
+| Rust | JSON or configured wire types | Selected concrete alternatives | Serde decoding and presence wrappers |
+| Go | json.RawMessage | Unsupported; rejects | JSON decoding; required primitives can default to zero |
+| Python | Any | Selected typed dictionary alternatives | Static TypedDict annotations |
+| PHP | JSON values | Requires selected typename | Generated model decoding/validation |
+| Java | JsonNode | Requires selected typename | Generated record decoding/validation |
+| C# / dotnet | JsonElement | Unsupported; rejects | Required presence; nonnull values are not revalidated |
+| Ruby | Untyped JSON | Selected variants | Generated model validation and RBS signatures |
+| Swift | GraphqlJSON | Unsupported; rejects | Codable plus presence/null checks |
+| Elixir | JSON terms | Requires selected typename | Generated struct/scalar decoding/validation |
+
+Subscriptions require a distinct transport capability. Only TypeScript currently
+accepts an injected subscription transport; other language generators reject subscriptions.
+No language in this table has a bundled WebSocket/SSE subscription transport, dynamic
+field selection, incremental delivery or runtime custom scalar codecs.
+Symfony remains a separate HTTP integration target; adapting the PHP GraphQL transport
+to Symfony HttpClient is possible, but generated Symfony GraphQL DI bindings are not implemented.

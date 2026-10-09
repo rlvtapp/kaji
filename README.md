@@ -44,7 +44,7 @@ await generate({
 ## Supported outputs
 
 OpenAPI supports the established HTTP SDKs and helpers. GraphQL supports
-TypeScript/Rust clients and JavaScript query, validation and testing companions
+clients for all ten SDK languages and TypeScript query, validation and testing companions
 in this checkout. RPC, events and workflows have their own supported pipelines.
 
 [Plugin support matrix](docs/plugin-support-matrix.md) · [Examples](examples/README.md)

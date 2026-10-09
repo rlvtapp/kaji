@@ -1,0 +1,51 @@
+public record Field<T>(boolean present, T value) {
+ public static <T> Field<T> absent() { return new Field<>(false,null); }
+ public static <T> Field<T> of(T value) { return new Field<>(true,value); }
+}
+public record GraphqlError(String message, JsonNode path, JsonNode locations, JsonNode extensions) {}
+public record Envelope<T>(boolean dataPresent, T data, java.util.List<GraphqlError> errors, JsonNode extensions, int status) {
+ public boolean hasErrors() { return !errors.isEmpty(); }
+ public T requireData() { if (hasErrors() || !dataPresent || data==null) throw new GraphqlException(this); return data; }
+}
+public static final class GraphqlException extends RuntimeException {
+ public final Envelope<?> response;
+ public GraphqlException(Envelope<?> response) { super("GraphQL response has errors or no data"); this.response=response; }
+}
+@FunctionalInterface public interface Decoder<T> { T decode(JsonNode node); }
+public interface Transport { <T> Envelope<T> execute(String document,String operation,ObjectNode variables,Decoder<T> decoder) throws java.io.IOException,InterruptedException; }
+public static final class HttpTransport implements Transport {
+ private final java.net.URI endpoint; private final java.net.http.HttpClient http; private final Map<String,String> headers;
+ public HttpTransport(String endpoint) { this(endpoint,java.net.http.HttpClient.newHttpClient(),Map.of()); }
+ public HttpTransport(String endpoint,java.net.http.HttpClient http,Map<String,String> headers) { this.endpoint=java.net.URI.create(endpoint);this.http=Objects.requireNonNull(http);this.headers=Map.copyOf(headers); }
+ public <T> Envelope<T> execute(String document,String operation,ObjectNode variables,Decoder<T> decoder) throws java.io.IOException,InterruptedException {
+  ObjectNode request=JSON.createObjectNode();request.put("query",document);request.put("operationName",operation);request.set("variables",variables);
+  var builder=java.net.http.HttpRequest.newBuilder(endpoint).header("Content-Type","application/json").header("Accept","application/graphql-response+json, application/json");headers.forEach(builder::header);
+  var response=http.send(builder.POST(java.net.http.HttpRequest.BodyPublishers.ofString(JSON.writeValueAsString(request))).build(),java.net.http.HttpResponse.BodyHandlers.ofString());
+  JsonNode body=JSON.readTree(response.body());if(body==null||!body.isObject())throw new java.io.IOException("Malformed GraphQL response");
+  java.util.List<GraphqlError> errors=new ArrayList<>();JsonNode err=body.get("errors");if(err!=null){if(!err.isArray()||err.isEmpty())throw new java.io.IOException("Malformed GraphQL errors");for(JsonNode e:err){if(!e.isObject()||!e.path("message").isTextual())throw new java.io.IOException("Malformed GraphQL error");errors.add(new GraphqlError(e.get("message").asText(),e.get("path"),e.get("locations"),e.get("extensions")));}}
+  if(!body.has("data")&&errors.isEmpty())throw new java.io.IOException("GraphQL response contains neither data nor errors");
+  if((response.statusCode()<200||response.statusCode()>=300)&&errors.isEmpty())throw new java.io.IOException("HTTP status "+response.statusCode());
+  T data;try { data=body.hasNonNull("data")?decoder.decode(body.get("data")):null; } catch(IllegalArgumentException malformed){throw new java.io.IOException("Malformed GraphQL selected result",malformed);}
+  return new Envelope<>(body.has("data"),data,java.util.List.copyOf(errors),body.get("extensions"),response.statusCode());
+ }
+}
+private static final ObjectMapper JSON=new ObjectMapper();
+public interface Input { ObjectNode toJson(); }
+private static JsonNode encode(Object value) {
+ if(value==null)return NullNode.instance;
+ if(value instanceof Input input)return input.toJson();
+ if(value instanceof java.util.List<?> list){ArrayNode node=JSON.createArrayNode();for(Object item:list)node.add(encode(item));return node;}
+ return JSON.valueToTree(value);
+}
+private static <T> java.util.List<T> list(JsonNode node,Decoder<T> decoder) {
+ if(node==null||!node.isArray())throw new IllegalArgumentException("Expected GraphQL list");java.util.List<T> result=new ArrayList<>();for(JsonNode item:node)result.add(decoder.decode(item));return Collections.unmodifiableList(result);
+}
+private static JsonNode field(JsonNode object,String name) {if(object==null||!object.isObject()||!object.has(name))throw new IllegalArgumentException("Missing GraphQL field "+name);return object.get(name);}
+private static String text(JsonNode node) {if(!node.isTextual())throw new IllegalArgumentException("Expected GraphQL string");return node.asText();}
+private static Integer integer(JsonNode node) {if(!node.isIntegralNumber()||!node.canConvertToInt())throw new IllegalArgumentException("Expected GraphQL Int");return node.intValue();}
+private static Double number(JsonNode node) {if(!node.isNumber())throw new IllegalArgumentException("Expected GraphQL Float");return node.doubleValue();}
+private static Boolean bool(JsonNode node) {if(!node.isBoolean())throw new IllegalArgumentException("Expected GraphQL Boolean");return node.booleanValue();}
+private static String literal(JsonNode node,String expected){String value=text(node);if(!value.equals(expected))throw new IllegalArgumentException("Invalid GraphQL literal");return value;}
+private static String enumValue(JsonNode node,java.util.List<String> values){String value=text(node);if(!values.contains(value))throw new IllegalArgumentException("Invalid GraphQL enum");return value;}
+
+private static JsonNode scalarNode(JsonNode node){if(node.isNull())throw new IllegalArgumentException("Non-null GraphQL scalar");return node;}

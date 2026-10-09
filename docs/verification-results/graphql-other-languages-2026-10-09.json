@@ -1,0 +1,97 @@
+{
+  "date": "2026-10-09",
+  "status": "unreleased",
+  "scope": "GraphQL outputs PHP, Java, CSharp/DotNet, Ruby, Swift and Elixir; CLI/npm integration. Go/Python/Rust preceding batch recorded separately.",
+  "protocol_server": {
+    "implementation": "GraphQL.js",
+    "version": "16.14.2",
+    "mode": "local schema-executing HTTP server"
+  },
+  "surfaces": [
+    "raw standalone operations",
+    "flat client",
+    "default query/mutation groups",
+    "custom named groups"
+  ],
+  "checks": {
+    "npm_sdk": {
+      "passed": 76,
+      "failed": 0,
+      "skipped": 0,
+      "includes": "existing HTTP configuration/export behavior and all ten GraphQL language factories"
+    },
+    "cli": {
+      "passed": 127,
+      "failed": 0,
+      "ignored": 9,
+      "includes": "all-language GraphQL recipes, regeneration, Postman incompatible-pair warning/skip preservation, existing OpenAPI recipes"
+    },
+    "php": {
+      "graphql_explicit_passed": 5,
+      "standard_passed": 26,
+      "standard_ignored": 16,
+      "toolchain": "PHP8.2 Docker",
+      "abstract_variants": "selected typename required",
+      "custom_scalars": "JSON values"
+    },
+    "java": {
+      "graphql_explicit_passed": 6,
+      "standard_passed": 35,
+      "standard_ignored": 15,
+      "toolchain": "Java21 running generated Java17/Jackson2.18.3",
+      "abstract_variants": "selected typename required",
+      "custom_scalars": "JsonNode"
+    },
+    "csharp": {
+      "graphql_explicit_passed": 3,
+      "standard_passed": 28,
+      "standard_ignored": 15,
+      "toolchain": ".NET8.0.425",
+      "abstract_variants": "rejected",
+      "custom_scalars": "JsonElement",
+      "caveat": "Required presence checked; nonnull values not runtime revalidated"
+    },
+    "ruby": {
+      "graphql_explicit_passed": 4,
+      "standard_passed": 23,
+      "standard_ignored": 2,
+      "toolchain": "Ruby3.3.12 / RBS3.4.0 Docker",
+      "abstract_variants": "ambiguous variants rejected",
+      "custom_scalars": "untyped JSON"
+    },
+    "swift": {
+      "graphql_explicit_passed": 3,
+      "standard_passed": 18,
+      "standard_ignored": 21,
+      "toolchain": "Swift6.4 compiling Swift5.9 package",
+      "abstract_variants": "rejected",
+      "custom_scalars": "GraphqlJSON"
+    },
+    "all_target_clippy": "passed with -D warnings on all changed plugin crates, alias, CLI and Node",
+    "format": "cargo fmt --all -- --check passed",
+    "documentation_links": "no missing local links",
+    "npm_final_graphql_recheck": {
+      "passed": 13,
+      "failed": 0,
+      "skipped": 0,
+      "includes": "fresh rebuilt addon after final language fixes"
+    },
+    "elixir": {
+      "graphql_explicit_passed": 4,
+      "standard_passed": 21,
+      "standard_failed": 0,
+      "standard_ignored": 15,
+      "toolchain": "Elixir1.17.3 / OTP27 Docker; Finch0.24.0 / Jason1.4.5",
+      "abstract_variants": "selected __typename required",
+      "custom_scalars": "JSON terms",
+      "runtime_checks": "All four surfaces, queries/mutation, typename variants, nullable/nested lists, nested inputs and omission/null/defaulted nonnull variables"
+    }
+  },
+  "verification_boundary": [
+    "Explicit GraphQL passes include normally ignored external compilation/runtime probes; ignored standard tests are not counted as passes.",
+    "Existing CLI HTTP tests and npm suite ran; full workspace and 205-spec corpus were not rerun for this batch.",
+    "Generated local-server tests prove fixed query/mutation selections, not complete GraphQL specification parity.",
+    "Only TypeScript has injected subscription transport support. Other languages reject subscriptions.",
+    "No publication or version bump."
+  ]
+}

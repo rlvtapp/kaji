@@ -70,3 +70,23 @@ Selections come from operation documents. A dynamic `fields` parameter is
 
 The existing Go and Python plugin factories also accept GraphQL input:
 [Go client](../reference/outputs/graphql-go.md) · [Python client](../reference/outputs/graphql-python.md).
+
+The existing PHP, Java and C# factories now also accept GraphQL input:
+[PHP](../reference/outputs/graphql-php.md) · [Java](../reference/outputs/graphql-java.md) · [C#](../reference/outputs/graphql-csharp.md).
+Use `contracts.graphql` to select raw, flat or grouped style and configure groups.
+Transport and scalar limits differ by language; the TypeScript integration plugins
+remain TypeScript outputs.
+
+[Ruby](../reference/outputs/graphql-ruby.md), [Swift](../reference/outputs/graphql-swift.md) and
+[Elixir](../reference/outputs/graphql-elixir.md) use their existing language factories too.
+The same configuration shape selects each language's own generated API:
+
+```js
+plugins: [pluginGo({ contracts: { graphql: {
+  style: 'grouped', groups: { users: { read: 'ReadUser' } },
+} } })]
+```
+
+`ReadUser` is an operation name from a supplied document. Group names are explicit.
+`raw` exposes standalone operations; `flat` exposes direct client functions/methods;
+`grouped` exposes query/mutation or custom groups in the language's own conventions.

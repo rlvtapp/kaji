@@ -11,7 +11,7 @@ native compilation; the [feature catalog](../about/features.md) describes curren
 
 ## Native protocol priorities
 
-GraphQL → TypeScript, Protobuf → Go gRPC, AsyncAPI → TypeScript/Kafka and Arazzo →
+GraphQL → all ten SDK languages, Protobuf → Go gRPC, AsyncAPI → TypeScript/Kafka and Arazzo →
 TypeScript runners are implemented for documented subsets. Next: Cap’n Proto →
 Rust, standalone AsyncAPI message types, broader protocol features, npm native
 generation wiring and shared naming adoption. Forge overlays/migration and Cap’n

@@ -434,3 +434,28 @@ Rust packaged tests cover raw, flat, idiomatic and custom grouped clients.
 
 Go/Python limitations remain documented in their usage guides. This verification
 does not rerun the full workspace or the earlier 205-spec compatibility corpus.
+
+## GraphQL remaining SDK language outputs
+
+The [test record](../verification-results/graphql-other-languages-2026-10-09.json)
+tracks PHP, Java, C#/DotNet, Ruby, Swift and Elixir, completing fixed-operation
+GraphQL clients across all ten SDK languages. Each generated output is compiled
+and executed against GraphQL.js **16.14.2**, covering raw, flat, default groups and
+custom groups. Language toolchains and ignored-test counts are recorded separately. Explicit GraphQL
+checks pass PHP **5**, Java **6**, C# **3**, Ruby **4**, Swift **3**, Elixir **4**;
+these counts include externally enabled compilation/runtime tests and repeat some
+ordinary checks rather than forming an additional distinct-test total.
+
+The shared CLI suite passes **127 tests, 0 failures, 9 ignored**. The npm SDK suite
+passes **76 tests, 0 failures, 0 skips**, including the existing HTTP configuration
+paths. Changed crates, CLI and Node pass all-target Clippy with warnings denied.
+Formatting and local documentation links pass. The full workspace and 205-spec
+HTTP corpus were not rerun for this batch.
+
+These checks cover fixed query/mutation documents, selection models, input
+presence/null handling, partial GraphQL results, malformed responses, provider
+substitution and regeneration. They do not establish uniform abstract-type or scalar
+codec support: consult each [language guide](../reference/README.md) and the
+[support matrix](../plugin-support-matrix.md#graphql-language-boundaries).
+Subscriptions remain a distinct transport capability; the new outputs reject them.
+All changes remain unreleased.

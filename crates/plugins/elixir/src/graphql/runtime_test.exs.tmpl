@@ -1,0 +1,28 @@
+endpoint=System.fetch_env!("POOLSTER_GRAPHQL_ENDPOINT")
+client=Example.Client.new(endpoint)
+variables=%Example.Models.ReadUserVariables{id: "1"}
+{:ok,response}=__CALL__(client,variables)
+{:ok,result}=Example.Runtime.require_data(response)
+"Ada"=result.read_user.name
+nil=result.read_user.nickname
+{:ok,response}=__CALL__(client,%Example.Models.ReadUserVariables{id: "partial"})
+true=response.data_present
+"Ada"=response.data.read_user.name
+[%{"message"=>"nickname failed","path"=>["readUser","nickname"]}]=response.errors
+{:error,{:graphql,^response}}=Example.Runtime.require_data(response)
+{:ok,response}=__CALL__(client,%Example.Models.ReadUserVariables{id: "1",nick: false})
+:poolster_absent=response.data.read_user.nickname
+{:error,{:variables,_}}=__CALL__(client,%Example.Models.ReadUserVariables{id: nil})
+{:error,{:variables,_}}=__CALL__(client,%Example.Models.ReadUserVariables{id: "1",nick: nil})
+{:ok,response}=__PING__(client)
+true=response.data.ping
+IO.puts("GraphQL runtime passed")
+
+%{}=Example.Models.Filter.to_wire(%Example.Models.Filter{})
+%{"name"=>nil}=Example.Models.Filter.to_wire(%Example.Models.Filter{name: nil})
+%{"filter"=>nil}=Map.take(Example.Models.ReadUserVariables.to_wire(%Example.Models.ReadUserVariables{id: "1",filter: nil}),["filter"])
+false=Map.has_key?(Example.Models.ReadUserVariables.to_wire(%Example.Models.ReadUserVariables{id: "1"}),"filter")
+{:ok,response}=__COMPLEX__(client)
+{:ok,result}=Example.Runtime.require_data(response)
+[%Example.Models.ComplexResultNodesVariant0{typename: "User",name: "Ada"},nil,%Example.Models.ComplexResultNodesVariant1{typename: "Team",name: "Staff"}]=result.nodes
+[["a",nil],nil]=result.matrix

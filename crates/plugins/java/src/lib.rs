@@ -338,3 +338,6 @@ mod bundled_middleware;
 
 #[cfg(test)]
 mod source_layout_tests;
+
+mod graphql;
+pub use graphql::{Graphql, GraphqlClient, GraphqlStyle, graphql};

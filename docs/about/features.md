@@ -42,7 +42,7 @@ supported. Version 0.5.0 is on the branch; use a source build until published.
 | Existing generator projects | Stainless/Fern/Speakeasy config import and direct generation; supported annotations normalized; unsupported settings reported for review | [Migration](migration.md) |
 | Large public contract regression | Pinned Graph, six official contracts and 205 APIs.guru contracts (including five Azure services); [2,050 reconciled generation/native passes](../verification/guru-compatibility.md); fresh alpha.2 frozen-build sweep pending | [Large specs](../verification/large-specs.md) |
 | Native input providers | OpenAPI, GraphQL, AsyncAPI, Arazzo, Protobuf and Cap’n Proto; whole contracts and available typed blocks | [Input plugins](../reference/inputs/input-plugins.md) |
-| Native generation (`alpha-2`, unreleased) | GraphQL → TypeScript/Rust (CLI and npm); Protobuf → Go gRPC; AsyncAPI → TypeScript/Kafka; Arazzo → TypeScript sequential runners. Cap’n Proto output remains open | [Support matrix](../plugin-support-matrix.md) |
+| Native generation (`alpha-2`, unreleased) | GraphQL → all ten SDK languages (Rust API, CLI and npm); Protobuf → Go gRPC; AsyncAPI → TypeScript/Kafka; Arazzo → TypeScript sequential runners. Cap’n Proto output remains open | [Support matrix](../plugin-support-matrix.md) |
 | Arbitrary custom languages | Rust library `Language`/`Plugin` implementations and optional delivery metadata. CLI needs explicit registry integration | [Library plugins](../plugins/rust/README.md) |
 | Ejectable generator sources | `poolster eject` exports rebuildable renderers, runtime sources and plugin interfaces, with a SHA-256 manifest | [Own the sources](../reference/regeneration/source-customization.md) |
 

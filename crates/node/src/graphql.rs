@@ -40,8 +40,22 @@ fn generate(request: &str) -> AnyResult<String> {
     let mut profiles = ProfileSet::new(".");
     for mut package in request.packages {
         output_options::apply(&mut package, "graphql")?;
-        if !["typescript", "rust", "go", "python"].contains(&package.language.as_str()) {
-            bail!("GraphQL requires TypeScript, Rust, Go or Python output");
+        if ![
+            "typescript",
+            "rust",
+            "go",
+            "python",
+            "php",
+            "java",
+            "csharp",
+            "dotnet",
+            "ruby",
+            "swift",
+            "elixir",
+        ]
+        .contains(&package.language.as_str())
+        {
+            bail!("Unsupported GraphQL output language");
         }
         if package.client_name.is_some()
             || package.jobs.is_some()
@@ -147,6 +161,181 @@ fn generate(request: &str) -> AnyResult<String> {
                 generator.idiomatic()
             };
             let mut target = python::package(package.path)
+                .common(common)
+                .with(generator)
+                .with(input);
+            if let Some(name) = package.name {
+                target = target.name(name);
+            }
+            profiles = profiles.package(target);
+            continue;
+        }
+        if package.language == "php" {
+            if request.subscriptions || package.transport.is_some() {
+                bail!("php GraphQL does not support subscriptions or transport options");
+            }
+            if !package.scalars.is_empty() {
+                bail!("php GraphQL custom scalar mappings are not supported");
+            }
+            let generator = php::graphql(Some(input.handle())).groups(package.groups.clone());
+            let generator = if package.raw.unwrap_or(false) || style == "raw" {
+                generator.raw()
+            } else if style == "flat" {
+                generator.flat()
+            } else {
+                generator.idiomatic()
+            };
+            let mut target = php::package(package.path)
+                .common(common)
+                .with(generator)
+                .with(input);
+            if let Some(name) = package.name {
+                target = target.name(name);
+            }
+            profiles = profiles.package(target);
+            continue;
+        }
+        if package.language == "java" {
+            if request.subscriptions || package.transport.is_some() {
+                bail!("java GraphQL does not support subscriptions or transport options");
+            }
+            if !package.scalars.is_empty() {
+                bail!("java GraphQL custom scalar mappings are not supported");
+            }
+            let generator = java::graphql(Some(input.handle())).groups(package.groups.clone());
+            let generator = if package.raw.unwrap_or(false) || style == "raw" {
+                generator.raw()
+            } else if style == "flat" {
+                generator.flat()
+            } else {
+                generator.idiomatic()
+            };
+            let mut target = java::package(package.path)
+                .common(common)
+                .with(generator)
+                .with(input);
+            if let Some(name) = package.name {
+                target = target.name(name);
+            }
+            profiles = profiles.package(target);
+            continue;
+        }
+        if package.language == "csharp" {
+            if request.subscriptions || package.transport.is_some() {
+                bail!("csharp GraphQL does not support subscriptions or transport options");
+            }
+            if !package.scalars.is_empty() {
+                bail!("csharp GraphQL custom scalar mappings are not supported");
+            }
+            let generator = csharp::graphql(Some(input.handle())).groups(package.groups.clone());
+            let generator = if package.raw.unwrap_or(false) || style == "raw" {
+                generator.raw()
+            } else if style == "flat" {
+                generator.flat()
+            } else {
+                generator.idiomatic()
+            };
+            let mut target = csharp::package(package.path)
+                .common(common)
+                .with(generator)
+                .with(input);
+            if let Some(name) = package.name {
+                target = target.name(name);
+            }
+            profiles = profiles.package(target);
+            continue;
+        }
+        if package.language == "dotnet" {
+            if request.subscriptions || package.transport.is_some() {
+                bail!("dotnet GraphQL does not support subscriptions or transport options");
+            }
+            if !package.scalars.is_empty() {
+                bail!("dotnet GraphQL custom scalar mappings are not supported");
+            }
+            let generator = dotnet::graphql(Some(input.handle())).groups(package.groups.clone());
+            let generator = if package.raw.unwrap_or(false) || style == "raw" {
+                generator.raw()
+            } else if style == "flat" {
+                generator.flat()
+            } else {
+                generator.idiomatic()
+            };
+            let mut target = dotnet::package(package.path)
+                .common(common)
+                .with(generator)
+                .with(input);
+            if let Some(name) = package.name {
+                target = target.name(name);
+            }
+            profiles = profiles.package(target);
+            continue;
+        }
+        if package.language == "ruby" {
+            if request.subscriptions || package.transport.is_some() {
+                bail!("ruby GraphQL does not support subscriptions or transport options");
+            }
+            if !package.scalars.is_empty() {
+                bail!("ruby GraphQL custom scalar mappings are not supported");
+            }
+            let generator = ruby::graphql(Some(input.handle())).groups(package.groups.clone());
+            let generator = if package.raw.unwrap_or(false) || style == "raw" {
+                generator.raw()
+            } else if style == "flat" {
+                generator.flat()
+            } else {
+                generator.idiomatic()
+            };
+            let mut target = ruby::package(package.path)
+                .common(common)
+                .with(generator)
+                .with(input);
+            if let Some(name) = package.name {
+                target = target.name(name);
+            }
+            profiles = profiles.package(target);
+            continue;
+        }
+        if package.language == "swift" {
+            if request.subscriptions || package.transport.is_some() {
+                bail!("swift GraphQL does not support subscriptions or transport options");
+            }
+            if !package.scalars.is_empty() {
+                bail!("swift GraphQL custom scalar mappings are not supported");
+            }
+            let generator = swift::graphql(Some(input.handle())).groups(package.groups.clone());
+            let generator = if package.raw.unwrap_or(false) || style == "raw" {
+                generator.raw()
+            } else if style == "flat" {
+                generator.flat()
+            } else {
+                generator.idiomatic()
+            };
+            let mut target = swift::package(package.path)
+                .common(common)
+                .with(generator)
+                .with(input);
+            if let Some(name) = package.name {
+                target = target.name(name);
+            }
+            profiles = profiles.package(target);
+            continue;
+        }
+        if package.language == "elixir" {
+            if request.subscriptions || package.transport.is_some() {
+                bail!("elixir GraphQL does not support subscriptions or transport options");
+            }
+            if !package.scalars.is_empty() {
+                bail!("elixir GraphQL custom scalar mappings are not supported");
+            }
+            let generator = elixir::graphql(Some(input.handle())).groups(package.groups.clone());
+            let generator = if package.raw.unwrap_or(false) || style == "raw" {
+                generator.raw()
+            } else if style == "flat" {
+                generator.flat()
+            } else {
+                generator.idiomatic()
+            };
+            let mut target = elixir::package(package.path)
                 .common(common)
                 .with(generator)
                 .with(input);

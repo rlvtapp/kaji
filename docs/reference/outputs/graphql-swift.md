@@ -1,0 +1,33 @@
+# GraphQL → Swift clients
+
+Unreleased. Swift 5.9+ packages use Foundation URLSession, async functions and
+selection-specific Codable models. Package platforms are macOS 12+ / iOS 15+.
+
+```sh
+poolster generate schema.graphql --input-format graphql \
+  --operation operations.graphql --language swift --output generated
+```
+
+Use npm `pluginSwift({ contracts: { graphql: { style: 'flat' } } })` or
+Rust `swift::graphql(Some(input.handle())).flat()` in a Swift package.
+
+## Styles and models
+
+Flat calls `try await client.readUser(variables: variables)`.
+Grouped calls `try await client.query.readUser(variables: variables)`;
+custom `groups: { users: { read: 'ReadUser' } }` exposes `client.users.read(...)`.
+Raw exposes free operation functions. Operations with no variables omit the argument.
+
+Codable models contain only selected fields. `GraphqlField<T>` distinguishes
+`.omitted`, `.null` and `.value(value)` for optional fields. Nonnullable fields
+reject null during encoding/decoding; recursive input objects use reference models.
+Custom scalars use `GraphqlJSON`, enums retain strings.
+
+`GraphqlResponse` keeps data, errors and extensions together, including partial data.
+`ensureSuccess()` throws `GraphqlFailure` for GraphQL errors; HTTP failures throw
+`GraphqlHTTPError`. Client configuration supplies endpoint, session and headers.
+Task cancellation propagates through URLSession.
+
+Abstract unions, subscriptions, incremental delivery and dynamic selections are
+unsupported. Generated code compiles with warnings treated as errors and runs
+against pinned GraphQL.js 16.14.2. See the [support matrix](../../plugin-support-matrix.md).

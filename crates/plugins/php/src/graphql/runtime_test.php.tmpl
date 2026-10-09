@@ -1,0 +1,15 @@
+<?php
+require __DIR__.'/Graphql.php';
+use Poolster\Test\{Client,Presence,ReadUserVariables,GraphqlException};
+function check(bool $ok):void { if(!$ok) throw new RuntimeException('Assertion failed'); }
+$mode='success'; $seen=[];
+$transport=function($url,$body,$headers,$timeout) use (&$mode,&$seen) { $seen=json_decode($body,true); return match($mode){'success'=>[200,'{"data":{"readUser":{"name":"Ada"}}}'],'null'=>[200,'{"data":{"readUser":{"name":"Ada","nickname":null}}}'],'partial'=>[200,'{"data":{"readUser":null},"errors":[{"message":"denied","path":["readUser"],"extensions":{"code":"DENIED"}}]}'],'absent'=>[200,'{"errors":[{"message":"bad"}]}'],'invalid'=>[200,'{"data":{}}'],'malformed'=>[200,'{"wat":true}'],'http'=>[503,'{}'],'invaliderrors'=>[200,'{"errors":null}'],'invalidjson'=>[200,'['],'datanull'=>[200,'{"data":null}']}; };
+$client=new Client('http://localhost/graphql',transport:$transport);$variables=new ReadUserVariables(id:'1');
+$r=CALL_OPERATION;check($r->requireData()->readUser->name==='Ada');check(!$r->data->value->readUser->nickname->present);check(!array_key_exists('include',$seen['variables']));
+$mode='null';$variables=new ReadUserVariables(id:'1',include:Presence::of(true));$r=CALL_OPERATION;check($r->data->value->readUser->nickname->present && $r->data->value->readUser->nickname->value===null);check($seen['variables']['include']===true);
+$mode='partial';$r=CALL_OPERATION;check($r->data->present && $r->data->value->readUser===null && count($r->errors)===1);try{$r->requireData();throw new RuntimeException('expected GraphqlException');}catch(GraphqlException $e){check($e->response===$r);}
+$mode='absent';$r=CALL_OPERATION;check(!$r->data->present);
+$mode='datanull';$r=CALL_OPERATION;check($r->data->present && $r->data->value===null);
+foreach(['invalid','malformed','http','invaliderrors','invalidjson'] as $mode){$caught=false;try{CALL_OPERATION;}catch(Throwable $e){$caught=true;}check($caught);}
+if($endpoint=getenv('POOLSTER_GRAPHQL_ENDPOINT')){$client=new Client($endpoint);$variables=new ReadUserVariables(id:'1',include:Presence::of(true));$r=CALL_OPERATION;check($r->requireData()->readUser->name==='Ada');check($r->data->value->readUser->nickname->value===null);$variables=new ReadUserVariables(id:'error');$r=CALL_OPERATION;check(count($r->errors)===1 && $r->data->value->readUser===null);}
+echo "PHP GraphQL assertions passed\n";

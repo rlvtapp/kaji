@@ -1,0 +1,38 @@
+import Foundation
+@main struct RuntimeTest {
+static func main() async throws {
+    let defaulted = StrictInput()
+    let missing = try JSONSerialization.jsonObject(with:JSONEncoder().encode(defaulted)) as! [String:Any]
+    guard missing.isEmpty else { fatalError("defaulted nonnull omission") }
+    do { _ = try JSONEncoder().encode(StrictInput(count:.null)); fatalError("missing nonnull encode failure") } catch is EncodingError {}
+    do { _ = try JSONDecoder().decode(StrictInput.self,from:Data("{\"count\":null}".utf8)); fatalError("missing nonnull decode failure") } catch is DecodingError {}
+    var client = GraphqlClient(endpoint:URL(string:"ENDPOINT")!)
+    guard try await PING_CALL.data?.ping == "pong" else { fatalError("mutation") }
+    var variables = ReadUserVariables(id:"read")
+    let encoded = try JSONSerialization.jsonObject(with:JSONEncoder().encode(variables)) as! [String:Any]
+    guard !encoded.keys.contains("nickname") else { fatalError("omission") }
+    var result = try await CALL
+    guard result.data?.readUser?.name == "read", result.errors == nil else { fatalError("query") }
+    guard case .null = result.data!.readUser!.nickname else { fatalError("nullable result") }
+    variables = ReadUserVariables(id:"read", nickname:.value("nick"))
+    result = try await CALL
+    guard case .value("nick") = result.data!.readUser!.nickname else { fatalError("input value") }
+    variables = ReadUserVariables(id:"partial",nickname:.null)
+    let explicit = try JSONSerialization.jsonObject(with:JSONEncoder().encode(variables)) as! [String:Any]
+    guard explicit["nickname"] is NSNull else { fatalError("explicit null") }
+    result = try await CALL
+    guard result.data?.readUser?.name == "partial",result.errors?.first?.message == "partial failure" else { fatalError("partial") }
+    do { try result.ensureSuccess(); fatalError("missing GraphQL failure") } catch is GraphqlFailure {}
+    client = GraphqlClient(endpoint:URL(string:"ENDPOINT/http")!)
+    do { _ = try await CALL; fatalError("missing HTTP failure") } catch let error as GraphqlHTTPError { guard error.statusCode == 503 else { fatalError("HTTP status") } }
+    client = GraphqlClient(endpoint:URL(string:"ENDPOINT/malformed")!)
+    do { _ = try await CALL; fatalError("missing malformed failure") } catch is DecodingError {}
+    let omitted = try JSONDecoder().decode(ReadUserResult.self,from:Data("{\"readUser\":{\"name\":\"omitted\"}}".utf8))
+    guard case .omitted = omitted.readUser!.nickname else { fatalError("result omission") }
+    client = GraphqlClient(endpoint:URL(string:"ENDPOINT/slow")!)
+    let task = Task { try await CALL }; task.cancel()
+    do { _ = try await task.value; fatalError("missing cancellation") }
+    catch is CancellationError {} catch let error as URLError { guard error.code == .cancelled else { throw error } }
+    print("Swift GraphQL runtime passed")
+}
+}

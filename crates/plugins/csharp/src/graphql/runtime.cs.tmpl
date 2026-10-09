@@ -1,0 +1,53 @@
+using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+public readonly record struct Optional<T>(bool IsSet, T? Value)
+{
+    public static Optional<T> Some(T? value) => new(true, value);
+    public static Optional<T> Null() => new(true, default);
+}
+public sealed record GraphqlError
+{
+    [JsonPropertyName("message")] public required string Message { get; init; }
+    [JsonPropertyName("path")] public JsonElement? Path { get; init; }
+    [JsonPropertyName("locations")] public JsonElement? Locations { get; init; }
+    [JsonPropertyName("extensions")] public JsonElement? Extensions { get; init; }
+}
+public sealed record GraphqlResponse<T>
+{
+    [JsonPropertyName("data")] public T? Data { get; init; }
+    [JsonPropertyName("errors")] public List<GraphqlError>? Errors { get; init; }
+    [JsonPropertyName("extensions")] public JsonElement? Extensions { get; init; }
+    public void EnsureSuccess() { if (Errors is { Count: > 0 }) throw new GraphqlException(Errors); }
+}
+public sealed class GraphqlException(IReadOnlyList<GraphqlError> errors) : Exception(string.Join("; ", errors.Select(e => e.Message)))
+{ public IReadOnlyList<GraphqlError> Errors { get; } = errors; }
+internal sealed class OptionalConverterFactory : JsonConverterFactory
+{
+    public override bool CanConvert(Type t) => t.IsGenericType && t.GetGenericTypeDefinition() == typeof(Optional<>);
+    public override JsonConverter CreateConverter(Type t, JsonSerializerOptions options) => (JsonConverter)Activator.CreateInstance(typeof(OptionalConverter<>).MakeGenericType(t.GetGenericArguments()[0]))!;
+}
+internal sealed class OptionalConverter<T> : JsonConverter<Optional<T>>
+{
+    public override bool HandleNull => true;
+    public override Optional<T> Read(ref Utf8JsonReader reader, Type t, JsonSerializerOptions options) => Optional<T>.Some(JsonSerializer.Deserialize<T>(ref reader, options));
+    public override void Write(Utf8JsonWriter writer, Optional<T> value, JsonSerializerOptions options) => JsonSerializer.Serialize(writer, value.Value, options);
+}
+public sealed partial class GraphqlClient
+{
+    private readonly HttpClient http;
+    private readonly Uri endpoint;
+    internal static readonly JsonSerializerOptions Json = CreateOptions();
+    private static JsonSerializerOptions CreateOptions() { var o = new JsonSerializerOptions(); o.Converters.Add(new OptionalConverterFactory()); return o; }
+    public GraphqlClient(HttpClient http, Uri endpoint) { this.http = http; this.endpoint = endpoint; }
+    public async Task<GraphqlResponse<T>> ExecuteAsync<T>(string operationName, string document, object variables, CancellationToken cancellationToken = default)
+    {
+        using var response = await http.PostAsJsonAsync(endpoint, new { query = document, operationName, variables }, Json, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        using var responseDocument = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
+        var root = responseDocument.RootElement;
+        if (root.ValueKind != JsonValueKind.Object || (!root.TryGetProperty("data", out _) && !root.TryGetProperty("errors", out _))) throw new JsonException("Invalid GraphQL response envelope");
+        var envelope = root.Deserialize<GraphqlResponse<T>>(Json);
+        return envelope ?? throw new JsonException("Missing GraphQL response envelope");
+    }
+}

@@ -4,6 +4,9 @@
 //! libraries. The public client accepts normal Ruby keyword arguments and has
 //! both direct operations and optional resource namespaces.
 
+pub mod graphql;
+pub use graphql::{Graphql, GraphqlClient, GraphqlStyle, graphql};
+
 mod oauth;
 pub use oauth::{OAuth, oauth};
 mod operation_tests;
