@@ -70,3 +70,14 @@ The default transport uses urllib; it does not retry mutations automatically.
 Tests include generated Python compilation, presence/null cases, regeneration,
 recursive inputs, grouped methods, and pinned GraphQL.js 16.14.2 local-server calls.
 See the [support matrix](../../plugin-support-matrix.md).
+
+## Generated source layout
+
+The existing `models` and `operations` imports now point to packages containing individual model/operation modules and small export parts. Client and group methods use bounded static mixin parts. `client.py` and `runtime.py` remain entry points; recursive type annotations retain canonical model identities.
+
+The layout targets source files below **128 KiB**, grouping declarations and export
+parts at semantic boundaries. An indivisible model or operation that exceeds this
+budget is retained and listed in `.poolster/source-layout-diagnostics.json`;
+this is a size diagnostic, not a claim that every possible schema produces small files.
+Regeneration removes obsolete unchanged owned files and preserves unrelated user files.
+Source customizations referring to old monolithic paths must be retargeted.

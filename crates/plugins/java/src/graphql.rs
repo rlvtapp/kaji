@@ -1,4 +1,5 @@
 //! Native GraphQL clients consume selection contracts, never the HTTP AST.
+mod layout;
 mod models;
 #[cfg(test)]
 mod tests;
@@ -124,7 +125,10 @@ fn render(
         "Java GraphQL requires operation documents"
     );
     ensure!(
-        package.split('.').all(models::identifier),
+        package.len() <= 512
+            && package
+                .split('.')
+                .all(|segment| models::identifier(segment) && segment.len() <= 128),
         "Invalid Java package name"
     );
     fn validate_names(ty: &poolster_core::native::ModelType, c: &GraphqlOperations) -> Result<()> {
@@ -159,6 +163,7 @@ fn render(
     }
     let mut methods = BTreeMap::new();
     let mut calls = String::new();
+    let mut operation_files = Vec::new();
     let mut groups: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
     for op in &c.operations {
         ensure!(
@@ -200,7 +205,18 @@ fn render(
         );
         let result = models.ty(&op.result, &format!("{}Result", op.name))?;
         let vars = format!("{}Variables", op.name);
-        let document = serde_json::to_string(&op.document)?;
+        let chunks = op
+            .document
+            .chars()
+            .collect::<Vec<_>>()
+            .chunks(4000)
+            .map(|chars| serde_json::to_string(&chars.iter().collect::<String>()))
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        let document = if chunks.len() <= 1 {
+            chunks.first().cloned().unwrap_or("\"\"".into())
+        } else {
+            format!("String.join(\"\",{})", chunks.join(","))
+        };
         let name = serde_json::to_string(&op.name)?;
         let (receiver, param) = if style == GraphqlStyle::Raw {
             ("client.transport", "Client client, ")
@@ -209,13 +225,15 @@ fn render(
         };
         writeln!(
             calls,
-            "public {} Envelope<{result}> {method}({param}{vars} variables) throws java.io.IOException, InterruptedException {{ return {receiver}.execute({document}, {name}, variables.toJson(), {result}::fromJson); }}",
+            "public {} Envelope<{result}> {method}({param}{vars} variables) throws java.io.IOException, InterruptedException {{ return {}Operation.execute({receiver}, variables); }}",
             if style == GraphqlStyle::Raw {
                 "static"
             } else {
                 ""
-            }
+            },
+            op.name
         )?;
+        operation_files.push((format!("{}Operation",op.name),format!("package {package}.operations;\nimport {package}.models.*;\nimport static {package}.GraphqlRuntime.*;\npublic final class {}Operation {{ private {}Operation() {{}} public static Envelope<{result}> execute(Transport transport,{vars} variables) throws java.io.IOException,InterruptedException {{ return transport.execute({document},{name},variables.toJson(),{result}::fromJson); }} }}\n",op.name,op.name)));
         if op.variables.iter().all(|v| v.optional) {
             writeln!(
                 calls,
@@ -263,6 +281,7 @@ fn render(
         groups = custom.clone();
     }
     let mut group_code = String::new();
+    let mut group_files = Vec::new();
     for (group, members) in groups {
         ensure!(
             models::identifier(&group)
@@ -285,8 +304,11 @@ fn render(
         models.reserve(&class)?;
         writeln!(
             group_code,
-            "public {class} {group}() {{ return new {class}(); }} public final class {class} {{"
+            "public {package}.groups.{class} {group}() {{ return new {package}.groups.{class}(this); }}"
         )?;
+        let mut group_source = format!(
+            "package {package}.groups;\nimport {package}.Client;\nimport {package}.models.*;\nimport static {package}.GraphqlRuntime.*;\npublic final class {class} {{ private final Client client; public {class}(Client client) {{this.client=client;}}\n"
+        );
         for (method, op) in members {
             ensure!(
                 models::identifier(&method)
@@ -306,8 +328,8 @@ fn render(
                 .get(&op)
                 .ok_or_else(|| anyhow::anyhow!("Unknown GraphQL operation {op}"))?;
             writeln!(
-                group_code,
-                "public Envelope<{op}Result> {method}({op}Variables variables) throws java.io.IOException, InterruptedException {{ return Client.this.{target}(variables); }}"
+                group_source,
+                "public Envelope<{op}Result> {method}({op}Variables variables) throws java.io.IOException, InterruptedException {{ return client.{target}(variables); }}"
             )?;
             if c.operations
                 .iter()
@@ -318,23 +340,43 @@ fn render(
                 .all(|v| v.optional)
             {
                 writeln!(
-                    group_code,
-                    "public Envelope<{op}Result> {method}() throws java.io.IOException, InterruptedException {{ return Client.this.{target}(); }}"
+                    group_source,
+                    "public Envelope<{op}Result> {method}() throws java.io.IOException, InterruptedException {{ return client.{target}(); }}"
                 )?;
             }
         }
-        group_code.push_str("}\n");
+        group_source.push_str("}\n");
+        group_files.push((class, group_source));
     }
     let source = format!(
-        "package {package};\nimport com.fasterxml.jackson.databind.*;\nimport com.fasterxml.jackson.databind.node.*;\nimport java.util.*;\npublic final class Client {{\n{}\n{}\npublic final Transport transport; public Client(Transport transport) {{ this.transport=Objects.requireNonNull(transport); }} public Client(String endpoint) {{ this(new HttpTransport(endpoint)); }}\n{calls}\n{group_code}\n}}",
-        include_str!("graphql/runtime.java.tmpl"),
-        models.source
+        "package {package};\nimport {package}.models.*;\nimport {package}.operations.*;\nimport java.util.Objects;\npublic final class Client extends GraphqlRuntime {{ public Client(Transport transport){{super(transport);}} public Client(String endpoint){{this(new HttpTransport(endpoint));}}\n{calls}\n{group_code}\n}}\n"
     );
+    let root = format!("src/main/java/{}", package.replace('.', "/"));
     let mut tree = GeneratedTree::default();
-    tree.insert(GeneratedFile::new(
-        format!("src/main/java/{}/Client.java", package.replace('.', "/")),
-        source,
-    )?)?;
+    tree.insert(GeneratedFile::new(format!("{root}/Client.java"), source)?)?;
+    let runtime = include_str!("graphql/runtime.java.tmpl")
+        .replace("private static ", "public static ")
+        .replace(
+            "public static final ObjectMapper JSON",
+            "private static final ObjectMapper JSON",
+        );
+    tree.insert(GeneratedFile::new(format!("{root}/GraphqlRuntime.java"),format!("package {package};\nimport com.fasterxml.jackson.databind.*;\nimport com.fasterxml.jackson.databind.node.*;\nimport java.util.*;\npublic class GraphqlRuntime {{ public final Transport transport; protected GraphqlRuntime(Transport transport){{this.transport=Objects.requireNonNull(transport);}} public static ObjectNode object(){{return JSON.createObjectNode();}}\n{runtime}\n}}\n"))?)?;
+    for (name, source) in layout::declarations(&models.source)? {
+        let source = source.replace("JSON.createObjectNode()", "object()");
+        tree.insert(GeneratedFile::new(format!("{root}/models/{name}.java"),format!("package {package}.models;\nimport com.fasterxml.jackson.databind.*;\nimport com.fasterxml.jackson.databind.node.*;\nimport static {package}.GraphqlRuntime.*;\npublic {}\n",source.strip_prefix("public ").unwrap()))?)?;
+    }
+    for (name, source) in operation_files {
+        tree.insert(GeneratedFile::new(
+            format!("{root}/operations/{name}.java"),
+            source,
+        )?)?;
+    }
+    for (name, source) in group_files {
+        tree.insert(GeneratedFile::new(
+            format!("{root}/groups/{name}.java"),
+            source,
+        )?)?;
+    }
     tree.insert(GeneratedFile::new(
         "pom.xml",
         crate::docs::pom_xml(package, "graphql-client", "0.0.0"),
@@ -347,7 +389,7 @@ fn render(
         "settings.gradle",
         crate::docs::settings_gradle("graphql-client"),
     )?)?;
-    tree.insert(GeneratedFile::new("README.md",format!("# GraphQL Java client\n\nJava 17+; Maven or Gradle; pinned Jackson 2.18.3. Import `{package}.Client`.\n\nSelected style: `{style:?}`. Raw exposes static operation functions taking a client, flat exposes methods on the client, and idiomatic exposes query/mutation or explicitly configured resource groups.\n\nVariables and selected results are nested records on `Client`. Optional fields use `Field.absent()` or `Field.of(value)`; explicit null is distinct from absence. HTTP uses JDK HttpClient. Supply `HttpTransport(endpoint, http, headers)` or implement `Transport`.\n\nCalls return `Envelope<T>` with data presence, typed partial data, errors, extensions and HTTP status. `requireData()` rejects GraphQL errors and missing/null data. Transport/protocol failures throw IOException; interruption remains explicit. Abstract selections require selected __typename. Custom scalars remain JsonNode. Subscriptions require a separately supported transport and are rejected.\n"))?)?;
+    tree.insert(GeneratedFile::new("README.md",format!("# GraphQL Java client\n\nJava 17+; Maven or Gradle; pinned Jackson 2.18.3. Import `{package}.Client`.\n\nSelected style: `{style:?}`. Raw exposes static operation functions taking a client, flat exposes methods on the client, and idiomatic exposes query/mutation or explicitly configured resource groups.\n\nVariables and selected results are individual records in `{package}.models`; import `{package}.models.ReadUserVariables` instead of the previous `Client.ReadUserVariables`. Client call paths and inherited Field/Envelope/Transport helper types remain compatible. Each operation document and execution body lives in a separate operations file; Client is a thin facade. Atomic declarations and exceptionally large public facades exceeding128KiB are reported in .poolster/source-layout-diagnostics.json rather than silently split across incompatible APIs. Optional fields use `Field.absent()` or `Field.of(value)`; explicit null is distinct from absence. HTTP uses JDK HttpClient. Supply `HttpTransport(endpoint, http, headers)` or implement `Transport`.\n\nCalls return `Envelope<T>` with data presence, typed partial data, errors, extensions and HTTP status. `requireData()` rejects GraphQL errors and missing/null data. Transport/protocol failures throw IOException; interruption remains explicit. Abstract selections require selected __typename. Custom scalars remain JsonNode. Subscriptions require a separately supported transport and are rejected.\n"))?)?;
     tree.insert(GeneratedFile::new(
         "graphql/schema.graphql",
         c.schema_source.clone(),
@@ -356,5 +398,12 @@ fn render(
         "graphql/operations.graphql",
         c.operation_source.clone(),
     )?)?;
+    let oversized=tree.iter().filter(|(path,source)|path.extension().is_some_and(|ext|ext=="java")&&source.len()>128*1024).map(|(path,source)|serde_json::json!({"path":path,"bytes":source.len(),"max_file_bytes":128*1024,"reason":"Atomic declaration or thin public facade exceeds the source budget; retained intact to preserve public API."})).collect::<Vec<_>>();
+    if !oversized.is_empty() {
+        tree.insert(GeneratedFile::new(
+            ".poolster/source-layout-diagnostics.json",
+            serde_json::to_string_pretty(&oversized)?,
+        )?)?;
+    }
     Ok((tree, methods))
 }

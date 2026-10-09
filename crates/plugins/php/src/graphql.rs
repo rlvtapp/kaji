@@ -171,6 +171,56 @@ fn upper(value: &str) -> String {
     v[..1].make_ascii_uppercase();
     v
 }
+fn method_traits(
+    owner: &str,
+    methods: &BTreeMap<String, String>,
+    files: &mut BTreeMap<String, String>,
+    names: &mut BTreeSet<String>,
+) -> Result<String> {
+    let mut level = vec![];
+    for (name, method) in methods {
+        let class = format!("{owner}{name}Methods");
+        ensure!(
+            names.insert(class.to_ascii_lowercase()),
+            "GraphQL trait naming collision {class}"
+        );
+        files.insert(
+            format!("Methods/{class}.php"),
+            format!("trait {class} {{\n{method}\n}}"),
+        );
+        level.push(class);
+    }
+    let mut depth = 0;
+    while level.len() > 1 {
+        let mut next = vec![];
+        for (index, children) in level.chunks(2).enumerate() {
+            if children.len() == 1 {
+                next.push(children[0].clone());
+                continue;
+            }
+            let class = format!("{owner}Branch{depth}Node{index}Methods");
+            ensure!(
+                names.insert(class.to_ascii_lowercase()),
+                "GraphQL trait naming collision {class}"
+            );
+            let requires = children
+                .iter()
+                .map(|child| format!("require_once __DIR__.'/{child}.php';\n"))
+                .collect::<String>();
+            files.insert(
+                format!("Methods/{class}.php"),
+                format!("{requires}trait {class} {{use {};}}", children.join(",")),
+            );
+            next.push(class);
+        }
+        level = next;
+        depth += 1;
+    }
+    Ok(level
+        .first()
+        .map(|root| format!("use {root};"))
+        .unwrap_or_default())
+}
 pub(crate) fn render(
     contract: &GraphqlOperations,
     package: &str,
@@ -197,7 +247,7 @@ pub(crate) fn render(
     }
     let mut models = Models {
         namespace: namespace.clone(),
-        source: String::new(),
+        files: BTreeMap::new(),
         names: ["client", "presence", "graphqlresponse", "graphqlexception"]
             .into_iter()
             .map(str::to_string)
@@ -207,8 +257,8 @@ pub(crate) fn render(
         models.object(name, fields, true)?;
     }
     let mut symbols = BTreeMap::new();
-    let mut functions = String::new();
-    let mut methods = String::new();
+    let mut files = BTreeMap::new();
+    let mut methods = BTreeMap::new();
     let mut used = BTreeSet::new();
     for op in &contract.operations {
         ensure!(
@@ -244,10 +294,12 @@ pub(crate) fn render(
         } else {
             format!("{name}Variables $variables")
         };
+        let mut functions = String::new();
         writeln!(functions,"/** @return GraphqlResponse<{name}Result> */\nfunction {method}(Client $client,{variables}):GraphqlResponse{{return $client->execute({},{},$variables??new {name}Variables(),{name}Result::class);}}",quote(&name),quote(&op.document)).unwrap();
         if matches!(style, GraphqlStyle::Flat) {
-            writeln!(methods,"/** @return GraphqlResponse<{name}Result> */ public function {method}({variables}):GraphqlResponse{{return {method}($this,$variables);}}").unwrap();
+            methods.insert(name.clone(),format!("/** @return GraphqlResponse<{name}Result> */ public function {method}({variables}):GraphqlResponse{{return {method}($this,$variables);}}"));
         }
+        files.insert(format!("Operations/{name}.php"), functions);
         symbols.insert(name, method);
     }
     if matches!(style, GraphqlStyle::Idiomatic) {
@@ -283,12 +335,11 @@ pub(crate) fn render(
                 models.names.insert(class.to_ascii_lowercase()),
                 "GraphQL group type collision"
             );
-            writeln!(
-                methods,
-                "public function {group}():{class}{{return new {class}($this);}}"
-            )
-            .unwrap();
-            writeln!(functions,"final readonly class {class} {{public function __construct(private Client $client){{}}").unwrap();
+            methods.insert(
+                class.clone(),
+                format!("public function {group}():{class}{{return new {class}($this);}}"),
+            );
+            let mut group_methods = BTreeMap::new();
             let mut names = BTreeSet::new();
             for (method, operation) in entries {
                 let method = ident(&method)?;
@@ -309,26 +360,41 @@ pub(crate) fn render(
                 } else {
                     format!("{operation}Variables $variables")
                 };
-                writeln!(functions,"/** @return GraphqlResponse<{operation}Result> */ public function {method}({vars}):GraphqlResponse{{return {function}($this->client,$variables);}}").unwrap();
+                group_methods.insert(upper(&method),format!("/** @return GraphqlResponse<{operation}Result> */ public function {method}({vars}):GraphqlResponse{{return {function}($this->client,$variables);}}"));
             }
-            functions.push_str("}\n");
+            let inherited = method_traits(&class, &group_methods, &mut files, &mut models.names)?;
+            files.insert(format!("Groups/{class}.php"),format!("final readonly class {class} {{ public function __construct(private Client $client){{}} {inherited} }}"));
         }
     }
     let mut tree = GeneratedTree::default();
-    tree.insert(GeneratedFile::new(
-        "src/Graphql.php",
+    let inherited = method_traits("Client", &methods, &mut files, &mut models.names)?;
+    let runtime =
+        include_str!("../templates/graphql.php.tmpl").replace("__NAMESPACE__", &namespace);
+    let (runtime, client) = runtime.split_once("class Client {").unwrap();
+    tree.insert(GeneratedFile::new("src/Runtime.php", runtime)?)?;
+    files.insert(
+        "Client.php".into(),
         format!(
-            "{}\n{}\n{}",
-            include_str!("../templates/graphql.php.tmpl")
-                .replace("__NAMESPACE__", &namespace)
-                .replace("__CLIENT_METHODS__", &methods),
-            models.source,
-            functions
+            "class Client {{{}",
+            client.replace("__CLIENT_METHODS__", &inherited)
         ),
-    )?)?;
+    );
+    for (name, source) in models.files {
+        files.insert(format!("Models/{name}.php"), source);
+    }
+    for (file, source) in files {
+        tree.insert(GeneratedFile::new(
+            format!("src/{file}"),
+            format!("<?php\ndeclare(strict_types=1);\nnamespace {namespace};\n{source}"),
+        )?)?;
+    }
+    tree.insert(GeneratedFile::new("src/Graphql.php","<?php\ndeclare(strict_types=1);\nrequire_once __DIR__.'/Runtime.php';\nforeach(['Models','Operations','Methods','Groups'] as $dir) foreach(glob(__DIR__.'/'. $dir .'/*.php') ?: [] as $file) require_once $file;\nrequire_once __DIR__.'/Client.php';\n")?)?;
     tree.insert(GeneratedFile::new("composer.json",serde_json::to_string_pretty(&serde_json::json!({"name":package,"version":"0.0.0","require":{"php":">=8.2"},"autoload":{"files":["src/Graphql.php"]}}))?)?)?;
     tree.insert(GeneratedFile::new("README.md","# GraphQL client\n\nPHP 8.2+, Composer autoload. Query/mutation fixed-operation clients use selection-specific immutable models. Optional fields use Presence::missing() versus Presence::of(null). Responses preserve partial data and errors; requireData() rejects errors. Raw functions, flat Client methods or grouped accessors. HTTP streams by default, injectable callable transport for PSR-18/Symfony. Subscriptions unsupported. Custom scalars retain JSON values.\n")?)?;
+    source_layout::diagnostics(&mut tree)?;
     Ok((tree, symbols))
 }
 #[cfg(test)]
 mod tests;
+
+mod source_layout;

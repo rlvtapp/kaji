@@ -174,3 +174,14 @@ outside this increment. See the [support matrix](../../plugin-support-matrix.md)
 [remaining work](../inputs/native-pipelines.md#remaining-work).
 
 Changes in this checkout are not part of the already published alpha.1 packages.
+
+## Generated source layout
+
+`graphql.ts` remains the public barrel. Individual model and operation files live in `graphql/models/` and `graphql/operations/`. `graphql-client.ts` constructs the client using bounded helper parts in `graphql/client/`; runtime code stays in `graphql-runtime.ts`. Export indexes are split into small parts. Model modules import only the input types they reference.
+
+The layout targets source files below **128 KiB**, grouping declarations and export
+parts at semantic boundaries. An indivisible model or operation that exceeds this
+budget is retained and listed in `.poolster/source-layout-diagnostics.json`;
+this is a size diagnostic, not a claim that every possible schema produces small files.
+Regeneration removes obsolete unchanged owned files and preserves unrelated user files.
+Source customizations referring to old monolithic paths must be retargeted.

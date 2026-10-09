@@ -62,25 +62,12 @@ fn compiles_executes_all_styles() {
             fs::write(p, s).unwrap();
         }
         let call = match style {
-            GraphqlStyle::Raw => "Client.readUser(client,new Client.ReadUserVariables(\"1\"))",
-            GraphqlStyle::Flat => "client.readUser(new Client.ReadUserVariables(\"1\"))",
-            GraphqlStyle::Idiomatic => {
-                "client.query().readUser(new Client.ReadUserVariables(\"1\"))"
-            }
+            GraphqlStyle::Raw => "Client.readUser(client,new ReadUserVariables(\"1\"))",
+            GraphqlStyle::Flat => "client.readUser(new ReadUserVariables(\"1\"))",
+            GraphqlStyle::Idiomatic => "client.query().readUser(new ReadUserVariables(\"1\"))",
         };
-        fs::write(dir.path().join("Test.java"),format!(r#"import io.test.Client;import com.fasterxml.jackson.databind.*;public class Test {{public static void main(String[] args)throws Exception {{Client client=new Client(new Client.Transport(){{public <T> Client.Envelope<T> execute(String doc,String op,com.fasterxml.jackson.databind.node.ObjectNode vars,Client.Decoder<T> decoder)throws java.io.IOException{{if(!vars.path("id").asText().equals("1"))throw new AssertionError();return new Client.Envelope<>(true,decoder.decode(new ObjectMapper().readTree("{{\"readUser\":{{\"name\":\"Ada\",\"nickname\":null}}}}")),java.util.List.of(),null,200);}}}});var response={call};if(!response.requireData().readUser().name().equals("Ada"))throw new AssertionError();if(!response.data().readUser().nickname().present()||response.data().readUser().nickname().value()!=null)throw new AssertionError();}}}}"#)).unwrap();
-        let output = Command::new("javac")
-            .args([
-                "-cp",
-                &classpath(),
-                "-d",
-                "classes",
-                "src/main/java/io/test/Client.java",
-                "Test.java",
-            ])
-            .current_dir(dir.path())
-            .output()
-            .unwrap();
+        fs::write(dir.path().join("Test.java"),format!(r#"import io.test.Client;import io.test.models.*;import com.fasterxml.jackson.databind.*;public class Test {{public static void main(String[] args)throws Exception {{Client client=new Client(new Client.Transport(){{public <T> Client.Envelope<T> execute(String doc,String op,com.fasterxml.jackson.databind.node.ObjectNode vars,Client.Decoder<T> decoder)throws java.io.IOException{{if(!vars.path("id").asText().equals("1"))throw new AssertionError();return new Client.Envelope<>(true,decoder.decode(new ObjectMapper().readTree("{{\"readUser\":{{\"name\":\"Ada\",\"nickname\":null}}}}")),java.util.List.of(),null,200);}}}});var response={call};if(!response.requireData().readUser().name().equals("Ada"))throw new AssertionError();if(!response.data().readUser().nickname().present()||response.data().readUser().nickname().value()!=null)throw new AssertionError();}}}}"#)).unwrap();
+        let output = compile(dir.path());
         assert!(
             output.status.success(),
             "{}",
@@ -164,6 +151,11 @@ fn live_graphql_server_all_styles() {
             );
         }
         let mut input = fixture();
+        input.operations[0].document = format!(
+            "{}{}",
+            "# padded comment\n".repeat(5000),
+            input.operations[0].document
+        );
         input.operations.push(GraphqlOperation {
             name: "Ping".into(),
             kind: GraphqlOperationKind::Mutation,
@@ -194,22 +186,11 @@ fn live_graphql_server_all_styles() {
             GraphqlStyle::Idiomatic => "client.mutation().ping()",
         };
         let test = format!(
-            r#"import io.test.Client;public class Test {{public static void main(String[] args)throws Exception {{var client=new Client("http://127.0.0.1:{}");var variables=new Client.ReadUserVariables("1");var result={invoke};if(!result.requireData().readUser().name().equals("Ada")||!result.data().readUser().nickname().present()||result.data().readUser().nickname().value()!=null)throw new AssertionError();variables=new Client.ReadUserVariables("partial");result={invoke};if(!result.hasErrors()||!result.dataPresent()||!result.data().readUser().name().equals("Ada")||!result.errors().get(0).message().equals("nickname failed")||result.errors().get(0).path()==null)throw new AssertionError();try{{result.requireData();throw new AssertionError();}}catch(Client.GraphqlException expected){{}} if(!{ping}.requireData().ping())throw new AssertionError(); }} }}"#,
+            r#"import io.test.Client;import io.test.models.*;public class Test {{public static void main(String[] args)throws Exception {{var client=new Client("http://127.0.0.1:{}");var variables=new ReadUserVariables("1");var result={invoke};if(!result.requireData().readUser().name().equals("Ada")||!result.data().readUser().nickname().present()||result.data().readUser().nickname().value()!=null)throw new AssertionError();variables=new ReadUserVariables("partial");result={invoke};if(!result.hasErrors()||!result.dataPresent()||!result.data().readUser().name().equals("Ada")||!result.errors().get(0).message().equals("nickname failed")||result.errors().get(0).path()==null)throw new AssertionError();try{{result.requireData();throw new AssertionError();}}catch(Client.GraphqlException expected){{}} if(!{ping}.requireData().ping())throw new AssertionError(); }} }}"#,
             port.trim()
         );
         fs::write(dir.path().join("Test.java"), test).unwrap();
-        let output = Command::new("javac")
-            .args([
-                "-cp",
-                &classpath(),
-                "-d",
-                "classes",
-                "src/main/java/io/test/Client.java",
-                "Test.java",
-            ])
-            .current_dir(dir.path())
-            .output()
-            .unwrap();
+        let output = compile(dir.path());
         assert!(
             output.status.success(),
             "{}",
@@ -291,19 +272,8 @@ fn complex_selections_compile_and_decode() {
         fs::create_dir_all(p.parent().unwrap()).unwrap();
         fs::write(p, s).unwrap();
     }
-    fs::write(dir.path().join("Test.java"),r#"import io.test.Client;import com.fasterxml.jackson.databind.ObjectMapper;public class Test {public static void main(String[]args)throws Exception {var vars=new Client.ReadUserVariables("1",Client.Field.of(new Client.Filter(Client.Field.absent())));if(vars.toJson().get("filter").has("name"))throw new AssertionError();var absent=new Client.ReadUserVariables("1",Client.Field.absent());if(absent.toJson().has("filter"))throw new AssertionError();var explicit=new Client.ReadUserVariables("1",Client.Field.of(null));if(!explicit.toJson().get("filter").isNull())throw new AssertionError();var result=Client.ReadUserResult.fromJson(new ObjectMapper().readTree("{\"nodes\":[{\"__typename\":\"User\",\"name\":\"Ada\"},null,{\"__typename\":\"Team\",\"name\":\"Staff\"}],\"matrix\":[[\"a\",null],null]}"));if(!(result.nodes().get(0) instanceof Client.ReadUserResultNodesVariant0 user)||!user.name().equals("Ada")||result.nodes().get(1)!=null||result.matrix().get(0).get(1)!=null)throw new AssertionError();}}"#).unwrap();
-    let output = Command::new("javac")
-        .args([
-            "-cp",
-            &classpath(),
-            "-d",
-            "classes",
-            "src/main/java/io/test/Client.java",
-            "Test.java",
-        ])
-        .current_dir(dir.path())
-        .output()
-        .unwrap();
+    fs::write(dir.path().join("Test.java"),r#"import io.test.Client;import io.test.models.*;import com.fasterxml.jackson.databind.ObjectMapper;public class Test {public static void main(String[]args)throws Exception {var vars=new ReadUserVariables("1",Client.Field.of(new Filter(Client.Field.absent())));if(vars.toJson().get("filter").has("name"))throw new AssertionError();var absent=new ReadUserVariables("1",Client.Field.absent());if(absent.toJson().has("filter"))throw new AssertionError();var explicit=new ReadUserVariables("1",Client.Field.of(null));if(!explicit.toJson().get("filter").isNull())throw new AssertionError();var result=ReadUserResult.fromJson(new ObjectMapper().readTree("{\"nodes\":[{\"__typename\":\"User\",\"name\":\"Ada\"},null,{\"__typename\":\"Team\",\"name\":\"Staff\"}],\"matrix\":[[\"a\",null],null]}"));if(!(result.nodes().get(0) instanceof ReadUserResultNodesVariant0 user)||!user.name().equals("Ada")||result.nodes().get(1)!=null||result.matrix().get(0).get(1)!=null)throw new AssertionError();}}"#).unwrap();
+    let output = compile(dir.path());
     assert!(
         output.status.success(),
         "{}",
@@ -331,11 +301,25 @@ fn selection_models_and_graph_are_native() {
     )
     .unwrap();
     assert_eq!(methods["ReadUser"], "readUser");
-    let client = tree.get("src/main/java/io/test/Client.java").unwrap();
+    let client = tree
+        .get("src/main/java/io/test/models/ReadUserVariables.java")
+        .unwrap();
     assert!(client.contains("ReadUserVariables(String id)"));
-    assert!(client.contains("Field<String> nickname"));
-    assert!(client.contains("public QueryGroup query()"));
-    assert!(client.contains("operationName"));
+    assert!(
+        tree.get("src/main/java/io/test/models/ReadUserResultReadUser.java")
+            .unwrap()
+            .contains("Field<String> nickname")
+    );
+    assert!(
+        tree.get("src/main/java/io/test/Client.java")
+            .unwrap()
+            .contains("groups.QueryGroup query()")
+    );
+    assert!(
+        tree.get("src/main/java/io/test/GraphqlRuntime.java")
+            .unwrap()
+            .contains("operationName")
+    );
 }
 struct Source {
     meta: Meta,
@@ -380,4 +364,76 @@ fn selected_provider_and_regeneration() {
         assert!(source.contains(&format!("record {name}Variables")));
         assert!(!source.contains("record IgnoredVariables"));
     }
+}
+
+fn compile(dir: &std::path::Path) -> std::process::Output {
+    fn files(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        for entry in fs::read_dir(dir).unwrap() {
+            let p = entry.unwrap().path();
+            if p.is_dir() {
+                files(&p, out);
+            } else if p.extension().is_some_and(|e| e == "java") {
+                out.push(p);
+            }
+        }
+    }
+    let mut sources = Vec::new();
+    files(&dir.join("src/main/java"), &mut sources);
+    Command::new("javac")
+        .args(["-cp", &classpath(), "-d", "classes"])
+        .args(sources)
+        .arg("Test.java")
+        .current_dir(dir)
+        .output()
+        .unwrap()
+}
+#[test]
+fn many_operations_have_individual_bounded_sources() {
+    let mut c = fixture();
+    let op = c.operations[0].clone();
+    c.operations = (0..300)
+        .map(|i| {
+            let mut op = op.clone();
+            op.name = format!("Read{i}");
+            op.document =
+                format!("query Read{i}($id: ID!) {{readUser(id:$id) {{ name nickname }} }}");
+            op
+        })
+        .collect();
+    let (tree, _) = render(&c, "io.test", GraphqlStyle::Idiomatic, &BTreeMap::new()).unwrap();
+    assert_eq!(
+        tree.iter()
+            .filter(|(p, _)| p.to_string_lossy().contains("/operations/"))
+            .count(),
+        300
+    );
+    assert_eq!(
+        tree.iter()
+            .filter(|(p, _)| p.to_string_lossy().contains("/models/"))
+            .count(),
+        900
+    );
+    for (p, source) in tree.iter() {
+        if p.extension().is_some_and(|e| e == "java") {
+            assert!(source.len() < 128 * 1024, "{} is oversized", p.display());
+        }
+    }
+    assert!(
+        !tree
+            .get("src/main/java/io/test/Client.java")
+            .unwrap()
+            .contains("query Read")
+    );
+}
+#[test]
+fn rejects_unportable_type_names_before_writing() {
+    let mut c = fixture();
+    c.input_objects.insert("Foo".into(), vec![]);
+    c.input_objects.insert("foo".into(), vec![]);
+    let error = render(&c, "io.test", GraphqlStyle::Flat, &BTreeMap::new()).unwrap_err();
+    assert!(error.to_string().contains("case-insensitive"));
+    let mut c = fixture();
+    c.operations[0].name = "A".repeat(230);
+    let error = render(&c, "io.test", GraphqlStyle::Flat, &BTreeMap::new()).unwrap_err();
+    assert!(error.to_string().contains("portable filename limit"));
 }

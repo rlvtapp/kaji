@@ -93,7 +93,7 @@ fn renders_native_styles() {
         let (tree, methods) = render(&fixture(), "example", style, &BTreeMap::new()).unwrap();
         assert_eq!(methods["ReadUser"], "read_user");
         assert!(
-            tree.get("lib/example/models.ex")
+            tree.get("lib/example/models/read_user_result_read_user.ex")
                 .unwrap()
                 .contains("nickname: String.t() | nil | :poolster_absent")
         );
@@ -264,4 +264,63 @@ fn selected_provider_and_regeneration() {
         assert!(content.contains(&format!("Models.{name}Variables")));
         assert!(!content.contains("Models.IgnoredVariables"));
     }
+}
+
+#[test]
+fn many_operations_have_bounded_modules() {
+    let mut c = fixture();
+    let original = c.operations[0].clone();
+    c.operations=(0..300).map(|i|{let mut op=original.clone();op.name=format!("Read{i}");op.document=format!("query Read{i}($id: ID!, $nick: Boolean = true) {{readUser(id:$id){{name nickname @include(if:$nick)}}}}");op}).collect();
+    let (tree, _) = render(&c, "example", GraphqlStyle::Idiomatic, &BTreeMap::new()).unwrap();
+    assert_eq!(
+        tree.iter()
+            .filter(|(p, _)| p.to_string_lossy().contains("/operations/"))
+            .count(),
+        300
+    );
+    assert_eq!(
+        tree.iter()
+            .filter(|(p, _)| p.to_string_lossy().contains("/models/"))
+            .count(),
+        900
+    );
+    assert!(
+        !tree
+            .get("lib/example/operations.ex")
+            .unwrap()
+            .contains("query Read")
+    );
+    assert!(
+        tree.get("lib/example/operations.ex")
+            .unwrap()
+            .contains("use Example.Internal")
+    );
+    for (p, source) in tree.iter() {
+        if p.extension().is_some_and(|ext| ext == "ex") {
+            assert!(source.len() < 128 * 1024, "{} oversized", p.display());
+        }
+    }
+}
+#[test]
+fn filenames_are_portable_and_case_collisions_reject() {
+    let stem = layout::stem(&"UpperCase".repeat(30));
+    assert!(stem.len() <= 180);
+    assert_eq!(stem, layout::stem(&"UpperCase".repeat(30)));
+    let mut c = fixture();
+    c.input_objects.insert("FOO".into(), vec![]);
+    c.input_objects.insert("Foo".into(), vec![]);
+    assert!(
+        render(&c, "example", GraphqlStyle::Flat, &BTreeMap::new())
+            .unwrap_err()
+            .to_string()
+            .contains("model collision")
+    );
+    let mut c = fixture();
+    c.operations[0].name = "A".repeat(250);
+    assert!(
+        render(&c, "example", GraphqlStyle::Flat, &BTreeMap::new())
+            .unwrap_err()
+            .to_string()
+            .contains("atom name limit")
+    );
 }

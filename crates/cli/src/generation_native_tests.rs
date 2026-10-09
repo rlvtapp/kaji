@@ -212,7 +212,12 @@ fn graphql_go_python_packages_generate_and_regenerate_through_recipe() {
         ]),
     );
     generate_from_config(&path, ColorChoice::Never, false, false).unwrap();
-    assert!(directory.path().join("generated/go/graphql.go").exists());
+    assert!(
+        directory
+            .path()
+            .join("generated/go/graphql_client.go")
+            .exists()
+    );
     assert!(
         directory
             .path()

@@ -111,7 +111,6 @@ fn unsupported_and_colliding_contracts_fail() {
 #[ignore = "requires pinned graphql@16.14.2 Node module and loopback sockets"]
 fn python_graphql_against_real_graphql_server() {
     let root = std::env::var("POOLSTER_GRAPHQL_JS_ROOT").expect("set POOLSTER_GRAPHQL_JS_ROOT");
-    let temp = tempfile::tempdir().unwrap();
     let mut input = contract();
     input.operations[0].document = "query ReadUser($id: ID) { hello(id: $id) }".into();
     let groups = BTreeMap::from([
@@ -124,16 +123,35 @@ fn python_graphql_against_real_graphql_server() {
             BTreeMap::from([("get".into(), "ReadUser".into())]),
         ),
     ]);
-    render(&input, "example", GraphqlStyle::Idiomatic, &groups)
-        .unwrap()
-        .0
-        .write_to(temp.path())
-        .unwrap();
-    let script = r#"
+    for (style, custom) in [
+        (GraphqlStyle::Raw, false),
+        (GraphqlStyle::Flat, false),
+        (GraphqlStyle::Idiomatic, false),
+        (GraphqlStyle::Idiomatic, true),
+    ] {
+        let temp = tempfile::tempdir().unwrap();
+        let selected = if custom {
+            groups.clone()
+        } else {
+            BTreeMap::new()
+        };
+        render(&input, "example", style, &selected)
+            .unwrap()
+            .0
+            .write_to(temp.path())
+            .unwrap();
+        let call = match style {
+            GraphqlStyle::Raw => "operations.read_user(client._transport, {'id':None})",
+            GraphqlStyle::Flat => "client.read_user({'id':None})",
+            GraphqlStyle::Idiomatic if custom => "client.users.read({'id':None})",
+            GraphqlStyle::Idiomatic => "client.query.read_user({'id':None})",
+        };
+        let script = r#"
 import os, json, subprocess, threading
-from example import Client
+from example import Client, operations
 node = r'''
-const { graphql, buildSchema } = require(process.env.POOLSTER_GRAPHQL_JS_ROOT + '/graphql');
+const { graphql, buildSchema, version } = require(process.env.POOLSTER_GRAPHQL_JS_ROOT + '/graphql');
+if(version !== '16.14.2') throw Error('Expected pinned GraphQL16.14.2');
 const schema = buildSchema('type Query { hello(id: ID): String }');
 const http = require('http');
 const server = http.createServer(async (req,res) => {
@@ -148,25 +166,26 @@ server=subprocess.Popen(['node','-e',node],stdout=subprocess.PIPE,text=True)
 try:
     port=int(server.stdout.readline())
     client=Client('http://127.0.0.1:'+str(port))
-    for result in [client.read_user(), client.users.read(), client.people.get({'id': None})]:
+    for result in [CALL_OPERATION]:
         assert result.status == 'partial' and result.data == {'hello':None}
         assert result.errors[0]['message'] == 'resolver failed'
 finally:
     server.terminate(); server.wait(timeout=5)
-"#;
-    let output = Command::new("python3")
-        .args(["-c", script])
-        .env("POOLSTER_GRAPHQL_JS_ROOT", root)
-        .env("PYTHONPATH", temp.path().join("src"))
-        .env("PYTHONPYCACHEPREFIX", temp.path().join("pycache"))
-        .current_dir(temp.path())
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+"#.replace("CALL_OPERATION",call);
+        let output = Command::new("python3")
+            .args(["-c", &script])
+            .env("POOLSTER_GRAPHQL_JS_ROOT", &root)
+            .env("PYTHONPATH", temp.path().join("src"))
+            .env("PYTHONPYCACHEPREFIX", temp.path().join("pycache"))
+            .current_dir(temp.path())
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 }
 
 #[test]
@@ -225,6 +244,155 @@ assert callable(operations.read_user)
             output.status.success(),
             "{}",
             String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}
+#[test]
+fn large_modular_packages_preserve_types_files_and_regeneration() {
+    let mut c = contract();
+    let op = c.operations[0].clone();
+    c.operations = (0..300)
+        .map(|i| {
+            let mut op = op.clone();
+            op.name = format!("ReadOperation{i:03}");
+            op.document = op.document.replace("ReadUser", &op.name);
+            op
+        })
+        .collect();
+    c.input_objects.insert(
+        "Wide".into(),
+        (0..512)
+            .map(|i| ModelField {
+                name: format!("field{i:03}"),
+                ty: ModelType {
+                    nullable: i % 3 == 0,
+                    kind: ModelKind::Scalar("String".into()),
+                },
+                optional: i % 2 == 0,
+                default_value: None,
+            })
+            .collect(),
+    );
+    c.input_objects.insert(
+        "Filter".into(),
+        vec![ModelField {
+            name: "next".into(),
+            ty: ModelType {
+                nullable: true,
+                kind: ModelKind::Named("Filter".into()),
+            },
+            optional: true,
+            default_value: None,
+        }],
+    );
+    c.operations[0].variables.push(ModelField {
+        name: "filter".into(),
+        ty: ModelType {
+            nullable: true,
+            kind: ModelKind::Named("Filter".into()),
+        },
+        optional: true,
+        default_value: None,
+    });
+    for (style, custom) in [
+        (GraphqlStyle::Raw, false),
+        (GraphqlStyle::Flat, false),
+        (GraphqlStyle::Idiomatic, false),
+        (GraphqlStyle::Idiomatic, true),
+    ] {
+        let groups = if custom {
+            BTreeMap::from([(
+                "users".into(),
+                BTreeMap::from([("read".into(), "ReadOperation299".into())]),
+            )])
+        } else {
+            BTreeMap::new()
+        };
+        let (tree, _) = render(&c, "example", style, &groups).unwrap();
+        assert!(
+            !tree
+                .iter()
+                .any(|(p, _)| p == std::path::Path::new("src/example/models.py")
+                    || p == std::path::Path::new("src/example/operations.py"))
+        );
+        for (path, code) in tree.iter() {
+            assert!(
+                code.len() < 16384,
+                "{} too large: {}",
+                path.display(),
+                code.len()
+            );
+            assert!(
+                code.lines().all(|line| line.len() < 8192),
+                "{} long line",
+                path.display()
+            );
+        }
+        let mut reordered = c.clone();
+        reordered.operations.reverse();
+        reordered.input_objects.get_mut("Wide").unwrap().reverse();
+        let (again, _) = render(&reordered, "example", style, &groups).unwrap();
+        assert_eq!(
+            tree.iter().collect::<Vec<_>>(),
+            again.iter().collect::<Vec<_>>()
+        );
+        let dir = tempfile::tempdir().unwrap();
+        tree.write_to(dir.path()).unwrap();
+        let changes = again.check(dir.path()).unwrap();
+        assert!(
+            changes.added.is_empty() && changes.modified.is_empty() && changes.removed.is_empty()
+        );
+        let call = match style {
+            GraphqlStyle::Raw => "operations.read_operation299(client._transport)",
+            GraphqlStyle::Flat => "client.read_operation299()",
+            GraphqlStyle::Idiomatic if custom => "client.users.read()",
+            GraphqlStyle::Idiomatic => "client.query.read_operation299()",
+        };
+        let script = format!(
+            r#"
+import compileall, typing, importlib
+assert compileall.compile_dir('src',quiet=1)
+from example import Client, operations
+from example.models import Wide, Filter, ReadOperation000Variables, Operation0Variables, ReadOperation299Result
+assert len(typing.get_type_hints(Wide))==512
+assert len(Wide.__required_keys__)==256 and len(Wide.__optional_keys__)==256
+assert typing.get_type_hints(Filter)['next']==typing.Optional[Filter]
+assert typing.get_type_hints(ReadOperation000Variables)['filter']==typing.Optional[Filter]
+assert Operation0Variables is ReadOperation000Variables
+leaf=importlib.import_module('example.models.read_operation000_variables')
+assert leaf.ReadOperation000Variables is ReadOperation000Variables
+class Transport:
+ def execute(self,*args):
+  from example import GraphqlResponse
+  return GraphqlResponse(data={{'hello':'ok'}},errors=[])
+client=Client('http://localhost'); client._transport=Transport()
+assert {call}.require_data()=={{'hello':'ok'}}
+assert typing.get_type_hints(operations.read_operation299)['return'].__args__[0] is ReadOperation299Result
+"#
+        );
+        let out = Command::new("python3")
+            .args(["-c", &script])
+            .env("PYTHONPATH", dir.path().join("src"))
+            .env("PYTHONPYCACHEPREFIX", dir.path().join("pycache"))
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let mut removed = c.clone();
+        removed.operations.pop();
+        let reduced = render(&removed, "example", style, &BTreeMap::new())
+            .unwrap()
+            .0;
+        assert!(!reduced.check(dir.path()).unwrap().removed.is_empty());
+        reduced.write_to(dir.path()).unwrap();
+        assert!(
+            !dir.path()
+                .join("src/example/operations/read_operation299.py")
+                .exists()
         );
     }
 }

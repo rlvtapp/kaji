@@ -75,9 +75,10 @@ fn run_generated(endpoint: Option<&str>) {
             BTreeMap::new()
         };
         let (tree, _) = render(&fixture(), "poolster/test", style, &groups).unwrap();
+        tree.write_to(dir.path()).unwrap();
         fs::write(
             dir.path().join("Graphql.php"),
-            tree.get("src/Graphql.php").unwrap(),
+            "<?php require_once __DIR__.'/src/Graphql.php';",
         )
         .unwrap();
         let call = match style {
@@ -219,9 +220,10 @@ fn nested_models_variables_mutations_and_no_variable_calls() {
     )
     .unwrap();
     let dir = tempfile::tempdir().unwrap();
+    tree.write_to(dir.path()).unwrap();
     fs::write(
         dir.path().join("Graphql.php"),
-        tree.get("src/Graphql.php").unwrap(),
+        "<?php require_once __DIR__.'/src/Graphql.php';",
     )
     .unwrap();
     let script = r#"<?php
@@ -312,5 +314,82 @@ fn selected_provider_and_regeneration() {
         let code = tree.iter().map(|(_, s)| s).collect::<Vec<_>>().join("\n");
         assert!(code.contains(&format!("class {name}Result")));
         assert!(!code.contains("class IgnoredResult"));
+    }
+}
+#[test]
+fn large_packages_use_bounded_files_and_regenerate() {
+    let mut c = fixture();
+    let op = c.operations[0].clone();
+    c.operations = (0..300)
+        .map(|i| {
+            let mut op = op.clone();
+            op.name = format!("Operation{i:03}");
+            op.document = op.document.replace("ReadUser", &op.name);
+            op
+        })
+        .collect();
+    for style in [
+        GraphqlStyle::Raw,
+        GraphqlStyle::Flat,
+        GraphqlStyle::Idiomatic,
+    ] {
+        let (tree, _) = render(&c, "poolster/test", style, &BTreeMap::new()).unwrap();
+        assert_eq!(
+            tree.iter()
+                .filter(|(p, _)| p.starts_with("src/Operations"))
+                .count(),
+            300
+        );
+        assert!(
+            tree.iter()
+                .filter(|(p, _)| p.starts_with("src/Models"))
+                .count()
+                >= 600
+        );
+        for (path, code) in tree.iter() {
+            assert!(
+                code.len() < 16384,
+                "{} too large: {}",
+                path.display(),
+                code.len()
+            );
+        }
+        let mut reversed = c.clone();
+        reversed.operations.reverse();
+        let (again, _) = render(&reversed, "poolster/test", style, &BTreeMap::new()).unwrap();
+        assert_eq!(
+            tree.iter().collect::<Vec<_>>(),
+            again.iter().collect::<Vec<_>>()
+        );
+        let dir = tempfile::tempdir().unwrap();
+        tree.write_to(dir.path()).unwrap();
+        let changes = again.check(dir.path()).unwrap();
+        assert!(
+            changes.added.is_empty() && changes.modified.is_empty() && changes.removed.is_empty()
+        );
+        let call = match style {
+            GraphqlStyle::Raw => "\\Poolster\\Test\\operation299($client,$variables)",
+            GraphqlStyle::Flat => "$client->operation299($variables)",
+            GraphqlStyle::Idiomatic => "$client->query()->operation299($variables)",
+        };
+        let script = format!(
+            "<?php require __DIR__.'/src/Graphql.php'; $client=new \\Poolster\\Test\\Client('http://localhost',transport:fn()=>[200,'{{\"data\":{{\"readUser\":null}}}}']);$variables=new \\Poolster\\Test\\Operation299Variables(id:'1');$r={call};if(!$r->data->value instanceof \\Poolster\\Test\\Operation299Result)throw new \\RuntimeException('wrong result');"
+        );
+        fs::write(dir.path().join("test.php"), script).unwrap();
+        let out = Command::new(std::env::var("POOLSTER_TEST_PHP").unwrap_or("php".into()))
+            .arg(dir.path().join("test.php"))
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let mut removed = c.clone();
+        removed.operations.pop();
+        let (reduced, _) = render(&removed, "poolster/test", style, &BTreeMap::new()).unwrap();
+        assert!(!reduced.check(dir.path()).unwrap().removed.is_empty());
+        reduced.write_to(dir.path()).unwrap();
+        assert!(!dir.path().join("src/Operations/Operation299.php").exists());
     }
 }

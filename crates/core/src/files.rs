@@ -390,6 +390,31 @@ struct OwnedFile {
     #[serde(default)]
     create_once: bool,
 }
+/// A deterministic, portable stem for generated source files. Public symbols remain unchanged.
+/// Long or unsafe identities receive a digest suffix; ordinary identifiers stay readable.
+pub fn source_file_stem(identity: &str) -> String {
+    if identity.len() <= 96
+        && !identity.is_empty()
+        && identity
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || b"_-$".contains(&c))
+    {
+        return identity.to_owned();
+    }
+    let prefix: String = identity
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .take(64)
+        .collect();
+    format!("{prefix}_{}", &digest(identity)[..16])
+}
+
 fn digest(value: &str) -> String {
     use sha2::{Digest, Sha256};
     Sha256::digest(value.as_bytes())
@@ -858,5 +883,21 @@ mod tests {
             tree.replace(GeneratedFile::new("typescript/missing.json", "{}\n").unwrap())
                 .is_err()
         );
+    }
+}
+
+#[cfg(test)]
+mod source_stem_tests {
+    use super::source_file_stem;
+    #[test]
+    fn source_names_are_readable_bounded_and_identity_specific() {
+        assert_eq!(source_file_stem("ReadUser"), "ReadUser");
+        let name = "Read".repeat(100);
+        let first = source_file_stem(&name);
+        assert!(first.len() < 96);
+        assert_eq!(first, source_file_stem(&name));
+        assert_ne!(first, source_file_stem(&(name + "Other")));
+        assert_ne!(source_file_stem("a/b"), source_file_stem("a_b"));
+        assert!(!source_file_stem("../escape").contains('/'));
     }
 }

@@ -35,8 +35,8 @@ fn generated_go_compiles_and_executes() {
         } else {
             BTreeMap::new()
         };
-        let (source, _) = render(&fixture(), "graphqlclient", style, &groups).unwrap();
-        fs::write(dir.path().join("graphql.go"), source).unwrap();
+        let (files, _) = render(&fixture(), "graphqlclient", style, &groups).unwrap();
+        write_files(dir.path(), files);
         fs::write(
             dir.path().join("go.mod"),
             "module graphqlclient\n\ngo 1.22\n",
@@ -157,14 +157,14 @@ fn go_graphql_against_real_graphql_server() {
     let temp = tempfile::tempdir().unwrap();
     let mut contract = fixture();
     contract.operations[0].document="query ReadUser($id: ID!, $nickname: String) { readUser(id: $id, nickname: $nickname) { name nickname } }".into();
-    let (source, _) = render(
+    let (files, _) = render(
         &contract,
         "graphqlclient",
         GraphqlStyle::Flat,
         &BTreeMap::new(),
     )
     .unwrap();
-    fs::write(temp.path().join("graphql.go"), source).unwrap();
+    write_files(temp.path(), files);
     fs::write(
         temp.path().join("go.mod"),
         "module graphqlclient\n\ngo 1.22\n",
@@ -233,5 +233,134 @@ res.setHeader('Content-Type','application/graphql-response+json');res.end(JSON.s
         "{}\n{}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+fn write_files(root: &std::path::Path, files: BTreeMap<String, String>) {
+    for (path, source) in files {
+        let path = root.join(path);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, source).unwrap();
+    }
+}
+#[test]
+fn many_operations_have_stable_bounded_files_and_migrate_owned_monolith() {
+    let mut input = fixture();
+    let operation = input.operations[0].clone();
+    input.operations = (0..1000)
+        .map(|i| {
+            let mut op = operation.clone();
+            op.name = format!("Operation{i:04}");
+            op.document = op.document.replace("ReadUser", &op.name);
+            op
+        })
+        .collect();
+    for style in [
+        GraphqlStyle::Raw,
+        GraphqlStyle::Flat,
+        GraphqlStyle::Idiomatic,
+    ] {
+        let (files, _) = render(&input, "graphqlclient", style, &BTreeMap::new()).unwrap();
+        assert_eq!(
+            files
+                .keys()
+                .filter(|p| p.starts_with("graphql_operation_"))
+                .count(),
+            1000
+        );
+        assert!(files.keys().any(|p| p.starts_with("graphql_model_")));
+        assert!(files.contains_key("graphql_client.go"));
+        assert!(!files.contains_key("graphql.go"));
+        assert!(files.values().all(|s| s.len() <= 128 * 1024));
+        let mut reversed = input.clone();
+        reversed.operations.reverse();
+        assert_eq!(
+            files,
+            render(&reversed, "graphqlclient", style, &BTreeMap::new())
+                .unwrap()
+                .0
+        );
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let mut previous = poolster_core::GeneratedTree::default();
+    previous
+        .insert(GeneratedFile::new("graphql.go", "// previous owned monolith").unwrap())
+        .unwrap();
+    previous.write_to(dir.path()).unwrap();
+    fs::write(dir.path().join("custom.go"), "// user code").unwrap();
+    let mut tree = poolster_core::GeneratedTree::default();
+    for (path, source) in render(
+        &fixture(),
+        "graphqlclient",
+        GraphqlStyle::Flat,
+        &BTreeMap::new(),
+    )
+    .unwrap()
+    .0
+    {
+        tree.insert(GeneratedFile::new(path, source).unwrap())
+            .unwrap();
+    }
+    tree.write_to(dir.path()).unwrap();
+    assert!(!dir.path().join("graphql.go").exists());
+    assert!(dir.path().join("custom.go").exists());
+    assert!(tree.check(dir.path()).unwrap().is_empty());
+}
+#[test]
+fn oversized_atomic_go_models_have_explicit_layout_diagnostics() {
+    let mut input = fixture();
+    input.input_objects.insert(
+        "LargeInput".into(),
+        (0..3000)
+            .map(|i| ModelField {
+                name: format!("property{i:04}"),
+                ty: string(true),
+                optional: true,
+                default_value: None,
+            })
+            .collect(),
+    );
+    let files = render(
+        &input,
+        "graphqlclient",
+        GraphqlStyle::Flat,
+        &BTreeMap::new(),
+    )
+    .unwrap()
+    .0;
+    let diagnostics: serde_json::Value =
+        serde_json::from_str(&files[".poolster/source-layout-diagnostics.json"]).unwrap();
+    assert!(diagnostics.as_array().unwrap().iter().any(|d| {
+        d["path"]
+            .as_str()
+            .unwrap()
+            .starts_with("graphql_model_largeinput_")
+    }));
+}
+#[test]
+fn group_method_filenames_encode_tuple_identity() {
+    let mut input = fixture();
+    let mut other = input.operations[0].clone();
+    other.name = "ReadOther".into();
+    input.operations.push(other);
+    let groups = BTreeMap::from([
+        (
+            "a_b".into(),
+            BTreeMap::from([("c".into(), "ReadUser".into())]),
+        ),
+        (
+            "a".into(),
+            BTreeMap::from([("b_c".into(), "ReadOther".into())]),
+        ),
+    ]);
+    let files = render(&input, "graphqlclient", GraphqlStyle::Idiomatic, &groups)
+        .unwrap()
+        .0;
+    assert_eq!(
+        files
+            .keys()
+            .filter(|p| p.starts_with("graphql_group_method_"))
+            .count(),
+        2
     );
 }

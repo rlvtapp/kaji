@@ -1,0 +1,103 @@
+{
+  "date": "2026-10-09",
+  "scope": "Generated GraphQL SDK source organization across ten languages",
+  "status": "verified",
+  "layout": {
+    "operation_fixture_sizes": [
+      300,
+      1000
+    ],
+    "source_budget_bytes": 131072,
+    "budget_is_hard_limit": false,
+    "oversized_policy": "Retain indivisible source and emit .poolster/source-layout-diagnostics.json",
+    "java_migration": "Model imports move to <package>.models",
+    "public_api": "Other existing facade and operation call paths retained"
+  },
+  "checks": {
+    "cli": {
+      "passed": 127,
+      "ignored": 9
+    },
+    "rust_graphql_explicit": {
+      "passed": 6,
+      "ignored": 0
+    },
+    "csharp_full": {
+      "passed": 30,
+      "ignored": 15
+    },
+    "swift_full": {
+      "passed": 20,
+      "ignored": 21
+    },
+    "go_full": {
+      "passed": 53,
+      "ignored": 3
+    },
+    "java_full": {
+      "passed": 37,
+      "ignored": 15
+    },
+    "elixir_full": {
+      "passed": 23,
+      "ignored": 15
+    },
+    "php_full": {
+      "passed": 27,
+      "ignored": 16
+    },
+    "ruby_full": {
+      "passed": 23,
+      "ignored": 3
+    },
+    "python_full": {
+      "passed": 40,
+      "ignored": 3
+    },
+    "typescript_graphql_explicit": {
+      "passed": 10,
+      "ignored": 0
+    },
+    "php_graphql_explicit": {
+      "passed": 7,
+      "ignored": 0
+    },
+    "python_graphql_explicit": {
+      "passed": 6,
+      "ignored": 0
+    },
+    "ruby_graphql_explicit": {
+      "passed": 6,
+      "ignored": 0
+    },
+    "npm_sdk": {
+      "passed": 76,
+      "skipped": 0
+    },
+    "typescript_selected_graphql_and_integrations": {
+      "passed": 22,
+      "ignored": 0
+    },
+    "lint": "All changed crates, core, CLI and Node pass all-target Clippy with warnings denied",
+    "format_and_links": "cargo fmt, git diff whitespace checks, modified guide local links pass",
+    "rust_lib": {
+      "passed": 30,
+      "ignored": 8
+    },
+    "typescript_lib": {
+      "passed": 50,
+      "ignored": 20
+    },
+    "rust_lib_initial_attempt": {
+      "passed": 25,
+      "failed": 5,
+      "ignored": 8,
+      "cause": "Nested generated-package Cargo calls attempted crates.io DNS in restricted environment; rerun with CARGO_NET_OFFLINE=true and POOLSTER_RUNTIME_OFFLINE=1 passed all nonignored tests."
+    }
+  },
+  "boundaries": [
+    "Ignored tests in full suites are not counted as passes. Relevant GraphQL external tests were explicitly executed separately.",
+    "Full workspace and 205-spec OpenAPI corpus not rerun.",
+    "Existing protocol feature limits remain; source organization alone is not a production-readiness certification."
+  ]
+}

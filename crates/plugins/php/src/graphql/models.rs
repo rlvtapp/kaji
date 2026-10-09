@@ -54,7 +54,7 @@ fn doc_type(spec: &serde_json::Value) -> String {
 }
 pub(super) struct Models {
     pub(super) namespace: String,
-    pub(super) source: String,
+    pub(super) files: BTreeMap<String, String>,
     pub(super) names: BTreeSet<String>,
 }
 impl Models {
@@ -162,6 +162,7 @@ impl Models {
             self.names.insert(name.to_ascii_lowercase()),
             "PHP GraphQL generated type collision {name}"
         );
+        let mut source = String::new();
         let mut props = vec![];
         let mut decode = vec![];
         let mut encode = vec![];
@@ -211,16 +212,17 @@ impl Models {
                 constructor.push(format!("public {php} ${key}"));
             }
         }
-        writeln!(self.source,"final readonly class {name} {} {{\n{declarations}/** {} */ public function __construct({}){{{init}}}\npublic static function fromArray(array $data):self{{return new self({});}}",if input{"implements \\JsonSerializable"}else{""},docs.join("\n * "),constructor.join(","),decode.join(",")).unwrap();
+        writeln!(source,"final readonly class {name} {} {{\n{declarations}/** {} */ public function __construct({}){{{init}}}\npublic static function fromArray(array $data):self{{return new self({});}}",if input{"implements \\JsonSerializable"}else{""},docs.join("\n * "),constructor.join(","),decode.join(",")).unwrap();
         if input {
             writeln!(
-                self.source,
+                source,
                 "public function jsonSerialize():mixed{{$out=[];{}return (object)$out;}}",
                 encode.join("\n")
             )
             .unwrap();
         }
-        self.source.push_str("}\n");
+        source.push_str("}\n");
+        self.files.insert(name.into(), source);
         Ok(())
     }
 }

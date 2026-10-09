@@ -21,8 +21,7 @@ fn descriptor(name: &str, ty: &ModelType) -> serde_json::Value {
     value
 }
 pub(super) struct Models {
-    pub source: String,
-    pub signatures: String,
+    pub files: BTreeMap<String, (String, String)>,
     pub names: BTreeSet<String>,
     pub inputs: BTreeMap<String, String>,
 }
@@ -110,15 +109,30 @@ impl Models {
                 if *optional { format!("({ty})?") } else { ty }
             )?;
         }
+        let mut source = String::new();
+        let mut signatures = String::new();
         writeln!(
-            self.source,
+            source,
             "  class {name} < Model\n    TYPE = JSON.parse({}).freeze\n    def initialize(value = {{}})\n      super(self.class::TYPE, value, {input})\n    end\n{getters}  end\n  Model.register({name}::TYPE, {name})",
             ruby_string(&serde_json::to_string(&descriptor(name, ty))?)
         )?;
         writeln!(
-            self.signatures,
+            signatures,
             "  class {name} < Model\n    def initialize: (?Hash[String | Symbol, untyped]) -> void\n{sig}  end"
         )?;
+        let original = self
+            .inputs
+            .iter()
+            .find(|(_, class)| class.as_str() == name)
+            .map(|(original, _)| original.clone());
+        if let Some(original) = original {
+            writeln!(
+                source,
+                "  INPUT_CLASSES[{}] = {name}",
+                ruby_string(&original)
+            )?;
+        }
+        self.files.insert(name.into(), (source, signatures));
         Ok(())
     }
 }

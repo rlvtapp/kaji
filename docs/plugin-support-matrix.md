@@ -185,3 +185,16 @@ No language in this table has a bundled WebSocket/SSE subscription transport, dy
 field selection, incremental delivery or runtime custom scalar codecs.
 Symfony remains a separate HTTP integration target; adapting the PHP GraphQL transport
 to Symfony HttpClient is possible, but generated Symfony GraphQL DI bindings are not implemented.
+
+## GraphQL source organization
+
+All ten SDK client outputs now separate model, operation, client/facade and runtime
+code using native module/package conventions. Per-entity files, bounded facade/export
+parts and stable filename checks prevent large operation sets from accumulating
+in a monolith. The source grouping budget is **128 KiB**; oversized indivisible
+declarations are retained with explicit layout diagnostics. This is a grouping
+budget rather than a hard limit on all valid GraphQL selections.
+
+Raw, flat and grouped call paths are preserved. Java model imports move from nested
+`Client` records to `<package>.models` types. Generated-source customizations using
+old paths require migration. See each language guide for its actual file tree.

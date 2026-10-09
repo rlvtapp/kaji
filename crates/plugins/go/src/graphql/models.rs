@@ -1,10 +1,14 @@
 use super::ident;
 use anyhow::{Result, bail, ensure};
 use poolster_core::native::{ModelField, ModelKind, ModelType};
-use std::{collections::BTreeSet, fmt::Write};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt::Write,
+};
 #[derive(Default)]
 pub(super) struct Models {
     pub source: String,
+    pub files: BTreeMap<String, String>,
     names: BTreeSet<String>,
 }
 impl Models {
@@ -17,7 +21,10 @@ impl Models {
                 self.names.insert(name.into()),
                 "GraphQL type naming collision {name}"
             );
-            writeln!(self.source, "type {name} = {target}").unwrap();
+            let declaration = format!("type {name} = {target}\n");
+            self.source.push_str(&declaration);
+            self.files
+                .insert(super::filename("model", name), declaration);
             Ok(())
         }
     }
@@ -74,8 +81,10 @@ impl Models {
         self.source.push_str(&body);
         if input {
             marshal.push_str("return json.Marshal(fields)\n}\n");
-            self.source.push_str(&marshal)
+            self.source.push_str(&marshal);
+            body.push_str(&marshal);
         }
+        self.files.insert(super::filename("model", name), body);
         Ok(())
     }
     fn ty(&mut self, name: &str, ty: &ModelType, input: bool) -> Result<String> {

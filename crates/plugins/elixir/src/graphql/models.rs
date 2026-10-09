@@ -50,10 +50,15 @@ impl Models {
     fn reserve(&mut self, name: &str) -> Result<String> {
         let name = crate::pascal_case(name);
         ensure!(
-            !name.is_empty() && self.names.insert(name.clone()),
+            !name.is_empty() && self.names.insert(name.to_ascii_lowercase()),
             "Elixir GraphQL model collision: {name}"
         );
-        Ok(format!("{}.Models.{name}", self.module))
+        let full = format!("{}.Models.{name}", self.module);
+        ensure!(
+            full.len() <= 240,
+            "Elixir GraphQL model {full} exceeds the VM atom name limit"
+        );
+        Ok(full)
     }
     pub fn input(&mut self, name: &str, fields: &[ModelField]) -> Result<String> {
         self.record(name, fields, true)

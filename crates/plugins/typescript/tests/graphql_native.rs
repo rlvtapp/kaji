@@ -47,7 +47,7 @@ fn generate_schema(
 fn native_graphql_output_preserves_selection_and_regenerates() {
     let dir = tempfile::tempdir().unwrap();
     let tree = generate(dir.path(), OPERATIONS, false).unwrap();
-    let source = tree.get("sdk/graphql.ts").unwrap();
+    let source = graphql_source(&tree);
     assert!(
         source.contains("\"person\": { \"id\": string; \"name\": string; }"),
         "{source}"
@@ -55,7 +55,7 @@ fn native_graphql_output_preserves_selection_and_regenerates() {
     assert!(source.contains("\"fragile\": (string) | null"), "{source}");
     assert!(!source.contains("export type User"));
     let again = generate(dir.path(), OPERATIONS, false).unwrap();
-    assert_eq!(source, again.get("sdk/graphql.ts").unwrap());
+    assert_eq!(source, graphql_source(&again));
     let error = generate(
         dir.path(),
         "subscription Changed { changed { name } }",
@@ -70,7 +70,7 @@ fn native_graphql_output_preserves_selection_and_regenerates() {
             true
         )
         .unwrap()
-        .get("sdk/graphql.ts")
+        .get("sdk/graphql/operations/Changed.ts")
         .unwrap()
         .contains("AsyncIterable")
     );
@@ -186,11 +186,7 @@ fn output_accepts_substituted_contract_provider() {
         )
         .generate_native()
         .unwrap();
-    assert!(
-        tree.get("sdk/graphql.ts")
-            .unwrap()
-            .contains("export function Read")
-    );
+    assert!(graphql_source(&tree).contains("export function Read"));
 }
 
 #[test]
@@ -206,11 +202,7 @@ fn pinned_github_schema_generates_compilable_selection_package() {
     )
     .unwrap();
     tree.write_to(dir.path()).unwrap();
-    assert!(
-        tree.get("sdk/graphql.ts")
-            .unwrap()
-            .contains("export type ViewerResult")
-    );
+    assert!(graphql_source(&tree).contains("export type ViewerResult"));
     let output = Command::new("node")
         .arg(compiler)
         .args(["-p", "tsconfig.json"])
@@ -299,11 +291,7 @@ fn post_plugin_consumes_actual_generated_graphql_symbols() {
     let hook = tree.get("sdk/hooks/read.ts").unwrap();
     assert!(hook.contains("import { Read } from '../graphql.js'"));
     assert!(hook.contains("import type { ReadVariables, ReadResult } from '../graphql.js'"));
-    assert!(
-        tree.get("sdk/graphql.ts")
-            .unwrap()
-            .contains("export function Read")
-    );
+    assert!(graphql_source(&tree).contains("export function Read"));
 }
 
 #[test]
@@ -327,5 +315,82 @@ fn generated_aliases_reject_builtin_and_runtime_export_collisions() {
             message.contains("symbol collision") || message.contains("TypeScript identifier"),
             "{message}"
         );
+    }
+}
+
+fn graphql_source(tree: &poolster_core::GeneratedTree) -> String {
+    tree.iter()
+        .filter(|(path, _)| path.extension().is_some_and(|ext| ext == "ts"))
+        .map(|(_, content)| content)
+        .collect::<Vec<_>>()
+        .join("\n")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+#[test]
+fn graphql_layout_is_bounded_and_stable_for_large_operation_sets() {
+    let root = tempfile::tempdir().unwrap();
+    let documents: Vec<_> = (0..1000)
+        .map(|i| format!("query Read{i:04} {{ fatal }}"))
+        .collect();
+    let first = generate(root.path(), &documents.join("\n"), false).unwrap();
+    let reverse = documents
+        .iter()
+        .rev()
+        .cloned()
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert_eq!(first, generate(root.path(), &reverse, false).unwrap());
+    assert!(first.get("sdk/graphql.ts").unwrap().len() < 1024);
+    assert!(first.get("sdk/graphql-client.ts").unwrap().len() < 8192);
+    for (path, source) in first
+        .iter()
+        .filter(|(path, _)| path.extension().is_some_and(|ext| ext == "ts"))
+    {
+        assert!(
+            source.len() < 128 * 1024,
+            "oversized {}: {} bytes",
+            path.display(),
+            source.len()
+        );
+    }
+    assert!(first.get("sdk/graphql/models/Read0000.ts").is_some());
+    assert!(first.get("sdk/graphql/operations/Read0000.ts").is_some());
+}
+
+#[test]
+fn graphql_layout_uses_only_referenced_input_imports_and_portable_filenames() {
+    let root = tempfile::tempdir().unwrap();
+    let inputs = (0..300)
+        .map(|i| {
+            if i == 299 {
+                format!("input Input{i} {{ value: String }}")
+            } else {
+                format!("input Input{i} {{ next: Input{} }}", i + 1)
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let schema = format!("{inputs} type Query {{ echo(input:Input0): String }}");
+    let long_name = format!("Read{}", "Long".repeat(100));
+    let tree = generate_schema(
+        root.path(),
+        &schema,
+        &format!("query {long_name}($input:Input0) {{ echo(input:$input) }}"),
+        false,
+    )
+    .unwrap();
+    tree.write_to(root.path()).unwrap();
+    let input = tree.get("sdk/graphql/models/Input0.ts").unwrap();
+    assert_eq!(input.matches("import type").count(), 1);
+    assert!(input.contains("Input1"));
+    for (path, source) in tree
+        .iter()
+        .filter(|(path, _)| path.extension().is_some_and(|ext| ext == "ts"))
+    {
+        assert!(path.file_name().unwrap().len() < 128, "{}", path.display());
+        assert!(source.len() < 128 * 1024);
     }
 }

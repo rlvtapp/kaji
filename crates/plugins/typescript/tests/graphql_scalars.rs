@@ -46,7 +46,7 @@ fn mappings() -> BTreeMap<String, ts::GraphqlScalarMapping> {
 fn custom_scalars_have_independent_directions_preserving_wrappers_and_defaults() {
     let path = tempfile::tempdir().unwrap();
     let tree = generate(path.path(), mappings()).unwrap();
-    let source = tree.get("sdk/graphql.ts").unwrap();
+    let source = graphql_source(&tree);
     assert!(source.contains("\"at\": (string)"), "{source}");
     assert!(source.contains("\"at\": (number)"), "{source}");
     assert!(source.contains("\"maybe\"?: ((number)) | null"), "{source}");
@@ -55,7 +55,7 @@ fn custom_scalars_have_independent_directions_preserving_wrappers_and_defaults()
     assert!(source.contains("\"opaque\": (unknown) | null"), "{source}");
     assert_eq!(tree, generate(path.path(), mappings()).unwrap());
     let default = generate(path.path(), BTreeMap::new()).unwrap();
-    assert!(!default.get("sdk/graphql.ts").unwrap().contains("(number)"));
+    assert!(!graphql_source(&default).contains("(number)"));
     for mapping in [
         ts::GraphqlScalarMapping::new("string; export const injected=1", "number"),
         ts::GraphqlScalarMapping::new("", "number"),
@@ -121,4 +121,15 @@ fn mapped_scalars_compile_and_execute_against_real_custom_scalar_server() {
         .unwrap()
         .write_to(path.path())
         .unwrap();
+}
+
+fn graphql_source(tree: &poolster_core::GeneratedTree) -> String {
+    tree.iter()
+        .filter(|(path, _)| path.extension().is_some_and(|ext| ext == "ts"))
+        .map(|(_, content)| content)
+        .collect::<Vec<_>>()
+        .join("\n")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }

@@ -1,10 +1,14 @@
 use super::{ident, member};
 use anyhow::{Result, bail, ensure};
 use poolster_core::native::{ModelField, ModelKind, ModelType};
-use std::{collections::BTreeSet, fmt::Write};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt::Write,
+};
 #[derive(Default)]
 pub(super) struct Models {
     pub source: String,
+    pub files: BTreeMap<String, String>,
     names: BTreeSet<String>,
 }
 impl Models {
@@ -92,6 +96,10 @@ impl Models {
         }
         body.push_str("}\n");
         self.source.push_str(&body);
+        self.files.insert(
+            format!("Models/{}", super::filename(&format!("Model{name}"))),
+            body,
+        );
         Ok(())
     }
     pub fn ty(&mut self, name: &str, ty: &ModelType) -> Result<String> {

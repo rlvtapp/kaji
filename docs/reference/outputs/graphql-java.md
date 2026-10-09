@@ -29,3 +29,14 @@ identifiers and records exceeding 250 fields reject before generation.
 All four styles compile and execute against pinned GraphQL.js 16.14.2, including
 mutations, nested nullable lists, input presence and abstract variants.
 See the [support matrix](../../plugin-support-matrix.md).
+
+## Generated source layout
+
+Generated sources separate `GraphqlRuntime.java`, `Client.java`, `models/`, `operations/` and `groups/`. Operation/raw/grouped call paths are unchanged. **Model imports change:** use `<package>.models.ReadUserVariables` instead of `Client.ReadUserVariables`. The generated README describes this migration. Public class filenames follow Java rules; unsupported long/colliding names reject before writing.
+
+The layout targets source files below **128 KiB**, grouping declarations and export
+parts at semantic boundaries. An indivisible model or operation that exceeds this
+budget is retained and listed in `.poolster/source-layout-diagnostics.json`;
+this is a size diagnostic, not a claim that every possible schema produces small files.
+Regeneration removes obsolete unchanged owned files and preserves unrelated user files.
+Source customizations referring to old monolithic paths must be retargeted.

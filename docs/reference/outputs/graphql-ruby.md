@@ -40,3 +40,14 @@ responses and dynamic caller-selected fields are unsupported.
 
 Generated code and RBS were checked using Ruby 3.3.12 / RBS 3.4.0, including all
 four surfaces against pinned GraphQL.js 16.14.2. See the [support matrix](../../plugin-support-matrix.md).
+
+## Generated source layout
+
+The gem entry point loads individual model, operation, client and group files. Corresponding RBS signatures are split too. Public module/class/method paths and nested model identities are preserved.
+
+The layout targets source files below **128 KiB**, grouping declarations and export
+parts at semantic boundaries. An indivisible model or operation that exceeds this
+budget is retained and listed in `.poolster/source-layout-diagnostics.json`;
+this is a size diagnostic, not a claim that every possible schema produces small files.
+Regeneration removes obsolete unchanged owned files and preserves unrelated user files.
+Source customizations referring to old monolithic paths must be retargeted.

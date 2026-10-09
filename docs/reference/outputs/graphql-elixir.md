@@ -37,3 +37,14 @@ error tuples independently. Headers, timeout, Finch instance and transport are c
 Custom scalars retain JSON terms without codecs. Abstract variants require selected
 `__typename`. Subscriptions, incremental delivery and dynamic selections are unsupported.
 See the [support matrix](../../plugin-support-matrix.md) for the verification boundary.
+
+## Generated source layout
+
+Mix source files separate runtime, client, application, envelope, individual models and operations. Public facade/group exports use bounded parts. Existing public module, struct and function names are preserved.
+
+The layout targets source files below **128 KiB**, grouping declarations and export
+parts at semantic boundaries. An indivisible model or operation that exceeds this
+budget is retained and listed in `.poolster/source-layout-diagnostics.json`;
+this is a size diagnostic, not a claim that every possible schema produces small files.
+Regeneration removes obsolete unchanged owned files and preserves unrelated user files.
+Source customizations referring to old monolithic paths must be retargeted.

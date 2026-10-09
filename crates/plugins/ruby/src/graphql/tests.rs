@@ -56,14 +56,18 @@ fn ruby_graphql_styles_are_selection_specific_and_reject_collisions() {
         GraphqlStyle::Flat,
         GraphqlStyle::Idiomatic,
     ] {
-        let (source, signature, methods) =
+        let (source, methods) =
             render(&contract(), "example_graphql", style, &BTreeMap::new()).unwrap();
-        assert!(source.contains("class ReadUserVariables"));
-        assert!(signature.contains("class ReadUserResult"));
+        assert!(
+            source
+                .iter()
+                .any(|(_, code)| code.contains("class ReadUserVariables"))
+        );
+        assert!(signature(&source).contains("class ReadUserResult"));
         assert_eq!(methods["ReadUser"], "read_user");
         let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("client.rb");
-        std::fs::write(&file, source).unwrap();
+        source.write_to(dir.path()).unwrap();
+        let file = dir.path().join("lib/example_graphql.rb");
         let output =
             Command::new(std::env::var("POOLSTER_RUBY_BINARY").unwrap_or_else(|_| "ruby".into()))
                 .args(["-c", file.to_str().unwrap()])
@@ -139,13 +143,16 @@ fn ruby_graphql_executes_all_styles_against_pinned_server() {
         } else {
             BTreeMap::new()
         };
-        let (source, signature, _) =
-            render(&contract(), "example_graphql", style, &groups).unwrap();
-        let signature_file = root.path().join(format!("client{index}.rbs"));
-        std::fs::write(&signature_file, signature).unwrap();
-        assert_rbs(&signature_file);
-        let file = root.path().join(format!("client{index}.rb"));
-        std::fs::write(&file, source).unwrap();
+        let (source, _) = render(&contract(), "example_graphql", style, &groups).unwrap();
+        let package = root.path().join(format!("package{index}"));
+        source.write_to(&package).unwrap();
+        for (path, _) in source
+            .iter()
+            .filter(|(path, _)| path.to_string_lossy().ends_with(".rbs"))
+        {
+            assert_rbs(&package.join(path));
+        }
+        let file = package.join("lib/example_graphql.rb");
         let call = match index {
             0 => "ExampleGraphql.read_user(client.transport, vars)",
             1 => "client.read_user(vars)",
@@ -300,22 +307,26 @@ fn ruby_nested_named_list_union_models_and_signatures() {
     let mut second = c.operations[0].clone();
     second.name = "ReadAgain".into();
     c.operations.push(second);
-    let (source, signature, _) = render(
+    let (source, _) = render(
         &c,
         "example_graphql",
         GraphqlStyle::Idiomatic,
         &BTreeMap::new(),
     )
     .unwrap();
+    let signature = signature(&source);
     assert!(signature.contains("def user: () -> ReadUserResultUser"));
     assert!(signature.contains("def filter: () -> ((Filter)?)?"));
     assert!(signature.contains("def read_user:"));
     let root = tempfile::tempdir().unwrap();
-    let file = root.path().join("client.rb");
-    std::fs::write(&file, source).unwrap();
-    let sig = root.path().join("client.rbs");
-    std::fs::write(&sig, signature).unwrap();
-    assert_rbs(&sig);
+    source.write_to(root.path()).unwrap();
+    let file = root.path().join("lib/example_graphql.rb");
+    for (path, _) in source
+        .iter()
+        .filter(|(path, _)| path.to_string_lossy().ends_with(".rbs"))
+    {
+        assert_rbs(&root.path().join(path));
+    }
     let script = r#"require ARGV[0]
 f=ExampleGraphql::Filter.new(label:nil,next:{})
 v=ExampleGraphql::ReadUserVariables.new(filter:f)
@@ -384,5 +395,92 @@ fn selected_provider_and_regeneration() {
         let code = tree.iter().map(|(_, s)| s).collect::<Vec<_>>().join("\n");
         assert!(code.contains(&format!("class {name}Result")));
         assert!(!code.contains("class IgnoredResult"));
+    }
+}
+
+fn signature(tree: &poolster_core::GeneratedTree) -> String {
+    tree.iter()
+        .filter(|(path, _)| path.to_string_lossy().ends_with(".rbs"))
+        .map(|(_, source)| source)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+#[test]
+#[ignore = "requires Ruby3.1+ to execute modular large GraphQL packages"]
+fn large_packages_use_bounded_files_and_regenerate() {
+    let mut c = contract();
+    let op = c.operations[0].clone();
+    c.operations = (0..300)
+        .map(|i| {
+            let mut op = op.clone();
+            op.name = format!("Operation{i:03}");
+            op.document = op.document.replace("ReadUser", &op.name);
+            op
+        })
+        .collect();
+    for style in [
+        GraphqlStyle::Raw,
+        GraphqlStyle::Flat,
+        GraphqlStyle::Idiomatic,
+    ] {
+        let (tree, _) = render(&c, "example_graphql", style, &BTreeMap::new()).unwrap();
+        assert_eq!(
+            tree.iter()
+                .filter(|(p, _)| p.starts_with("lib/example_graphql/operations"))
+                .count(),
+            300
+        );
+        for (path, code) in tree.iter() {
+            assert!(
+                code.len() < 16384,
+                "{} too large: {}",
+                path.display(),
+                code.len()
+            );
+        }
+        let mut reversed = c.clone();
+        reversed.operations.reverse();
+        let (again, _) = render(&reversed, "example_graphql", style, &BTreeMap::new()).unwrap();
+        assert_eq!(
+            tree.iter().collect::<Vec<_>>(),
+            again.iter().collect::<Vec<_>>()
+        );
+        let dir = tempfile::tempdir().unwrap();
+        tree.write_to(dir.path()).unwrap();
+        let changes = again.check(dir.path()).unwrap();
+        assert!(
+            changes.added.is_empty() && changes.modified.is_empty() && changes.removed.is_empty()
+        );
+        let call = match style {
+            GraphqlStyle::Raw => "ExampleGraphql.operation299(client.transport)",
+            GraphqlStyle::Flat => "client.operation299",
+            GraphqlStyle::Idiomatic => "client.query.operation299",
+        };
+        let script = format!(
+            "require ARGV[0]\nclient=ExampleGraphql::Client.new('http://localhost');transport=Object.new;def transport.execute(document,name,variables,result);ExampleGraphql::GraphqlResponse.new(data:result.new('hello'=>nil,'other'=>'ok'),errors:[],data_present:true);end;client.instance_variable_set(:@transport,transport);r={call};raise 'wrong result' unless r.data.is_a?(ExampleGraphql::Operation299Result)\n"
+        );
+        let out = Command::new(std::env::var("POOLSTER_RUBY_BINARY").unwrap_or("ruby".into()))
+            .args([
+                "-e",
+                &script,
+                dir.path().join("lib/example_graphql.rb").to_str().unwrap(),
+            ])
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let mut removed = c.clone();
+        removed.operations.pop();
+        let (reduced, _) = render(&removed, "example_graphql", style, &BTreeMap::new()).unwrap();
+        assert!(!reduced.check(dir.path()).unwrap().removed.is_empty());
+        reduced.write_to(dir.path()).unwrap();
+        assert!(
+            !dir.path()
+                .join("lib/example_graphql/operations/operation299.rb")
+                .exists()
+        );
     }
 }

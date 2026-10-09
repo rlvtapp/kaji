@@ -21,7 +21,8 @@ fn validates_contract_and_configuration() {
         GraphqlStyle::Flat,
         GraphqlStyle::Idiomatic,
     ] {
-        let (source, _) = render(&fixture(), style, &BTreeMap::new()).unwrap();
+        let (files, _) = render(&fixture(), style, &BTreeMap::new()).unwrap();
+        let source = files.values().cloned().collect::<Vec<_>>().join("\n");
         assert!(source.contains("GraphqlField<String>"));
         assert!(source.contains("URLSession"));
     }
@@ -119,11 +120,15 @@ res.setHeader('content-type','application/json');res.end(JSON.stringify(result))
         } else {
             BTreeMap::new()
         };
-        fs::write(
-            dir.path().join("Graphql.swift"),
-            render(&input, style, &groups).unwrap().0,
-        )
-        .unwrap();
+        let mut generated = Vec::new();
+        for (path, source) in render(&input, style, &groups).unwrap().0 {
+            let path = dir.path().join(path);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            if path.extension().and_then(|s| s.to_str()) == Some("swift") {
+                generated.push(path.clone());
+            }
+            fs::write(path, source).unwrap();
+        }
         let call = match style {
             GraphqlStyle::Raw => "readUser(client:client,variables:variables)",
             GraphqlStyle::Flat => "client.readUser(variables:variables)",
@@ -150,11 +155,11 @@ res.setHeader('content-type','application/json');res.end(JSON.stringify(result))
                 "5",
                 "-warnings-as-errors",
                 "-parse-as-library",
-                "Graphql.swift",
                 "Program.swift",
                 "-o",
                 "test-client",
             ])
+            .args(&generated)
             .env("CLANG_MODULE_CACHE_PATH", dir.path().join("cache"))
             .current_dir(dir.path())
             .output()
@@ -220,4 +225,115 @@ fn provider_substitution_and_regeneration() {
         assert!(!source.contains("func `ignored`"));
         assert!(source.contains("swift-tools-version: 5.9"));
     }
+}
+#[test]
+fn many_operations_have_stable_bounded_files_and_migrate_owned_monolith() {
+    let mut input = fixture();
+    let operation = input.operations[0].clone();
+    input.operations = (0..1000)
+        .map(|i| {
+            let mut op = operation.clone();
+            op.name = format!("Operation{i:04}");
+            op.document = op.document.replace("ReadUser", &op.name);
+            op
+        })
+        .collect();
+    for style in [
+        GraphqlStyle::Raw,
+        GraphqlStyle::Flat,
+        GraphqlStyle::Idiomatic,
+    ] {
+        let (files, _) = render(&input, style, &BTreeMap::new()).unwrap();
+        assert_eq!(
+            files
+                .keys()
+                .filter(|p| p.starts_with("Operations/"))
+                .count(),
+            1000
+        );
+        assert!(files.keys().any(|p| p.starts_with("Models/")));
+        assert!(files.contains_key("Client/GraphqlClient.swift"));
+        assert!(!files.contains_key("Graphql.swift"));
+        assert!(files.values().all(|s| s.len() <= 128 * 1024));
+        let mut reversed = input.clone();
+        reversed.operations.reverse();
+        assert_eq!(files, render(&reversed, style, &BTreeMap::new()).unwrap().0);
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let mut previous = poolster_core::GeneratedTree::default();
+    previous
+        .insert(
+            GeneratedFile::new(
+                "Sources/GraphqlSdk/Graphql.swift",
+                "// previous owned monolith",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    previous.write_to(dir.path()).unwrap();
+    fs::write(dir.path().join("custom.swift"), "// user code").unwrap();
+    let mut tree = poolster_core::GeneratedTree::default();
+    for (path, source) in render(&fixture(), GraphqlStyle::Flat, &BTreeMap::new())
+        .unwrap()
+        .0
+    {
+        tree.insert(GeneratedFile::new(format!("Sources/GraphqlSdk/{path}"), source).unwrap())
+            .unwrap();
+    }
+    tree.write_to(dir.path()).unwrap();
+    assert!(!dir.path().join("Sources/GraphqlSdk/Graphql.swift").exists());
+    assert!(dir.path().join("custom.swift").exists());
+    assert!(tree.check(dir.path()).unwrap().is_empty());
+}
+#[test]
+fn oversized_atomic_swift_models_have_explicit_layout_diagnostics() {
+    let mut input = fixture();
+    input.input_objects.insert(
+        "LargeInput".into(),
+        (0..1500)
+            .map(|i| ModelField {
+                name: format!("property{i:04}"),
+                ty: string(true),
+                optional: true,
+                default_value: None,
+            })
+            .collect(),
+    );
+    let files = render(&input, GraphqlStyle::Flat, &BTreeMap::new())
+        .unwrap()
+        .0;
+    let diagnostics: serde_json::Value =
+        serde_json::from_str(&files[".poolster/source-layout-diagnostics.json"]).unwrap();
+    assert!(diagnostics.as_array().unwrap().iter().any(|d| {
+        d["path"]
+            .as_str()
+            .unwrap()
+            .starts_with("Models/ModelLargeInput_")
+    }));
+}
+#[test]
+fn group_method_filenames_encode_tuple_identity() {
+    let mut input = fixture();
+    let mut other = input.operations[0].clone();
+    other.name = "ReadOther".into();
+    input.operations.push(other);
+    let groups = BTreeMap::from([
+        (
+            "a".into(),
+            BTreeMap::from([("bMethodC".into(), "ReadUser".into())]),
+        ),
+        (
+            "aMethodB".into(),
+            BTreeMap::from([("c".into(), "ReadOther".into())]),
+        ),
+    ]);
+    let files = render(&input, GraphqlStyle::Idiomatic, &groups).unwrap().0;
+    assert_eq!(
+        files
+            .keys()
+            .filter(|p| p.starts_with("Groups/") && !p.contains("Group_"))
+            .count(),
+        2
+    );
+    assert_eq!(files.keys().filter(|p| p.starts_with("Groups/")).count(), 4);
 }

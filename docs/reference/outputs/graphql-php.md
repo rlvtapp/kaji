@@ -33,3 +33,14 @@ Subscriptions, incremental delivery and dynamic selections are unsupported.
 
 All four styles compile and execute against pinned GraphQL.js 16.14.2.
 See the [support matrix](../../plugin-support-matrix.md) for the verification boundary.
+
+## Generated source layout
+
+`src/Graphql.php` stays the Composer-loaded entry point. Runtime and client code are separate, with individual files in `Models/`, `Operations/`, `Methods/` and group modules. Balanced trait composition keeps client definitions small. Namespaces and public calls are unchanged.
+
+The layout targets source files below **128 KiB**, grouping declarations and export
+parts at semantic boundaries. An indivisible model or operation that exceeds this
+budget is retained and listed in `.poolster/source-layout-diagnostics.json`;
+this is a size diagnostic, not a claim that every possible schema produces small files.
+Regeneration removes obsolete unchanged owned files and preserves unrelated user files.
+Source customizations referring to old monolithic paths must be retargeted.

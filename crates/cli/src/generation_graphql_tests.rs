@@ -19,8 +19,12 @@ fn graphql_recipe_scalar_mapping_reaches_generated_selection() {
     )
     .unwrap();
     generate_from_config(&path, ColorChoice::Never, false, false).unwrap();
-    let generated =
-        std::fs::read_to_string(directory.path().join("generated/sdk/graphql.ts")).unwrap();
+    let generated = std::fs::read_to_string(
+        directory
+            .path()
+            .join("generated/sdk/graphql/models/Joined.ts"),
+    )
+    .unwrap();
     assert!(generated.contains("\"joinedAt\": (string)"));
     generate_from_config(&path, ColorChoice::Never, true, false).unwrap();
 }
@@ -129,7 +133,8 @@ fn graphql_recipe_styles_groups_and_raw_conflicts_are_explicit() {
         );
         generate_from_config(&path, ColorChoice::Never, false, false).unwrap();
         let source =
-            std::fs::read_to_string(directory.path().join("generated/ts/graphql.ts")).unwrap();
+            std::fs::read_to_string(directory.path().join("generated/ts/graphql-client.ts"))
+                .unwrap_or_default();
         assert_eq!(
             source.contains("export function createClient"),
             style != "raw"
@@ -150,7 +155,8 @@ fn graphql_recipe_styles_groups_and_raw_conflicts_are_explicit() {
         serde_json::json!([{"language":"typescript","path":"ts","plugins":[{"name":"graphql","groups":{"greeting":{"read":"Hello"}}}]}]),
     );
     generate_from_config(&path, ColorChoice::Never, false, false).unwrap();
-    let source = std::fs::read_to_string(directory.path().join("generated/ts/graphql.ts")).unwrap();
+    let source =
+        std::fs::read_to_string(directory.path().join("generated/ts/graphql-client.ts")).unwrap();
     assert!(source.contains("greeting"));
 }
 
@@ -162,7 +168,8 @@ fn graphql_recipe_selects_contract_scoped_options_with_sdk_alias() {
         serde_json::json!([{"language":"typescript","path":"ts","plugins":[{"name":"sdk","contracts":{"http":{"style":"flat"},"graphql":{"style":"grouped","groups":{"greeting":{"read":"Hello"}}}}}]}]),
     );
     generate_from_config(&path, ColorChoice::Never, false, false).unwrap();
-    let source = std::fs::read_to_string(directory.path().join("generated/ts/graphql.ts")).unwrap();
+    let source =
+        std::fs::read_to_string(directory.path().join("generated/ts/graphql-client.ts")).unwrap();
     assert!(source.contains("greeting"));
     let mut config: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();

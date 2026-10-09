@@ -108,7 +108,7 @@ test('GraphQL output plugin options select styles and reject conflicting aliases
   for (const style of ['raw','flat','idiomatic','namespaced']) {
     const configuration={input,output:path.join(dir,style),plugins:[bundle.pluginTypeScript({style,scalars:input.scalars}),bundle.pluginRust({name:'graphql_client',style,scalars:{DateTime:{input:'String',output:'String'}}})]};
     const result=await generate(configuration);
-    const ts=result.files.find(file=>file.path.endsWith('typescript/graphql.ts')).contents;
+    const ts=result.files.filter(file=>file.path.startsWith('typescript/') && file.path.endsWith('.ts')).map(file=>file.contents).join('\n');
     assert.equal(ts.includes('export function createClient'),style !== 'raw');
     assert.deepEqual((await generate(configuration)).changes,{added:[],modified:[],removed:[]});
   }
@@ -172,7 +172,7 @@ test('GraphQL Go and Python packages use existing factories and regenerate witho
   const first = await generate(configuration);
   assert.equal(first.api, null);
   assert.deepEqual(first.skipped, []);
-  assert.ok(first.files.some(f => f.path.endsWith('graphql.go')));
+  assert.ok(first.files.some(f => f.path.includes('graphql_operation_')));
   assert.ok(first.files.some(f => f.path.endsWith('.py')));
   assert.deepEqual((await generate(configuration)).changes, { added: [], modified: [], removed: [] });
   configuration.plugins = [bundle.pluginPython({ contracts: { graphql: { scalars: { DateTime: { input: 'str', output: 'str' } } } } })];

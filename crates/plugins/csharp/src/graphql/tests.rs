@@ -21,7 +21,8 @@ fn validates_contract_and_configuration() {
         GraphqlStyle::Flat,
         GraphqlStyle::Idiomatic,
     ] {
-        let (source, _) = render(&fixture(), "TestSdk", style, &BTreeMap::new()).unwrap();
+        let (files, _) = render(&fixture(), "TestSdk", style, &BTreeMap::new()).unwrap();
+        let source = files.values().cloned().collect::<Vec<_>>().join("\n");
         assert!(source.contains("Optional<string?> Nickname"));
         assert!(source.contains("CancellationToken"));
     }
@@ -117,11 +118,11 @@ res.setHeader('content-type','application/json');res.end(JSON.stringify(result))
                 .or_default()
                 .insert("ping".into(), "Ping".into());
         }
-        fs::write(
-            dir.path().join("Graphql.cs"),
-            render(&input, "TestSdk", style, &groups).unwrap().0,
-        )
-        .unwrap();
+        for (path, source) in render(&input, "TestSdk", style, &groups).unwrap().0 {
+            let path = dir.path().join(path);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, source).unwrap();
+        }
         fs::write(dir.path().join("Test.csproj"),"<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors></PropertyGroup></Project>").unwrap();
         let call = match style {
             GraphqlStyle::Raw => "GraphqlOperations.ReadUserAsync(client, variables)",
@@ -213,4 +214,88 @@ fn csharp_and_dotnet_provider_substitution_and_regeneration() {
             assert!(!source.contains("IgnoredAsync"));
         }
     }
+}
+#[test]
+fn many_operations_have_stable_bounded_files_and_migrate_owned_monolith() {
+    let mut input = fixture();
+    let operation = input.operations[0].clone();
+    input.operations = (0..1000)
+        .map(|i| {
+            let mut op = operation.clone();
+            op.name = format!("Operation{i:04}");
+            op.document = op.document.replace("ReadUser", &op.name);
+            op
+        })
+        .collect();
+    for style in [
+        GraphqlStyle::Raw,
+        GraphqlStyle::Flat,
+        GraphqlStyle::Idiomatic,
+    ] {
+        let (files, _) = render(&input, "TestSdk", style, &BTreeMap::new()).unwrap();
+        assert_eq!(
+            files
+                .keys()
+                .filter(|p| p.starts_with("Operations/"))
+                .count(),
+            1000
+        );
+        assert!(files.keys().any(|p| p.starts_with("Models/")));
+        assert!(files.contains_key("Client/GraphqlClient.cs"));
+        assert!(!files.contains_key("Graphql.cs"));
+        assert!(files.values().all(|s| s.len() <= 128 * 1024));
+        let mut reversed = input.clone();
+        reversed.operations.reverse();
+        assert_eq!(
+            files,
+            render(&reversed, "TestSdk", style, &BTreeMap::new())
+                .unwrap()
+                .0
+        );
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let mut previous = poolster_core::GeneratedTree::default();
+    previous
+        .insert(GeneratedFile::new("Graphql.cs", "// previous owned monolith").unwrap())
+        .unwrap();
+    previous.write_to(dir.path()).unwrap();
+    fs::write(dir.path().join("custom.cs"), "// user code").unwrap();
+    let mut tree = poolster_core::GeneratedTree::default();
+    for (path, source) in render(&fixture(), "TestSdk", GraphqlStyle::Flat, &BTreeMap::new())
+        .unwrap()
+        .0
+    {
+        tree.insert(GeneratedFile::new(path, source).unwrap())
+            .unwrap();
+    }
+    tree.write_to(dir.path()).unwrap();
+    assert!(!dir.path().join("Graphql.cs").exists());
+    assert!(dir.path().join("custom.cs").exists());
+    assert!(tree.check(dir.path()).unwrap().is_empty());
+}
+#[test]
+fn large_records_split_at_property_boundaries() {
+    let mut input = fixture();
+    input.input_objects.insert(
+        "LargeInput".into(),
+        (0..2500)
+            .map(|i| ModelField {
+                name: format!("property{i:04}"),
+                ty: string(true),
+                optional: true,
+                default_value: None,
+            })
+            .collect(),
+    );
+    let files = render(&input, "TestSdk", GraphqlStyle::Flat, &BTreeMap::new())
+        .unwrap()
+        .0;
+    assert!(
+        files
+            .keys()
+            .filter(|p| p.starts_with("Models/LargeInput_"))
+            .count()
+            > 1
+    );
+    assert!(files.values().all(|s| s.len() <= 128 * 1024));
 }

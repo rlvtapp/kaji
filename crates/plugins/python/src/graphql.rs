@@ -112,128 +112,28 @@ impl Plugin<Python> for Graphql {
         cx.publish(GraphqlClient { methods })
     }
 }
-struct Models {
-    source: String,
-    names: BTreeSet<String>,
-}
-impl Models {
-    fn fields(&mut self, name: &str, fields: &[ModelField]) -> Result<String> {
-        ensure!(
-            !matches!(
-                name,
-                "None"
-                    | "True"
-                    | "False"
-                    | "class"
-                    | "def"
-                    | "return"
-                    | "and"
-                    | "or"
-                    | "not"
-                    | "if"
-                    | "else"
-                    | "elif"
-                    | "for"
-                    | "while"
-                    | "in"
-                    | "is"
-                    | "import"
-                    | "from"
-                    | "with"
-                    | "as"
-                    | "try"
-                    | "except"
-                    | "finally"
-                    | "raise"
-                    | "pass"
-                    | "break"
-                    | "continue"
-                    | "lambda"
-                    | "yield"
-                    | "global"
-                    | "nonlocal"
-                    | "assert"
-                    | "del"
-                    | "async"
-                    | "await"
-                    | "Any"
-                    | "TypedDict"
-                    | "Optional"
-                    | "List"
-                    | "Union"
-                    | "Literal"
-                    | "Client"
-                    | "Transport"
-                    | "GraphqlResponse"
-            ),
-            "GraphQL Python type name conflicts with language/runtime name: {name}"
-        );
-        ensure!(
-            name.chars()
-                .next()
-                .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
-                && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'),
-            "invalid GraphQL Python type name {name}"
-        );
-        ensure!(
-            self.names.insert(name.into()),
-            "GraphQL Python type collision: {name}"
-        );
-        let mut required = Vec::new();
-        let mut optional = Vec::new();
-        for (i, field) in fields.iter().enumerate() {
-            let ty = self.ty(&field.ty, &format!("{name}Field{i}"))?;
-            let entry = format!("{}: {ty}", serde_json::to_string(&field.name)?);
-            if field.optional {
-                optional.push(entry);
+mod models;
+use models::Models;
+mod layout;
+fn base_import(root: Option<(String, String)>, group: bool) -> (String, String) {
+    if let Some((path, class)) = root {
+        let path = if group {
+            if let Some(path) = path.strip_prefix("..groups.") {
+                format!(".{path}")
             } else {
-                required.push(entry);
+                format!(".._mixins{path}")
             }
-        }
-        writeln!(
-            self.source,
-            "_{name}Required = TypedDict({name:?}, {{{}}})\n_{name}Optional = TypedDict({name:?}, {{{}}}, total=False)\nclass {name}(_{name}Required, _{name}Optional):\n    pass\n",
-            required.join(", "),
-            optional.join(", ")
-        )?;
-        Ok(name.into())
-    }
-    fn ty(&mut self, ty: &ModelType, name: &str) -> Result<String> {
-        let mut value = match &ty.kind {
-            ModelKind::Scalar(s) => match s.as_str() {
-                "String" | "ID" => "str",
-                "Int" => "int",
-                "Float" => "float",
-                "Boolean" => "bool",
-                _ => "Any",
-            }
-            .into(),
-            ModelKind::Named(s) => format!("{s:?}"),
-            ModelKind::Enum(values) => format!(
-                "Literal[{}]",
-                values
-                    .iter()
-                    .map(|v| format!("{v:?}"))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-            ModelKind::Literal(v) => format!("Literal[{v:?}]"),
-            ModelKind::List(inner) => format!("List[{}]", self.ty(inner, &format!("{name}Item"))?),
-            ModelKind::Object(fields) => self.fields(name, fields)?,
-            ModelKind::Union(members) => format!(
-                "Union[{}]",
-                members
-                    .iter()
-                    .enumerate()
-                    .map(|(i, t)| self.ty(t, &format!("{name}Variant{i}")))
-                    .collect::<Result<Vec<_>>>()?
-                    .join(", ")
-            ),
+        } else if let Some(path) = path.strip_prefix("..") {
+            format!(".{path}")
+        } else {
+            format!("._mixins{path}")
         };
-        if ty.nullable {
-            value = format!("Optional[{value}]");
-        }
-        Ok(value)
+        (
+            format!("from {path} import {class} as _Base\n"),
+            "(_Base)".into(),
+        )
+    } else {
+        (String::new(), String::new())
     }
 }
 fn render(
@@ -258,68 +158,95 @@ fn render(
         module == distribution.replace('-', "_") && !module.is_empty(),
         "invalid Python GraphQL package name"
     );
+    ensure!(
+        matches!(style, GraphqlStyle::Idiomatic) || groups.is_empty(),
+        "custom GraphQL groups require idiomatic style"
+    );
     let mut models = Models {
-        source: "from typing import Any, TypedDict, Optional, List, Union, Literal\n".into(),
+        files: BTreeMap::new(),
+        exports: vec![],
         names: BTreeSet::new(),
+        input_names: contract.input_objects.keys().cloned().collect(),
+        paths: BTreeSet::new(),
     };
     for (name, fields) in &contract.input_objects {
         models.fields(name, fields)?;
     }
-    let mut operations =
-        String::from("from .models import *\nfrom .runtime import GraphqlResponse, Transport\n\n");
+    let mut files = BTreeMap::new();
     let mut methods = BTreeMap::new();
     let mut signatures = BTreeMap::new();
     let mut names = BTreeSet::new();
-    for (i, op) in contract.operations.iter().enumerate() {
+    let mut operation_exports = vec![];
+    let mut client_bases = vec![];
+    let mut selected_operations = contract.operations.iter().collect::<Vec<_>>();
+    selected_operations.sort_by_key(|op| &op.name);
+    for (index, op) in selected_operations.iter().enumerate() {
         let name = python_identifier(&op.name);
         ensure!(
-            names.insert(name.clone()),
-            "Python GraphQL operation name collision: {name}"
+            names.insert(name.clone()) && name != "transport",
+            "Python GraphQL operation naming collision {name}"
         );
         ensure!(
-            name != "transport",
-            "Python GraphQL operation conflicts with runtime symbol"
+            matches!(op.result.kind, ModelKind::Object(_)),
+            "Python GraphQL operation result must be an object"
         );
-        let vars = models.fields(&format!("Operation{i}Variables"), &op.variables)?;
-        let result = models.ty(&op.result, &format!("Operation{i}Result"))?;
+        let vars = models.fields(&format!("{}Variables", op.name), &op.variables)?;
+        let result = models.ty(&op.result, &format!("{}Result", op.name))?;
+        let mut aliases = vec![];
+        let mut alias_code = String::new();
+        for (alias, canonical) in [
+            (format!("Operation{index}Variables"), vars.clone()),
+            (
+                format!("Operation{index}Result"),
+                format!("{}Result", op.name),
+            ),
+        ] {
+            if alias != canonical {
+                ensure!(
+                    models.names.insert(alias.clone()),
+                    "Python GraphQL legacy alias collision {alias}"
+                );
+                writeln!(
+                    alias_code,
+                    "from .{} import {canonical}\n{alias} = {canonical}",
+                    python_identifier(&canonical)
+                )?;
+                aliases.push(alias);
+            }
+        }
+        if !aliases.is_empty() {
+            let alias_file = format!("_aliases_{name}");
+            models
+                .files
+                .insert(format!("models/{alias_file}.py"), alias_code);
+            models.exports.push((alias_file, aliases));
+        }
         let parameter = if op.variables.iter().all(|v| v.optional) {
             format!("variables: Optional[{vars}] = None")
         } else {
             format!("variables: {vars}")
         };
-        writeln!(
-            operations,
-            "def {name}(transport: Transport, {parameter}) -> GraphqlResponse[{result}]:\n    return transport.execute({}, {}, {{}} if variables is None else variables)\n",
+        let mut code = format!(
+            "from typing import Optional\nfrom ..models import *\nfrom ..runtime import GraphqlResponse, Transport\n\ndef {name}(transport: Transport, {parameter}) -> GraphqlResponse[{result}]:\n    return transport.execute({}, {}, {{}} if variables is None else variables)\n",
             serde_json::to_string(&op.document)?,
             serde_json::to_string(&op.name)?
-        )?;
-        methods.insert(op.name.clone(), name.clone());
+        );
+        if !matches!(style, GraphqlStyle::Raw) {
+            writeln!(
+                code,
+                "class _OperationMixin:\n    _transport: Transport\n    def {name}(self, {parameter}) -> GraphqlResponse[{result}]:\n        return {name}(self._transport, variables)\n"
+            )?;
+            client_bases.push((format!("..operations.{name}"), "_OperationMixin".into()));
+        }
+        files.insert(format!("operations/{name}.py"), code);
+        operation_exports.push((name.clone(), vec![name.clone()]));
+        methods.insert(op.name.clone(), name);
         signatures.insert(op.name.clone(), (vars, result));
     }
-    let mut client = String::from(
-        "from . import operations\nfrom .models import *\nfrom .runtime import Transport, GraphqlResponse\n\nclass Client:\n    def __init__(self, endpoint: str, *, headers=None, timeout: float = 30):\n        self._transport = Transport(endpoint, headers=headers, timeout=timeout)\n",
-    );
-    if !matches!(style, GraphqlStyle::Raw) {
-        for op in &contract.operations {
-            let (vars, result) = &signatures[&op.name];
-            let name = &methods[&op.name];
-            let parameter = if op.variables.iter().all(|v| v.optional) {
-                format!("variables: Optional[{vars}] = None")
-            } else {
-                format!("variables: {vars}")
-            };
-            writeln!(
-                client,
-                "    def {name}(self, {parameter}) -> GraphqlResponse[{result}]:\n        return operations.{name}(self._transport, variables)\n"
-            )?;
-        }
-    }
-    let mut group_source = String::new();
     if matches!(style, GraphqlStyle::Idiomatic) {
-        let mut group_names = BTreeSet::new();
         let mut selected = groups.clone();
         if selected.is_empty() {
-            for op in &contract.operations {
+            for op in &selected_operations {
                 selected
                     .entry(
                         if op.kind == GraphqlOperationKind::Query {
@@ -333,34 +260,27 @@ fn render(
                     .insert(methods[&op.name].clone(), op.name.clone());
             }
         }
+        let mut group_names = BTreeSet::new();
         for (index, (group, entries)) in selected.iter().enumerate() {
             let group_name = python_identifier(group);
             ensure!(
                 group_names.insert(group_name.clone())
                     && !names.contains(&group_name)
                     && !matches!(group_name.as_str(), "_transport" | "execute"),
-                "Python GraphQL group collision: {group_name}"
+                "Python GraphQL group collision {group_name}"
             );
-            writeln!(
-                client,
-                "    @property\n    def {group_name}(self):\n        return _Group{index}(self._transport)\n"
-            )?;
+            let mut group_bases = vec![];
             let mut normalized = BTreeSet::new();
-            writeln!(
-                group_source,
-                "class _Group{index}:\n    def __init__(self, transport):\n        self._transport = transport"
-            )?;
             for (method, operation) in entries {
                 let method = python_identifier(method);
                 ensure!(
                     normalized.insert(method.clone()) && method != "_transport",
-                    "Python GraphQL grouped method collision"
+                    "Python GraphQL group method collision"
                 );
-                let Some((vars, result)) = signatures.get(operation) else {
-                    anyhow::bail!("unknown GraphQL grouped operation {operation}");
-                };
-                let op = contract
-                    .operations
+                let (vars, result) = signatures.get(operation).ok_or_else(|| {
+                    anyhow::anyhow!("unknown GraphQL grouped operation {operation}")
+                })?;
+                let op = selected_operations
                     .iter()
                     .find(|op| &op.name == operation)
                     .unwrap();
@@ -369,20 +289,45 @@ fn render(
                 } else {
                     format!("variables: {vars}")
                 };
-                writeln!(
-                    group_source,
-                    "    def {method}(self, {parameter}) -> GraphqlResponse[{result}]:\n        return operations.{}(self._transport, variables)\n",
-                    methods[operation]
-                )?;
+                let file = format!("{group_name}_{method}");
+                files.insert(format!("groups/{file}.py"),format!("from typing import Optional\nfrom ..models import *\nfrom ..operations.{} import {}\nfrom ..runtime import GraphqlResponse, Transport\nclass _MethodMixin:\n    _transport: Transport\n    def {method}(self, {parameter}) -> GraphqlResponse[{result}]:\n        return {}(self._transport, variables)\n",methods[operation],methods[operation],methods[operation]));
+                group_bases.push((format!("..groups.{file}"), "_MethodMixin".into()));
             }
+            let root = layout::mixins(&mut files, &format!("group_{group_name}"), group_bases)?;
+            let (imports, base) = base_import(root, true);
+            files.insert(format!("groups/{group_name}.py"),format!("{imports}class _Group{index}{base}:\n    def __init__(self, transport):\n        self._transport = transport\n\nclass _AccessorMixin:\n    @property\n    def {group_name}(self) -> _Group{index}:\n        return _Group{index}(self._transport)\n"));
+            client_bases.push((format!("..groups.{group_name}"), "_AccessorMixin".into()));
         }
     }
-    client.push_str(&group_source);
+    let root = layout::mixins(&mut files, "client", client_bases)?;
+    let (imports, base) = base_import(root, false);
+    files.insert("client.py".into(),format!("from .runtime import Transport\n{imports}class Client{base}:\n    def __init__(self, endpoint: str, *, headers=None, timeout: float=30):\n        self._transport=Transport(endpoint, headers=headers, timeout=timeout)\n"));
+    let model_exports = layout::facade(&mut models.files, "models", &models.exports);
+    models.files.insert("models/__init__.py".into(),format!("{model_exports}\nimport sys as _sys\n_exports = {{name: globals()[name] for name in __all__}}\nfor _name, _module in list(_sys.modules.items()):\n    if _name.startswith(__name__ + '.'):\n        vars(_module).update({{name: _exports[name] for name in getattr(_module, '__poolster_refs__', ())}})\n"));
+    models
+        .files
+        .insert("models/_parts/__init__.py".into(), String::new());
+    files.extend(models.files);
+    let operation_exports = layout::facade(&mut files, "operations", &operation_exports);
+    files.insert("operations/__init__.py".into(), operation_exports);
+    files.insert("groups/__init__.py".into(), String::new());
+    files.insert("_mixins/__init__.py".into(), String::new());
+    files.insert(
+        "runtime.py".into(),
+        include_str!("../templates/graphql_runtime.py").into(),
+    );
+    files.insert("__init__.py".into(),"from .client import Client\nfrom .runtime import GraphqlResponse, GraphqlErrors, Transport\nfrom .models import *\n".into());
+    files.insert("py.typed".into(), String::new());
     let mut tree = GeneratedTree::default();
-    for (path,contents) in [("models.py",models.source),("operations.py",operations),("client.py",client),("runtime.py",include_str!("../templates/graphql_runtime.py").into()),("__init__.py","from .client import Client\nfrom .runtime import GraphqlResponse, GraphqlErrors, Transport\nfrom .models import *\n".into()),("py.typed",String::new())] {tree.insert(GeneratedFile::new(format!("src/{module}/{path}"),contents)?)?;}
+    for (path, source) in files {
+        tree.insert(GeneratedFile::new(format!("src/{module}/{path}"), source)?)?;
+    }
     tree.insert(GeneratedFile::new("README.md", "# GraphQL Python client\n\nRequires Python 3.9+. Flat clients expose snake_case operation methods; idiomatic clients additionally expose query/mutation or configured groups. Raw exports use an explicit Transport. Variables and selection-specific results are TypedDicts: omitted keys differ from explicit None. GraphqlResponse preserves data, errors and extensions; inspect status or call require_data() to reject partial results. urllib transport exceptions remain distinct. Custom scalars retain Any JSON wire values. Subscriptions, incremental delivery and async transports are not supported.\n")?)?;
     tree.insert(GeneratedFile::new("pyproject.toml",format!("[build-system]\nrequires = [\"setuptools>=68\"]\nbuild-backend = \"setuptools.build_meta\"\n[project]\nname = {distribution:?}\nversion = \"0.0.0\"\nrequires-python = \">=3.9\"\n[tool.setuptools.packages.find]\nwhere = [\"src\"]\n[tool.setuptools.package-data]\n\"*\" = [\"py.typed\"]\n"))?)?;
+    source_layout::diagnostics(&mut tree)?;
     Ok((tree, methods))
 }
 #[cfg(test)]
 mod tests;
+
+mod source_layout;

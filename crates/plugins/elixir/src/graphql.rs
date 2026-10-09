@@ -1,4 +1,5 @@
 //! Native GraphQL clients consume selection contracts, never the HTTP AST.
+mod layout;
 mod models;
 #[cfg(test)]
 mod tests;
@@ -125,7 +126,7 @@ fn render(
     let app = crate::elixir_identifier(package);
     let module = crate::pascal_case(package);
     ensure!(
-        !app.is_empty() && !module.is_empty(),
+        !app.is_empty() && !module.is_empty() && app.len() <= 128 && module.len() <= 80,
         "Invalid Elixir GraphQL package name"
     );
     fn validate_names(t: &poolster_core::native::ModelType, c: &GraphqlOperations) -> Result<()> {
@@ -157,6 +158,8 @@ fn render(
     let mut models = models::Models::new(&module);
     let mut methods = BTreeMap::new();
     let mut calls = String::new();
+    let mut operation_files = Vec::new();
+    let mut declarations = Vec::new();
     let mut groups: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
     for (name, fields) in &c.input_objects {
         models.input(name, fields)?;
@@ -169,6 +172,10 @@ fn render(
         let name = crate::pascal_case(&op.name);
         ensure!(!name.is_empty(), "Invalid Elixir GraphQL operation name");
         let method = crate::elixir_identifier(&op.name);
+        ensure!(
+            method.len() <= 240,
+            "Elixir GraphQL method exceeds VM atom name limit"
+        );
         ensure!(
             models::identifier(&method)
                 && ![
@@ -199,12 +206,21 @@ fn render(
         } else {
             String::new()
         };
+        let start = calls.len();
         writeln!(
             calls,
             "  @spec {method}({module}.Client.t(), {vars}.t()) :: {{:ok, {module}.Envelope.t({result})}} | {{:error, term()}}\n  def {method}(client, variables{default}) do\n    try do\n      {module}.Runtime.execute(client, {}, {}, {vars}.to_wire(variables), &{module}.Models.{name}Result.from_wire/1)\n    rescue e in ArgumentError -> {{:error, {{:variables, Exception.message(e)}}}}\n    end\n  end",
             elixir_string(&op.document),
             elixir_string(&op.name)
         )?;
+        operation_files.push((
+            method.clone(),
+            format!(
+                "defmodule {module}.Operations.{name} do\n{}\nend\n",
+                &calls[start..]
+            ),
+        ));
+        declarations.push(format!("{}\n  def {method}(client, variables{default}), do: {module}.Operations.{name}.{method}(client, variables)",calls[start..].lines().next().unwrap()));
         if style == GraphqlStyle::Idiomatic {
             groups
                 .entry(
@@ -230,13 +246,21 @@ fn render(
     } else {
         module.clone()
     };
-    let mut source = format!("defmodule {surface} do\n{calls}\nend\n");
+    let mut tree = GeneratedTree::default();
+    layout::facade(
+        &mut tree,
+        &app,
+        &surface,
+        &declarations,
+        &format!("lib/{app}/operations.ex"),
+    )?;
     let mut group_names = std::collections::BTreeSet::new();
     for (group, members) in groups {
         let group_name = crate::pascal_case(&group);
         ensure!(
             !group_name.is_empty()
-                && group_names.insert(group_name.clone())
+                && group_name.len() + module.len() <= 230
+                && group_names.insert(group_name.to_ascii_lowercase())
                 && ![
                     "Client",
                     "Models",
@@ -248,12 +272,13 @@ fn render(
                 .contains(&group_name.as_str()),
             "Invalid Elixir group"
         );
-        writeln!(source, "defmodule {module}.{group_name} do")?;
+        let mut group_declarations = Vec::new();
         let mut member_names = std::collections::BTreeSet::new();
         for (method, op) in members {
             let method = crate::elixir_identifier(&method);
             ensure!(
                 models::identifier(&method)
+                    && method.len() <= 240
                     && member_names.insert(method.clone())
                     && !["__info__", "module_info"].contains(&method.as_str()),
                 "Invalid Elixir group method"
@@ -275,28 +300,40 @@ fn render(
             } else {
                 String::new()
             };
-            writeln!(
-                source,
-                "  def {method}(client, variables{default}), do: {surface}.{target}(client, variables)"
-            )?;
+            group_declarations.push(format!("  def {method}(client, variables{default}), do: {surface}.{target}(client, variables)"));
         }
-        source.push_str("end\n");
+        layout::facade(
+            &mut tree,
+            &app,
+            &format!("{module}.{group_name}"),
+            &group_declarations,
+            &format!("lib/{app}/groups/{}.ex", layout::stem(&group_name)),
+        )?;
     }
-    let mut tree = GeneratedTree::default();
-    tree.insert(GeneratedFile::new(
-        format!("lib/{app}/models.ex"),
-        models.source,
-    )?)?;
-    tree.insert(GeneratedFile::new(
-        format!("lib/{app}/runtime.ex"),
-        include_str!("graphql/runtime.ex.tmpl").replace("__POOLSTER__", &module),
-    )?)?;
-    tree.insert(GeneratedFile::new(
-        format!("lib/{app}/operations.ex"),
-        source,
-    )?)?;
+    for (name, source) in layout::modules(&models.source)? {
+        let name = name.rsplit('.').next().unwrap();
+        tree.insert(GeneratedFile::new(
+            format!("lib/{app}/models/{}.ex", layout::stem(name)),
+            source,
+        )?)?;
+    }
+    for (name, source) in
+        layout::modules(&include_str!("graphql/runtime.ex.tmpl").replace("__POOLSTER__", &module))?
+    {
+        let name = name.rsplit('.').next().unwrap();
+        tree.insert(GeneratedFile::new(
+            format!("lib/{app}/{}.ex", layout::stem(name)),
+            source,
+        )?)?;
+    }
+    for (name, source) in operation_files {
+        tree.insert(GeneratedFile::new(
+            format!("lib/{app}/operations/{}.ex", layout::stem(&name)),
+            source,
+        )?)?;
+    }
     tree.insert(GeneratedFile::new("mix.exs",format!("defmodule {module}.MixProject do\n use Mix.Project\n def project, do: [app: :{app},version: \"0.0.0\",elixir: \"~> 1.15\",deps: [{{:finch, \"== 0.24.0\"}},{{:jason, \"== 1.4.5\"}}]]\n def application, do: [extra_applications: [:logger,:inets,:crypto],mod: {{{module}.Application,[]}}]\nend\n"))?)?;
-    tree.insert(GeneratedFile::new("README.md",format!("# GraphQL Elixir client\n\nFixed operation clients in `{style:?}` style. Construct `{module}.Client.new(endpoint)`. Raw functions live in `{module}.Operations`, flat functions in `{module}`, grouped functions in Query/Mutation or your custom modules. Variables and selected results are typed structs below `{module}.Models`. Optional variables default to `:poolster_absent`; nil means explicit null.\n\nReturns `{{:ok, Envelope}}` even for GraphQL errors/partial results; inspect data_present, data, errors, extensions and status. `{module}.Runtime.require_data/1` returns error for GraphQL errors or absent/null data. HTTP/protocol/variable failures return `{{:error, reason}}`. Finch0.24.0 and Jason1.4.5 are pinned. Custom transport receives a Finch request. Subscriptions rejected; abstract selections require selected __typename; custom scalars remain term().\n"))?)?;
+    tree.insert(GeneratedFile::new("README.md",format!("# GraphQL Elixir client\n\nFixed operation clients in `{style:?}` style. Construct `{module}.Client.new(endpoint)`. Raw functions live in `{module}.Operations`, flat functions in `{module}`, grouped functions in Query/Mutation or your custom modules. Variables and selected results retain their typed struct names below `{module}.Models`, with one module per model file. Execution bodies and documents live in one file per operation; API and group facades use bounded export modules. Optional variables default to `:poolster_absent`; nil means explicit null.\n\nReturns `{{:ok, Envelope}}` even for GraphQL errors/partial results; inspect data_present, data, errors, extensions and status. `{module}.Runtime.require_data/1` returns error for GraphQL errors or absent/null data. HTTP/protocol/variable failures return `{{:error, reason}}`. Finch0.24.0 and Jason1.4.5 are pinned. Custom transport receives a Finch request. Subscriptions rejected; abstract selections require selected __typename; custom scalars remain term().\n"))?)?;
     tree.insert(GeneratedFile::new(
         "graphql/schema.graphql",
         c.schema_source.clone(),
@@ -305,6 +342,13 @@ fn render(
         "graphql/operations.graphql",
         c.operation_source.clone(),
     )?)?;
+    let oversized=tree.iter().filter(|(path,source)|path.extension().is_some_and(|ext|ext=="ex")&&source.len()>128*1024).map(|(path,source)|serde_json::json!({"path":path,"bytes":source.len(),"max_file_bytes":128*1024,"reason":"Atomic declaration exceeds the source budget; retained intact."})).collect::<Vec<_>>();
+    if !oversized.is_empty() {
+        tree.insert(GeneratedFile::new(
+            ".poolster/source-layout-diagnostics.json",
+            serde_json::to_string_pretty(&oversized)?,
+        )?)?;
+    }
     Ok((tree, methods))
 }
 fn elixir_string(value: &str) -> String {

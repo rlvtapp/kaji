@@ -59,3 +59,14 @@ mapping API yet. No third-party GraphQL runtime is required in generated package
 Generated-code tests cover all styles, presence/null behavior, exact documents,
 errors, cancellation and regeneration. The [support matrix](../../plugin-support-matrix.md)
 records the validation boundary.
+
+## Generated source layout
+
+Go keeps one package and the existing import path. Separate `graphql_runtime.go`, `graphql_client.go`, `graphql_transport.go`, `graphql_model_*.go`, `graphql_operation_*.go` and group/method files replace `graphql.go`. Same-package Go source files intentionally share one directory.
+
+The layout targets source files below **128 KiB**, grouping declarations and export
+parts at semantic boundaries. An indivisible model or operation that exceeds this
+budget is retained and listed in `.poolster/source-layout-diagnostics.json`;
+this is a size diagnostic, not a claim that every possible schema produces small files.
+Regeneration removes obsolete unchanged owned files and preserves unrelated user files.
+Source customizations referring to old monolithic paths must be retargeted.

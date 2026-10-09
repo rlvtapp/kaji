@@ -17,15 +17,19 @@ fn generate(root: &Path) -> Result<GeneratedTree> {
     generate_style(root, "idiomatic")
 }
 fn generate_style(root: &Path, style: &str) -> Result<GeneratedTree> {
-    std::fs::write(root.join("schema.graphql"), SCHEMA)?;
-    std::fs::write(
-        root.join("operations.graphql"),
+    generate_documents(
+        root,
+        style,
         if style == "collision" {
             "query FooBar { fatal } query foo_bar { fatal }"
         } else {
             OPS
         },
-    )?;
+    )
+}
+fn generate_documents(root: &Path, style: &str, documents: &str) -> Result<GeneratedTree> {
+    std::fs::write(root.join("schema.graphql"), SCHEMA)?;
+    std::fs::write(root.join("operations.graphql"), documents)?;
     let mut registry = InputRegistry::new();
     registry.register(poolster_input_graphql::GraphqlInput)?;
     let input = InputProvider::<GraphqlOperations>::new(
@@ -37,10 +41,15 @@ fn generate_style(root: &Path, style: &str) -> Result<GeneratedTree> {
         operation_files: vec![root.join("operations.graphql")],
         ..Default::default()
     });
-    let generator = rust::graphql(Some(input.handle())).scalar(
-        "Timestamp",
-        rust::GraphqlScalarMapping::new("String", "i64"),
-    );
+    let generator = rust::graphql(Some(input.handle()));
+    let generator = if documents.contains("Scalars") {
+        generator.scalar(
+            "Timestamp",
+            rust::GraphqlScalarMapping::new("String", "i64"),
+        )
+    } else {
+        generator
+    };
     let generator = match style {
         "raw" => generator.raw(),
         "flat" | "collision" => generator.flat(),
@@ -56,6 +65,10 @@ fn generate_style(root: &Path, style: &str) -> Result<GeneratedTree> {
         "unknown-group" => generator
             .idiomatic()
             .group("user", "read", "MissingOperation"),
+        "filename-tuples" => generator
+            .idiomatic()
+            .group("a_b", "c", "Read")
+            .group("a", "b_c", "Rename"),
         "grouped" => generator
             .idiomatic()
             .group("user", "read", "Read")
@@ -269,7 +282,12 @@ fn graphql_bound_styles_have_snake_case_methods_and_zero_argument_queries() -> R
         let root = tempfile::tempdir()?;
         let tree = generate_style(root.path(), style)?;
         tree.write_to(root.path())?;
-        let source = std::fs::read_to_string(root.path().join("sdk/src/graphql.rs"))?;
+        let source = tree
+            .iter()
+            .filter(|(path, _)| path.extension().is_some_and(|ext| ext == "rs"))
+            .map(|(_, content)| content)
+            .collect::<Vec<_>>()
+            .join("\n");
         ensure!(source.contains(expected), "missing {expected} for {style}");
         ensure!(
             source.contains("pub async fn fatal(&self)"),
@@ -281,5 +299,68 @@ fn graphql_bound_styles_have_snake_case_methods_and_zero_argument_queries() -> R
             "raw transport functions remain available"
         );
     }
+    Ok(())
+}
+
+#[test]
+fn graphql_layout_is_bounded_and_stable_for_large_operation_sets() -> Result<()> {
+    let root = tempfile::tempdir()?;
+    let documents: Vec<_> = (0..1000)
+        .map(|i| format!("query Read{i:04} {{ fatal }}"))
+        .collect();
+    for style in ["raw", "flat", "idiomatic"] {
+        let first = generate_documents(root.path(), style, &documents.join("\n"))?;
+        let reverse = documents
+            .iter()
+            .rev()
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n");
+        let reordered = generate_documents(root.path(), style, &reverse)?;
+        ensure!(
+            first == reordered,
+            "layout must not depend on operation document order"
+        );
+        ensure!(
+            first.get("sdk/src/graphql.rs").unwrap().len() < 8192,
+            "entry must remain thin"
+        );
+        for (path, source) in first
+            .iter()
+            .filter(|(path, _)| path.extension().is_some_and(|ext| ext == "rs"))
+        {
+            ensure!(
+                source.len() < 128 * 1024,
+                "oversized generated source {}: {} bytes",
+                path.display(),
+                source.len()
+            );
+        }
+        ensure!(
+            first
+                .get("sdk/src/graphql/operations/read0000.rs")
+                .is_some()
+        );
+        ensure!(
+            first
+                .get("sdk/src/graphql/models/Read0000Result.rs")
+                .is_some()
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn graphql_layout_preserves_distinct_group_method_tuples() -> Result<()> {
+    let root = tempfile::tempdir()?;
+    let tree = generate_style(root.path(), "filename-tuples")?;
+    ensure!(
+        tree.get("sdk/src/graphql/client/methods/a_b/c.rs")
+            .is_some()
+    );
+    ensure!(
+        tree.get("sdk/src/graphql/client/methods/a/b_c.rs")
+            .is_some()
+    );
     Ok(())
 }

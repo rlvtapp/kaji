@@ -34,3 +34,14 @@ are unsupported in this first implementation.
 All four styles compile with warnings treated as errors and execute against pinned
 GraphQL.js 16.14.2, including mutation, partial errors, cancellation and malformed responses.
 See the [support matrix](../../plugin-support-matrix.md).
+
+## Generated source layout
+
+Runtime, client, operation, model and group sources have separate folders. Partial declarations preserve existing public model and client paths; wide records can split at property boundaries. The `dotnet` alias uses this same layout.
+
+The layout targets source files below **128 KiB**, grouping declarations and export
+parts at semantic boundaries. An indivisible model or operation that exceeds this
+budget is retained and listed in `.poolster/source-layout-diagnostics.json`;
+this is a size diagnostic, not a claim that every possible schema produces small files.
+Regeneration removes obsolete unchanged owned files and preserves unrelated user files.
+Source customizations referring to old monolithic paths must be retargeted.

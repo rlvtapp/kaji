@@ -1,3 +1,4 @@
+  INPUT_CLASSES = {}
   class Model
     @registry = {}
     def self.register(type, klass); Model.instance_variable_get(:@registry)[type['model_class']] = klass; end

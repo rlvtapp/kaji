@@ -70,7 +70,9 @@ pub(super) fn layout(
     let mut methods = BTreeMap::new();
     let mut allocated = BTreeSet::new();
     let mut types = BTreeSet::from(["Client".to_string()]);
-    for op in &contract.operations {
+    let mut ordered_operations: Vec<_> = contract.operations.iter().collect();
+    ordered_operations.sort_by_key(|op| &op.name);
+    for op in ordered_operations {
         if style == GraphqlStyle::Raw {
             continue;
         }
@@ -144,42 +146,52 @@ impl Layout {
             .chain(self.groups.values().map(|(ty, _)| ty.clone()))
             .collect()
     }
-    pub fn render(
+    pub fn render_files(
         &self,
-        source: &mut String,
         style: GraphqlStyle,
         operations: &BTreeMap<String, GraphqlOperationSymbols>,
-    ) -> Result<()> {
+    ) -> Result<BTreeMap<String, String>> {
+        let mut files = BTreeMap::new();
         if style == GraphqlStyle::Raw {
-            return Ok(());
+            return Ok(files);
         }
-        writeln!(
-            source,
-            "pub struct Client {{ transport: crate::graphql_runtime::GraphqlHttpTransport }}\nimpl Client {{\n    pub fn new(endpoint: impl Into<String>, client: reqwest::Client) -> Self {{ Self::from_transport(crate::graphql_runtime::GraphqlHttpTransport::new(endpoint,client)) }}\n    pub fn from_transport(transport: crate::graphql_runtime::GraphqlHttpTransport) -> Self {{ Self {{ transport }} }}"
-        )?;
+        files.insert("client".into(), "pub struct Client { transport: crate::graphql_runtime::GraphqlHttpTransport }\nimpl Client {\n    pub fn new(endpoint: impl Into<String>, client: reqwest::Client) -> Self { Self::from_transport(crate::graphql_runtime::GraphqlHttpTransport::new(endpoint,client)) }\n    pub fn from_transport(transport: crate::graphql_runtime::GraphqlHttpTransport) -> Self { Self { transport } }\n}\n".into());
         for (group, (ty, members)) in &self.groups {
-            if group.is_empty() {
-                self.render_methods(source, members, operations, "&self.transport")?;
-            } else {
-                writeln!(
-                    source,
-                    "    pub fn {group}(&self) -> {ty}<'_> {{ {ty} {{ transport: &self.transport }} }}"
+            if !group.is_empty() {
+                files.insert(format!("group_{group}"), format!("pub struct {ty}<'a> {{ transport: &'a crate::graphql_runtime::GraphqlHttpTransport }}\nimpl Client {{\n    pub fn {group}(&self) -> {ty}<'_> {{ {ty} {{ transport: &self.transport }} }}\n}}\n"));
+            }
+            for member in members {
+                let mut source = if group.is_empty() {
+                    "impl Client {\n".into()
+                } else {
+                    format!("impl {ty}<'_> {{\n")
+                };
+                self.render_methods(
+                    &mut source,
+                    std::slice::from_ref(member),
+                    operations,
+                    if group.is_empty() {
+                        "&self.transport"
+                    } else {
+                        "self.transport"
+                    },
                 )?;
+                source.push_str("}\n");
+                files.insert(
+                    format!(
+                        "methods/{}/{}",
+                        poolster_core::files::source_file_stem(if group.is_empty() {
+                            "flat"
+                        } else {
+                            group
+                        }),
+                        poolster_core::files::source_file_stem(&member.1)
+                    ),
+                    source,
+                );
             }
         }
-        writeln!(source, "}}")?;
-        for (group, (ty, members)) in &self.groups {
-            if group.is_empty() {
-                continue;
-            }
-            writeln!(
-                source,
-                "pub struct {ty}<'a> {{ transport: &'a crate::graphql_runtime::GraphqlHttpTransport }}\nimpl {ty}<'_> {{"
-            )?;
-            self.render_methods(source, members, operations, "self.transport")?;
-            writeln!(source, "}}")?;
-        }
-        Ok(())
+        Ok(files)
     }
     fn render_methods(
         &self,

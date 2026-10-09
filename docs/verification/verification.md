@@ -459,3 +459,33 @@ codec support: consult each [language guide](../reference/README.md) and the
 [support matrix](../plugin-support-matrix.md#graphql-language-boundaries).
 Subscriptions remain a distinct transport capability; the new outputs reject them.
 All changes remain unreleased.
+
+## GraphQL generated source organization
+
+The [source-layout record](../verification-results/graphql-source-layout-2026-10-09.json)
+tracks modular SDK generation across all ten languages. Models, operations, runtime
+code and client helpers have separate source files; exports and helper collections
+are partitioned where needed. Tests cover 300–1,000 operations, deterministic
+reordering, regeneration and retained oversized source diagnostics. Python also
+checks a 512-field model. The source budget is 128 KiB, not a hard limit on valid
+input: indivisible oversized files remain usable and are reported.
+
+Existing public call paths remain, except Java model imports move to the generated
+`.models` package. Source customizations targeting former monolithic files need
+new paths. Compilation and local-server runtime checks retain the existing protocol
+limitations in the [support matrix](../plugin-support-matrix.md).
+
+The full workspace and 205-spec HTTP corpus were not rerun for this change.
+Ignored tests in ordinary suites are recorded separately from explicitly executed
+GraphQL runtime checks. These changes remain unreleased.
+
+The rebuilt npm SDK suite passes **76/76**, with no skipped tests. The CLI suite
+passes **127**, with **9 ignored**. TypeScript's selected GraphQL and ecosystem
+suites pass **22**, explicitly enabling compiler/runtime tests. Changed crates,
+core, CLI and Node pass all-target Clippy with warnings denied; formatting and
+modified guide links pass. Per-language results are recorded in the linked record.
+
+Rust library tests pass **30**, with **8 ignored**; TypeScript library tests pass
+**50**, with **20 ignored**. The first Rust attempt had five generated-package
+dependency-download failures because crates.io DNS was blocked. Rerunning with
+cached dependencies and offline child Cargo calls passed.

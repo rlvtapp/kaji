@@ -143,3 +143,14 @@ identical-key variants with different types require selecting `__typename`.
 The packaged runtime test also verifies a real custom GraphQL scalar with
 `String` input and `i64` output, nested/list/presence/nullability behavior, unmapped
 JSON values and incompatible server data.
+
+## Generated source layout
+
+`src/graphql.rs` remains the public module. `src/graphql/models/`, `operations/` and `client/` contain individual declarations, operations and method implementations. Small include indexes preserve existing public type and method paths. Transport code remains in `src/graphql_runtime.rs`.
+
+The layout targets source files below **128 KiB**, grouping declarations and export
+parts at semantic boundaries. An indivisible model or operation that exceeds this
+budget is retained and listed in `.poolster/source-layout-diagnostics.json`;
+this is a size diagnostic, not a claim that every possible schema produces small files.
+Regeneration removes obsolete unchanged owned files and preserves unrelated user files.
+Source customizations referring to old monolithic paths must be retargeted.

@@ -101,8 +101,12 @@ impl Models {
             "Invalid/reserved GraphQL Java type {name}"
         );
         ensure!(
-            self.names.insert(name.into()),
-            "GraphQL Java model collision {name}"
+            name.len() <= 200,
+            "GraphQL Java type {name} exceeds the portable filename limit (200 bytes)"
+        );
+        ensure!(
+            self.names.insert(name.to_ascii_lowercase()),
+            "GraphQL Java model collision on a case-insensitive filesystem: {name}"
         );
         Ok(())
     }
