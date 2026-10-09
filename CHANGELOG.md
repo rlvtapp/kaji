@@ -170,11 +170,11 @@
   205-contract APIs.guru corpus, including five Azure services, with per-phase
   logs, timeout/failure reports, cleanup tests, verified companion reference
   files and manual native-language workflows. See
-  [large-spec testing](docs/large-specs.md). All 205 pass local Go generation and
+  [large-spec testing](docs/verification/large-specs.md). All 205 pass local Go generation and
   native compilation. A subsequent 2,050-case cross-language run records
   generation/native failures in the other nine targets, with per-contract
   diagnostics and a prioritized fix list in the
-  [compatibility baseline](docs/guru-compatibility.md). Workflow availability does not imply
+  [compatibility baseline](docs/verification/guru-compatibility.md). Workflow availability does not imply
   every contract passes in every language.
 - Postman collection/environment sync is included; whole-workspace synchronization
   and publication are outside this release's scope.

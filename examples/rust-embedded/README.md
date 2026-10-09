@@ -12,5 +12,5 @@ cargo run
 
 The example uses path dependencies because the crates are currently consumed
 from this checkout. It lives outside the workspace to resemble a consumer
-application. Read the [library quickstart](../../docs/library/quickstart.md)
+application. Read the [library quickstart](../../docs/rust/quickstart.md)
 before adapting it to your own build process.

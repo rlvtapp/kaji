@@ -56,4 +56,4 @@ The unmodified pinned schema in `tests/schema/collection-v2.1.0.json` comes from
 Schema validation verifies export shape; live API behavior requires a deliberate
 execution test against a sandbox or mock.
 
-See the [author guide](../../../docs/postman.md) for CLI recipes and distribution.
+See the [author guide](../../../docs/reference/outputs/postman.md) for CLI recipes and distribution.

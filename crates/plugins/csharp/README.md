@@ -28,7 +28,7 @@ this plugin without the `poolster` facade, import
 `poolster_core::engine::Packages`. Supply a security catalog when your API
 declares named security schemes.
 
-See [configuration](../../../docs/configuration.md) for every generation option
+See [configuration](../../../docs/reference/configuration/configuration.md) for every generation option
 and the generated package's README for exact operation signatures.
 
 SDK authors can bundle customer middleware through `Package::middleware` or

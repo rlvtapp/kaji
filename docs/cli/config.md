@@ -74,7 +74,7 @@ the standard library.
 `URLSession` and `Codable`, without third-party runtime dependencies.
 
 For private remote contracts, use environment references rather than committed
-tokens. The full [`poolster.json` reference](../config-file.md) covers every field,
+tokens. The full [`poolster.json` reference](../reference/configuration/config-file.md) covers every field,
 remote inputs, download limits, and plugin-specific options.
 
 ## Bundle idempotency keys

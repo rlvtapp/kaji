@@ -6,5 +6,5 @@ typed contracts to generator consumers. Each provider lives in its own `poolster
 This crate reexports them and builds a default registry. Features select
 which provider crates are linked; all five are enabled by default.
 
-See [input plugins](../../docs/input-plugins.md) for CLI commands, replacement
+See [input plugins](../../../docs/reference/inputs/input-plugins.md) for CLI commands, replacement
 providers, typed graph integration, supported versions and verification limits.

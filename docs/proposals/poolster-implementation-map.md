@@ -81,7 +81,7 @@ later, after the npm/PyPI CLI distribution is established.
 
 ## Suggested sequence
 
-1. **Continue source layout cleanup.** Apply the [code organization guidelines](../code-organization.md)
+1. **Continue source layout cleanup.** Apply the [code organization guidelines](../about/code-organization.md)
    to the CLI and plugins; move templates and probes out of `src/` as those
    modules are split.
 2. **Verify the slim Rust SDK facade.** Test Rust embedding with only one

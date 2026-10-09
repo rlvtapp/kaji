@@ -66,9 +66,9 @@ SDKs are namespaced by default; `.flat()` selects direct clients. TypeScript
 also supports `.raw()`, which emits operation functions without the class.
 Select Fetch and Axios in different packages when you need both.
 
-- [Getting started](../../docs/getting-started.md)
-- [All configuration options](../../docs/configuration.md)
-- [Generated SDK surfaces](../../docs/generated-sdks.md)
-- [Zod, TanStack, and other artifacts](../../docs/auxiliary-generators.md)
-- [Plugin authoring](../../docs/typed-plugins.md)
-- [Contract mocking](../../docs/mocking.md)
+- [Getting started](../../docs/rust/quickstart.md)
+- [All configuration options](../../docs/reference/configuration/configuration.md)
+- [Generated SDK surfaces](../../docs/reference/outputs/generated-sdks.md)
+- [Zod, TanStack, and other artifacts](../../docs/reference/outputs/auxiliary-generators.md)
+- [Plugin authoring](../../docs/internals/typed-plugins.md)
+- [Contract mocking](../../docs/reference/outputs/mocking.md)

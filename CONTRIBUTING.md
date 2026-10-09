@@ -3,9 +3,9 @@
 Thanks for contributing. Poolster values small, reviewable changes with clear
 behavioural tests.
 
-Start with the [contributor guide](docs/contributing.md) for workspace structure,
+Start with the [contributor guide](docs/about/contributing.md) for workspace structure,
 toolchains, checks, plugin boundaries, and release preparation.
-Follow the [code organization guidelines](docs/code-organization.md) when
+Follow the [code organization guidelines](docs/about/code-organization.md) when
 adding modules, generated-language templates, or test fixtures.
 
 1. Open an issue before a broad API or generator-design change.

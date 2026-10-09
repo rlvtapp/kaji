@@ -2,7 +2,7 @@
 
 | Task | Start here |
 | --- | --- |
-| Ship middleware to every customer | [SDK customization](../sdk-customization.md) |
+| Ship middleware to every customer | [SDK customization](../reference/regeneration/sdk-customization.md) |
 | Add an application policy | [TypeScript](#add-a-header-to-a-typescript-application), [Python](#use-pythons-native-request-boundary), [Go](#decorate-a-go-transport) |
 | Find another language's extension | [Native interfaces](#use-the-native-extension-in-your-language) |
 | Understand retries and short circuits | [Execution boundaries](#understand-where-your-policy-runs) |
@@ -18,7 +18,7 @@ client normally; they do not import a policy or populate a middleware array to a
 the behavior you distribute.
 
 The source, exported symbol and registration recipe are covered in [SDK
-customization](../sdk-customization.md).
+customization](../reference/regeneration/sdk-customization.md).
 
 Application-level registration is optional and adds application behavior around an
 installed SDK. The examples here show that extra surface. Bundled defaults are prepended
@@ -28,7 +28,7 @@ application wrappers before transport execution.
 ## Add a header to a TypeScript application
 
 This example uses the flat `Notes` client generated in [Use a generated
-SDK](../generated-sdks.md):
+SDK](../reference/outputs/generated-sdks.md):
 
 ```ts
 import { Notes, type ClientMiddleware } from '@poolster/notes-fetch'
@@ -338,9 +338,9 @@ must support concurrent calls. Native wrappers can see resolved authentication h
 choose logged fields deliberately. If a policy should ship to every SDK customer, move
 it into the generator recipe rather than asking every application to register it.
 
-Continue with [SDK customization](../sdk-customization.md) to bundle the policy,
-[generated SDK usage](../generated-sdks.md) to document the customer's entry point, and
-[SDK publishing](../sdk-publishing.md) to distribute the tested package.
+Continue with [SDK customization](../reference/regeneration/sdk-customization.md) to bundle the policy,
+[generated SDK usage](../reference/outputs/generated-sdks.md) to document the customer's entry point, and
+[SDK publishing](../reference/automation/sdk-publishing.md) to distribute the tested package.
 
 ## Python and Ruby structural response checks
 

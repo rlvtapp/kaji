@@ -47,4 +47,4 @@ and an intentional `rate-limited` scenario quickly.
 
 The `x-poolster-mock` extension belongs in the OpenAPI source. Regenerate after
 changing it instead of editing generated fixture YAML. See
-[contract mocking](../../docs/mocking.md) for all predicates and response fields.
+[contract mocking](../../docs/reference/outputs/mocking.md) for all predicates and response fields.

@@ -30,6 +30,6 @@ poolster mcp ./openapi.yaml --base-url https://api.example.com
 ```
 
 `poolster mcp generator` exposes generation controls to a trusted MCP host and can write
-files. Read [the MCP guide](../mcp-server.md) for authentication, inputs, and safety.
+files. Read [the MCP guide](../reference/automation/mcp-server.md) for authentication, inputs, and safety.
 The [multi-package example](../../examples/cli-multi-package/README.md) emits both ReDoc
 and an MCP manifest.

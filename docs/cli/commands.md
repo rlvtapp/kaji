@@ -23,7 +23,7 @@ project. The npm facade launches the native generator.
 
 `discover` searches the public APIs.guru OpenAPI directory; `download` writes a
 preferred (or explicitly selected) directory version to a new local file. See
-[OpenAPI discovery and download](../discovery.md) for examples and safeguards.
+[OpenAPI discovery and download](../reference/configuration/discovery.md) for examples and safeguards.
 
 ## Direct-mode example
 
@@ -108,7 +108,7 @@ Reference that profile in `poolster.json` with
 `"token": { "profile": "github" }`, then use `poolster auth logout github` to
 remove the mapping. `POOLSTER_CONFIG_HOME` overrides the profile-store directory.
 
-See [the complete CLI reference](../cli.md) for every option and source-build
+See [the complete CLI reference](reference.md) for every option and source-build
 instructions.
 
 ## Inspect other input formats
@@ -120,7 +120,7 @@ poolster contract plugins --format json
 poolster contract inspect schema.graphql --input-format graphql --format json
 ```
 
-[Input providers and format support →](../input-plugins.md)
+[Input providers and format support →](../reference/inputs/input-plugins.md)
 
 ## Check a contract
 

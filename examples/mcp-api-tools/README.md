@@ -15,4 +15,4 @@ a production service.
 The server never infers credentials from the document. Supply request headers
 or cookies per MCP tool call, or use a credential-injecting proxy. The detailed
 protocol, supported body encodings, and safety notes are in the
-[MCP server guide](../../docs/mcp-server.md).
+[MCP server guide](../../docs/reference/automation/mcp-server.md).

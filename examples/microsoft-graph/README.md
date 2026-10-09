@@ -35,6 +35,6 @@ For a reproducible full verification that also compiles the Go SDK, run:
 bash ../../scripts/test-large-graph.sh
 ```
 
-See the [large-spec guide](../../docs/large-specs.md) for the performance and
-validation details, and the [`poolster.json` reference](../../docs/config-file.md)
+See the [large-spec guide](../../docs/verification/large-specs.md) for the performance and
+validation details, and the [`poolster.json` reference](../../docs/reference/configuration/config-file.md)
 for remote URL, headers, and authentication settings.

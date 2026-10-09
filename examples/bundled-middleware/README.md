@@ -90,8 +90,8 @@ needs the generated `.poolster/package.json`, supplied by this example's `releas
 entry. It does not install a GitHub App or register a trusted npm publisher.
 Replace `@example/notes` with a package name you own before any publication.
 
-For a separate SDK repository, follow [SDK repository automation](../../docs/sdk-automation.md)
+For a separate SDK repository, follow [SDK repository automation](../../docs/reference/automation/sdk-automation.md)
 for the destination bootstrap and scoped App authentication. See
-[SDK publishing](../../docs/sdk-publishing.md) for trusted-publisher registration,
-exact-tag checks, and retry behavior. See [SDK customization](../../docs/sdk-customization.md)
+[SDK publishing](../../docs/reference/automation/sdk-publishing.md) for trusted-publisher registration,
+exact-tag checks, and retry behavior. See [SDK customization](../../docs/reference/regeneration/sdk-customization.md)
 for other language contracts and source overrides.

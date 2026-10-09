@@ -1,10 +1,10 @@
 # Recorded verification evidence
 
-[How to verify](../verification.md) · [Compatibility matrix](../guru-compatibility.md)
+[How to verify](verification.md) · [Compatibility matrix](guru-compatibility.md)
 
 These are reports from earlier verification runs. Counts and host-specific
 statements describe those runs; they are not the current workspace result.
-Current input-plugin results are in [the input guide](../input-plugins.md#verification).
+Current input-plugin results are in [the input guide](../reference/inputs/input-plugins.md#verification).
 
 Expand the area you are investigating.
 
@@ -44,7 +44,7 @@ TypeScript, Rust, Python, Go, Java, C# and Ruby. All six pinned public contracts
 compile in Go. The manual public-contract matrix records results for ten language
 targets; this does not establish that every contract works in every target.
 
-The broader [205-contract compatibility baseline](../guru-compatibility.md) attempts
+The broader [205-contract compatibility baseline](guru-compatibility.md) attempts
 all ten languages and records generation/native failures beyond these curated
 fixtures. Go passes all 205; the other targets have explicit failures. Use that
 matrix when assessing large-contract compatibility and stability.
@@ -158,13 +158,13 @@ The checksum-pinned Graph regression compiles the full generated Go package,
 executes typed request and extension-data roundtrips, compares SDK outputs with
 one/four workers and generates a multi-language recipe. Run metadata intentionally
 records different output paths/worker settings. TypeScript generation in that
-large-contract check is not native TypeScript compilation. See [large specs](../large-specs.md).
+large-contract check is not native TypeScript compilation. See [large specs](large-specs.md).
 
 Postman sync tests mock API requests, reviewed remote hashes and read-back checks.
 Terraform release scaffolding is editable and inactive until deliberately copied
 into workflows. Native Framework lifecycle checks passed after the namespace and
 version changes; GoReleaser signing, external release uploads and registry ingestion
-remain unexecuted. The [feature catalog](../features.md) records these boundaries.
+remain unexecuted. The [feature catalog](../about/features.md) records these boundaries.
 
 
 The shared corpus now enables Ruby/Swift retry options and passed their replay-safe

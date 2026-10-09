@@ -3,18 +3,18 @@
 Audited **9 October 2026**, against the unreleased alpha.2 implementation in this checkout.
 Manifests still use `0.5.0-alpha.1`; the additions below are unreleased alpha.2
 work. This matrix describes implemented generation, not parser availability.
-For remaining work, start with the [native pipeline backlog](native-pipelines.md#remaining-work).
+For remaining work, start with the [native pipeline backlog](reference/inputs/native-pipelines.md#remaining-work).
 
 GraphQL React Query, Vue Query, SWR, Zod, Faker, MSW and Cypress integrations now
 have separate generated compilation and runtime checks. These checks establish
 the documented GraphQL subset, rather than every existing HTTP plugin option.
-See the [integration guide](graphql-integrations.md) for API and limitations.
+See the [integration guide](reference/outputs/graphql-integrations.md) for API and limitations.
 
 GraphQL client work is verified for TypeScript and Rust, including separate
 input/output scalar mappings. Unmapped Rust custom scalars retain JSON values. Both are wired through the CLI and existing npm language plugin packages.
 Packaged clients compile and execute against local GraphQL servers. These changes
-are not yet published; see the [TypeScript guide](graphql-typescript.md),
-[Rust guide](graphql-rust.md) and [verification](verification.md#graphql-client-completion-checks).
+are not yet published; see the [TypeScript guide](reference/outputs/graphql-typescript.md),
+[Rust guide](reference/outputs/graphql-rust.md) and [verification](verification/verification.md#graphql-client-completion-checks).
 
 ✅ = implemented for the stated contract; — = no bundled generation support.
 A check does not imply support for every feature of a specification. Target-specific
@@ -66,7 +66,7 @@ writes files without contacting a broker; a broker is needed for runtime use and
 integration tests. There is no standalone broker-independent AsyncAPI types-only
 output yet, although input message blocks are available to custom plugins.
 
-See [output migration coverage](output-contract-migration.md) for typed HTTP
+See [output migration coverage](verification/output-contract-migration.md) for typed HTTP
 selection, block consumption, finalization and compatibility boundaries.
 
 ## Input providers
@@ -112,7 +112,7 @@ unsupported features in an otherwise supported pipeline still fail explicitly.
 Current alpha.2 workspace check: **816 passed, 0 failed, 143 ignored**;
 formatting and workspace Clippy with warnings denied passed. Ignored tests are not passes.
 Selected external GraphQL, gRPC, Kafka and workflow integration tests were also
-run explicitly and passed; commands and boundaries are in [verification](verification.md).
+run explicitly and passed; commands and boundaries are in [verification](verification/verification.md).
 
 The pre-output-migration frozen-build **205 specs × 10 HTTP SDK targets** sweep
 is complete: **2,050 effective passes**, including deterministic regeneration,
@@ -122,7 +122,7 @@ runtime behavior or corpus coverage of the later output migration. The migrated
 workspace passed separately; final migrated-binary corpus coverage and clean
 installation checks of release artifacts remain open. Original infrastructure
 failures and successful retries remain in the audit trail. See
-[current verification](verification.md#current-alpha2-verification-9-october-2026).
+[current verification](verification/verification.md#current-alpha2-verification-9-october-2026).
 
 - [x] Existing OpenAPI snapshots and workspace tests pass.
 - [x] Provider substitution, typed downstream hooks and regeneration have focused tests.
@@ -142,5 +142,5 @@ failures and successful retries remain in the audit trail. See
 - [ ] Confirm Cap’n Web scope, then implement and test output.
 - [ ] Alpha.2 versioning, final packaging, publication and install verification.
 
-See [native pipelines](native-pipelines.md) for exact feature limits and concrete
+See [native pipelines](reference/inputs/native-pipelines.md) for exact feature limits and concrete
 implementation/verification requirements for each follow-up.

@@ -49,5 +49,5 @@ credentials, or expose arbitrary shell execution. For an agent that should
 call an API instead, use the separate [MCP API tools example](../mcp-api-tools/README.md)
 against the native [mock scenarios example](../mock-scenarios/README.md).
 
-See the [MCP server guide](../../docs/mcp-server.md) for protocol and
+See the [MCP server guide](../../docs/reference/automation/mcp-server.md) for protocol and
 authentication details.

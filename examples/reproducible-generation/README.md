@@ -33,5 +33,5 @@ npx poolster generate openapi.yaml --output generated --language typescript,csha
 ```
 
 For a public contract you do not yet have locally, first use
-[`poolster discover` and `poolster download`](../../docs/discovery.md); private
+[`poolster discover` and `poolster download`](../../docs/reference/configuration/discovery.md); private
 contracts should use the authenticated remote-input recipe instead.

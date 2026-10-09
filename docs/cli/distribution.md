@@ -1,6 +1,6 @@
 # Distribute the Poolster CLI
 
-[CLI reference](../cli.md) · [Source builds](../source-customization.md)
+[CLI reference](reference.md) · [Source builds](../reference/regeneration/source-customization.md)
 
 ## npm layout and release preparation
 

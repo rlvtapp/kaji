@@ -104,4 +104,4 @@ available without changing your package's plugin graph.
 The compiler honors `$self` as the document's reference identity and base URI. Keep it
 consistent with the location of relative child documents. Compiler caches include the
 artifact format revision, while provenance hashes retain source-byte meaning. See [the
-compiler guide](../openapi-compiler.md) for source limits and custom-format boundaries.
+compiler guide](../reference/inputs/openapi-compiler.md) for source limits and custom-format boundaries.

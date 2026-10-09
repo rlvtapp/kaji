@@ -21,14 +21,14 @@ SDKs are namespaced by default. Choose `go::sdk().flat()` or
 Namespaced clients expose resources such as `client.Contacts.Get(ctx, input)`;
 flat clients use direct operations such as `client.GetContact(ctx, input)`.
 Go always emits split model and operation files. Configure bounded rendering
-parallelism with `go::sdk().jobs(4)`; see [large specs](../../../docs/large-specs.md).
+parallelism with `go::sdk().jobs(4)`; see [large specs](../../../docs/verification/large-specs.md).
 
 When depending on this plugin without the `poolster` facade, import
 `poolster_plugin_go::PackageExt` and compose its package through
 `poolster_core::engine::Packages`. Supply a security catalog when your API
 declares named security schemes.
 
-See [configuration](../../../docs/configuration.md) for every generation option
+See [configuration](../../../docs/reference/configuration/configuration.md) for every generation option
 and the generated package's README for exact operation signatures.
 
 The generated package has no third-party dependencies. Configure it with

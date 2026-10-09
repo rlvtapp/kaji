@@ -16,4 +16,4 @@ provider actually supplies the consumer's output.
 The custom language has no SDK transport or publisher. Use the same engine with
 an existing language contract when replacing an SDK provider. A recipe JSON
 plugin name cannot load arbitrary Rust code: embed and compile the generator.
-See [typed plugin authoring](../../docs/typed-plugins.md) for the full boundaries.
+See [typed plugin authoring](../../docs/internals/typed-plugins.md) for the full boundaries.

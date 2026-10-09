@@ -85,4 +85,4 @@ objects, since property order is not significant.
 
 Also compile a consumer using the generated model types. A successful JSON roundtrip
 alone does not prove that the language's enum type accepts a future value. See [testing
-generated SDKs](testing.md) and [verification](../verification.md).
+generated SDKs](testing.md) and [verification](../verification/verification.md).

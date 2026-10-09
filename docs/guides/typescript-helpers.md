@@ -57,9 +57,9 @@ not complete behavioral mocks. See [testing generated SDKs](testing.md) and the 
 TypeScript example](../../examples/typescript-stack/README.md).
 
 For every option and direct Rust API use, see [auxiliary
-generators](../auxiliary-generators.md).
+generators](../reference/outputs/auxiliary-generators.md).
 
-See the [generator completion backlog](../generator-backlog.md) for language fixes, output size/splitting, framework APIs and artifact acceptance work. These items are planned, not current capabilities.
+See the [generator completion backlog](../proposals/generator-backlog.md) for language fixes, output size/splitting, framework APIs and artifact acceptance work. These items are planned, not current capabilities.
 
 TanStack helpers forward cancellation into `requestOptions.signal` and retain a
 caller-provided signal. Query keys contain the operation, explicit cache scope

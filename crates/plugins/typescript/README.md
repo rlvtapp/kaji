@@ -35,10 +35,10 @@ ReDoc, and MCP manifest renderers. These return files directly, not ready-made
 typed plugins. They are not CLI targets. Review their dependencies, import
 configuration, and limitations before using generated output.
 
-- [Every SDK/model option](../../../docs/configuration.md#typescript-sdk)
-- [Raw and full client usage](../../../docs/generated-sdks.md)
-- [Auxiliary artifact API and limitations](../../../docs/auxiliary-generators.md)
-- [Contracts and plugin composition](../../../docs/typed-plugins.md)
+- [Every SDK/model option](../../../docs/reference/configuration/configuration.md#typescript-sdk)
+- [Raw and full client usage](../../../docs/reference/outputs/generated-sdks.md)
+- [Auxiliary artifact API and limitations](../../../docs/reference/outputs/auxiliary-generators.md)
+- [Contracts and plugin composition](../../../docs/internals/typed-plugins.md)
 
 ## Composable SDK providers
 

@@ -13,5 +13,5 @@ poolster generate
 
 The package currently publishes wheels for macOS ARM64 and Intel, Linux x64 with
 glibc 2.35 or later, and Windows x64. Alpine/musl and Linux ARM64 are not yet
-packaged. See the [CLI guide](../../docs/cli.md)
+packaged. See the [CLI guide](../../docs/cli/reference.md)
 for recipes, supported generation targets, and source-build instructions.

@@ -54,6 +54,6 @@ paths resolve relative to the recipe. Select the TypeScript `graphql` plugin.
 Unsupported format/output pairs warn, skip and preserve existing skipped outputs.
 Malformed sources and unsupported options for an otherwise supported pipeline fail.
 
-See the [native generation matrix and recipe](../native-pipelines.md) and
+See the [native generation matrix and recipe](../reference/inputs/native-pipelines.md) and
 [runnable local GraphQL example](../../examples/graphql-native/README.md).
 The existing OpenAPI recipe shape and behavior are unchanged.

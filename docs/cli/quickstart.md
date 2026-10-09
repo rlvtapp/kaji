@@ -80,20 +80,20 @@ const note = await api.notes.getNote({ path: { noteId: "note_123" } });
 
 Install or link the built package in your application. Replace the example URL with your server.
 
-Need a local API? Use [contract mocking](../mocking.md).
+Need a local API? Use [contract mocking](../reference/outputs/mocking.md).
 
 ## 4. Keep author changes in the recipe
 
-Keep custom source beside your recipe. [SDK customization](../sdk-customization.md) covers bundled middleware, added files and replacement patches.
+Keep custom source beside your recipe. [SDK customization](../reference/regeneration/sdk-customization.md) covers bundled middleware, added files and replacement patches.
 
 Regeneration protects edited owned files and preserves unrelated or create-once files. Stale generated files are removed only when their fingerprints match.
 
-[Resolve ownership conflicts →](../safe-regeneration.md) Writing is not an atomic directory swap; an I/O failure can interrupt it.
+[Resolve ownership conflicts →](../reference/regeneration/safe-regeneration.md) Writing is not an atomic directory swap; an I/O failure can interrupt it.
 
 ## 5. Prepare delivery when the package is ready
 
 Commit your contract, recipe, custom source and chosen generated output/bookkeeping. Add build and behavior tests.
 
-[Prepare SDK PRs](../sdk-automation.md) → [Release and publish](../sdk-publishing.md)
+[Prepare SDK PRs](../reference/automation/sdk-automation.md) → [Release and publish](../reference/automation/sdk-publishing.md)
 
 For your own local contract, `poolster init --input ./openapi.yaml --output ./generated` creates a starter recipe without overwriting an existing one. Continue with [configuration](config.md) for exact package settings, [multi-package recipes](recipes.md) for more outputs, or [commands](commands.md) for direct mode and filtering.

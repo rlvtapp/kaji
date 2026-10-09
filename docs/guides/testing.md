@@ -29,7 +29,7 @@ docker compose up --build
 
 The Docker mock returns deterministic contract-derived happy paths. Put durable
 conditional responses in `x-poolster-mock`; keep stateful workflows in a dedicated
-service. See [contract mocking](../mocking.md).
+service. See [contract mocking](../reference/outputs/mocking.md).
 
 MSW handlers and Cypress tests are editable scaffolding. Review mutation tests
 before execution and use a sandbox. The [TypeScript stack example](../../examples/typescript-stack/README.md)
@@ -112,7 +112,7 @@ cannot establish that a published package imports successfully.
 ### Other integration checks
 
 [Postman execution](../../packages/internal/postman-execute/README.md) runs Newman against
-a local service. The [Terraform suite](../terraform-provider.md) runs a real CLI
+a local service. The [Terraform suite](../reference/outputs/terraform-provider.md) runs a real CLI
 lifecycle against a mock.
 
 The synthetic complex OpenAPI corpus uses the actual Go compiler and executes

@@ -11,7 +11,7 @@ const { DefaultVersioningStrategy } = require('release-please/build/src/versioni
 
 const root = path.join(__dirname, '..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
-const config = JSON.parse(read('release-please-config.json')).packages['.'];
+const config = JSON.parse(read('.github/release-please-config.json')).packages['.'];
 const version = Version.parse('0.5.1');
 
 test('release updates inherited workspace and lock versions without changing dependencies', () => {

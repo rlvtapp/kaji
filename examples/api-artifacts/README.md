@@ -72,7 +72,7 @@ to expose scalar read-only data sources from its validated resource read plans.
 The repository's opt-in `terraform_cli_local_mock_lifecycle` test exercises a real
 Terraform binary against its own local fixture; see the Terraform guide for setup.
 
-See the [Postman guide](../../docs/postman.md) and
-[typed Terraform guide](../../docs/terraform-provider.md) for supported behavior,
+See the [Postman guide](../../docs/reference/outputs/postman.md) and
+[typed Terraform guide](../../docs/reference/outputs/terraform-provider.md) for supported behavior,
 plugin customization and follow-up scope. These outputs share API metadata, not
 Terraform lifecycle assumptions.

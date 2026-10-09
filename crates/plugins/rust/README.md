@@ -28,8 +28,8 @@ documented in each generated package.
 For an in-memory API with named security schemes, supply its security catalog;
 `poolster::generate_openapi` loads the bundled compiler's catalog automatically.
 
-[Configuration reference](../../../docs/configuration.md) ·
-[Generated SDKs](../../../docs/generated-sdks.md)
+[Configuration reference](../../../docs/reference/configuration/configuration.md) ·
+[Generated SDKs](../../../docs/reference/outputs/generated-sdks.md)
 
 Operations and resource facades group complete request/error/method declarations
 under a 128 KiB byte budget, in addition to the existing declaration-count limit.

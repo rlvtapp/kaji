@@ -57,4 +57,4 @@ assembled under `packages/npm/platform/cli/<platform>/`; source code and build t
 not shipped to users. `POOLSTER_BINARY` is an optional local development override.
 `POOLSTER_OPENAPI_BIN` overrides the Go helper for source builds.
 
-Full CLI and release instructions: [docs/cli.md](https://github.com/rlvtapp/poolster/blob/main/docs/cli.md).
+Full CLI and release instructions: [docs/cli/reference.md](https://github.com/rlvtapp/poolster/blob/main/docs/cli/reference.md).
