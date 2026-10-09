@@ -18,9 +18,17 @@ impl<'a> Models<'a> {
     pub fn new(contract: &'a GraphqlOperations) -> Self {
         Self::with_mappings(contract, &BTreeMap::new())
     }
+    #[cfg(test)]
     pub fn with_mappings(
         contract: &'a GraphqlOperations,
         mappings: &BTreeMap<String, super::GraphqlScalarMapping>,
+    ) -> Self {
+        Self::with_reserved(contract, mappings, &[])
+    }
+    pub fn with_reserved(
+        contract: &'a GraphqlOperations,
+        mappings: &BTreeMap<String, super::GraphqlScalarMapping>,
+        reserved: &[String],
     ) -> Self {
         let mut names: BTreeSet<_> = [
             "String",
@@ -42,6 +50,7 @@ impl<'a> Models<'a> {
         .into_iter()
         .map(str::to_owned)
         .collect();
+        names.extend(reserved.iter().cloned());
         let input_names = contract
             .input_objects
             .keys()

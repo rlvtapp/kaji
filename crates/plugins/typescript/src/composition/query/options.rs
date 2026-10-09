@@ -1,6 +1,12 @@
 use super::*;
 
 impl Query {
+    /// Consume the selected GraphQL client's authoritative operation symbols.
+    pub fn using_graphql(mut self, provider: Option<Handle<crate::GraphqlClient>>) -> Self {
+        self.graphql = Some(provider);
+        self
+    }
+
     /// Select an owned HTTP input contract rather than the package's legacy API.
     pub fn input(
         mut self,
@@ -67,4 +73,44 @@ impl Query {
         self.output = module.into();
         self
     }
+}
+
+pub fn react_query() -> Query {
+    Query {
+        http_input: Default::default(),
+        meta: Meta::new(),
+        framework: QueryFramework::React,
+        provider: None,
+        graphql: None,
+        output: "react-query".into(),
+        operations_per_file: Some(50),
+        layout: None,
+        include: None,
+        kinds: BTreeMap::new(),
+        names: BTreeMap::new(),
+    }
+}
+pub fn vue_query() -> Query {
+    Query {
+        framework: QueryFramework::Vue,
+        output: "vue-query".into(),
+        ..react_query()
+    }
+}
+pub fn swr() -> Query {
+    Query {
+        framework: QueryFramework::Swr,
+        output: "swr".into(),
+        ..react_query()
+    }
+}
+
+pub fn graphql_react_query(provider: Option<Handle<crate::GraphqlClient>>) -> Query {
+    react_query().using_graphql(provider)
+}
+pub fn graphql_vue_query(provider: Option<Handle<crate::GraphqlClient>>) -> Query {
+    vue_query().using_graphql(provider)
+}
+pub fn graphql_swr(provider: Option<Handle<crate::GraphqlClient>>) -> Query {
+    swr().using_graphql(provider)
 }

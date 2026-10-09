@@ -5,7 +5,10 @@ pub use asyncapi::{AsyncApi, KafkaClient, KafkaOperationSymbols, asyncapi};
 mod workflow;
 pub use workflow::{WorkflowClient, WorkflowRunner, workflow};
 mod graphql;
-pub use graphql::{Graphql, GraphqlClient, GraphqlOperationSymbols, GraphqlScalarMapping, graphql};
+mod graphql_helpers;
+pub use graphql::{
+    Graphql, GraphqlClient, GraphqlOperationSymbols, GraphqlScalarMapping, GraphqlStyle, graphql,
+};
 mod oauth;
 pub use oauth::{OAuth, oauth};
 mod webhooks;
@@ -19,6 +22,8 @@ pub use poolster_core::SourceLayout;
 mod bundled_middleware;
 mod clients;
 pub mod composition;
+pub use composition::{cypress, faker, msw, zod};
+pub use composition::{graphql_react_query, graphql_swr, graphql_vue_query};
 mod esm;
 mod operation_tests;
 pub use operation_tests::{OperationTests, operation_tests};

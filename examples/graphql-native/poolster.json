@@ -13,7 +13,12 @@
       "name": "@example/graphql-person",
       "plugins": [{
         "name": "graphql",
-        "scalars": { "DateTime": { "input": "string", "output": "string" } }
+        "contracts": {
+          "graphql": {
+            "style": "flat",
+            "scalars": { "DateTime": { "input": "string", "output": "string" } }
+          }
+        }
       }]
     }
   ]

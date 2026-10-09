@@ -152,7 +152,10 @@ impl Workspace {
         Ok(())
     }
 
-    pub(crate) fn package_file(&mut self, file: GeneratedFile) -> Result<()> {
+    /// Register a package assembly file, such as a community provider's manifest.
+    /// Identical declarations may be shared; conflicting contents are rejected.
+    /// Finalization adds registered dependencies and emits through the owned emitter.
+    pub fn package_file(&mut self, file: GeneratedFile) -> Result<()> {
         if self.package_files.get(&file.path) == Some(&file.contents) {
             return Ok(());
         }

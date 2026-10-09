@@ -1,6 +1,8 @@
 //! Rust SDK generation through typed packages and a Reqwest-backed client.
 mod graphql;
-pub use graphql::{Graphql, GraphqlClient, GraphqlOperationSymbols, GraphqlScalarMapping, graphql};
+pub use graphql::{
+    Graphql, GraphqlClient, GraphqlOperationSymbols, GraphqlScalarMapping, GraphqlStyle, graphql,
+};
 mod model_compatibility;
 mod native_names;
 mod oauth;

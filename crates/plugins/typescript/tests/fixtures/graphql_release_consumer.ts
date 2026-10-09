@@ -1,8 +1,9 @@
-import { Read, Partial, Rename, Fatal, createGraphqlHttpTransport, releaseMarker, type ReadVariables } from '@poolster-test/graphql-client';
+import { Read, read, Partial, Rename, Fatal, createGraphqlHttpTransport, releaseMarker, type ReadVariables } from '@poolster-test/graphql-client';
 const transport = createGraphqlHttpTransport('http://localhost');
 const variables: ReadVariables = { id: '7', filter: { prefix: 'selected' } };
 async function check(): Promise<void> {
   const result = await Read(transport, variables);
+  await read(transport, variables);
   if (result.kind !== 'error') {
     const name: string = result.data.person.name;
     const nickname: string | null = result.data.person.nickname;

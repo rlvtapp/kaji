@@ -29,6 +29,8 @@ Read and validate source documents, then publish typed data.
 - [OpenAPI compiler](openapi-compiler.md): the existing HTTP SDK workflow.
 - [Input providers](input-plugins.md): GraphQL, AsyncAPI, Arazzo, Protobuf and Cap’n Proto.
 - GraphQL clients: [TypeScript](graphql-typescript.md) and [Rust](graphql-rust.md).
+- [GraphQL integrations](graphql-integrations.md): query frameworks, validation and test helpers.
+- Planned: [typed GraphQL selection builder](graphql-selection-builder-proposal.md).
 - [Discover a contract](discovery.md): find or download public OpenAPI documents.
 
 Outputs must support the published contract. Native parsing does not make every

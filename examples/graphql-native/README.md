@@ -2,6 +2,11 @@
 
 Poolster validates a schema together with operation documents and generates a package whose result types contain only each operation's selections. This example uses queries, a mutation and an intentional resolver failure to show usable partial data with explicit GraphQL errors.
 
+The recipe selects `contracts.graphql.style: "flat"`. The JavaScript consumer
+configures its endpoint once with `createClient({ endpoint })`, then calls
+`client.personName({ id: '1' })` and `client.renamePerson(...)`. Method names come
+from the named operation documents; selections remain fixed by those documents.
+
 With Node.js 22 or newer and the Poolster CLI on your PATH, run from this directory:
 
 ```sh

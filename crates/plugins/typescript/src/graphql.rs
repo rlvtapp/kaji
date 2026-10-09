@@ -1,5 +1,9 @@
 //! Selection-specific SDKs consume Poolster contracts rather than parser ASTs.
+mod facade;
 mod render;
+mod validation;
+pub use facade::GraphqlStyle;
+use validation::{identifier, validate_type};
 mod scalars;
 use crate::TypeScript;
 use anyhow::{Result, bail};
@@ -15,6 +19,8 @@ use std::{collections::BTreeMap, fmt::Write, path::PathBuf};
 #[derive(Clone, Debug)]
 pub struct GraphqlOperationSymbols {
     pub function: crate::Symbol,
+    /// Canonical camelCase standalone operation, retaining the original function.
+    pub raw_function: crate::Symbol,
     pub variables: crate::Symbol,
     pub result: crate::Symbol,
     pub kind: GraphqlOperationKind,
@@ -25,6 +31,12 @@ pub struct GraphqlClient {
     pub operations: BTreeMap<String, GraphqlOperationSymbols>,
     /// Package-relative module without extension.
     pub runtime_module: PathBuf,
+    pub style: GraphqlStyle,
+    pub factory: Option<crate::Symbol>,
+    pub methods: BTreeMap<String, String>,
+    /// Authoritative selected contract used to render this client.
+    pub definition: GraphqlOperations,
+    pub scalars: BTreeMap<String, GraphqlScalarMapping>,
 }
 impl Contract for GraphqlClient {
     const NAME: &'static str = "poolster.typescript.graphql-client.v1";
@@ -33,6 +45,8 @@ pub struct Graphql {
     meta: Meta,
     provider: Option<Handle<GraphqlOperations>>,
     subscriptions: bool,
+    style: GraphqlStyle,
+    groups: BTreeMap<String, BTreeMap<String, String>>,
     scalars: BTreeMap<String, GraphqlScalarMapping>,
 }
 pub fn graphql(provider: Option<Handle<GraphqlOperations>>) -> Graphql {
@@ -40,10 +54,45 @@ pub fn graphql(provider: Option<Handle<GraphqlOperations>>) -> Graphql {
         meta: Meta::new(),
         provider,
         subscriptions: false,
+        style: GraphqlStyle::Idiomatic,
+        groups: BTreeMap::new(),
         scalars: BTreeMap::new(),
     }
 }
 impl Graphql {
+    pub fn group(
+        mut self,
+        group: impl Into<String>,
+        method: impl Into<String>,
+        operation: impl Into<String>,
+    ) -> Self {
+        self.groups
+            .entry(group.into())
+            .or_default()
+            .insert(method.into(), operation.into());
+        self
+    }
+    pub fn groups(mut self, groups: BTreeMap<String, BTreeMap<String, String>>) -> Self {
+        self.groups = groups;
+        self
+    }
+
+    pub fn raw(mut self) -> Self {
+        self.style = GraphqlStyle::Raw;
+        self
+    }
+    pub fn flat(mut self) -> Self {
+        self.style = GraphqlStyle::Flat;
+        self
+    }
+    pub fn idiomatic(mut self) -> Self {
+        self.style = GraphqlStyle::Idiomatic;
+        self
+    }
+    pub fn namespaced(self) -> Self {
+        self.idiomatic()
+    }
+
     /// Map a custom scalar's input and output wire types without installing codecs.
     pub fn scalar(mut self, name: impl Into<String>, mapping: GraphqlScalarMapping) -> Self {
         self.scalars.insert(name.into(), mapping);
@@ -103,6 +152,10 @@ impl Plugin<TypeScript> for Graphql {
             "Array",
             "Promise",
             "AsyncIterable",
+            "createClient",
+            "GraphqlClientOptions",
+            "GraphqlBoundClient",
+            "HeadersInit",
         ]
         .into_iter()
         .map(str::to_owned)
@@ -144,12 +197,22 @@ impl Plugin<TypeScript> for Graphql {
                 }
                 symbols.push(cx.workspace.declare("graphql", &name, self.kind())?);
             }
+            let raw_name = crate::symbols::camel(&op.name);
+            let raw_function = if raw_name == op.name {
+                symbols[2].clone()
+            } else {
+                if !names.insert(raw_name.clone()) {
+                    bail!("GraphQL TypeScript symbol collision: {raw_name}");
+                }
+                cx.workspace.declare("graphql", &raw_name, self.kind())?
+            };
             operations.insert(
                 op.name.clone(),
                 GraphqlOperationSymbols {
                     variables: symbols[0].clone(),
                     result: symbols[1].clone(),
                     function: symbols[2].clone(),
+                    raw_function,
                     kind: op.kind,
                 },
             );
@@ -187,6 +250,25 @@ impl Plugin<TypeScript> for Graphql {
                 )?;
             }
         }
+        for op in &contract.operations {
+            let alias = crate::symbols::camel(&op.name);
+            if alias != op.name {
+                writeln!(out, "export const {alias} = {};", op.name)?;
+            }
+        }
+        let methods = facade::render(&mut out, self.style, contract, &self.groups)?;
+        let factory = if self.style != GraphqlStyle::Raw {
+            cx.workspace
+                .declare("graphql", "GraphqlClientOptions", self.kind())?;
+            cx.workspace
+                .declare("graphql", "GraphqlBoundClient", self.kind())?;
+            Some(
+                cx.workspace
+                    .declare("graphql", "createClient", self.kind())?,
+            )
+        } else {
+            None
+        };
         cx.files.emit(GeneratedFile::new("graphql.ts", out)?)?;
         cx.files.emit(GeneratedFile::new(
             "graphql-runtime.ts",
@@ -199,148 +281,11 @@ impl Plugin<TypeScript> for Graphql {
         cx.publish(GraphqlClient {
             operations,
             runtime_module: "graphql-runtime".into(),
+            style: self.style,
+            factory,
+            methods,
+            definition: contract.clone(),
+            scalars: self.scalars.clone(),
         })
-    }
-}
-fn identifier(value: &str) -> Result<()> {
-    const RESERVED: &[&str] = &[
-        "default",
-        "class",
-        "function",
-        "var",
-        "let",
-        "const",
-        "import",
-        "export",
-        "return",
-        "new",
-        "delete",
-        "in",
-        "instanceof",
-        "typeof",
-        "void",
-        "await",
-        "yield",
-        "enum",
-        "extends",
-        "implements",
-        "interface",
-        "package",
-        "private",
-        "protected",
-        "public",
-        "static",
-        "null",
-        "true",
-        "false",
-        "this",
-        "super",
-        "switch",
-        "case",
-        "break",
-        "continue",
-        "throw",
-        "try",
-        "catch",
-        "finally",
-        "while",
-        "do",
-        "for",
-        "if",
-        "else",
-        "with",
-        "debugger",
-        "eval",
-        "arguments",
-        "any",
-        "string",
-        "number",
-        "boolean",
-        "unknown",
-        "never",
-        "object",
-        "symbol",
-        "bigint",
-        "undefined",
-    ];
-    if value.is_empty()
-        || !value
-            .chars()
-            .enumerate()
-            .all(|(i, c)| c.is_ascii_alphabetic() || c == '_' || (i > 0 && c.is_ascii_digit()))
-        || RESERVED.contains(&value)
-    {
-        bail!("GraphQL name {value:?} cannot be emitted as a TypeScript identifier");
-    }
-    Ok(())
-}
-fn validate_type(ty: &ModelType, contract: &GraphqlOperations) -> Result<()> {
-    match &ty.kind {
-        ModelKind::Named(name) => {
-            identifier(name)?;
-            if !contract.input_objects.contains_key(name) {
-                bail!("GraphQL contract references missing input type {name}");
-            }
-        }
-        ModelKind::Object(fields) => {
-            let mut names = std::collections::BTreeSet::new();
-            for field in fields {
-                if !names.insert(&field.name) {
-                    bail!("GraphQL contract contains duplicate field {}", field.name);
-                }
-                validate_type(&field.ty, contract)?;
-            }
-        }
-        ModelKind::List(item) => validate_type(item, contract)?,
-        ModelKind::Union(items) => {
-            for item in items {
-                validate_type(item, contract)?;
-            }
-        }
-        ModelKind::Enum(items) if items.is_empty() => bail!("GraphQL contract contains empty enum"),
-        _ => {}
-    }
-    Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn substituted_models_reject_unsafe_names_and_missing_refs() {
-        let contract = GraphqlOperations {
-            schema_source: String::new(),
-            operation_source: String::new(),
-            operations: vec![],
-            input_objects: Default::default(),
-        };
-        for name in ["Missing", "Injected; export const bad = 1"] {
-            let ty = ModelType {
-                nullable: false,
-                kind: ModelKind::Named(name.into()),
-            };
-            assert!(validate_type(&ty, &contract).is_err());
-        }
-        assert!(
-            validate_type(
-                &ModelType {
-                    nullable: false,
-                    kind: ModelKind::Enum(vec![])
-                },
-                &contract
-            )
-            .is_err()
-        );
-        assert_eq!(
-            render_type(
-                &ModelType {
-                    nullable: false,
-                    kind: ModelKind::Union(vec![])
-                },
-                &BTreeMap::new(),
-                false
-            ),
-            "never"
-        );
     }
 }

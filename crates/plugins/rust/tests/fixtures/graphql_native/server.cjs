@@ -18,6 +18,8 @@ const root = {
  inputEcho: ({options})=>options===undefined?'options-omitted':options===null?'options-null':options.note,
 };
 const server = http.createServer(async(req,res)=>{
+ try {
+ if(req.url==='/style'&&req.headers['x-style']!=='configured-once')throw new Error('client headers missing');
  if(req.url==='/bad-scalar'){res.end(JSON.stringify({data:{scalars:{timestamp:'not-an-integer',values:[1700000001,null],nullable:null,raw:{retained:['json',42]}}}}));return;}
  if(req.url==='/disconnect'){req.socket.destroy();return;}
  if(req.url==='/http-error'){res.writeHead(503);res.end('unavailable');return;}
@@ -26,8 +28,16 @@ const server = http.createServer(async(req,res)=>{
  if(req.url==='/missing-nullable'){res.end('{"data":{"person":{"id":"7","name":"Ada"}}}');return;}
  if(req.url==='/null-nonnull'){res.end('{"data":{"user":{"name":null,"nickname":null}}}');return;}
  let body='';for await(const chunk of req)body+=chunk;
+ if(req.url==='/slow')await new Promise(resolve=>setTimeout(resolve,100));
  const request=JSON.parse(body);
  const result=await graphql({schema,source:request.query,operationName:request.operationName,variableValues:request.variables,rootValue:root});
  res.setHeader('content-type','application/json');res.end(JSON.stringify(result));
+ } catch(error) {
+  if(error.code === 'ECONNRESET' && req.destroyed) return;
+  console.error(error);res.writeHead(500);res.end('fixture error');
+ }
+}).on('clientError', (error, socket) => {
+ if(error.code !== 'ECONNRESET') console.error(error);
+ socket.destroy();
 });
 server.listen(0,'127.0.0.1',()=>console.log(`http://127.0.0.1:${server.address().port}`));

@@ -33,7 +33,12 @@ requires operations. Use a recipe for package metadata and custom scalar mapping
     "version": "1.0.0",
     "plugins": [{
       "name": "graphql",
-      "scalars": { "DateTime": { "input": "string", "output": "string" } }
+      "contracts": {
+        "graphql": {
+          "style": "flat",
+          "scalars": { "DateTime": { "input": "string", "output": "string" } }
+        }
+      }
     }]
   }]
 }
@@ -58,16 +63,25 @@ await generate({
     path: './schema.graphql',
     plugin: inputGraphql(),
     operations: ['./operations.graphql'],
-    scalars: { DateTime: { input: 'string', output: 'string' } },
   },
   output: './generated',
-  plugins: [pluginTypeScript({ path: 'client', name: '@example/graphql-client' })],
+  plugins: [pluginTypeScript({
+    path: 'client',
+    name: '@example/graphql-client',
+    contracts: {
+      graphql: {
+        style: 'flat',
+        scalars: { DateTime: { input: 'string', output: 'string' } },
+      },
+    },
+  })],
 });
 ```
 
-Config-file loading resolves operation paths alongside the config file. This
-For mixed TypeScript/Rust outputs, provide Rust mappings separately as
-`input.rustScalars`; `input.scalars` remains the TypeScript mapping surface. This
+Config-file loading resolves operation paths alongside the config file.
+Each output plugin configures its own scalar mappings under `contracts.graphql`.
+The older `input.scalars` and `input.rustScalars` options remain shorthand for
+TypeScript and Rust mappings respectively; conflicting mappings are rejected. This
 entry point invokes the native GraphQL generator; it does not establish general
 Node dispatch for Rust contract/block hooks.
 
@@ -94,9 +108,10 @@ let output = ts::graphql(Some(input.handle()))
 ## Results and transport failures
 
 ```ts
-import { createGraphqlHttpTransport, Viewer } from '@example/graphql-client';
-const transport = createGraphqlHttpTransport('http://localhost:4000/graphql');
-const result = await Viewer(transport, {});
+import { createClient } from '@example/graphql-client';
+const client = createClient({ endpoint: 'http://localhost:4000/graphql' });
+// Generated from an operation named ReadUser.
+const result = await client.readUser({ id: '42' });
 switch (result.kind) {
   case 'success': console.log(result.data); break;
   case 'partial': console.log(result.data, result.errors); break;
@@ -109,7 +124,46 @@ HTTP failures throw `GraphqlHttpError`; malformed response JSON or envelopes
 throw `GraphqlProtocolError`. Fetch, headers and cancellation are configurable.
 The HTTP transport does not retry mutations automatically.
 
+## JavaScript client styles
+
+The compiled package is usable directly from JavaScript. In flat style, named
+operations become methods: `ReadUser` becomes `client.readUser(variables)` and
+`RenameUser` becomes `client.renameUser(variables)`. Configure endpoint, fetch and
+headers once through `createClient`; individual calls can provide request options.
+
+Grouped style uses explicit operation mappings:
+
+```js
+pluginTypeScript({
+  contracts: {
+    graphql: {
+      style: 'grouped',
+      groups: {
+        user: { read: 'ReadUser', rename: 'RenameUser' },
+      },
+    },
+  },
+});
+// In the generated package:
+await client.user.read({ id: '42' });
+await client.user.rename({ id: '42', name: 'Ada' });
+```
+
+Unassigned operations use `query`, `mutation` or `subscription` groups. The
+`namespaced` and `idiomatic` names are aliases for this grouped style; grouped is
+the current default when no style is configured. Raw style emits standalone
+functions without a bound client. Existing standalone operation exports remain
+available in flat and grouped packages. Groups cannot be configured for flat or
+raw style; unknown operations and method collisions are rejected.
+
+Selections remain fixed by operation documents in every style. A typed dynamic
+`fields` argument is only a [future proposal](graphql-selection-builder-proposal.md).
+
 ## Supported boundary
+
+Query framework, validation and mock integrations are documented in the
+[GraphQL integration guide](graphql-integrations.md); their checks are separate
+from core client compilation and runtime tests.
 
 Aliases, fragments, concrete abstract-type selections, conditional field presence,
 variables/defaults, nullability and queries/mutations are supported. Subscription

@@ -40,6 +40,7 @@ pub(super) fn generate_from_config(
         .with_context(|| format!("read Poolster config {}", path.display()))?;
     let mut config: ProjectConfig = serde_json::from_str(&source)
         .with_context(|| format!("parse Poolster JSON config {}", path.display()))?;
+    recipe_exporters::apply(&mut config)?;
     if config.input.is_some() {
         let document: serde_json::Value = serde_json::from_str(&source)?;
         native_profiles::validate_recipe(&document, &config)?;

@@ -24,7 +24,30 @@ pub(super) fn language_compatible(format: &str, language: &str) -> bool {
 }
 pub(super) fn compatible(format: &str, package: &PackageConfig) -> bool {
     if format == "graphql" && package.language == "rust" {
-        return package.plugins.len() == 1 && package.plugins[0].name == "graphql";
+        return package.plugins.len() == 1
+            && matches!(package.plugins[0].name.as_str(), "graphql" | "sdk");
+    }
+    if format == "graphql" && package.language == "typescript" {
+        let mains = package
+            .plugins
+            .iter()
+            .filter(|p| matches!(p.name.as_str(), "graphql" | "sdk"))
+            .count();
+        return mains == 1
+            && package.plugins.iter().all(|p| {
+                matches!(
+                    p.name.as_str(),
+                    "graphql"
+                        | "sdk"
+                        | "zod"
+                        | "faker"
+                        | "msw"
+                        | "cypress"
+                        | "react-query"
+                        | "vue-query"
+                        | "swr"
+                )
+            });
     }
     pipeline(format).is_some_and(|(language, plugin)| {
         package.language == language
@@ -51,8 +74,28 @@ pub(super) fn build(options: &Generate, input: &NativeInputConfig) -> Result<Pro
                       path: &str,
                       name: Option<&str>,
                       version: Option<&str>,
-                      plugin: Option<&PluginConfig>|
+                      plugin: Option<&PluginConfig>,
+                      package_config: Option<&PackageConfig>|
      -> Result<()> {
+        let explicit_style = plugin
+            .and_then(|p| p.style.as_deref())
+            .or(package_config.and_then(|p| p.client_style.as_deref()));
+        let raw = plugin.and_then(|p| p.raw).unwrap_or(false)
+            || package_config.is_some_and(|p| p.sdk_raw)
+            || options.raw;
+        ensure!(
+            !(raw && explicit_style.is_some()),
+            "GraphQL raw and style are mutually exclusive"
+        );
+        let style = explicit_style.unwrap_or(if options.style == SdkClientStyle::Flat {
+            "flat"
+        } else {
+            "idiomatic"
+        });
+        ensure!(
+            ["raw", "flat", "idiomatic", "namespaced", "grouped"].contains(&style),
+            "GraphQL style must be raw, flat, idiomatic, or namespaced"
+        );
         let common = Common {
             package_version: Some(version.unwrap_or(&options.version).to_owned()),
             ..Default::default()
@@ -60,28 +103,32 @@ pub(super) fn build(options: &Generate, input: &NativeInputConfig) -> Result<Pro
         let old = std::mem::replace(&mut profiles, ProfileSet::new("."));
         profiles = if input.format == "graphql" && language == "rust" {
             let input_provider = provider::<GraphqlOperations>(input, registry.clone());
+            let generator = rust::graphql(Some(input_provider.handle())).scalars(
+                plugin
+                    .map(|p| {
+                        p.scalars
+                            .iter()
+                            .map(|(name, m)| {
+                                (
+                                    name.clone(),
+                                    rust::GraphqlScalarMapping::new(&m.input, &m.output),
+                                )
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+            );
+            let generator = generator.groups(plugin.map(|p| p.groups.clone()).unwrap_or_default());
+            let generator = if raw || style == "raw" {
+                generator.raw()
+            } else if style == "flat" {
+                generator.flat()
+            } else {
+                generator.idiomatic()
+            };
             let mut package = rust::package(path)
                 .common(common)
-                .with(
-                    rust::graphql(Some(input_provider.handle())).scalars(
-                        plugin
-                            .map(|p| {
-                                p.scalars
-                                    .iter()
-                                    .map(|(name, mapping)| {
-                                        (
-                                            name.clone(),
-                                            rust::GraphqlScalarMapping::new(
-                                                &mapping.input,
-                                                &mapping.output,
-                                            ),
-                                        )
-                                    })
-                                    .collect()
-                            })
-                            .unwrap_or_default(),
-                    ),
-                )
+                .with(generator)
                 .with(input_provider);
             if let Some(name) = name {
                 package = package.name(name);
@@ -115,6 +162,15 @@ pub(super) fn build(options: &Generate, input: &NativeInputConfig) -> Result<Pro
                     let input_provider = provider::<GraphqlOperations>(input, registry.clone());
                     let output_plugin = ts::graphql(Some(input_provider.handle()))
                         .scalars(plugin.map(|p| p.scalars.clone()).unwrap_or_default());
+                    let output_plugin =
+                        output_plugin.groups(plugin.map(|p| p.groups.clone()).unwrap_or_default());
+                    let output_plugin = if raw || style == "raw" {
+                        output_plugin.raw()
+                    } else if style == "flat" {
+                        output_plugin.flat()
+                    } else {
+                        output_plugin.idiomatic()
+                    };
                     let output_plugin = if plugin
                         .and_then(|plugin| plugin.subscriptions)
                         .unwrap_or(false)
@@ -123,7 +179,14 @@ pub(super) fn build(options: &Generate, input: &NativeInputConfig) -> Result<Pro
                     } else {
                         output_plugin
                     };
-                    ts::package(path).with(input_provider).with(output_plugin)
+                    let client = output_plugin.handle();
+                    native_graphql_addons::attach(
+                        ts::package(path).with(input_provider).with(output_plugin),
+                        package_config
+                            .map(|p| p.plugins.as_slice())
+                            .unwrap_or_default(),
+                        client,
+                    )?
                 }
                 "arazzo" => {
                     let input_provider = provider::<WorkflowOperations>(input, registry.clone());
@@ -158,7 +221,13 @@ pub(super) fn build(options: &Generate, input: &NativeInputConfig) -> Result<Pro
                 &package.path,
                 package.name.as_deref(),
                 package.version.as_deref(),
-                Some(&package.plugins[0]),
+                package.plugins.iter().find(|p| {
+                    matches!(
+                        p.name.as_str(),
+                        "graphql" | "sdk" | "workflow" | "asyncapi" | "grpc"
+                    )
+                }),
+                Some(package),
             )?;
         }
     } else {
@@ -167,7 +236,7 @@ pub(super) fn build(options: &Generate, input: &NativeInputConfig) -> Result<Pro
             .iter()
             .filter(|language| language_compatible(&input.format, language))
         {
-            append(language, language, None, None, None)?;
+            append(language, language, None, None, None, None)?;
         }
     }
     Ok(profiles)
@@ -182,9 +251,10 @@ pub(super) fn validate_recipe(document: &serde_json::Value, config: &ProjectConf
         "set exactly one of input or openapi"
     );
     ensure!(
-        document
-            .get("defaults")
-            .is_none_or(|value| value.as_object().is_some_and(|object| object.is_empty())),
+        document.get("defaults").is_none_or(|value| value
+            .as_object()
+            .is_some_and(|object| object.is_empty()
+                || (input.format == "graphql" && object.keys().all(|key| key == "client_style")))),
         "native recipes do not support HTTP defaults"
     );
     for (raw, package) in document
@@ -197,13 +267,7 @@ pub(super) fn validate_recipe(document: &serde_json::Value, config: &ProjectConf
         if !compatible(&input.format, package) {
             continue;
         }
-        for key in [
-            "client_style",
-            "layout",
-            "idempotency",
-            "middleware",
-            "api_reference",
-        ] {
+        for key in ["layout", "idempotency", "middleware", "api_reference"] {
             ensure!(
                 raw.get(key).is_none(),
                 "native {} packages do not support {key}",
@@ -211,22 +275,73 @@ pub(super) fn validate_recipe(document: &serde_json::Value, config: &ProjectConf
             );
         }
         let allowed: &[&str] = match input.format.as_str() {
-            "graphql" => &["name", "transport", "subscriptions", "scalars"],
+            "graphql" => &[
+                "name",
+                "transport",
+                "subscriptions",
+                "scalars",
+                "style",
+                "raw",
+                "groups",
+                "contracts",
+            ],
             "protobuf" => &["name", "module", "toolchain", "go_packages"],
             _ => &["name"],
         };
-        for key in raw["plugins"][0]
-            .as_object()
-            .context("plugin must be an object")?
-            .keys()
+        for (raw_plugin, plugin) in raw["plugins"]
+            .as_array()
+            .context("plugins must be an array")?
+            .iter()
+            .zip(&package.plugins)
         {
-            ensure!(
-                allowed.contains(&key.as_str()),
-                "native {} plugin option {key:?} is unsupported",
-                input.format
-            );
+            let supported = if matches!(
+                plugin.name.as_str(),
+                "graphql" | "sdk" | "workflow" | "asyncapi" | "grpc"
+            ) {
+                allowed
+            } else {
+                match plugin.name.as_str() {
+                    "cypress" => &["name", "output", "cypress_options"][..],
+                    "faker" => &["name", "output", "fixture_options"][..],
+                    _ => &["name", "output"][..],
+                }
+            };
+            for key in raw_plugin
+                .as_object()
+                .context("plugin must be an object")?
+                .keys()
+            {
+                ensure!(
+                    supported.contains(&key.as_str()),
+                    "native {} plugin option {key:?} is unsupported",
+                    input.format
+                );
+            }
         }
-        let plugin = &package.plugins[0];
+        let plugin = package
+            .plugins
+            .iter()
+            .find(|p| {
+                matches!(
+                    p.name.as_str(),
+                    "graphql" | "sdk" | "workflow" | "asyncapi" | "grpc"
+                )
+            })
+            .context("missing native generator")?;
+        ensure!(
+            plugin.client_name.is_none(),
+            "native GraphQL client_name is unsupported"
+        );
+        ensure!(
+            !(input.format == "graphql"
+                && (package.sdk_raw || plugin.raw == Some(true))
+                && config.defaults.client_style.is_some()),
+            "GraphQL raw and explicit default client_style are mutually exclusive"
+        );
+        ensure!(
+            input.format == "graphql" || (package.client_style.is_none() && !package.sdk_raw),
+            "native client style/raw applies only to GraphQL"
+        );
         if input.format == "graphql" && package.language == "rust" {
             ensure!(
                 plugin.subscriptions != Some(true),

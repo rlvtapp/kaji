@@ -23,7 +23,7 @@ Rust rejects TypeScript scalar expressions and subscription options explicitly.
 ## Rust plugin use
 
 ```rust
-let generator = rust::graphql(Some(input.handle()));
+let generator = rust::graphql(Some(input.handle())).flat();
 let package = rust::package("client").with(input).with(generator);
 ```
 
@@ -31,6 +31,14 @@ A named operation `Read` exposes `ReadVariables`, `ReadResult` and an async `rea
 function. The HTTP transport accepts an endpoint and a Reqwest client, allowing
 application headers/timeouts to remain caller-controlled. Dropping the future
 cancels the caller's request rather than automatically retrying mutations.
+
+Flat style also emits a bound `Client`: `Client::new(endpoint, reqwest_client)`
+followed by `client.read(&variables).await`. Grouped style emits
+`client.query().read(&variables)` and `client.mutation().rename(&variables)`;
+explicit `.group("user", "read", "Read")` mappings provide
+`client.user().read(&variables)`. Raw style emits only the standalone functions.
+Standalone functions remain available in every style. Grouped style is the
+default; `.idiomatic()` and `.namespaced()` select it.
 
 GraphQL responses distinguish success, usable partial data with errors, and
 errors without data. Network/HTTP/protocol/decoding failures are separate from
@@ -59,7 +67,12 @@ The same recipe plugin accepts language-specific mappings:
   "path": "client",
   "plugins": [{
     "name": "graphql",
-    "scalars": { "Timestamp": { "input": "String", "output": "i64" } }
+    "contracts": {
+      "graphql": {
+        "style": "flat",
+        "scalars": { "Timestamp": { "input": "String", "output": "i64" } }
+      }
+    }
   }]
 }
 ```
@@ -94,10 +107,18 @@ await generate({
     path: './schema.graphql',
     plugin: inputGraphql(),
     operations: ['./operations.graphql'],
-    rustScalars: { Timestamp: { input: 'String', output: 'i64' } },
   },
   output: './generated',
-  plugins: [pluginRust({ path: 'client', name: 'example-graphql-client' })],
+  plugins: [pluginRust({
+    path: 'client',
+    name: 'example-graphql-client',
+    contracts: {
+      graphql: {
+        style: 'flat',
+        scalars: { Timestamp: { input: 'String', output: 'i64' } },
+      },
+    },
+  })],
 });
 ```
 

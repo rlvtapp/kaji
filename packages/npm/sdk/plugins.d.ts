@@ -1,9 +1,9 @@
-import type { NativePlugin, NativeAddon, NativeInputPlugin, SdkPackageOptions } from '@relevate/poolster';
+import type { NativePlugin, NativeAddon, NativeInputPlugin, SdkPackageOptions, FixtureOptions, CypressOptions } from '@relevate/poolster';
 
 export type TypeScriptPluginOptions = Omit<SdkPackageOptions, 'language' | 'jobs'>;
 export function pluginTypeScript(options?: TypeScriptPluginOptions): NativePlugin;
 
-export type RustPluginOptions = Omit<SdkPackageOptions, 'language' | 'transport' | 'clientName' | 'raw' | 'jobs'>;
+export type RustPluginOptions = Omit<SdkPackageOptions, 'language' | 'transport' | 'clientName' | 'jobs'>;
 export function pluginRust(options?: RustPluginOptions): NativePlugin;
 
 export type GoPluginOptions = Omit<SdkPackageOptions, 'language' | 'transport' | 'clientName' | 'raw'>;
@@ -33,13 +33,13 @@ export function pluginSwift(options?: SwiftPluginOptions): NativePlugin;
 export interface ZodPluginOptions { target?: string; output?: string }
 export function pluginZod(options?: ZodPluginOptions): NativeAddon;
 
-export interface FakerPluginOptions { target?: string; output?: string }
+export interface FakerPluginOptions { target?: string; output?: string; fixtureOptions?: FixtureOptions }
 export function pluginFaker(options?: FakerPluginOptions): NativeAddon;
 
-export interface MswPluginOptions { target?: string; output?: string }
+export interface MswPluginOptions { target?: string; output?: string; fixtureOptions?: FixtureOptions }
 export function pluginMsw(options?: MswPluginOptions): NativeAddon;
 
-export interface CypressPluginOptions { target?: string; output?: string }
+export interface CypressPluginOptions { target?: string; output?: string; fixtureOptions?: FixtureOptions; cypressOptions?: CypressOptions }
 export function pluginCypress(options?: CypressPluginOptions): NativeAddon;
 
 export interface ReactQueryPluginOptions { target?: string; output?: string }

@@ -14,8 +14,18 @@ use std::{
 const SCHEMA: &str = "scalar Timestamp scalar Json input ScalarInput { required:Timestamp! values:[Timestamp]! optional:Timestamp } type ScalarResult { timestamp:Timestamp! values:[Timestamp]! nullable:Timestamp optional:Timestamp raw:Json! } input Options { note: String = \"input-default\" } type User { id: ID! name: String! nickname: String fragile: String } interface Node { id:ID! } type Person implements Node { id:ID! name:String! } type Robot implements Node { id:ID! code:String! } type Query { scalars(value:Timestamp!,input:ScalarInput!,optional:Timestamp):ScalarResult! node:Node! user(id: ID!): User! fatal: String! echo(input:String = \"argument-default\"):String inputEcho(options:Options):String } type Mutation { rename(name:String!):User! }";
 const OPS: &str = "query Scalars($value:Timestamp!,$input:ScalarInput!,$optional:Timestamp,$include:Boolean!){scalars(value:$value,input:$input,optional:$optional){timestamp values nullable optional @include(if:$include) raw}} query AbstractNode { node { id ... on Person { name } ... on Robot { code } } } query Read($id:ID!){person:user(id:$id){id name nickname}} query Partial($id:ID!){user(id:$id){name fragile}} query Fatal{fatal} mutation Rename($name:String!){rename(name:$name){name}} query PresenceQuery($value:String){value:echo(input:$value)} query InputPresence($options:Options){value:inputEcho(options:$options)} query Conditional($include:Boolean!){user(id:\"7\"){name @include(if:$include) nickname @include(if:$include)}} query Defaulted($include:Boolean! = false){user(id:\"7\"){name @include(if:$include) nickname @include(if:$include)}}";
 fn generate(root: &Path) -> Result<GeneratedTree> {
+    generate_style(root, "idiomatic")
+}
+fn generate_style(root: &Path, style: &str) -> Result<GeneratedTree> {
     std::fs::write(root.join("schema.graphql"), SCHEMA)?;
-    std::fs::write(root.join("operations.graphql"), OPS)?;
+    std::fs::write(
+        root.join("operations.graphql"),
+        if style == "collision" {
+            "query FooBar { fatal } query foo_bar { fatal }"
+        } else {
+            OPS
+        },
+    )?;
     let mut registry = InputRegistry::new();
     registry.register(poolster_input_graphql::GraphqlInput)?;
     let input = InputProvider::<GraphqlOperations>::new(
@@ -31,6 +41,18 @@ fn generate(root: &Path) -> Result<GeneratedTree> {
         "Timestamp",
         rust::GraphqlScalarMapping::new("String", "i64"),
     );
+    let generator = match style {
+        "raw" => generator.raw(),
+        "flat" | "collision" => generator.flat(),
+        "unknown-group" => generator
+            .idiomatic()
+            .group("user", "read", "MissingOperation"),
+        "grouped" => generator
+            .idiomatic()
+            .group("user", "read", "Read")
+            .group("user", "rename", "Rename"),
+        _ => generator.idiomatic(),
+    };
     Packages::new()
         .package(
             rust::package("sdk")
@@ -63,9 +85,15 @@ fn graphql_regeneration_is_stable() -> Result<()> {
 #[test]
 #[ignore = "requires cached Cargo dependencies and POOLSTER_GRAPHQL_JS16.14.2; executes local HTTP server"]
 fn packaged_graphql_client_compiles_and_executes() -> Result<()> {
+    for style in ["raw", "flat", "idiomatic", "grouped"] {
+        packaged_style(style)?;
+    }
+    Ok(())
+}
+fn packaged_style(style: &str) -> Result<()> {
     use std::io::{BufRead, BufReader};
     let dir = tempfile::tempdir()?;
-    generate(dir.path())?.write_to(dir.path())?;
+    generate_style(dir.path(), style)?.write_to(dir.path())?;
     let mut child = Command::new("node")
         .arg(concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -114,13 +142,17 @@ fn packaged_graphql_client_compiles_and_executes() -> Result<()> {
     std::fs::write(
         consumer.join("Cargo.toml"),
         format!(
-            "[workspace]\n[package]\nname='graphql-consumer'\nversion='0.1.0'\nedition='2024'\n[dependencies]\nclient={{package='poolster-graphql-test-sdk',path={:?}}}\ntokio={{version='1',features=['macros','rt-multi-thread']}}\nserde_json='=1.0.151'\n",
+            "[workspace]\n[package]\nname='graphql-consumer'\nversion='0.1.0'\nedition='2024'\n[dependencies]\nclient={{package='poolster-graphql-test-sdk',path={:?}}}\ntokio={{version='1',features=['macros','rt-multi-thread','time']}}\nserde_json='=1.0.151'\n",
             installed.to_string_lossy()
         ),
     )?;
     std::fs::write(
         consumer.join("src/main.rs"),
-        include_str!("fixtures/graphql_native/consumer.rs"),
+        format!(
+            "{}\n{}",
+            include_str!("fixtures/graphql_native/consumer.rs"),
+            style_consumer(style)
+        ),
     )?;
     successful(
         Command::new("cargo")
@@ -148,5 +180,68 @@ fn packaged_graphql_client_compiles_and_executes() -> Result<()> {
         errors.contains("E0308") && errors.contains("E0609"),
         "unexpected compile failure: {errors}"
     );
+    Ok(())
+}
+
+fn style_consumer(style: &str) -> String {
+    if style == "raw" {
+        return "async fn style_probe(_: &str) {}".into();
+    }
+    let query = if style == "flat" {
+        "client"
+    } else {
+        "client.query()"
+    };
+    let read = if style == "grouped" {
+        "client.user()"
+    } else {
+        query
+    };
+    let mutation = if style == "flat" {
+        "client"
+    } else if style == "grouped" {
+        "client.user()"
+    } else {
+        "client.mutation()"
+    };
+    format!(
+        r#"async fn style_probe(endpoint:&str) {{
+ let mut headers=reqwest::header::HeaderMap::new();headers.insert("x-style",reqwest::header::HeaderValue::from_static("configured-once"));
+ let http=reqwest::Client::builder().default_headers(headers).timeout(std::time::Duration::from_secs(3)).build().unwrap();
+ let client=Client::new(format!("{{endpoint}}/style"),http);
+ assert_eq!(success({read}.read(&ReadVariables{{id:"7".into()}}).await.unwrap()).person.name,"Ada");
+ assert_eq!(success({mutation}.rename(&RenameVariables{{name:"Style".into()}}).await.unwrap()).rename.name,"Style");
+ assert!(matches!({query}.partial(&PartialVariables{{id:"7".into()}}).await.unwrap(),GraphqlResponse::Partial{{..}}));
+ assert!(matches!({query}.fatal(&FatalVariables{{}}).await.unwrap(),GraphqlResponse::Error{{..}}));
+ assert!(success({query}.presence_query(&PresenceQueryVariables{{value:Presence::Null}}).await.unwrap()).value.is_none());
+ assert!(matches!(success({query}.conditional(&ConditionalVariables{{include:false}}).await.unwrap()).user.name,Optional::Absent));
+ let variables=ScalarsVariables{{value:"wire-time".into(),input:ScalarInput{{required:"nested-time".into(),values:vec![Some("list-time".into()),None],optional:Presence::Null}},optional:Presence::Absent,include:false}};
+ assert_eq!(success({query}.scalars(&variables).await.unwrap()).scalars.timestamp,1700000000);
+ let client=Client::new(format!("{{endpoint}}/bad-scalar"),reqwest::Client::new());
+ assert!(matches!({query}.scalars(&variables).await.unwrap_err(),GraphqlTransportError::Decode(_)));
+ let client=Client::new(format!("{{endpoint}}/slow"),reqwest::Client::builder().timeout(std::time::Duration::from_millis(30)).build().unwrap());
+ assert!(matches!({read}.read(&ReadVariables{{id:"7".into()}}).await.unwrap_err(),GraphqlTransportError::Network(error) if error.is_timeout()));
+ let client=Client::new(format!("{{endpoint}}/slow"),reqwest::Client::new());
+ let task=tokio::spawn(async move {{ {read}.read(&ReadVariables{{id:"7".into()}}).await }});
+ tokio::time::sleep(std::time::Duration::from_millis(10)).await;task.abort();assert!(task.await.unwrap_err().is_cancelled());
+}}
+"#
+    )
+}
+
+#[test]
+fn graphql_style_collision_and_unknown_operation_are_diagnostics() -> Result<()> {
+    for (style, expected) in [
+        ("collision", "collision"),
+        ("unknown-group", "MissingOperation"),
+    ] {
+        let root = tempfile::tempdir()?;
+        let error =
+            generate_style(root.path(), style).expect_err("invalid style should fail generation");
+        ensure!(
+            format!("{error:#}").contains(expected),
+            "unexpected diagnostic: {error:#}"
+        );
+    }
     Ok(())
 }

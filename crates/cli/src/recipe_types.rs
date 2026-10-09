@@ -174,6 +174,8 @@ pub(super) struct PackageConfig {
     pub(super) version: Option<String>,
     pub(super) release: Option<poolster_core::release::PackageMetadata>,
     pub(super) client_style: Option<String>,
+    #[serde(default)]
+    pub(super) sdk_raw: bool,
     pub(super) layout: Option<poolster_core::SourceLayout>,
     #[serde(default)]
     pub(super) api_reference: bool,
@@ -270,6 +272,8 @@ impl CodeCustomizationConfig {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct PluginConfig {
+    #[serde(default)]
+    pub(super) contracts: BTreeMap<String, recipe_exporters::ExporterOptions>,
     pub(super) name: String,
     pub(super) id: Option<String>,
     #[serde(default)]
@@ -285,6 +289,10 @@ pub(super) struct PluginConfig {
     #[serde(default)]
     pub(super) scalars: BTreeMap<String, poolster::ts::GraphqlScalarMapping>,
     pub(super) surface: Option<String>,
+    pub(super) style: Option<String>,
+    #[serde(default)]
+    pub(super) groups: BTreeMap<String, BTreeMap<String, String>>,
+    pub(super) raw: Option<bool>,
     pub(super) client_name: Option<String>,
     pub(super) group_by_tag: Option<bool>,
     pub(super) split_by_group: Option<bool>,

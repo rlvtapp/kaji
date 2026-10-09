@@ -149,8 +149,8 @@ presence is not evidence that registry trust or live delivery works.
 
 ## Tests and confidence
 
-The October 9 alpha.2 workspace check passed **801 tests**, with **0 failures**
-and **141 ignored** after output migration; formatting passed. The older October 8
+The October 9 alpha.2 workspace check passed **816 tests**, with **0 failures**
+and **143 ignored** after GraphQL ecosystem expansion; formatting passed. The older October 8
 generator-fix check passed 483 workspace tests. New native probes
 exercise scoped query caching, invalidation, failures, callbacks, cancellation,
 recursive schemas, split CLI commands and Swift resource boundaries. The earlier

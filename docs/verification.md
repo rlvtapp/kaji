@@ -5,9 +5,10 @@ for the package you ship.
 
 ## Current alpha.2 verification (9 October 2026)
 
-After output migration and GraphQL TypeScript/Rust completion, the full workspace
-suite passes **801 tests, 0 failures, 141 ignored**. Formatting and workspace
-Clippy with `-D warnings` pass. Earlier checks recorded 798/0/141 after initial
+After client styles, contract-scoped configuration and GraphQL ecosystem completion,
+the full workspace suite passes **816 tests, 0 failures, 143 ignored**. Formatting
+and workspace Clippy with `-D warnings` pass. Earlier checks recorded 801/0/141
+after Rust scalar mappings and 798/0/141 after initial
 GraphQL completion and 788/0/138 after output
 migration and 752/0/136 before that migration. Ignored external probes are not counted as passed by that command.
 Initial sandbox-denied local-server tests passed when rerun with local-port access;
@@ -63,6 +64,70 @@ budgets there. Migration changes satisfy the ratchet without raising those budge
 See [output migration coverage](output-contract-migration.md).
 
 ## GraphQL client completion checks
+
+### Client styles and ecosystem follow-up
+
+The [ecosystem test record](verification-results/graphql-ecosystem-2026-10-09.json)
+separates the current checks from the earlier client/scalar records below.
+The combined TypeScript GraphQL suites pass **20/20**, with ignored integration
+tests explicitly enabled and **zero skipped** in that run. The default workspace
+suite's 143 ignored tests are reported separately.
+The fresh local native addon passes the full npm SDK suite: **71 passed, 0 failed,
+0 skipped**. Offline installed SDK/bundle tarballs generate the flat client and
+all seven companions and regenerate without changes. The local addon override
+does not prove unpublished binaries for other platforms.
+Raw, flat and grouped client generation remains compatible with existing operation
+exports. The flat JavaScript example now uses a configured client and compiles,
+executes query/mutation/partial responses against its local server, and passes
+deterministic regeneration checks.
+
+React Query, Vue Query and SWR checks compile and execute raw, flat and grouped
+packages. They exercise mounted React/SWR hooks, Vue effect scopes and reactive
+variables/cache scopes, local GraphQL HTTP requests, cache identity, cancellation,
+mutation retry policy and preserved GraphQL partial/error results.
+
+Zod, Faker and MSW checks cover selected shapes, nullability versus presence,
+recursive inputs, primitive scalar wire mappings, seeded fixtures, named query/
+mutation handlers and real MSW interception with local-server forwarding.
+Community-client substitution includes explicit package assembly and conflicting
+manifest ownership rejection. The first broad run exposed a missing manifest
+provider in that new fixture; it was corrected and the final full suite passes.
+
+Cypress **15.21.1**, using headless Electron **138**, passes **3 browser tests**:
+generated query/mutation requests, matching-operation interception with unrelated
+operations forwarded, and preserved partial data/errors. Browser checks are
+separate from typings and callback tests. The first browser harness attempt used
+an uncompiled exported fixture; another interpreted an absent result field as
+failure despite three passing tests. The corrected compiled runner exits cleanly.
+
+A combined SDK tarball containing all seven companions installs into a clean
+consumer, compiles strict selected-result checks, and executes its public exports
+through MSW and query clients. Its dependency installation uses the npm cache;
+it does not verify published Poolster binaries. React type declarations are
+explicit pinned dependencies for generated React/SWR development builds.
+
+The Rust four-style package checks pass **3/3**. The local server fixture now
+consumes request bodies before simulated delay and handles cancelled connections;
+this prevents expected cancellation from crashing the fixture server.
+
+Reproduce the browser check after exporting the helper fixture through
+`POOLSTER_GRAPHQL_HELPER_FIXTURE_OUTPUT` in the `graphql_helpers` integration test:
+
+```sh
+CYPRESS_CACHE_FOLDER=/path/to/pinned/cypress-cache \
+POOLSTER_CYPRESS_MODULES=/path/to/pinned/node_modules \
+POOLSTER_GRAPHQL_HELPER_NODE_MODULES=/path/to/pinned/helper/node_modules \
+POOLSTER_TSC_JS=/path/to/typescript/lib/tsc.js \
+POOLSTER_GRAPHQL_JS=/path/to/graphql/index.js \
+node crates/plugins/typescript/tests/fixtures/graphql_helpers/browser-runner.cjs \
+  /path/to/exported/fixture
+```
+
+The [integration guide](graphql-integrations.md) records supported options and
+limitations. Dynamic selections, subscriptions in companions, infinite pagination
+and helper partitioning are not established by these passes.
+
+### Earlier operation-client increment
 
 [Final-source test record](verification-results/graphql-clients-2026-10-09.json)
 records counts, dependency versions, artifact/log hashes and audit boundaries.

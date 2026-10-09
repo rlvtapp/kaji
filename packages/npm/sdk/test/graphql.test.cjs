@@ -83,7 +83,8 @@ test('npm GraphQL package compiles and executes against a local GraphQL server',
   const { buildSchema, graphql } = require(path.join(dependencies, 'graphql'));
   const {dir,input} = await fixture(t);
   const output = path.join(dir,'out');
-  await generate({input,output,plugins:[bundle.pluginTypeScript()]});
+  await fs.writeFile(input.operations[0], 'query ReadUser { joinedAt }');
+  await generate({input,output,plugins:[bundle.pluginTypeScript({contracts:{graphql:{style:'flat',scalars:input.scalars}}})]});
   const target = path.join(output,'typescript');
   await execFileAsync(process.execPath,[path.join(dependencies,'typescript/lib/tsc.js'),'--project',path.join(target,'tsconfig.json')]);
   const schema=buildSchema('scalar DateTime\ntype Query { joinedAt: DateTime! }');
@@ -98,5 +99,68 @@ test('npm GraphQL package compiles and executes against a local GraphQL server',
   const operations=await import(pathToFileURL(path.join(target,'dist/graphql.js')));
   const runtime=await import(pathToFileURL(path.join(target,'dist/graphql-runtime.js')));
   const transport=runtime.createGraphqlHttpTransport(`http://127.0.0.1:${server.address().port}`);
-  assert.deepEqual(await operations.Joined(transport,{}),{kind:'success',data:{joinedAt:'2026-10-09'},extensions:undefined});
+  assert.deepEqual(await operations.ReadUser(transport,{}),{kind:'success',data:{joinedAt:'2026-10-09'},extensions:undefined});
+  const bound=operations.createClient({transport});
+  assert.deepEqual(await bound.readUser({}),{kind:'success',data:{joinedAt:'2026-10-09'},extensions:undefined});
+});
+
+test('GraphQL output plugin options select styles and reject conflicting aliases', async (t) => {
+  const {dir,input}=await fixture(t);
+  for (const style of ['raw','flat','idiomatic','namespaced']) {
+    const configuration={input,output:path.join(dir,style),plugins:[bundle.pluginTypeScript({style,scalars:input.scalars}),bundle.pluginRust({name:'graphql_client',style,scalars:{DateTime:{input:'String',output:'String'}}})]};
+    const result=await generate(configuration);
+    const ts=result.files.find(file=>file.path.endsWith('typescript/graphql.ts')).contents;
+    assert.equal(ts.includes('export function createClient'),style !== 'raw');
+    assert.deepEqual((await generate(configuration)).changes,{added:[],modified:[],removed:[]});
+  }
+  const config=(options)=>({input,output:path.join(dir,'invalid'),plugins:[bundle.pluginTypeScript(options)]});
+  await assert.rejects(generate(config({raw:true,style:'flat'})),/mutually exclusive/);
+  await assert.rejects(generate(config({scalars:{DateTime:{input:'unknown',output:'unknown'}}})),/conflicting TypeScript scalar mapping/);
+  await assert.rejects(generate(config({style:'flat',groups:{user:{read:'Joined'}}})),/groups|idiomatic/i);
+  const grouped=await generate(config({style:'idiomatic',groups:{user:{read:'Joined'}}}));
+  assert.ok(grouped.files.some(file=>file.contents.includes('user') && file.contents.includes('read')));
+});
+
+test('contract-scoped exporter options are independent and diagnose conflicts', async (t) => {
+  const {dir,input}=await fixture(t);
+  delete input.scalars;
+  const plugin=(extra={})=>bundle.pluginTypeScript({contracts:{http:{style:'flat'},graphql:{style:'grouped',scalars:{DateTime:{input:'string',output:'string'}},groups:{user:{read:'Joined'}}}},...extra});
+  const config=(p)=>({input,output:path.join(dir,'scoped'),plugins:[p]});
+  const result=await generate(config(plugin()));
+  assert.ok(result.files.some(file=>file.contents.includes('user') && file.contents.includes('read')));
+  assert.deepEqual((await generate(config(plugin()))).changes,{added:[],modified:[],removed:[]});
+  await assert.rejects(generate(config(plugin({style:'flat'}))),/conflicting.*style/);
+  await assert.rejects(generate(config(bundle.pluginTypeScript({contracts:{unknown:{style:'flat'}}}))),/unsupported bundled exporter contract|unknown field/);
+});
+
+test('native GraphQL entry point composes existing ecosystem packages and mutation options', async (t) => {
+  const {dir,input}=await fixture(t);
+  delete input.scalars;
+  await fs.writeFile(input.path,'type User { id: ID!, name: String! } type Query { readUser(id: ID!): User! } type Mutation { renameUser(id: ID!, name: String!): User! }');
+  await fs.writeFile(input.operations[0],'query ReadUser($id: ID!) { readUser(id:$id) { id name } } mutation RenameUser($id: ID!, $name: String!) { renameUser(id:$id,name:$name) { id name } }');
+  const plugins=[bundle.pluginTypeScript({contracts:{graphql:{style:'flat'}}}),bundle.pluginReactQuery(),bundle.pluginVueQuery(),bundle.pluginSwr(),bundle.pluginZod(),bundle.pluginFaker({fixtureOptions:{seed:42}}),bundle.pluginMsw(),bundle.pluginCypress({cypressOptions:{baseUrl:'http://localhost:4000/graphql',includeMutations:true,timeoutMs:5000}})];
+  const config={input,output:path.join(dir,'ecosystem'),plugins};
+  const result=await generate(config);
+  for(const name of ['react-query','vue-query','swr','zod','faker','msw','cypress']) assert.ok(result.files.some(file=>file.path.includes(name)),name);
+  assert.ok(result.files.some(file=>file.path.includes('cypress')&&file.contents.includes('RenameUser')));
+  assert.deepEqual((await generate(config)).changes,{added:[],modified:[],removed:[]});
+  if (process.env.POOLSTER_GRAPHQL_ADDON_NODE_MODULES) {
+    const target=path.join(config.output,'typescript');
+    await fs.symlink(process.env.POOLSTER_GRAPHQL_ADDON_NODE_MODULES,path.join(target,'node_modules'),'dir');
+    const {execFileAsync}=require('../test-support/helpers.cjs');
+    await execFileAsync(process.execPath,[path.join(process.env.POOLSTER_GRAPHQL_TEST_NODE_MODULES,'typescript/lib/tsc.js'),'--project',path.join(target,'tsconfig.json')]);
+  }
+  const unsupported={...config,output:path.join(dir,'unsupported'),plugins:[bundle.pluginTypeScript(),bundle.pluginCypress({cypressOptions:{operationOverrides:{ReadUser:{path:'/http-only'}}}})]};
+  await assert.rejects(generate(unsupported),/operation.overrides|HTTP|unsupported/i);
+});
+
+test('HTTP selects its own contract options without applying GraphQL configuration', async (t) => {
+  const {artifacts,config}=require('../test-support/helpers.cjs');
+  const dir=await temporary(t);
+  const compiled=await artifacts(t);
+  const input={artifacts:compiled};
+  const baseline=await generate(config(input,path.join(dir,'http-flat'),[bundle.pluginTypeScript({style:'flat'})]),{write:false});
+  const scoped=await generate(config(input,path.join(dir,'http-scoped'),[bundle.pluginTypeScript({contracts:{http:{style:'flat'},graphql:{style:'grouped',groups:{user:{read:'NotAnHttpOperation'}},scalars:{DateTime:{input:'string',output:'string'}}}}})]),{write:false});
+  assert.deepEqual(scoped.files,baseline.files);
+  await assert.rejects(generate(config(input,path.join(dir,'http-bad'),[bundle.pluginTypeScript({scalars:{DateTime:{input:'string',output:'string'}}})])),/require GraphQL input/);
 });

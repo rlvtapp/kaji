@@ -1,0 +1,42 @@
+import assert from 'node:assert/strict';
+import {createServer} from 'node:http';
+import {createRequire} from 'node:module';
+import {setupServer} from 'msw/node';
+import {createClient} from './dist/graphql.js';
+import * as schemas from './dist/zod.js';
+import * as fixtures from './dist/faker.js';
+import * as handlers from './dist/msw.js';
+const require=createRequire(import.meta.url);const {buildSchema,graphql}=require(process.env.POOLSTER_GRAPHQL_JS);
+const schema=buildSchema(process.env.POOLSTER_GRAPHQL_SCHEMA);
+let forwarded=0;const server=createServer(async(req,res)=>{forwarded++;let body='';for await(const chunk of req)body+=chunk;const {query,operationName,variables}=JSON.parse(body);res.setHeader('content-type','application/json');res.end(JSON.stringify(await graphql({schema,source:query,operationName,variableValues:variables,rootValue:{user:({id})=>({id,name:'server',nickname:null}),rename:({name})=>({id:'real',name,nickname:null}),defaulted:({input})=>input.role}})));});
+await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const endpoint=`http://127.0.0.1:${server.address().port}/graphql`;
+const result={user:{id:'7',name:'mock',nickname:null}};
+assert.equal(schemas.ReadUserResultSchema.safeParse(result).success,true);
+assert.equal(schemas.ReadUserResultSchema.safeParse({user:{id:'7',name:'mock'}}).success,false,'required nullable must be present');
+assert.equal(schemas.ReadUserVariablesSchema.safeParse({id:'7',nested:null}).success,true);
+assert.equal(schemas.ReadUserVariablesSchema.safeParse({id:'7',nested:{required:'n',values:[],optional:null}}).success,true);
+assert.equal(schemas.ReadUserVariablesSchema.safeParse({id:'7',nested:{values:[]}}).success,false);
+assert.equal(schemas.TimestampVariablesSchema.safeParse({value:'wire'}).success,true);
+assert.equal(schemas.TimestampResultSchema.safeParse({timestamp:123}).success,true);
+assert.equal(schemas.TimestampResultSchema.safeParse({timestamp:'bad-wire'}).success,false);
+fixtures.seed(7);const first=fixtures.fakeReadUserVariables();fixtures.seed(7);assert.deepEqual(fixtures.fakeReadUserVariables(),first);
+const recursive=fixtures.fakeNestedInputVariables();assert.deepEqual(recursive.nested.values,[]);assert.equal(Object.hasOwn(recursive.nested,'child'),false);
+assert.equal(schemas.NestedInputVariablesSchema.safeParse({nested:{required:'a',values:[],child:{required:'b',values:[],child:null}}}).success,true);
+assert.equal(schemas.ConditionalResultSchema.safeParse({user:{}}).success,true);
+assert.equal(schemas.ConditionalResultSchema.safeParse({user:{nickname:null}}).success,true);
+assert.equal(schemas.ConditionalResultSchema.safeParse({user:{name:null}}).success,false);
+for(const name of ['ReadUser','Partial','Timestamp','Rename','NestedInput','Conditional','Models','DefaultedInput']){assert.equal(schemas[`${name}VariablesSchema`].safeParse(fixtures[`fake${name}Variables`]()).success,true);assert.equal(schemas[`${name}ResultSchema`].safeParse(fixtures[`fake${name}Result`]()).success,true);}
+const defaults=fixtures.fakeDefaultedInputVariables();assert.deepEqual(defaults,{input:{}});
+assert.equal(schemas.ModelsResultSchema.safeParse({role:'USER',extra:{json:1},node:{__typename:'Robot',id:'r',code:'kept'}}).success,true);
+assert.equal(schemas.ModelsResultSchema.safeParse({role:'USER',node:{__typename:'Robot',id:'r',code:'kept'}}).success,false);
+assert.equal(schemas.ModelsResultSchema.safeParse({role:'USER',extra:null,node:{__typename:'Robot',id:'r',code:'kept'}}).success,false);
+const mock=setupServer(handlers.mockReadUser(variables=>{assert.deepEqual(variables,{id:'7'});return {data:result};}));mock.listen({onUnhandledRequest:'bypass'});
+try{
+ const client=createClient({endpoint});assert.deepEqual((await client.readUser({id:'7'})).data,result);assert.equal(forwarded,0);
+ assert.equal((await client.rename({name:'unhandled-mutation'})).data.rename.name,'unhandled-mutation');assert.equal(forwarded,1,'unmatched operation must reach local server');
+ assert.equal((await client.defaultedInput(defaults)).data.defaulted,'USER');assert.equal(forwarded,2,'omitted nonnull default input must resolve on real server');
+ mock.use(handlers.mockRename(variables=>({data:{rename:{id:'7',name:variables.name,nickname:null}}})));assert.equal((await client.rename({name:'mocked'})).data.rename.name,'mocked');assert.equal(forwarded,2);
+ mock.use(handlers.mockPartial(()=>({data:{user:{id:'7',fragile:null}},errors:[{message:'partial',path:['user','fragile']}]})));const partial=await client.partial({id:'7'});assert.equal(partial.kind,'partial');assert.equal(partial.errors[0].message,'partial');
+ mock.use(handlers.mockReadUser(()=>({errors:[{message:'failure'}]})));assert.equal((await client.readUser({id:'7'})).kind,'error');
+ console.log('GraphQL Zod/Faker/MSW: compiled, presence/nullability/scalars/seed, operation matching, query/mutation, partial/errors, local forwarding passed');
+}finally{mock.close();await new Promise(resolve=>server.close(resolve));}

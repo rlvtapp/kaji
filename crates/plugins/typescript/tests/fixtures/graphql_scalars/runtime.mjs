@@ -1,7 +1,7 @@
 import {createRequire} from 'node:module';
 import {createServer} from 'node:http';
 import assert from 'node:assert/strict';
-import {Stamp,createGraphqlHttpTransport} from './dist/index.js';
+import {Stamp,stamp,createClient,createGraphqlHttpTransport} from './dist/index.js';
 const require=createRequire(import.meta.url);
 const {buildSchema,graphql}=require(process.env.POOLSTER_GRAPHQL_JS);
 const schema=buildSchema(process.env.POOLSTER_SCALAR_SCHEMA);
@@ -28,4 +28,9 @@ try {
  const nullable=await Stamp(transport,{...input,include:true,maybe:null,input:{...input.input,maybe:null}});
  assert.equal(nullable.kind,'success');assert.equal(nullable.data.stamp.maybe,null);
  assert.equal(seen.maybe,null);
+ const client=createClient({transport});
+ const bound=await client.mutation.stamp(input);
+ assert.equal(bound.kind,'success');assert.equal(bound.data.stamp.at,Date.parse(input.at));
+ const alias=await stamp(transport,input);
+ assert.equal(alias.kind,'success');assert.equal(alias.data.stamp.at,bound.data.stamp.at);
 } finally {await new Promise(resolve=>server.close(resolve));}

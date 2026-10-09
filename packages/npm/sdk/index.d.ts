@@ -83,13 +83,29 @@ export type SdkLanguage = 'typescript' | 'rust' | 'go' | 'python' | 'php' | 'jav
 
 export interface SdkPackageOptions {
   language: SdkLanguage;
+  /** Options for the selected bundled HTTP or GraphQL exporter. */
+  contracts?: { http?: ContractOutputOptions; graphql?: ContractOutputOptions };
   path?: string;
   name?: string;
   version?: string;
-  style?: 'flat' | 'namespaced';
+  style?: 'raw' | 'flat' | 'idiomatic' | 'namespaced' | 'grouped';
+  /** GraphQL output wire types for this language. */
+  scalars?: Record<string, GraphqlScalarMapping>;
+  /** GraphQL operation names assigned to idiomatic resource groups. */
+  groups?: Record<string, Record<string, string>>;
   transport?: 'fetch' | 'axios';
   clientName?: string;
   raw?: boolean;
+  jobs?: number;
+}
+
+export interface ContractOutputOptions {
+  style?: 'raw' | 'flat' | 'idiomatic' | 'namespaced' | 'grouped';
+  raw?: boolean;
+  scalars?: Record<string, GraphqlScalarMapping>;
+  groups?: Record<string, Record<string, string>>;
+  transport?: 'fetch' | 'axios';
+  clientName?: string;
   jobs?: number;
 }
 
@@ -99,12 +115,20 @@ export interface NativePlugin {
   package: SdkPackageOptions & { path: string };
 }
 
+export interface FixtureOptions { seed?: number; maxDepth?: number; maxAttempts?: number; overrides?: Record<string, unknown>; }
+export interface CypressOptions {
+  baseUrl?: string; headers?: Record<string, string>; includeMutations?: boolean; timeoutMs?: number;
+  operationOverrides?: Record<string, { enabled?: boolean; path?: string; query?: Record<string, unknown>; headers?: Record<string,string>; body?: unknown; expectedStatuses?: number[] }>;
+}
+
 export interface NativeAddon {
   kind: 'native-addon';
   name: string;
   plugin: string;
   target: string;
   output?: string;
+  fixtureOptions?: FixtureOptions;
+  cypressOptions?: CypressOptions;
 }
 
 export interface NativeInputPlugin {

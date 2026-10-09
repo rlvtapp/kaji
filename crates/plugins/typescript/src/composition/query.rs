@@ -1,6 +1,10 @@
 //! Native framework consumers with stable provider-bound imports.
+mod graphql;
 mod options;
 use super::*;
+pub use options::{
+    graphql_react_query, graphql_swr, graphql_vue_query, react_query, swr, vue_query,
+};
 
 pub enum QueryFramework {
     React,
@@ -18,6 +22,7 @@ pub struct Query {
     meta: Meta,
     framework: QueryFramework,
     provider: Option<Handle<Operations>>,
+    graphql: Option<Option<Handle<crate::GraphqlClient>>>,
     output: String,
     operations_per_file: Option<usize>,
     layout: Option<poolster_core::SourceLayout>,
@@ -25,38 +30,10 @@ pub struct Query {
     kinds: BTreeMap<String, QueryKind>,
     names: BTreeMap<String, String>,
 }
-pub fn react_query() -> Query {
-    Query {
-        http_input: Default::default(),
-        meta: Meta::new(),
-        framework: QueryFramework::React,
-        provider: None,
-        output: "react-query".into(),
-        operations_per_file: Some(50),
-        layout: None,
-        include: None,
-        kinds: BTreeMap::new(),
-        names: BTreeMap::new(),
-    }
-}
-pub fn vue_query() -> Query {
-    Query {
-        framework: QueryFramework::Vue,
-        output: "vue-query".into(),
-        ..react_query()
-    }
-}
-pub fn swr() -> Query {
-    Query {
-        framework: QueryFramework::Swr,
-        output: "swr".into(),
-        ..react_query()
-    }
-}
 
 impl Plugin<TypeScript> for Query {
     fn supports_native_input(&self) -> bool {
-        self.http_input.is_explicit()
+        self.graphql.is_some() || self.http_input.is_explicit()
     }
     fn kind(&self) -> &'static str {
         "typescript-query"
@@ -65,11 +42,17 @@ impl Plugin<TypeScript> for Query {
         &self.meta
     }
     fn requires(&self) -> Vec<Requirement> {
+        if let Some(provider) = self.graphql {
+            return vec![Requirement::on(provider)];
+        }
         let mut requirements = vec![Requirement::on(self.provider)];
         requirements.extend(self.http_input.requirements());
         requirements
     }
     fn generate(&self, cx: &mut PluginContext<'_, TypeScript>) -> Result<()> {
+        if self.graphql.is_some() {
+            return graphql::generate(self, cx);
+        }
         let selected = self.http_input.resolve(cx)?;
         let input_api = &selected.api;
         let config = render::ArtifactOptions {

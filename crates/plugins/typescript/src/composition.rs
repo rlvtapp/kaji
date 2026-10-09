@@ -456,13 +456,18 @@ impl Plugin<TypeScript> for Provider {
 }
 
 mod query;
-pub use query::{Query, QueryFramework, QueryKind, react_query, swr, vue_query};
+pub use query::{
+    Query, QueryFramework, QueryKind, graphql_react_query, graphql_swr, graphql_vue_query,
+    react_query, swr, vue_query,
+};
 
 /// Auxiliary artifacts tied to the selected model and operation providers.
 pub struct Auxiliary {
     http_input: poolster_core::engine::HttpInput,
     meta: Meta,
     kind: AuxiliaryKind,
+    graphql: bool,
+    graphql_client: Option<Handle<crate::GraphqlClient>>,
     output: String,
     models: Option<Handle<Models>>,
     operations: Option<Handle<Operations>>,
@@ -482,6 +487,8 @@ fn auxiliary(kind: AuxiliaryKind, output: &str) -> Auxiliary {
         http_input: Default::default(),
         meta: Meta::new(),
         kind,
+        graphql: false,
+        graphql_client: None,
         output: output.into(),
         models: None,
         operations: None,
@@ -506,7 +513,7 @@ pub fn cypress() -> Auxiliary {
 
 impl Plugin<TypeScript> for Auxiliary {
     fn supports_native_input(&self) -> bool {
-        self.http_input.is_explicit()
+        self.graphql || self.http_input.is_explicit()
     }
     fn kind(&self) -> &'static str {
         match self.kind {
@@ -520,6 +527,9 @@ impl Plugin<TypeScript> for Auxiliary {
         &self.meta
     }
     fn requires(&self) -> Vec<Requirement> {
+        if self.graphql {
+            return vec![Requirement::on(self.graphql_client)];
+        }
         let mut requirements = {
             let mut requirements = vec![Requirement::on(self.models)];
             if matches!(self.kind, AuxiliaryKind::Msw | AuxiliaryKind::Cypress) {
@@ -531,6 +541,32 @@ impl Plugin<TypeScript> for Auxiliary {
         requirements
     }
     fn generate(&self, cx: &mut PluginContext<'_, TypeScript>) -> Result<()> {
+        if self.graphql {
+            anyhow::ensure!(
+                !self.http_input.is_explicit(),
+                "GraphQL helpers cannot select HTTP input contracts"
+            );
+            anyhow::ensure!(
+                self.layout.is_none(),
+                "GraphQL helper custom source layout is unsupported"
+            );
+            let client = cx.inputs.get::<crate::GraphqlClient>()?.clone();
+            let kind = match self.kind {
+                AuxiliaryKind::Zod => crate::graphql_helpers::Kind::Zod,
+                AuxiliaryKind::Faker => crate::graphql_helpers::Kind::Faker,
+                AuxiliaryKind::Msw => crate::graphql_helpers::Kind::Msw,
+                AuxiliaryKind::Cypress => crate::graphql_helpers::Kind::Cypress,
+            };
+            return crate::graphql_helpers::generate(
+                cx,
+                &client,
+                kind,
+                &self.output,
+                &self.fixture_options,
+                &self.cypress_options,
+                self.max_file_bytes,
+            );
+        }
         let selected = self.http_input.resolve(cx)?;
         let input_api = &selected.api;
         let models = cx.inputs.get::<Models>()?;

@@ -247,13 +247,34 @@ import { inputGraphql } from '@relevate/poolster-input-graphql';
 import { pluginTypeScript } from '@relevate/poolster-plugin-typescript';
 export default defineConfig({
   input: { path: './schema.graphql', plugin: inputGraphql(),
-    operations: ['./operations.graphql'],
-    scalars: { DateTime: { input: 'string', output: 'string' } } },
+    operations: ['./operations.graphql'] },
   output: './generated',
-  plugins: [pluginTypeScript({ path: 'client' })],
+  plugins: [pluginTypeScript({ path: 'client', style: 'flat',
+    scalars: { DateTime: { input: 'string', output: 'string' } } })],
 });
 ```
 
-Loaded config files resolve operation paths beside the config. Direct API calls resolve paths from the current directory. Custom scalar mappings describe input and result wire types; they do not convert values at runtime. Unmapped scalars use `unknown`. Subscriptions require `input.subscriptions: true` and an injected subscription transport. HTTP SDK customization options and auxiliaries are rejected for GraphQL. JavaScript hooks receive the input inspection report and emitted files; this API does not expose native typed graph hooks. Unsupported language packages appear in `result.skipped`, warn, and preserve existing owned outputs.
+Loaded config files resolve operation paths beside the config. Direct API calls resolve paths from the current directory. Custom scalar mappings describe input and result wire types; they do not convert values at runtime. Unmapped scalars use `unknown`. Subscriptions require `input.subscriptions: true` and an injected subscription transport. `clientName` and Go worker options are rejected for GraphQL. JavaScript hooks receive the input inspection report and emitted files; this API does not expose native typed graph hooks. Unsupported language packages appear in `result.skipped`, warn, and preserve existing owned outputs.
 
 Rust GraphQL output uses the existing `pluginRust()` package. Unmapped custom scalars use `serde_json::Value`. Configure Rust wire types independently with `input.rustScalars`, for example `{ DateTime: { input: 'String', output: 'String' } }`. Mixed generation can also set TypeScript `input.scalars`; each generator uses its own map. Supported Rust mappings are self-contained primitive/container wire types and do not perform runtime conversion. Subscriptions and transport options remain unsupported.
+
+GraphQL output options belong to each language plugin: `pluginTypeScript({ scalars, style: 'flat' })` and `pluginRust({ scalars, style: 'idiomatic' })`. Styles are `raw`, `flat`, and `idiomatic` (`namespaced` is an alias); `raw: true` is an alternative to `style: 'raw'` and cannot be combined with an explicit style. Raw operation exports remain available with each client surface. Idiomatic clients group operations by query/mutation/subscription. Customize resource groups with `groups: { user: { read: 'ReadUser', rename: 'RenameUser' } }`; unassigned operations retain their operation-kind group. Groups require idiomatic/namespaced style.
+
+`input.scalars` and `input.rustScalars` remain compatibility aliases. A mapping supplied both on input and output is accepted when its input/output values are identical; conflicting values are rejected. GraphQL scalar/group options are rejected for OpenAPI generation.
+
+For configurations reused across inputs, scope options to their bundled exporter:
+
+```js
+pluginTypeScript({
+  contracts: {
+    http: { style: 'flat' },
+    graphql: { style: 'grouped',
+      scalars: { DateTime: { input: 'string', output: 'string' } },
+      groups: { user: { read: 'ReadUser' } } },
+  },
+});
+```
+
+The selected input activates `http` or `graphql`; the other block remains independent. `grouped` aliases GraphQL idiomatic/namespaced style. Top-level output options remain shorthand for the active exporter. Equal duplicated options are accepted; conflicting values are rejected. `contracts` currently configures these bundled exporters and does not register arbitrary JavaScript exporters. Each generation uses one input contract; this configuration does not promise combined HTTP/GraphQL Rust packages.
+
+GraphQL packages can attach the existing React Query, Vue Query, SWR, Zod, Faker, MSW and Cypress plugins with their usual `target` and `output` options. For example, `pluginCypress({ target: 'client', cypressOptions: { includeMutations: true, baseUrl: 'http://localhost:4000/graphql' } })` enables mutation smoke helpers explicitly. `pluginFaker({ target: 'client', fixtureOptions: { seed: 42 } })` configures deterministic native fixtures. GraphQL fixture options are supported on Faker; Cypress HTTP operation overrides and nondefault fixture options on other GraphQL addons are rejected. The package compiler requires each emitted integration's upstream runtime/type dependencies.

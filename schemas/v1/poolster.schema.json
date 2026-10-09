@@ -59,8 +59,9 @@
     "clientStyle": {
       "type": "string",
       "enum": [
+        "flat",
         "namespaced",
-        "flat"
+        "idiomatic"
       ],
       "default": "namespaced",
       "description": "Namespaced resource client or direct operation methods."
@@ -195,6 +196,9 @@
         },
         "paths": {
           "$ref": "#/$defs/pathSelection"
+        },
+        "contracts": {
+          "$ref": "#/$defs/exporterContracts"
         }
       },
       "oneOf": [
@@ -328,6 +332,10 @@
         "layout": {
           "$ref": "#/$defs/sourceLayout",
           "description": "Shared layout for plugins supporting configurable source layouts. Plugin settings override package settings, which override project defaults."
+        },
+        "sdk_raw": {
+          "type": "boolean",
+          "default": false
         }
       }
     },
@@ -487,6 +495,52 @@
           "type": "boolean",
           "default": false,
           "description": "Opt-in Java/C# Presence wrappers for omitted versus explicit-null optional properties; changes the optional-property API."
+        },
+        "contracts": {
+          "$ref": "#/$defs/exporterContracts"
+        },
+        "style": {
+          "enum": [
+            "raw",
+            "flat",
+            "idiomatic",
+            "namespaced",
+            "grouped"
+          ]
+        },
+        "raw": {
+          "type": "boolean"
+        },
+        "scalars": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "input",
+              "output"
+            ],
+            "properties": {
+              "input": {
+                "type": "string",
+                "minLength": 1
+              },
+              "output": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "groups": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
         }
       }
     },
@@ -659,6 +713,9 @@
               }
             }
           }
+        },
+        "contracts": {
+          "$ref": "#/$defs/exporterContracts"
         }
       }
     },
@@ -684,6 +741,9 @@
         },
         "oauth": {
           "$ref": "#/$defs/cliOAuth"
+        },
+        "contracts": {
+          "$ref": "#/$defs/exporterContracts"
         }
       }
     },
@@ -706,6 +766,9 @@
           "type": "string",
           "format": "uri",
           "description": "Default API origin. Users can override it with --base-url or the generated environment variable."
+        },
+        "contracts": {
+          "$ref": "#/$defs/exporterContracts"
         }
       }
     },
@@ -785,6 +848,9 @@
         "title": {
           "type": "string",
           "minLength": 1
+        },
+        "contracts": {
+          "$ref": "#/$defs/exporterContracts"
         }
       }
     },
@@ -801,6 +867,9 @@
         "output": {
           "type": "string",
           "minLength": 1
+        },
+        "contracts": {
+          "$ref": "#/$defs/exporterContracts"
         }
       }
     },
@@ -822,6 +891,9 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 65535
+        },
+        "contracts": {
+          "$ref": "#/$defs/exporterContracts"
         }
       }
     },
@@ -892,6 +964,9 @@
             "bigint"
           ],
           "default": "number"
+        },
+        "contracts": {
+          "$ref": "#/$defs/exporterContracts"
         }
       }
     },
@@ -908,6 +983,9 @@
             "roundtrips",
             "operation-tests"
           ]
+        },
+        "contracts": {
+          "$ref": "#/$defs/exporterContracts"
         }
       }
     },
@@ -996,6 +1074,9 @@
             }
           },
           "description": "Omit commands for standard npm/pypi/crates.io/go trusted publishing; custom registries require commands."
+        },
+        "contracts": {
+          "$ref": "#/$defs/exporterContracts"
         }
       }
     },
@@ -1144,6 +1225,9 @@
         "base_url": {
           "type": "string",
           "minLength": 1
+        },
+        "contracts": {
+          "$ref": "#/$defs/exporterContracts"
         }
       }
     },
@@ -1264,6 +1348,9 @@
             }
           },
           "description": "Bounded cancellable lifecycle waiters using this resource read operation; mutation is never replayed."
+        },
+        "contracts": {
+          "$ref": "#/$defs/exporterContracts"
         }
       }
     },
@@ -1304,6 +1391,9 @@
           "type": "string",
           "minLength": 1,
           "pattern": "^[a-z0-9-]+$"
+        },
+        "contracts": {
+          "$ref": "#/$defs/exporterContracts"
         }
       }
     },
@@ -1365,6 +1455,9 @@
               "minLength": 1
             }
           }
+        },
+        "contracts": {
+          "$ref": "#/$defs/exporterContracts"
         }
       },
       "allOf": [
@@ -1417,6 +1510,9 @@
               "minLength": 1
             }
           }
+        },
+        "contracts": {
+          "$ref": "#/$defs/exporterContracts"
         }
       },
       "description": "Generate bounded fake-driver public-operation tests and unsupported-case diagnostics. All SDK recipes support inference; named uses roles are supported by TypeScript recipes only."
@@ -1655,6 +1751,31 @@
               }
             }
           }
+        },
+        "style": {
+          "enum": [
+            "raw",
+            "flat",
+            "idiomatic",
+            "namespaced",
+            "grouped"
+          ]
+        },
+        "raw": {
+          "type": "boolean"
+        },
+        "groups": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "contracts": {
+          "$ref": "#/$defs/exporterContracts"
         }
       }
     },
@@ -1667,6 +1788,9 @@
       "properties": {
         "name": {
           "const": "workflow"
+        },
+        "contracts": {
+          "$ref": "#/$defs/exporterContracts"
         }
       }
     },
@@ -1679,6 +1803,9 @@
       "properties": {
         "name": {
           "const": "asyncapi"
+        },
+        "contracts": {
+          "$ref": "#/$defs/exporterContracts"
         }
       }
     },
@@ -1724,6 +1851,79 @@
             "type": "string",
             "minLength": 1
           }
+        },
+        "contracts": {
+          "$ref": "#/$defs/exporterContracts"
+        }
+      }
+    },
+    "exporterOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "style": {
+          "enum": [
+            "raw",
+            "flat",
+            "idiomatic",
+            "namespaced",
+            "grouped"
+          ]
+        },
+        "raw": {
+          "type": "boolean"
+        },
+        "scalars": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "input",
+              "output"
+            ],
+            "properties": {
+              "input": {
+                "type": "string",
+                "minLength": 1
+              },
+              "output": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "groups": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "transport": {
+          "enum": [
+            "fetch",
+            "axios"
+          ]
+        },
+        "client_name": {
+          "type": "string"
+        }
+      }
+    },
+    "exporterContracts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "http": {
+          "$ref": "#/$defs/exporterOptions"
+        },
+        "graphql": {
+          "$ref": "#/$defs/exporterOptions"
         }
       }
     }

@@ -40,5 +40,26 @@ try {
   const offline = new Error('transport offline');
   await assert.rejects(sdk.Read(sdk.createGraphqlHttpTransport(endpoint,{fetch:async()=>{throw offline;}}),{id:'7'}),error=>error===offline);
   const abort = new AbortController();abort.abort();await assert.rejects(sdk.Read(transport,{id:'7'},{signal:abort.signal}),error=>error.name==='AbortError');
+  assert.equal((await sdk.read(transport,{id:'7'})).kind,'success');
+  const style=process.env.POOLSTER_CLIENT_STYLE;
+  if(style==='raw') assert.equal(sdk.createClient,undefined);
+  else {
+    let fetches=0;
+    const client=sdk.createClient({endpoint,headers:{'x-package':'style-configured-once'},fetch:async(...args)=>{fetches++;return fetch(...args);}});
+    const query=style==='flat'?client:client.query;
+    const read=style==='grouped'?client.user:query;
+    const mutation=style==='flat'?client:style==='grouped'?client.user:client.mutation;
+    const userResult=await query.readUser({id:'42'});
+    assert.equal(userResult.kind,'success');assert.deepEqual(userResult.data.user,{id:'42',name:'Grace',nickname:null});
+    assert.equal(requests.at(-1).body.operationName,'ReadUser');assert.deepEqual(requests.at(-1).body.variables,{id:'42'});
+    assert.equal((await read.read({id:'7'})).data.person.name,'Grace');
+    assert.equal((await mutation.rename({name:'Style'})).data.rename.name,'Style');
+    assert.equal((await query.partial({id:'7'})).kind,'partial');
+    assert.equal((await query.fatal({})).kind,'error');
+    assert.equal(fetches,5);
+    assert.ok(requests.slice(-5).every(request=>request.headers['x-package']==='style-configured-once'));
+    const cancelled=new AbortController();cancelled.abort();
+    await assert.rejects(read.read({id:'7'},{signal:cancelled.signal}),error=>error.name==='AbortError');
+  }
   console.log('Installed GraphQL package: variables, selections/nullability, mutation, partial/errors, HTTP/protocol/fetch/abort, customization passed');
 } finally { await new Promise(resolve=>server.close(resolve)); }

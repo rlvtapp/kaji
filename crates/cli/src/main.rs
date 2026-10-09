@@ -64,9 +64,11 @@ mod mcp;
 mod migration;
 mod mock_http;
 mod mock_server;
+mod native_graphql_addons;
 mod native_profiles;
 mod openapi_sources;
 mod profile_config;
+mod recipe_exporters;
 mod recipe_types;
 mod registry;
 mod runtime_support;
@@ -129,8 +131,9 @@ Generate options (both modes):
       --go-package <file=mapping>     Repeatable Go import/package mappings
       --name <name>                   API name (default: API)
       --sdk-version <version>         Generated package version (default: 0.1.0)
-      --client-style <style>          namespaced (default) or flat
+      --client-style <style>          namespaced (default), idiomatic, or flat
       --typescript-transport <kind>   fetch (default) or axios
+      --raw-sdk                     Raw GraphQL operation surface
       --typescript-surface <surface>  client (default) or raw
       --typescript-client-name <name> TypeScript client class name
       --jobs <count>                  Go emission workers (default: bounded auto)

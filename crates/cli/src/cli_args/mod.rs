@@ -89,6 +89,7 @@ pub(super) fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Act
         json_changes: false,
     };
     let mut native_format = None;
+    let mut explicit_client_style = false;
     let mut native_provider = None;
     let mut native_options = poolster_core::input::InputOptions::default();
     while let Some(argument) = args.next() {
@@ -107,6 +108,10 @@ pub(super) fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Act
             continue;
         }
         let flag = text.as_ref();
+        if flag == "--raw-sdk" {
+            options.raw = true;
+            continue;
+        }
         if flag == "--check" {
             options.check = true;
             continue;
@@ -286,9 +291,10 @@ pub(super) fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Act
                         }
                     }
                     "--client-style" => {
+                        explicit_client_style = true;
                         options.style = match value.as_str() {
                             "flat" => SdkClientStyle::Flat,
-                            "namespaced" => SdkClientStyle::Namespaced,
+                            "namespaced" | "idiomatic" => SdkClientStyle::Namespaced,
                             _ => bail!("--client-style must be flat or namespaced"),
                         }
                     }
@@ -360,7 +366,22 @@ pub(super) fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Act
         bail!("--openapi-compiler cannot be used with --artifacts")
     }
     validate_path_selection(&options.path_selection)?;
-    if (options.raw || options.typescript_transport.is_some() || options.client_name.is_some())
+    if options
+        .native_input
+        .as_ref()
+        .is_some_and(|input| input.format == "graphql")
+        && options.raw
+        && explicit_client_style
+    {
+        bail!("GraphQL --raw-sdk and --client-style are mutually exclusive");
+    }
+    if ((options.raw
+        && options
+            .native_input
+            .as_ref()
+            .is_none_or(|input| input.format != "graphql"))
+        || options.typescript_transport.is_some()
+        || options.client_name.is_some())
         && !options
             .languages
             .iter()
@@ -372,10 +393,5 @@ pub(super) fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Act
 }
 
 fn default_config_path() -> PathBuf {
-    let current = PathBuf::from("poolster.json");
-    if !current.exists() && Path::new("poolster.json").exists() {
-        PathBuf::from("poolster.json")
-    } else {
-        current
-    }
+    PathBuf::from("poolster.json")
 }

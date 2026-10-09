@@ -53,16 +53,16 @@ function sdkPackage(options) {
   if (typeof options.language !== 'string' || !options.language) {
     throw new TypeError('sdk language is required');
   }
-  const allowed = new Set(['language', 'path', 'name', 'version', 'style', 'transport', 'clientName', 'raw', 'jobs']);
+  const allowed = new Set(['language', 'path', 'name', 'version', 'style', 'transport', 'clientName', 'raw', 'jobs', 'scalars', 'groups', 'contracts']);
   for (const key of Object.keys(options)) {
     if (!allowed.has(key)) throw new TypeError(`unknown sdk option ${key}`);
   }
   if (!['typescript', 'rust', 'go', 'python', 'php', 'java', 'csharp', 'elixir', 'ruby', 'swift'].includes(options.language)) {
     throw new TypeError(`unsupported SDK language ${options.language}`);
   }
-  const { language, path: outputPath = language, name, version, style, transport, clientName, raw, jobs } = options;
+  const { language, path: outputPath = language, name, version, style, transport, clientName, raw, jobs, scalars, groups, contracts } = options;
   if (typeof outputPath !== 'string' || !outputPath) throw new TypeError('sdk path must be a nonempty string');
-  return { language, path: outputPath, name, version, style, transport, clientName, raw, jobs };
+  return { language, path: outputPath, name, version, style, transport, clientName, raw, jobs, scalars, groups, contracts };
 }
 
 function normalizedPackagePath(value) {
@@ -122,4 +122,27 @@ async function loadConfig(configFile) {
   };
 }
 
-module.exports = { validateInput, defineInputPlugin, defineConfig, sdkPackage, normalizedPackagePath, definePlugin, validatePlugin, loadConfig };
+function nativeAddonOptions(addon) {
+  const rename = (value, keys, label) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError(`${label} must be an object`);
+    const result = {};
+    for (const [key, item] of Object.entries(value)) {
+      if (!(key in keys)) throw new TypeError(`unknown ${label} option ${key}`);
+      result[keys[key]] = item;
+    }
+    return result;
+  };
+  const options = {};
+  if (addon.fixtureOptions !== undefined) options.fixtureOptions = rename(addon.fixtureOptions,
+    { seed:'seed', maxDepth:'max_depth', maxAttempts:'max_attempts', overrides:'overrides' }, 'fixtureOptions');
+  if (addon.cypressOptions !== undefined) {
+    const mapped = rename(addon.cypressOptions,
+      {baseUrl:'base_url', headers:'headers', includeMutations:'include_mutations', timeoutMs:'timeout_ms', operationOverrides:'operation_overrides'}, 'cypressOptions');
+    if (mapped.operation_overrides) mapped.operation_overrides = Object.fromEntries(Object.entries(mapped.operation_overrides).map(([name,value]) => [name,rename(value,
+      {enabled:'enabled',path:'path',query:'query',headers:'headers',body:'body',expectedStatuses:'expected_statuses'}, 'Cypress operation override')]));
+    options.cypressOptions = mapped;
+  }
+  return options;
+}
+
+module.exports = { nativeAddonOptions, validateInput, defineInputPlugin, defineConfig, sdkPackage, normalizedPackagePath, definePlugin, validatePlugin, loadConfig };

@@ -5,6 +5,11 @@ Manifests still use `0.5.0-alpha.1`; the additions below are unreleased alpha.2
 work. This matrix describes implemented generation, not parser availability.
 For remaining work, start with the [native pipeline backlog](native-pipelines.md#remaining-work).
 
+GraphQL React Query, Vue Query, SWR, Zod, Faker, MSW and Cypress integrations now
+have separate generated compilation and runtime checks. These checks establish
+the documented GraphQL subset, rather than every existing HTTP plugin option.
+See the [integration guide](graphql-integrations.md) for API and limitations.
+
 GraphQL client work is verified for TypeScript and Rust, including separate
 input/output scalar mappings. Unmapped Rust custom scalars retain JSON values. Both are wired through the CLI and existing npm language plugin packages.
 Packaged clients compile and execute against local GraphQL servers. These changes
@@ -20,13 +25,13 @@ limitations still apply. GraphQL is a separate contract even when its transport 
 | Output plugin | Generated output | OpenAPI / HTTP `Api` | GraphQL operations | Protobuf RPC | AsyncAPI events | Arazzo workflows | Cap’n Proto |
 | --- | --- | :---: | :---: | :---: | :---: | :---: | :---: |
 | TypeScript | HTTP SDK/models; GraphQL client; Kafka message/client package; workflow runner | ✅ | ✅ | — | ✅ | ✅ | — |
-| Zod | TypeScript validators | ✅ | — | — | — | — | — |
-| Faker | TypeScript fixtures | ✅ | — | — | — | — | — |
-| MSW | HTTP mock handlers | ✅ | — | — | — | — | — |
-| Cypress | HTTP test helpers | ✅ | — | — | — | — | — |
-| React Query | TypeScript query hooks | ✅ | — | — | — | — | — |
-| Vue Query | TypeScript query hooks | ✅ | — | — | — | — | — |
-| SWR | TypeScript query hooks | ✅ | — | — | — | — | — |
+| Zod | HTTP and selected GraphQL validators | ✅ | ✅ | — | — | — | — |
+| Faker | HTTP and selected GraphQL fixtures | ✅ | ✅ | — | — | — | — |
+| MSW | HTTP and GraphQL mock handlers | ✅ | ✅ | — | — | — | — |
+| Cypress | HTTP and GraphQL request/interception helpers | ✅ | ✅ | — | — | — | — |
+| React Query | TypeScript query/mutation hooks | ✅ | ✅ | — | — | — | — |
+| Vue Query | TypeScript query/mutation hooks | ✅ | ✅ | — | — | — | — |
+| SWR | TypeScript query/mutation hooks | ✅ | ✅ | — | — | — | — |
 | Go | HTTP SDK; official Protobuf messages and gRPC clients/server interfaces | ✅ | — | ✅ | — | — | — |
 | Rust | HTTP SDK; selection-specific GraphQL query/mutation client | ✅ | ✅ | — | — | — | — |
 | Python | Python SDK | ✅ | — | — | — | — | — |
@@ -50,8 +55,12 @@ These are generators within one plugin package, not separate language packages.
 Go similarly provides its HTTP SDK and `go::grpc()` for `RpcContract`. Rust provides
 `rust::graphql()` for GraphQL and its existing HTTP generators in one language package.
 
-Zod, mocks and query-hook plugins still consume HTTP-generated contracts; adding a
-native TypeScript generator does not automatically make those helpers support it.
+GraphQL companions consume the selected `GraphqlClient` contract, including
+operation shapes and actual symbols; HTTP companions retain their HTTP contracts.
+GraphQL hooks currently use single-file output and fixed query/mutation selections;
+subscriptions and infinite-pagination helpers are unsupported. Zod/Faker runtime
+scalar mappings support primitive wire types. Cypress mutation helpers require
+explicit enablement. Input parsing alone does not establish companion support.
 A Kafka package contains message types **and** producer/consumer code. Generation
 writes files without contacting a broker; a broker is needed for runtime use and
 integration tests. There is no standalone broker-independent AsyncAPI types-only
@@ -100,7 +109,7 @@ unsupported features in an otherwise supported pipeline still fail explicitly.
 
 ## Verification and release checks
 
-Post-migration alpha.2 workspace check: **801 passed, 0 failed, 141 ignored**;
+Current alpha.2 workspace check: **816 passed, 0 failed, 143 ignored**;
 formatting and workspace Clippy with warnings denied passed. Ignored tests are not passes.
 Selected external GraphQL, gRPC, Kafka and workflow integration tests were also
 run explicitly and passed; commands and boundaries are in [verification](verification.md).

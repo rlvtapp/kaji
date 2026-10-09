@@ -1,6 +1,7 @@
 //! GraphQL operations render from owned contracts, independently of HTTP Api.
 mod models;
 mod scalars;
+mod styles;
 use crate::Rust;
 use anyhow::{Result, ensure};
 use poolster_core::{
@@ -13,6 +14,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::Write,
 };
+pub use styles::GraphqlStyle;
 #[derive(Clone, Debug)]
 pub struct GraphqlOperationSymbols {
     pub function: String,
@@ -23,6 +25,8 @@ pub struct GraphqlOperationSymbols {
 #[derive(Clone, Debug)]
 pub struct GraphqlClient {
     pub operations: BTreeMap<String, GraphqlOperationSymbols>,
+    pub style: GraphqlStyle,
+    pub methods: BTreeMap<String, String>,
 }
 impl Contract for GraphqlClient {
     const NAME: &'static str = "poolster.rust.graphql-client.v1";
@@ -31,15 +35,51 @@ pub struct Graphql {
     meta: Meta,
     provider: Option<Handle<GraphqlOperations>>,
     scalars: BTreeMap<String, GraphqlScalarMapping>,
+    style: GraphqlStyle,
+    groups: BTreeMap<String, BTreeMap<String, String>>,
 }
 pub fn graphql(provider: Option<Handle<GraphqlOperations>>) -> Graphql {
     Graphql {
         meta: Meta::new(),
         provider,
         scalars: BTreeMap::new(),
+        style: GraphqlStyle::Idiomatic,
+        groups: BTreeMap::new(),
     }
 }
 impl Graphql {
+    pub fn raw(mut self) -> Self {
+        self.style = GraphqlStyle::Raw;
+        self
+    }
+    pub fn flat(mut self) -> Self {
+        self.style = GraphqlStyle::Flat;
+        self
+    }
+    pub fn idiomatic(mut self) -> Self {
+        self.style = GraphqlStyle::Idiomatic;
+        self
+    }
+    pub fn namespaced(self) -> Self {
+        self.idiomatic()
+    }
+    pub fn group(
+        mut self,
+        group: impl Into<String>,
+        method: impl Into<String>,
+        operation: impl Into<String>,
+    ) -> Self {
+        self.groups
+            .entry(group.into())
+            .or_default()
+            .insert(method.into(), operation.into());
+        self
+    }
+    pub fn groups(mut self, groups: BTreeMap<String, BTreeMap<String, String>>) -> Self {
+        self.groups = groups;
+        self
+    }
+
     pub fn scalar(mut self, name: impl Into<String>, mapping: GraphqlScalarMapping) -> Self {
         self.scalars.insert(name.into(), mapping);
         self
@@ -112,8 +152,9 @@ impl Plugin<Rust> for Graphql {
             .package_version
             .clone()
             .unwrap_or_else(|| "0.0.0".into());
+        let layout = styles::layout(self.style, contract, &self.groups)?;
         let mappings = scalars::validate_mappings(&self.scalars, contract)?;
-        let mut models = models::Models::with_mappings(contract, &mappings);
+        let mut models = models::Models::with_reserved(contract, &mappings, &layout.reserved());
         models.input_objects()?;
         let mut source = String::new();
         let mut names = BTreeSet::new();
@@ -156,6 +197,7 @@ impl Plugin<Rust> for Graphql {
                 },
             );
         }
+        layout.render(&mut source, self.style, &operations)?;
         cx.files.emit(GeneratedFile::new(
             "src/graphql.rs",
             models.source + &source,
@@ -166,7 +208,11 @@ impl Plugin<Rust> for Graphql {
         )?)?;
         cx.files.emit(GeneratedFile::new("README.md","# Rust GraphQL client\n\nSelection-specific query/mutation functions use a caller-provided reqwest Client and endpoint. Results distinguish Success, Partial and Error; transport failures are separate. Presence::Absent, Null and Value preserve nullable input and conditional-result presence. Optional::Absent/Value preserves nonnullable optional fields. Unmapped custom scalars retain serde_json::Value. Configured input/output scalar mappings describe self-contained Rust JSON wire types; they do not install codecs. Subscription and incremental transports are unsupported. Abstract selections without __typename use structural untagged unions; structurally indistinguishable variants cannot identify a concrete GraphQL type. Native schema/operation documents remain in the input contract.\n")?)?;
         cx.workspace.graphql_package = Some(NativePackage { name, version });
-        cx.publish(GraphqlClient { operations })
+        cx.publish(GraphqlClient {
+            operations,
+            style: self.style,
+            methods: layout.methods,
+        })
     }
 }
 pub(crate) struct NativePackage {

@@ -3,6 +3,7 @@ fn success<T>(response:GraphqlResponse<T>)->T {match response{GraphqlResponse::S
 #[tokio::main]
 async fn main(){
  let endpoint=std::env::var("GRAPHQL_ENDPOINT").unwrap();
+ style_probe(&endpoint).await;
  let http=reqwest::Client::builder().timeout(std::time::Duration::from_secs(3)).build().unwrap();
  let transport=GraphqlHttpTransport::new(&endpoint,http.clone());
  let scalar_variables=ScalarsVariables{value:"wire-time".into(),input:ScalarInput{required:"nested-time".into(),values:vec![Some("list-time".into()),None],optional:Presence::Null},optional:Presence::Absent,include:false};

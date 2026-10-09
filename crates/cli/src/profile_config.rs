@@ -2,7 +2,7 @@ use super::*;
 
 pub(super) fn parse_style(value: Option<&str>) -> Result<SdkClientStyle> {
     match value.unwrap_or("namespaced") {
-        "namespaced" => Ok(SdkClientStyle::Namespaced),
+        "namespaced" | "idiomatic" => Ok(SdkClientStyle::Namespaced),
         "flat" => Ok(SdkClientStyle::Flat),
         other => bail!("client_style must be \"namespaced\" or \"flat\", got {other:?}"),
     }
@@ -195,6 +195,14 @@ pub(super) fn config_profiles(
                 }
             }
         }
+        ensure!(
+            !package.sdk_raw
+                && package.plugins.iter().all(|p| p.scalars.is_empty()
+                    && p.groups.is_empty()
+                    && p.style.is_none()
+                    && p.raw.is_none()),
+            "GraphQL scalar/style/raw plugin options require GraphQL input"
+        );
         let style = match package.client_style.as_deref() {
             Some(style) => parse_style(Some(style))?,
             None => default_style,

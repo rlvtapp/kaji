@@ -1,7 +1,9 @@
 //! Node-API boundary for Poolster's normalized contract and safe output tree.
 
 pub mod graphql;
+mod graphql_addons;
 pub mod materialize;
+mod output_options;
 
 use std::path::Path;
 
@@ -35,11 +37,17 @@ struct SdkPackage {
     #[serde(default)]
     style: Option<String>,
     #[serde(default)]
+    scalars: std::collections::BTreeMap<String, ts::GraphqlScalarMapping>,
+    #[serde(default)]
+    groups: std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>,
+    #[serde(default)]
+    contracts: std::collections::BTreeMap<String, output_options::ContractOptions>,
+    #[serde(default)]
     transport: Option<String>,
     #[serde(default)]
     client_name: Option<String>,
     #[serde(default)]
-    raw: bool,
+    raw: Option<bool>,
     #[serde(default)]
     jobs: Option<usize>,
     #[serde(default)]
@@ -50,6 +58,10 @@ struct SdkPackage {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct NativePlugin {
     name: String,
+    #[serde(default)]
+    fixture_options: Option<ts::FixtureOptions>,
+    #[serde(default)]
+    cypress_options: Option<ts::CypressOptions>,
     #[serde(default)]
     output: Option<String>,
 }
@@ -89,11 +101,16 @@ fn package_common(package: &SdkPackage) -> AnyResult<Common> {
 }
 
 fn validate_options(package: &SdkPackage) -> AnyResult<()> {
+    if !package.scalars.is_empty() || !package.groups.is_empty() {
+        bail!("scalar mappings and groups require GraphQL input");
+    }
     if package.path.is_empty() {
         bail!("SDK package path must not be empty");
     }
     if package.language != "typescript"
-        && (package.transport.is_some() || package.client_name.is_some() || package.raw)
+        && (package.transport.is_some()
+            || package.client_name.is_some()
+            || package.raw.unwrap_or(false))
     {
         bail!("transport, clientName and raw are TypeScript-only SDK options");
     }
@@ -111,7 +128,8 @@ fn validate_options(package: &SdkPackage) -> AnyResult<()> {
 
 fn profiles(packages: Vec<SdkPackage>) -> AnyResult<ProfileSet> {
     let mut profiles = ProfileSet::new(".");
-    for package in packages {
+    for mut package in packages {
+        output_options::apply(&mut package, "http")?;
         validate_options(&package)?;
         let common = package_common(&package)?;
         let path = package.path.clone();
@@ -123,7 +141,7 @@ fn profiles(packages: Vec<SdkPackage>) -> AnyResult<ProfileSet> {
                     "axios" => sdk.axios(),
                     _ => bail!("TypeScript transport must be fetch or axios"),
                 };
-                if package.raw {
+                if package.raw.unwrap_or(false) {
                     sdk = sdk.raw();
                 }
                 if let Some(client_name) = &package.client_name {
@@ -135,6 +153,7 @@ fn profiles(packages: Vec<SdkPackage>) -> AnyResult<ProfileSet> {
                 }
                 let mut target = target.with(sdk);
                 for plugin in package.plugins {
+                    graphql_addons::validate_options(&plugin)?;
                     target = match plugin.name.as_str() {
                         "zod" | "faker" | "msw" | "cypress" => {
                             let mut auxiliary = match plugin.name.as_str() {
@@ -143,6 +162,12 @@ fn profiles(packages: Vec<SdkPackage>) -> AnyResult<ProfileSet> {
                                 "msw" => ts::composition::msw(),
                                 _ => ts::composition::cypress(),
                             };
+                            if let Some(options) = &plugin.fixture_options {
+                                auxiliary = auxiliary.fixture_options(options.clone());
+                            }
+                            if let Some(options) = &plugin.cypress_options {
+                                auxiliary = auxiliary.cypress_options(options.clone());
+                            }
                             if let Some(output) = plugin.output {
                                 auxiliary = auxiliary.output(output);
                             }

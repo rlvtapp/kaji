@@ -82,6 +82,15 @@ impl Provider {
 }
 
 impl Auxiliary {
+    pub fn using_graphql(self, handle: Option<Handle<crate::GraphqlClient>>) -> Self {
+        self.graphql(handle)
+    }
+    /// Consume the actual generated GraphQL client capability.
+    pub fn graphql(mut self, handle: Option<Handle<crate::GraphqlClient>>) -> Self {
+        self.graphql = true;
+        self.graphql_client = handle;
+        self
+    }
     /// Select an owned HTTP input contract rather than the package's legacy API.
     pub fn input(
         mut self,

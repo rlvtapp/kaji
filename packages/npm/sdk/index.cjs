@@ -6,7 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { defineContract, providerHandle, requireContract, planPlugins, contractRuntime } = require('./plugin-engine.cjs');
-const { validateInput, defineInputPlugin, defineConfig, sdkPackage, normalizedPackagePath, definePlugin, validatePlugin, loadConfig } = require('./config.cjs');
+const { nativeAddonOptions, validateInput, defineInputPlugin, defineConfig, sdkPackage, normalizedPackagePath, definePlugin, validatePlugin, loadConfig } = require('./config.cjs');
 
 const root = path.resolve(__dirname, '../../..');
 
@@ -218,7 +218,7 @@ async function generate(config, options = {}) {
     const target = targets[0];
     if (target.language !== 'typescript') throw new Error(`native plugin ${addon.name} requires a TypeScript SDK package`);
     if (target.plugins?.some((plugin) => plugin.name === addon.plugin)) throw new Error(`native plugin ${addon.plugin} is configured twice for ${addon.target}`);
-    (target.plugins ??= []).push({ name: addon.plugin, ...(addon.output ? { output: addon.output } : {}) });
+    (target.plugins ??= []).push({ name: addon.plugin, ...(addon.output ? { output: addon.output } : {}), ...nativeAddonOptions(addon) });
   }
   const plan = planPlugins(jsPluginsUnordered, names);
   const jsPlugins = plan.order;
@@ -239,7 +239,6 @@ async function generate(config, options = {}) {
     if (config.input.plugin) {
       const loaded = await loadInput(config.input);
       if (!loaded.api && config.input.plugin.format === 'graphql' && packages.length) {
-        if (nativeAddons.length) throw new Error('GraphQL does not support HTTP SDK auxiliaries');
         const compatible = packages.filter((p) => ['typescript', 'rust'].includes(p.language));
         for (const p of packages.filter((p) => !['typescript', 'rust'].includes(p.language))) {
           const entry = { path: p.path, language: p.language, reason: 'GraphQL output currently supports TypeScript and Rust' };

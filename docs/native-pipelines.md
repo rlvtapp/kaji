@@ -90,6 +90,7 @@ codecs are available, but typed Node hook dispatch is still follow-up work.
 | Defaults | Native default literal retained; nullable or defaulted variables/input fields may be omitted; server applies defaults |
 | Conditional directives | `@skip` and `@include`; literal exclusions removed from result types, variable conditions mark presence optional |
 | Query/mutation | Operation-specific variable/result types and functions using an injected `GraphqlTransport` |
+| JavaScript client style | Raw functions, flat `client.readUser(...)`, or grouped methods with explicit operation mappings; selections stay fixed |
 | HTTP | Fetch POST transport; configurable fetch/headers and AbortSignal; no automatic retries |
 | Results | Discriminated `success`, `partial`, `error` results preserve GraphQL errors, partial data and extensions |
 | Transport errors | HTTP failures throw `GraphqlHttpError`; malformed envelopes/JSON throw `GraphqlProtocolError` |
@@ -114,15 +115,19 @@ codecs are available, but typed Node hook dispatch is still follow-up work.
     "path": "graphql",
     "name": "@example/graphql",
     "version": "1.0.0",
-    "plugins": [{ "name": "graphql", "transport": "fetch" }]
+    "plugins": [{
+      "name": "graphql",
+      "contracts": { "graphql": { "style": "flat", "transport": "fetch" } }
+    }]
   }]
 }
 ```
 
 Paths resolve relative to the recipe. Existing `openapi` recipes remain valid;
 set either `input` or `openapi`. Enable injected subscription functions with
-`"subscriptions": true` on the GraphQL output plugin. HTTP-specific defaults,
-layout, middleware and SDK options are rejected for supported GraphQL packages.
+`"subscriptions": true` on the GraphQL output plugin. Client styles are configured
+under `contracts.graphql`; existing top-level options remain shorthand. HTTP-only
+middleware, transport and SDK options remain subject to protocol compatibility checks.
 
 ```sh
 poolster generate schema.graphql --input-format graphql \
@@ -281,7 +286,7 @@ have usable, tested subsets described above.
 The frozen pre-output-migration HTTP corpus is **complete: 205 APIs × 10 languages,
 2,050 effective passes** for generation, native compilation or syntax checks and
 regeneration after recorded infrastructure retries. The migrated workspace passed
-**801 tests**, with **141 ignored**. PHP syntax lint reported deprecation warnings
+**816 tests**, with **143 ignored**. PHP syntax lint reported deprecation warnings
 in 140 contracts; lint does not establish endpoint runtime behavior.
 
 These are the remaining implementation and release gaps:
@@ -303,6 +308,19 @@ These are the remaining implementation and release gaps:
   preserving nullability and presence; runtime codecs remain unsupported.
 - [ ] **GRAPHQL-1:** Runtime scalar codecs, introspection/imports, incremental
   delivery and bundled subscription transport; each needs independent runtime tests.
+- [ ] **GRAPHQL-SELECTIONS:** Optional TypeScript selection builder with typed
+  fields in a second parameter, inferred results and runtime document generation.
+  See the [planned proposal](graphql-selection-builder-proposal.md); this is not
+  current SDK support and follows completion of fixed-operation clients.
+- [x] **GRAPHQL-ECOSYSTEM:** Extend React Query, Vue Query, SWR, Zod, Faker, MSW
+  and Cypress outputs to validated GraphQL operations. Verify selected variables
+  and results, partial/error handling, cache identity and cancellation, actual
+  GraphQL mocking/interception, scalar boundaries and clean package compilation.
+  Client generation alone does not establish parity with HTTP auxiliary outputs.
+- [ ] **GRAPHQL-ECOSYSTEM-EXTENSIONS:** Query helper partition/layout support,
+  explicit pagination policy and richer runtime scalar mappings. Subscription
+  helpers need separate transport and lifecycle semantics. See the
+  [integration guide](graphql-integrations.md) for the tested current subset.
 - [x] **GRAPHQL-RUST:** Selection-specific Rust query/mutation clients with
   presence/nullability, explicit partial/errors, Reqwest transport and clean
   package compilation/local-server execution; CLI and npm entry points wired.

@@ -1,0 +1,212 @@
+{
+  "date": "2026-10-09",
+  "project": "Poolster",
+  "status": "tested, unreleased",
+  "baseCommit": "4d616542e5518715bdda3e40bac7c6f12aab6fd6",
+  "checks": {
+    "workspace": {
+      "passed": 816,
+      "failed": 0,
+      "ignored": 143
+    },
+    "typescriptGraphqlExplicit": {
+      "passed": 20,
+      "failed": 0,
+      "ignored": 0
+    },
+    "rustGraphqlExplicit": {
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    "cypressBrowser": {
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "browser": "Electron 138",
+      "cypress": "15.21.1"
+    },
+    "workspaceClippy": "passed with -D warnings",
+    "formatting": "passed",
+    "cleanGeneratedPackage": "offline npm tarball installation, strict consumer compilation, runtime public exports, deterministic regeneration passed",
+    "sourceSizeAudit": {
+      "newViolations": 0,
+      "existingViolations": [
+        "crates/core/src/files.rs",
+        "crates/cli/src/sdk_install.rs",
+        "crates/cli/src/sdk_automation.rs"
+      ]
+    },
+    "npmSdk": {
+      "passed": 71,
+      "failed": 0,
+      "skipped": 0
+    },
+    "npmSdkPackageInstallation": "offline installed SDK and bundle with fresh local native-addon override; scoped flat client, all seven companions, regeneration passed"
+  },
+  "pins": {
+    "typescript": "5.9.3",
+    "graphql": "16.14.2",
+    "react": "19.3.0",
+    "reactTypes": "19.3.0",
+    "reactTestRenderer": "19.3.0",
+    "vue": "3.5.43",
+    "reactQuery": "5.104.1",
+    "vueQuery": "5.104.1",
+    "swr": "2.5.1",
+    "zod": "4.3.6",
+    "faker": "9.9.0",
+    "msw": "2.15.0",
+    "cypress": "15.21.1"
+  },
+  "logs": {
+    "workspace": {
+      "path": "/private/tmp/poolster-graphql-ecosystem-workspace-final.log",
+      "sha256": "1fb887e5ee3ffe8bad83f1f03b253c8b41e660650c67e344617b3f8e36e8ab3c"
+    },
+    "clippy": {
+      "path": "/private/tmp/poolster-graphql-ecosystem-clippy-final.log",
+      "sha256": "ec8c75251415b5cb21130d932aff4a7cc2b0cb13edceb423a62a31e431d2c2f9"
+    },
+    "typescript": {
+      "path": "/private/tmp/poolster-graphql-ecosystem-typescript-final.log",
+      "sha256": "7db153341104006f04a668e87e7ff4e6bf8a3cd98f58f39c362916f6a14643ab"
+    },
+    "rust": {
+      "path": "/private/tmp/poolster-graphql-rust-styles-cancellation-fixed.log",
+      "sha256": "6efcc6df996502f72720e833a0e39f87f4bd80729d8d013d2acba6c9b0f830d4"
+    },
+    "cypress": {
+      "path": "/private/tmp/poolster-graphql-cypress-browser-final.log",
+      "sha256": "dc90b3ecfdeb6fd47637c0afe86ae6b9500569e6ff87ca03e77080716339a0d5"
+    },
+    "packageInstall": {
+      "path": "/private/tmp/poolster-graphql-ecosystem-consumer-install-final.log",
+      "sha256": "0eba9b35ee2be37f881475290d44ef82802b3c73fca38a0adcf01f8054594794"
+    },
+    "packageCompile": {
+      "path": "/private/tmp/poolster-graphql-ecosystem-consumer-compile-latest.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "packageRuntime": {
+      "path": "/private/tmp/poolster-graphql-ecosystem-consumer-runtime-final.log",
+      "sha256": "4c95f9bb9dcaf9c0f7a312aa2153882ce5688f83f26a26d5be405a5a9b0b7b77"
+    },
+    "sourceAudit": {
+      "path": "/private/tmp/poolster-graphql-ecosystem-source-audit-final.log",
+      "sha256": "23caae239831e21be8cb5a11f943ede71c4bed684d2cb18905647b48fbac9e8d"
+    },
+    "npm": {
+      "path": "/private/tmp/poolster-graphql-ecosystem-final-npm.log",
+      "sha256": "c42c69be91a7ac678f36516423f54462a42ff2ea63bc93987019206b616f603b"
+    },
+    "npmPackedSdkInstall": {
+      "path": "/private/tmp/poolster-graphql-ecosystem-final-install/proof.log",
+      "sha256": "d0e254a7ee10b1d8e11f009bcbed162f3aee4dcb5989c171814d02d23a778b36"
+    }
+  },
+  "generatedTarball": {
+    "path": "/private/tmp/poolster-graphql-ecosystem-package/generated/client/poolster-graphql-ecosystem-test-1.0.0.tgz",
+    "sha256": "fa94caa305a9e2ab9f1d2219eb7f2eeee4a53a4975291d83dc75b4b1d87b43ad"
+  },
+  "cleanConsumerLockSha256": "26880918d6ec2df238f2fd5a3a889c2725980f1695584c9e2a729dd6baeb022c",
+  "sourceFiles": {
+    "crates/cli/src/cli_args/mod.rs": "5e5b7bdc2f80145f19c6445f9ab9c2bc8b735e5258ac04b03be273cf01e7cae0",
+    "crates/cli/src/generation_config.rs": "054df1c38abea0220fb6ab61e7a27d88cb050b59d2851379cd61617317076537",
+    "crates/cli/src/generation_graphql_tests.rs": "7f46d1b890271407ca1445638254d955d664ece5b7da61b24da194f8f75c1010",
+    "crates/cli/src/generation_native.rs": "80a9e0e93145f41965092b63d550b4c8cc5b3e599f856f7fb787c1227d2a7f08",
+    "crates/cli/src/generation_native_tests.rs": "de0a86d08d35f62994e175cd37cc8dfcf645f87ed4ba5c53b8a44ca06243013b",
+    "crates/cli/src/main.rs": "ed97bf7e7c8175c201c89b8e1de1964c3a26c454ab1445122f49d2805f98d9cb",
+    "crates/cli/src/native_graphql_addons.rs": "4b144706eb28d5c73bed97962194b1a8bfecd364618a77ae98578d8a4889542f",
+    "crates/cli/src/native_profiles.rs": "18622e62325320fe71a487d78e4cd1cc4d54bf2f8a99c94c6a186a858821943f",
+    "crates/cli/src/profile_config.rs": "44e3ad2fe38b3ed705e9a33859aad8caac1fe9ea36e73bd233f4f479800ecc53",
+    "crates/cli/src/recipe_exporters.rs": "d8f1528b46575f8caed19fb13750193dd3b1bf4765401ca20c294c48aaceb7f4",
+    "crates/cli/src/recipe_types.rs": "42ddab4ba0ffbbdc4aed4defec6eb3cf0a4dd231215f36a1a1357475e89200d6",
+    "crates/node/src/graphql.rs": "0294948b200a5b09b18380b87fc40bdc17c8f453bdddd4cdd6025d65505e8542",
+    "crates/node/src/graphql_addons.rs": "e1fe7f0775fc03d108adf4946b0b3be3b524a4139bf1340800091bd4ebc8759b",
+    "crates/node/src/lib.rs": "c214e3cf0ca6d269ecf34190d677775e95d7d01e186e4e256893754ceeb8162d",
+    "crates/node/src/output_options.rs": "98139e199af09f6c43ee0a9f55f53572bf9703f37d4d852c082c185d3ce5ee97",
+    "crates/plugins/rust/src/graphql.rs": "c4e29a4257792c7561ae6d0044fe693a8919ffe8223e9feffd7e28c7fb6dd579",
+    "crates/plugins/rust/src/graphql/models.rs": "6ab65c3bf6cade08819c2fa95b0988cf6e66358a4b77ba7671bd3692d87efa3d",
+    "crates/plugins/rust/src/graphql/styles.rs": "2e08175bd070344fc1d07134874d9847a71eb215f2999cb52a6af85780e8b9e2",
+    "crates/plugins/rust/src/lib.rs": "e87deb68743d4be468dca3dd9f7c1f14dd3bec19fa9511cdf84a86a59bfa5ba2",
+    "crates/plugins/rust/tests/fixtures/graphql_native/consumer.rs": "b5edcea3485bd0904759b8bfcd9f383c19f197b9b3a2f255b15685ff23377051",
+    "crates/plugins/rust/tests/fixtures/graphql_native/server.cjs": "73e5d899106fbe14a33bc83836604b81032208eb8835c43ef75cbde71cf7e941",
+    "crates/plugins/rust/tests/graphql_native.rs": "08e74ae3822bc740361720541b71838b6dba750a40cf4c7b90edfaed1a41bc67",
+    "crates/plugins/typescript/src/composition.rs": "81537d98db6b28b89140b04d324f40025771021a68d84bdaa377a0ef7a390de2",
+    "crates/plugins/typescript/src/composition/options.rs": "11f6ef6dbc1d22e8f4e94f46780048568a87cc5ece1ec03fa9cdab072934e276",
+    "crates/plugins/typescript/src/composition/query.rs": "fe73f0671e676af3ca14eef8ed76724a4013002aa6892c9ec643042c97dbed51",
+    "crates/plugins/typescript/src/composition/query/graphql.rs": "98337cf8b1826e7c69efa5eca02f8f595f59c7c715af82e4f73975021a0017e5",
+    "crates/plugins/typescript/src/composition/query/options.rs": "e861d07e3d7e34493fd2eca7ea2bab35de6f6adc08dc4ffde2c0307530f0fd1b",
+    "crates/plugins/typescript/src/graphql.rs": "6f69f257e43c117a9f94503a76d11cd32a19ccf2ac9fbb80a34f22c97573d0da",
+    "crates/plugins/typescript/src/graphql/facade.rs": "5730d47eb8cc6fb4071235eb6cc2575cf0e9ff03300948bd4600c5b16d6c5ea5",
+    "crates/plugins/typescript/src/graphql/validation.rs": "dbd44343ecd4f40b6dd2d4d3c44ca4924e8100e18d79f8a2b9e3f5dcfbd99c18",
+    "crates/plugins/typescript/src/graphql_helpers.rs": "9eaa8f5d182cd54e388c67cce53604e0bea78b982531aee2d93927a5a67d7f8d",
+    "crates/plugins/typescript/src/graphql_helpers/mocks.rs": "376257b1bcd0af6b45c337eda860d7617d33b42ea744d3974c2f6a526e57deb5",
+    "crates/plugins/typescript/src/graphql_helpers/models.rs": "7953193cd9b89a49a65b5988a03aad1d07288cedfedb4cd618dca5a9f0472e14",
+    "crates/plugins/typescript/src/lib.rs": "eae43b095224dbafcaa3ee466b7e93b988de16e194c103c6568f3141afd195c0",
+    "crates/plugins/typescript/src/workspace.rs": "f0baa3b6a31ec59cc0c5f1dfb3474b39d5b8570ece8c68413d6ca2696d319686",
+    "crates/plugins/typescript/tests/fixtures/graphql_helpers/browser-runner.cjs": "3ec731f4e3e5803719391bd9d5e86f9f53440cc99a22474a9f50b77bbcfd4d45",
+    "crates/plugins/typescript/tests/fixtures/graphql_helpers/browser.cy.js": "ef54ac5061ed7e3f39fcf7a53f9b50e2dcc8de9bc811756b0335eee43ea58643",
+    "crates/plugins/typescript/tests/fixtures/graphql_helpers/package-consumer.mts": "cf2466f290e139228fe0b2ed5e4429a42adb0df8ea015553561d8acad1222d37",
+    "crates/plugins/typescript/tests/fixtures/graphql_helpers/package-probe.mjs": "fd14d00dbe9a029a77ff37b16013d9e3dc70502d805615b78bf9e7190e8f529f",
+    "crates/plugins/typescript/tests/fixtures/graphql_helpers/probe.mjs": "c6664518008c015457c6dde7d230d7ed2988dc7760827a165b6f22b984b4f9f6",
+    "crates/plugins/typescript/tests/fixtures/graphql_query/consumer.ts": "191a7a02e29cab331a177ac948771b601c528e9dd54dbe60cd23dc01333f092b",
+    "crates/plugins/typescript/tests/fixtures/graphql_query/runtime.mjs": "5b2833f03b6ff077c0b144720d0d6afa7efca3e583a96c5756eb9496a8050ef7",
+    "crates/plugins/typescript/tests/fixtures/graphql_release_consumer.ts": "940645b0486d98146cd6e822a0cbb9f72c4bdd5cee32e90e39a491876ef56315",
+    "crates/plugins/typescript/tests/fixtures/graphql_release_probe.mjs": "3d6fea87843525f8ce956d959035ad6ca32f927c22368109ce93b029a9b5b55a",
+    "crates/plugins/typescript/tests/fixtures/graphql_scalars/runtime.mjs": "71515b32a6989f63b9785aa7b792913f72bad1e9de9e59b2018959c87ec4777c",
+    "crates/plugins/typescript/tests/graphql_helper_contracts.rs": "2ac482740490237e9604fcc6321203e94f28e9c008e7dbd7068c3485d61555f6",
+    "crates/plugins/typescript/tests/graphql_helpers.rs": "c015e54e762f8bbbcdaec1c670d6e06a7fa7202292dc124fc12c1670da8f93dd",
+    "crates/plugins/typescript/tests/graphql_query.rs": "126c997da96e4a54b0d525143e944c327daed6f1b0d8ed6bd9469305319edb35",
+    "crates/plugins/typescript/tests/graphql_release.rs": "24f604badcb8d4d9121468ac8d707214d7933ce743e36fe17c9dccefbf47d531",
+    "examples/graphql-native/README.md": "684509b258bfc686736915ff9d4aba143af690a0e40dc0026eaf9c289c36cf5b",
+    "examples/graphql-native/consumer.mjs": "75bdbf57ebd10591b2fe8006f95c1067277fca3c950890c0521230e730a78233",
+    "examples/graphql-native/poolster.json": "28958ab5a3c122478ccaae62b43fd5e4b755f7b110b603e4a9fd9f8bce6ec383",
+    "packages/npm/generate-plugins.mjs": "a50d8208fa720ddd639f0f7006ca69bff48f1bccc5856115468ee50a27912b51",
+    "packages/npm/plugins-all/index.cjs": "08cffeecbfa6985541b96ab4ed925a3b588c1489de4c7eaa99a5d26de89d7db9",
+    "packages/npm/plugins-all/index.d.ts": "bd910e4bd1011cacdfd66bfac6d7f98942e16db8c4f065b18b02878512846021",
+    "packages/npm/plugins/cypress/index.cjs": "7570f93e782e29223a929e4750ce92e266da986a7819dadd9d5d0a3bcd48f91c",
+    "packages/npm/plugins/cypress/index.d.ts": "0616e741200914496836ddd304785bd0eaaf20c450af9575fd48c57c68e46960",
+    "packages/npm/plugins/faker/index.cjs": "536981ae7d71959bd7ec3e9200147bb309d91f004208c42c9c6807c313dff685",
+    "packages/npm/plugins/faker/index.d.ts": "5c769ba06656464db832085d69c3f141c1f928ac4e96193309e7f75d23cc54aa",
+    "packages/npm/plugins/msw/index.cjs": "9add3346b8f1ff22b2e395479ae7d5e7ffbdb514509f946434e148e216bcbd5a",
+    "packages/npm/plugins/msw/index.d.ts": "c7b57f4a1b3498ebba1aea5e2d942b26bf5856e4c3cbbf625f8c77b0a6b06cc7",
+    "packages/npm/plugins/react-query/index.cjs": "996d3e4244ac16807a432255f4373e6c5ecce47aa3d94ba6cdf0cf5607a7c10d",
+    "packages/npm/plugins/react-query/index.d.ts": "3b6bb9f3443ba9a8a1a5122076209a454f7a6eda401fe64064162dbef37728e3",
+    "packages/npm/plugins/rust/index.d.ts": "61938300defc0ef574f2fe6a84b7ab14cacb1cfb46d0caf831981daae20e39a3",
+    "packages/npm/plugins/swr/index.cjs": "849a3bd980bb78404b71b33fb79b7a3642c8af7782220880ffe7972651da53c7",
+    "packages/npm/plugins/swr/index.d.ts": "70a1b1e1b38bc260aefb8171a6960c93b316ac3f4d1c333acf590c48a97b8850",
+    "packages/npm/plugins/vue-query/index.cjs": "048484acf74c5cbe780a95b3596f3feef1b11c66219e4c6fa4dcf62fbaf21b19",
+    "packages/npm/plugins/vue-query/index.d.ts": "d62d3aab8c62efadfe63b9ee1ef991bc556a1bb974229b3357a7fec37fc71320",
+    "packages/npm/plugins/zod/index.cjs": "c59d843f305b42ef29910e33c37f9031bd3b1eb495d05b2fbb1de5212686a922",
+    "packages/npm/plugins/zod/index.d.ts": "45df1496d2b01d801e4a7441c85273dcef0003b709bcb8b966dfa6ecf6052967",
+    "packages/npm/sdk/README.md": "5e01178ece568270446713414419ef74fda1fef2e0dd4b1fd4ad0910cb2b4c3b",
+    "packages/npm/sdk/config.cjs": "c34b6e218fbc2bc24acb4f1d35019be656c140ba947582fe357f998cf331e2c0",
+    "packages/npm/sdk/index.cjs": "b183f652108932b4e4dbe6d69d4ef958beced75b09e55baee1083a57cab992fe",
+    "packages/npm/sdk/index.d.ts": "b189877c51376523e8b3cc9b18f4f01340ed11612560cdd67100910874e6670f",
+    "packages/npm/sdk/plugins.cjs": "08cffeecbfa6985541b96ab4ed925a3b588c1489de4c7eaa99a5d26de89d7db9",
+    "packages/npm/sdk/plugins.d.ts": "bd910e4bd1011cacdfd66bfac6d7f98942e16db8c4f065b18b02878512846021",
+    "packages/npm/sdk/test/graphql.test.cjs": "a46b9beb4fb341ff453fe3cfba7ffc54644c6cb0f52b45d95716b757e4780d17",
+    "schemas/v1/poolster.schema.json": "601c0a2a8bf631c2239a70126518618d15912fe6147ecec0bb8cb57f6f93d8d5"
+  },
+  "resolvedHarnessIssues": [
+    "New community-client test lacked an explicit manifest provider; added provider and conflict-ownership check, final full suite passes.",
+    "First Cypress fixture export contained sources without compiled dist; runner now compiles it.",
+    "Cypress result object has no status field; corrected runner guard after three browser tests passed.",
+    "Rust delayed local-server fixture crashed on cancelled body reads; consume request before delay and handle expected reset.",
+    "Initial strict npm consumer compilation lacked React declarations; pinned types installed and registered in generated React/SWR development dependencies."
+  ],
+  "notVerified": [
+    "Final migrated 205-spec HTTP corpus sweep; earlier frozen-build 205x10 result remains separate.",
+    "Published/cross-platform native npm artifacts.",
+    "Bundled GraphQL subscription transport or subscription companions.",
+    "Dynamic typed selections, infinite pagination and helper file partitioning.",
+    "Complex custom-scalar runtime codecs."
+  ],
+  "nativeAddon": {
+    "path": "/private/tmp/poolster-graphql-ecosystem-final-node.node",
+    "sha256": "aff0950a932767f7d898f428ad4a20a5da1d50d40432f17183fb461e272b10d7",
+    "builtAt": "2026-10-09T13:21:27+02:00"
+  }
+}
