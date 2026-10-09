@@ -20,6 +20,8 @@ import { generate } from '@relevate/poolster';
 import { pluginTypeScript } from '@relevate/poolster-plugin-typescript';
 
 await generate({
+  name: 'Example API',
+  version: '1.0.0',
   input: './openapi.yaml',
   output: './generated',
   plugins: [pluginTypeScript({ path: 'client' })],

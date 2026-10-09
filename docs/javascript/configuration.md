@@ -6,6 +6,8 @@ Use `poolster.config.mjs` and export `defineConfig(...)`.
 
 ```js
 export default defineConfig({
+  name: 'Example API',
+  version: '1.0.0',
   input: './openapi.yaml',
   output: './generated',
   name: 'Example API',

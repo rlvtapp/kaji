@@ -57,3 +57,9 @@ Use the [Rust library](../rust/README.md) to compose native plugins.
 The CLI recipe selects its bundled plugin set.
 
 [Complete CLI reference →](reference.md)
+
+## Deliver and customize SDKs
+
+- [GitHub Actions and generated PRs](automation.md)
+- [Release and publish an SDK](../reference/automation/sdk-publishing.md)
+- [Customize output and eject the generator](customization.md)

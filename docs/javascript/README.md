@@ -12,3 +12,6 @@ You do not need to write Rust.
 Want to create a plugin? Use [JavaScript plugin authoring](../plugins/javascript/README.md).
 
 [All sections](../README.md)
+
+For command-line delivery, see [CLI automation](../cli/automation.md) and
+[ejection](../cli/customization.md).

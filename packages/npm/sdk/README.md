@@ -11,6 +11,8 @@ import { defineConfig, generate } from '@relevate/poolster';
 import { pluginTypeScript } from '@relevate/poolster-plugin-typescript';
 
 const config = defineConfig({
+  name: 'Example API',
+  version: '1.0.0',
   input: './openapi.yaml',
   output: './generated',
   plugins: [pluginTypeScript({ path: 'client', name: '@example/client' })],
