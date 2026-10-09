@@ -19,6 +19,9 @@ impl Plugin<Terraform> for ReleaseScaffold {
     fn meta(&self) -> &Meta {
         &self.meta
     }
+    fn supports_native_input(&self) -> bool {
+        true
+    }
     fn generate(&self, cx: &mut PluginContext<'_, Terraform>) -> Result<()> {
         let name = cx.settings.provider_name.as_deref().ok_or_else(|| {
             anyhow::anyhow!("release-scaffold requires an explicit provider_name")

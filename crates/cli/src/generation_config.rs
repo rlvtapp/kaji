@@ -42,62 +42,7 @@ pub(super) fn generate_from_config(
         .with_context(|| format!("parse Poolster JSON config {}", path.display()))?;
     if config.input.is_some() {
         let document: serde_json::Value = serde_json::from_str(&source)?;
-        ensure!(
-            document.get("openapi").is_none(),
-            "set exactly one of input or openapi"
-        );
-        ensure!(
-            document
-                .get("defaults")
-                .is_none_or(|value| value.as_object().is_some_and(|object| object.is_empty())),
-            "native GraphQL recipes do not support HTTP defaults"
-        );
-        for package in document
-            .get("packages")
-            .and_then(serde_json::Value::as_array)
-            .into_iter()
-            .flatten()
-        {
-            if package.get("language").and_then(serde_json::Value::as_str) != Some("typescript")
-                || !package
-                    .get("plugins")
-                    .and_then(serde_json::Value::as_array)
-                    .is_some_and(|plugins| {
-                        plugins.len() == 1
-                            && plugins[0].get("name").and_then(serde_json::Value::as_str)
-                                == Some("graphql")
-                    })
-            {
-                continue;
-            }
-            for key in [
-                "client_style",
-                "layout",
-                "idempotency",
-                "middleware",
-                "api_reference",
-            ] {
-                ensure!(
-                    package.get(key).is_none(),
-                    "GraphQL packages do not support {key}"
-                );
-            }
-            for plugin in package
-                .get("plugins")
-                .and_then(serde_json::Value::as_array)
-                .into_iter()
-                .flatten()
-            {
-                if let Some(object) = plugin.as_object() {
-                    for key in object.keys() {
-                        ensure!(
-                            ["name", "transport", "subscriptions"].contains(&key.as_str()),
-                            "GraphQL plugin option {key:?} is unsupported"
-                        );
-                    }
-                }
-            }
-        }
+        native_profiles::validate_recipe(&document, &config)?;
     }
     let base = path.parent().expect("config path has parent");
     if config.output.path.as_os_str().is_empty() {
@@ -119,12 +64,17 @@ pub(super) fn generate_from_config(
     let output = config_path(base, config.output.path.clone());
     for package in &mut config.packages {
         GeneratedFile::new(&package.path, "")?;
-        if config.input.is_some()
-            && (package.language != "typescript"
-                || package.plugins.len() != 1
-                || package.plugins[0].name != "graphql")
+        if config
+            .input
+            .as_ref()
+            .is_some_and(|input| !native_profiles::compatible(&input.format, package))
         {
             continue;
+        }
+        for plugin in &mut package.plugins {
+            if let Some(toolchain) = &mut plugin.toolchain {
+                toolchain.resolve(base);
+            }
         }
         package.resolved_customizations = package
             .customizations
@@ -171,6 +121,7 @@ pub(super) fn generate_from_config(
         input
     });
     let options = Generate {
+        native_output: NativeOutputConfig::default(),
         native_input,
         source: config
             .openapi

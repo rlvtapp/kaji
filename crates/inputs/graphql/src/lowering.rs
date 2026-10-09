@@ -16,23 +16,7 @@ pub fn lower(
 ) -> Result<GraphqlOperations> {
     let doc = ExecutableDocument::parse_and_validate(schema, source, "operations.graphql")
         .map_err(|e| anyhow!("invalid GraphQL operations: {e}"))?;
-    let mut input_objects = BTreeMap::new();
-    for (name, ty) in &schema.types {
-        if let ExtendedType::InputObject(obj) = ty {
-            input_objects.insert(
-                name.to_string(),
-                obj.fields
-                    .values()
-                    .map(|f| ModelField {
-                        name: f.name.to_string(),
-                        ty: typed(schema, &f.ty, None),
-                        optional: !f.ty.is_non_null() || f.default_value.is_some(),
-                        default_value: f.default_value.as_ref().map(ToString::to_string),
-                    })
-                    .collect(),
-            );
-        }
-    }
+    let mut input_objects = input_objects(schema);
     let mut operations = Vec::new();
     for op in doc
         .operations
@@ -349,4 +333,25 @@ fn reachable_inputs(
         ModelKind::List(inner) => reachable_inputs(inner, objects, found),
         _ => {}
     }
+}
+
+pub(crate) fn input_objects(schema: &Schema) -> BTreeMap<String, Vec<ModelField>> {
+    let mut input_objects = BTreeMap::new();
+    for (name, ty) in &schema.types {
+        if let ExtendedType::InputObject(obj) = ty {
+            input_objects.insert(
+                name.to_string(),
+                obj.fields
+                    .values()
+                    .map(|f| ModelField {
+                        name: f.name.to_string(),
+                        ty: typed(schema, &f.ty, None),
+                        optional: !f.ty.is_non_null() || f.default_value.is_some(),
+                        default_value: f.default_value.as_ref().map(ToString::to_string),
+                    })
+                    .collect(),
+            );
+        }
+    }
+    input_objects
 }

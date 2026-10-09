@@ -1,0 +1,56 @@
+arazzo: 1.0.1
+info:
+  title: Checkout executable slice
+  version: 1.0.0
+sourceDescriptions:
+  - name: shop
+    url: https://example.invalid/shop.openapi.yaml
+    type: openapi
+workflows:
+  - workflowId: login
+    inputs:
+      type: object
+      properties:
+        username: {type: string, default: guest}
+    steps:
+      - stepId: authenticate
+        operationId: login
+        requestBody:
+          contentType: application/json
+          payload:
+            username: $inputs.username
+        successCriteria:
+          - condition: $statusCode == 200
+        outputs:
+          token: $response.body#/token
+    outputs:
+      token: $steps.authenticate.outputs.token
+  - workflowId: checkout
+    dependsOn: [login]
+    inputs:
+      type: object
+      required: [itemId]
+      properties:
+        itemId: {type: string}
+        quantity: {type: integer, default: 1}
+        username: {type: string, default: guest}
+    steps:
+      - stepId: create
+        operationId: $sourceDescriptions.shop.createOrder
+        parameters:
+          - name: id
+            in: path
+            value: $inputs.itemId
+          - name: quantity
+            in: query
+            value: $inputs.quantity
+          - name: X-Session
+            in: header
+            value: $workflows.login.outputs.token
+        successCriteria:
+          - condition: $statusCode == 201
+        outputs:
+          orderId: $response.body#/id
+          status: $statusCode
+    outputs:
+      orderId: $steps.create.outputs.orderId

@@ -23,12 +23,12 @@ impl ContentDefinition {
     pub fn schema(&self) -> Option<SchemaValue> {
         self.schema_definition
             .as_ref()
-            .map(crate::adapter::openapi_sidecar::convert_value)
+            .map(crate::schema_json::convert_value)
     }
     pub fn item_schema(&self) -> Option<SchemaValue> {
         self.item_schema_definition
             .as_ref()
-            .map(crate::adapter::openapi_sidecar::convert_value)
+            .map(crate::schema_json::convert_value)
     }
 }
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

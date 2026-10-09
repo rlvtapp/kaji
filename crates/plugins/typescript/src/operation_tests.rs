@@ -1,4 +1,5 @@
 //! Bounded native operation tests; native transport ABI is verified before emission.
+mod options;
 use crate::{
     TypeScript,
     composition::{Models, Operations, Transport},
@@ -13,6 +14,7 @@ use serde_json::{Value, json};
 use std::collections::BTreeMap;
 use std::fmt::Write;
 pub struct OperationTests {
+    http_input: poolster_core::engine::HttpInput,
     meta: Meta,
     models: Option<Handle<Models>>,
     operations: Option<Handle<Operations>>,
@@ -22,6 +24,7 @@ pub struct OperationTests {
 }
 pub fn operation_tests() -> OperationTests {
     OperationTests {
+        http_input: Default::default(),
         meta: Meta::new(),
         models: None,
         operations: None,
@@ -30,28 +33,7 @@ pub fn operation_tests() -> OperationTests {
         max_operations: 128,
     }
 }
-impl OperationTests {
-    pub fn using_models(mut self, handle: Handle<Models>) -> Self {
-        self.models = Some(handle);
-        self
-    }
-    pub fn using_operations(mut self, handle: Handle<Operations>) -> Self {
-        self.operations = Some(handle);
-        self
-    }
-    pub fn using_transport(mut self, handle: Handle<Transport>) -> Self {
-        self.transport = Some(handle);
-        self
-    }
-    pub fn sample_options(mut self, options: poolster_core::samples::SampleOptions) -> Self {
-        self.options = options;
-        self
-    }
-    pub fn max_operations(mut self, limit: usize) -> Self {
-        self.max_operations = limit;
-        self
-    }
-}
+
 fn sample(
     api: &Api,
     schema: &SchemaValue,
@@ -231,6 +213,9 @@ fn render(
     ))
 }
 impl Plugin<TypeScript> for OperationTests {
+    fn supports_native_input(&self) -> bool {
+        self.http_input.is_explicit()
+    }
     fn kind(&self) -> &'static str {
         "typescript-operation-tests"
     }
@@ -238,13 +223,19 @@ impl Plugin<TypeScript> for OperationTests {
         &self.meta
     }
     fn requires(&self) -> Vec<Requirement> {
-        vec![
-            Requirement::on(self.models),
-            Requirement::on(self.operations),
-            Requirement::on(self.transport),
-        ]
+        let mut requirements = {
+            vec![
+                Requirement::on(self.models),
+                Requirement::on(self.operations),
+                Requirement::on(self.transport),
+            ]
+        };
+        requirements.extend(self.http_input.requirements());
+        requirements
     }
     fn generate(&self, cx: &mut PluginContext<'_, TypeScript>) -> Result<()> {
+        let selected = self.http_input.resolve(cx)?;
+        let input_api = &selected.api;
         let models = cx.inputs.get::<Models>()?;
         let operations = cx.inputs.get::<Operations>()?;
         let transport = cx.inputs.get::<Transport>()?;
@@ -271,7 +262,7 @@ impl Plugin<TypeScript> for OperationTests {
         source.push_str("function check(value:boolean,message:string):asserts value{if(!value)throw new Error(message)}\nfunction normalize(value:unknown):unknown{if(Array.isArray(value))return value.map(normalize);if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).sort(([a],[b])=>a.localeCompare(b)).map(([key,value])=>[key,normalize(value)]));return value}\nfunction same(actual:unknown,expected:unknown,message:string){check(JSON.stringify(normalize(actual))===JSON.stringify(normalize(expected)),message)}\n");
         let mut skipped = BTreeMap::new();
         let mut tests = vec![];
-        for (index, operation) in cx.api.operations.iter().enumerate() {
+        for (index, operation) in input_api.operations.iter().enumerate() {
             let rendered = if index >= self.max_operations {
                 Err("operation bound reached".into())
             } else if models.options.integer_as_string
@@ -287,7 +278,7 @@ impl Plugin<TypeScript> for OperationTests {
                     .ok_or_else(|| "operation unavailable".into())
                     .and_then(|symbol| {
                         render(
-                            cx.api,
+                            input_api,
                             operation,
                             symbol,
                             index,

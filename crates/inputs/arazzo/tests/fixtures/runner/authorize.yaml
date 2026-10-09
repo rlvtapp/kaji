@@ -1,0 +1,27 @@
+arazzo: 1.0.0
+info: {title: Pinned OAuth authorization operation, version: 1.0.0}
+sourceDescriptions:
+  - {name: oauth, url: './oauth.openapi.yaml', type: openapi}
+workflows:
+  - workflowId: authorize
+    inputs:
+      type: object
+      required: [clientId, redirectUri]
+      properties:
+        clientId: {type: string}
+        redirectUri: {type: string}
+    steps:
+      - stepId: authorize
+        operationId: authorize
+        parameters:
+          - {name: client_id, in: query, value: '$inputs.clientId'}
+          - {name: redirect_uri, in: query, value: '$inputs.redirectUri'}
+          - {name: response_type, in: query, value: code}
+          - {name: scope, in: query, value: openid}
+          - {name: state, in: query, value: pinned-test}
+        successCriteria:
+          - {condition: '$statusCode == 200'}
+        outputs:
+          status: $statusCode
+    outputs:
+      status: $steps.authorize.outputs.status

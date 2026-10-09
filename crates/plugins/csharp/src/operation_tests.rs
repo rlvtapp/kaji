@@ -3,12 +3,14 @@ use super::*;
 use poolster_core::engine::{Handle, Meta, Plugin, PluginContext, Requirement};
 use serde_json::{Value, json};
 pub struct OperationTests {
+    http_input: poolster_core::engine::HttpInput,
     meta: Meta,
     sdk: Option<Handle<NativeSdk>>,
     max_operations: usize,
 }
 pub fn operation_tests() -> OperationTests {
     OperationTests {
+        http_input: Default::default(),
         meta: Meta::new(),
         sdk: None,
         max_operations: 128,
@@ -94,10 +96,11 @@ fn render(api: &Api, sdk: &NativeSdk, bound: usize) -> Result<(String, Value)> {
 macro_rules! plugin {
     ($language:ty)=>{
         impl Plugin<$language> for OperationTests{
+ fn supports_native_input(&self) -> bool { self.http_input.is_explicit() }
             fn kind(&self)->&'static str{"csharp-operation-tests"}
             fn meta(&self)->&Meta{&self.meta}
-            fn requires(&self)->Vec<Requirement>{vec![Requirement::on(self.sdk)]}
-            fn generate(&self,cx:&mut PluginContext<'_,$language>)->Result<()>{
+            fn requires(&self)->Vec<Requirement>{let mut requirements=self.http_input.requirements();requirements.push(Requirement::on(self.sdk));requirements}
+            fn generate(&self,cx:&mut PluginContext<'_,$language>)->Result<()>{self.http_input.with_context(cx,|cx|{
                 let sdk=cx.inputs.get::<NativeSdk>()?;
                 let (source,report)=render(cx.api,sdk,self.max_operations)?;
                 let package=cx.settings.package_name.clone().unwrap_or_else(||format!("{}-sdk",kebab_case(&cx.api.name)));
@@ -107,7 +110,7 @@ macro_rules! plugin {
                 cx.files.emit(GeneratedFile::new("operation-test-report.json",serde_json::to_string_pretty(&report)?)?)?;
                 cx.files.emit(GeneratedFile::new("OPERATION_TESTS.md","# Generated operation smoke tests\n\nAll HTTP is fake and in memory. Run:\n\n~~~sh\ndotnet run --project tests/OperationTests/OperationTests.csproj\n~~~\n\noperation-test-report.json records supported cases and exclusions. Samples strip source examples, defaults and annotations. Dedicated fixtures remain necessary for constraints, recursion/composition, auth, pagination, retries and streaming.\n")?)?;
                 Ok(())
-            }
+            })}
         }
     }
 }
@@ -139,6 +142,7 @@ pub(crate) fn finalize(tree: &mut GeneratedTree) -> Result<()> {
         ),
     )?)
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -322,3 +326,6 @@ mod tests {
         );
     }
 }
+
+#[path = "operation_tests_input.rs"]
+mod http_input;

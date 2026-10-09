@@ -30,6 +30,32 @@ def source_path(root, contract):
     return root / (contract["name"] + ".yml")
 
 
+def verified_tree_exists(root, expected):
+    """Reuse only the exact pinned file set; never repair or trust stale trees."""
+    if root.is_symlink():
+        raise ValueError("Unsafe reference output symlink")
+    if not root.exists():
+        return False
+    if not root.is_dir():
+        raise ValueError("Reference output must be a directory")
+    actual = {}
+    for path in root.rglob("*"):
+        if path.is_symlink():
+            raise ValueError("Unsafe reference output symlink")
+        if path.is_dir():
+            continue
+        name = path.relative_to(root).as_posix()
+        if not path.is_file() or name not in expected:
+            raise ValueError("Reference output file set mismatch")
+        size, digest = expected[name]
+        if path.stat().st_size != size or hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+            raise ValueError("Reference output checksum/size mismatch: " + name)
+        actual[name] = True
+    if actual.keys() != expected.keys():
+        raise ValueError("Reference output file set mismatch")
+    return True
+
+
 def fetch(manifest, root, cache):
     root.mkdir(parents=True, exist_ok=True)
     for contract in contracts(manifest):
@@ -91,8 +117,12 @@ def fetch(manifest, root, cache):
             if sum(len(payload) for _, payload in staged) > 64 * 1024 * 1024:
                 raise ValueError("Supplemental reference tree exceeds size bound")
             tree = root / contract["name"]
-            if tree.exists():
-                raise ValueError("Reference output already exists; use a fresh output directory")
+            entries = [(source, data), *staged]
+            expected = {str(path): (len(payload), hashlib.sha256(payload).hexdigest())
+                        for path, payload in entries}
+            if verified_tree_exists(tree, expected):
+                print("Verified pinned contract:", contract["name"])
+                continue
             tree.mkdir()
             source_file = tree.joinpath(*source.parts)
             source_file.parent.mkdir(parents=True, exist_ok=True)
@@ -125,8 +155,22 @@ def unpack(root, archive, entry):
                 raise ValueError("Unsafe archive member")
             if len(path.parts) > 1:
                 validated.append((member, root.joinpath(*path.parts[1:])))
-        if root.exists():
-            raise ValueError("Archive output already exists; use a fresh output directory")
+        expected = {}
+        for member, target in validated:
+            if member.is_dir():
+                continue
+            name = target.relative_to(root).as_posix()
+            if name in expected:
+                raise ValueError("Duplicate archive member")
+            digest = hashlib.sha256()
+            with source.open(member) as reader:
+                for chunk in iter(lambda: reader.read(65536), b""):
+                    digest.update(chunk)
+            expected[name] = (member.file_size, digest.hexdigest())
+        if str(entry_parts) not in expected:
+            raise ValueError("Contract archive entry missing")
+        if verified_tree_exists(root, expected):
+            return
         for member, target in validated:
             if member.is_dir():
                 target.mkdir(parents=True, exist_ok=True)

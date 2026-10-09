@@ -6,8 +6,8 @@ use anyhow::{Context, Result, bail};
 
 use super::{
     ColorChoice, GENERATION_LOCK_PATH, GENERATION_LOCK_VERSION, Generate, GenerationReplayLock,
-    OpenApiInput, TypeScriptTransport, Update, UpdateInputLock, UpdateLock, generate, parse_style,
-    sha256_directory, sha256_file,
+    NativeOutputConfig, OpenApiInput, TypeScriptTransport, Update, UpdateInputLock, UpdateLock,
+    generate, parse_style, sha256_directory, sha256_file,
 };
 
 pub(super) fn update(options: Update) -> Result<()> {
@@ -127,6 +127,7 @@ fn replay_generate_options(replay: GenerationReplayLock, output: PathBuf) -> Res
         bail!("generation replay has invalid TypeScript surface")
     }
     Ok(Generate {
+        native_output: NativeOutputConfig::default(),
         native_input: None,
         source,
         config: None,

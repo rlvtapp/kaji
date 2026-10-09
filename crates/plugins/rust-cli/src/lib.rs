@@ -37,12 +37,14 @@ impl PackageExt for Package<RustCli> {
 }
 
 pub struct Cli {
+    http_input: poolster_core::engine::HttpInput,
     meta: Meta,
     command_name: Option<String>,
     base_url: Option<String>,
 }
 pub fn cli() -> Cli {
     Cli {
+        http_input: Default::default(),
         meta: Meta::new(),
         command_name: None,
         base_url: None,
@@ -59,6 +61,13 @@ impl Cli {
     }
 }
 impl Plugin<RustCli> for Cli {
+    fn supports_native_input(&self) -> bool {
+        self.http_input.is_explicit()
+    }
+    fn requires(&self) -> Vec<poolster_core::engine::Requirement> {
+        self.http_input.requirements()
+    }
+
     fn kind(&self) -> &'static str {
         "rust-cli"
     }
@@ -66,43 +75,45 @@ impl Plugin<RustCli> for Cli {
         &self.meta
     }
     fn generate(&self, cx: &mut PluginContext<'_, RustCli>) -> Result<()> {
-        let command = self
-            .command_name
-            .clone()
-            .unwrap_or_else(|| kebab_case(&cx.api.name));
-        if command.is_empty() {
-            bail!("Rust CLI command name cannot be empty");
-        }
-        let package = cx
-            .settings
-            .package_name
-            .clone()
-            .unwrap_or_else(|| format!("{}-cli", command));
-        cx.files.emit(GeneratedFile::new(
-            "Cargo.toml",
-            cargo_toml(&package, &command, &cx.api.version),
-        )?)?;
-        for (path, source) in render_command_modules(
-            cx.api,
-            &command,
-            self.base_url.as_deref(),
-            cx.security_schemes,
-        ) {
-            cx.files.emit(GeneratedFile::new(path, source)?)?;
-        }
-        cx.files.emit_custom(GeneratedFile::new(
-            "src/poolster_extension.rs",
-            extension_template(),
-        )?)?;
-        cx.files
-            .emit(GeneratedFile::new("README.md", readme(cx.api, &command))?)?;
-        for (group, reference) in render_skill_references(cx.api, &command) {
+        self.http_input.with_context(cx, |cx| {
+            let command = self
+                .command_name
+                .clone()
+                .unwrap_or_else(|| kebab_case(&cx.api.name));
+            if command.is_empty() {
+                bail!("Rust CLI command name cannot be empty");
+            }
+            let package = cx
+                .settings
+                .package_name
+                .clone()
+                .unwrap_or_else(|| format!("{}-cli", command));
             cx.files.emit(GeneratedFile::new(
-                format!("references/{group}.md"),
-                reference,
+                "Cargo.toml",
+                cargo_toml(&package, &command, &cx.api.version),
             )?)?;
-        }
-        Ok(())
+            for (path, source) in render_command_modules(
+                cx.api,
+                &command,
+                self.base_url.as_deref(),
+                cx.security_schemes,
+            ) {
+                cx.files.emit(GeneratedFile::new(path, source)?)?;
+            }
+            cx.files.emit_custom(GeneratedFile::new(
+                "src/poolster_extension.rs",
+                extension_template(),
+            )?)?;
+            cx.files
+                .emit(GeneratedFile::new("README.md", readme(cx.api, &command))?)?;
+            for (group, reference) in render_skill_references(cx.api, &command) {
+                cx.files.emit(GeneratedFile::new(
+                    format!("references/{group}.md"),
+                    reference,
+                )?)?;
+            }
+            Ok(())
+        })
     }
 }
 
@@ -714,3 +725,6 @@ mod tests {
         assert!(main.contains("env_key(scheme.id)"));
     }
 }
+
+#[path = "lib_input.rs"]
+mod http_input;

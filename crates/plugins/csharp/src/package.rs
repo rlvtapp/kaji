@@ -74,6 +74,7 @@ impl Contract for NativeSdk {
     const NAME: &'static str = "native-sdk";
 }
 pub struct Sdk {
+    http_input: poolster_core::engine::HttpInput,
     meta: Meta,
     client_style: Option<SdkClientStyle>,
     open_enums: bool,
@@ -81,6 +82,7 @@ pub struct Sdk {
 }
 pub fn sdk() -> Sdk {
     Sdk {
+        http_input: Default::default(),
         meta: Meta::new(),
         client_style: None,
         open_enums: false,
@@ -113,6 +115,13 @@ impl Sdk {
     }
 }
 impl Plugin<CSharp> for Sdk {
+    fn supports_native_input(&self) -> bool {
+        self.http_input.is_explicit()
+    }
+    fn requires(&self) -> Vec<poolster_core::engine::Requirement> {
+        self.http_input.requirements()
+    }
+
     fn kind(&self) -> &'static str {
         "csharp-sdk"
     }
@@ -123,27 +132,36 @@ impl Plugin<CSharp> for Sdk {
         vec![Provision::of::<NativeSdk>()]
     }
     fn generate(&self, cx: &mut PluginContext<'_, CSharp>) -> Result<()> {
-        cx.files.append(crate::presence::render(
-            cx.api,
-            ".",
-            cx.settings.package_name.as_deref(),
-            self.client_style
-                .or(cx.common.client_style)
-                .unwrap_or(SdkClientStyle::Namespaced),
-            self.open_enums,
-            self.preserve_presence,
-        )?)?;
-        cx.publish(NativeSdk {
-            namespace: crate::dotnet_namespace(
-                cx.settings
-                    .package_name
-                    .as_deref()
-                    .unwrap_or(&format!("{}-sdk", crate::kebab_case(&cx.api.name))),
-            ),
+        self.http_input.with_context(cx, |cx| {
+            cx.files.append(crate::presence::render(
+                cx.api,
+                ".",
+                cx.settings.package_name.as_deref(),
+                self.client_style
+                    .or(cx.common.client_style)
+                    .unwrap_or(SdkClientStyle::Namespaced),
+                self.open_enums,
+                self.preserve_presence,
+            )?)?;
+            cx.publish(NativeSdk {
+                namespace: crate::dotnet_namespace(
+                    cx.settings
+                        .package_name
+                        .as_deref()
+                        .unwrap_or(&format!("{}-sdk", crate::kebab_case(&cx.api.name))),
+                ),
+            })
         })
     }
 }
 impl Plugin<DotNet> for Sdk {
+    fn supports_native_input(&self) -> bool {
+        self.http_input.is_explicit()
+    }
+    fn requires(&self) -> Vec<poolster_core::engine::Requirement> {
+        self.http_input.requirements()
+    }
+
     fn kind(&self) -> &'static str {
         "dotnet-sdk"
     }
@@ -154,23 +172,25 @@ impl Plugin<DotNet> for Sdk {
         vec![Provision::of::<NativeSdk>()]
     }
     fn generate(&self, cx: &mut PluginContext<'_, DotNet>) -> Result<()> {
-        cx.files.append(crate::presence::render(
-            cx.api,
-            ".",
-            cx.settings.package_name.as_deref(),
-            self.client_style
-                .or(cx.common.client_style)
-                .unwrap_or(SdkClientStyle::Namespaced),
-            self.open_enums,
-            self.preserve_presence,
-        )?)?;
-        cx.publish(NativeSdk {
-            namespace: crate::dotnet_namespace(
-                cx.settings
-                    .package_name
-                    .as_deref()
-                    .unwrap_or(&format!("{}-sdk", crate::kebab_case(&cx.api.name))),
-            ),
+        self.http_input.with_context(cx, |cx| {
+            cx.files.append(crate::presence::render(
+                cx.api,
+                ".",
+                cx.settings.package_name.as_deref(),
+                self.client_style
+                    .or(cx.common.client_style)
+                    .unwrap_or(SdkClientStyle::Namespaced),
+                self.open_enums,
+                self.preserve_presence,
+            )?)?;
+            cx.publish(NativeSdk {
+                namespace: crate::dotnet_namespace(
+                    cx.settings
+                        .package_name
+                        .as_deref()
+                        .unwrap_or(&format!("{}-sdk", crate::kebab_case(&cx.api.name))),
+                ),
+            })
         })
     }
 }
@@ -185,3 +205,6 @@ mod tests {
         assert_eq!(DotNet::NAME, "dotnet");
     }
 }
+
+#[path = "package_input.rs"]
+mod http_input;

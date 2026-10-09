@@ -20,15 +20,41 @@ pub fn package(directory: impl Into<String>) -> Package<HttpMock> {
 }
 pub struct Server {
     meta: Meta,
+    http: poolster_core::engine::HttpInput,
     options: MockServerOptions,
 }
 pub fn server() -> Server {
     Server {
         meta: Meta::new(),
+        http: Default::default(),
         options: MockServerOptions::default(),
     }
 }
 impl Server {
+    /// Select an input or transformed HTTP contract.
+    pub fn input(
+        mut self,
+        input: poolster_core::engine::Handle<poolster_core::AdaptedApi>,
+    ) -> Self {
+        self.http = self.http.input(input);
+        self
+    }
+    pub fn input_models(
+        mut self,
+        models: poolster_core::engine::Handle<poolster_core::blocks::Blocks<poolster_core::Schema>>,
+    ) -> Self {
+        self.http = self.http.input_models(models);
+        self
+    }
+    pub fn input_endpoints(
+        mut self,
+        endpoints: poolster_core::engine::Handle<
+            poolster_core::blocks::Blocks<poolster_core::Operation>,
+        >,
+    ) -> Self {
+        self.http = self.http.input_endpoints(endpoints);
+        self
+    }
     pub fn image(mut self, image: impl Into<String>) -> Self {
         self.options.image = image.into();
         self
@@ -45,11 +71,19 @@ impl Plugin<HttpMock> for Server {
     fn meta(&self) -> &Meta {
         &self.meta
     }
+    fn requires(&self) -> Vec<poolster_core::engine::Requirement> {
+        self.http.requirements()
+    }
+    fn supports_native_input(&self) -> bool {
+        self.http.is_explicit()
+    }
     fn generate(&self, cx: &mut PluginContext<'_, HttpMock>) -> Result<()> {
-        cx.files.append_from(
-            generate(cx.api, "__mock", &self.options)?,
-            std::path::Path::new("__mock"),
-        )
+        self.http.run(cx, |cx| {
+            cx.files.append_from(
+                generate(cx.api, "__mock", &self.options)?,
+                std::path::Path::new("__mock"),
+            )
+        })
     }
 }
 

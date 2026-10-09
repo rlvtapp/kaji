@@ -37,6 +37,8 @@ pub struct InputContract {
     pub summary: InputSummary,
     pub diagnostics: Vec<InputDiagnostic>,
     contracts: HashMap<TypeId, Box<dyn Any + Send + Sync>>,
+    identities: HashMap<&'static str, TypeId>,
+    references: HashMap<TypeId, crate::blocks::ContractReference>,
 }
 
 impl InputContract {
@@ -45,21 +47,62 @@ impl InputContract {
             summary,
             diagnostics: Vec::new(),
             contracts: HashMap::new(),
+            identities: HashMap::new(),
+            references: HashMap::new(),
         }
     }
 
     pub fn publish<C: Contract>(&mut self, contract: C) -> Result<()> {
+        self.check_identity::<C>()?;
         ensure!(
             !self.contracts.contains_key(&TypeId::of::<C>()),
             "input contract {} was already published",
             C::NAME
         );
+        self.identities.insert(C::NAME, TypeId::of::<C>());
         self.contracts.insert(TypeId::of::<C>(), Box::new(contract));
         Ok(())
     }
 
+    /// Attach authoritative provenance separately from the typed payload.
+    pub fn publish_with_reference<C: Contract>(
+        &mut self,
+        contract: C,
+        reference: crate::blocks::ContractReference,
+    ) -> Result<()> {
+        ensure!(
+            reference.contract == C::NAME,
+            "provenance contract mismatch: expected {}, found {}",
+            C::NAME,
+            reference.contract
+        );
+        reference.validate()?;
+        self.publish(contract)?;
+        self.references.insert(TypeId::of::<C>(), reference);
+        Ok(())
+    }
+
+    /// An opaque published contract has no provenance. Missing payloads still fail.
+    pub fn get_reference<C: Contract>(&self) -> Result<Option<&crate::blocks::ContractReference>> {
+        self.get::<C>()?;
+        Ok(self.references.get(&TypeId::of::<C>()))
+    }
+
+    fn check_identity<C: Contract>(&self) -> Result<()> {
+        if let Some(type_id) = self.identities.get(C::NAME) {
+            ensure!(
+                *type_id == TypeId::of::<C>(),
+                "contract compatibility error for {}: different Rust types use the same stable contract name",
+                C::NAME
+            );
+        }
+        Ok(())
+    }
+
     pub fn take<C: Contract>(&mut self) -> Result<C> {
-        self.contracts
+        self.check_identity::<C>()?;
+        let value = self
+            .contracts
             .remove(&TypeId::of::<C>())
             .and_then(|contract| contract.downcast::<C>().ok())
             .map(|contract| *contract)
@@ -68,10 +111,13 @@ impl InputContract {
                     "input provider did not publish required contract {}",
                     C::NAME
                 )
-            })
+            })?;
+        self.references.remove(&TypeId::of::<C>());
+        Ok(value)
     }
 
     pub fn get<C: Contract>(&self) -> Result<&C> {
+        self.check_identity::<C>()?;
         self.contracts
             .get(&TypeId::of::<C>())
             .and_then(|contract| contract.downcast_ref())
@@ -303,139 +349,14 @@ impl<C: Contract, L: crate::engine::Language> crate::engine::Plugin<L> for Input
                 &self.options,
             )?
             .contract;
-        cx.publish(input.take::<C>()?)
+        let reference = input.get_reference::<C>()?.cloned();
+        let value = input.take::<C>()?;
+        match reference {
+            Some(reference) => cx.publish_with_reference(value, reference),
+            None => cx.publish(value),
+        }
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    struct Native(String);
-    impl Contract for Native {
-        const NAME: &'static str = "example.native";
-    }
-    #[derive(Debug)]
-    struct Missing;
-    impl Contract for Missing {
-        const NAME: &'static str = "example.missing";
-    }
-    struct Provider(&'static str);
-    impl InputPlugin for Provider {
-        fn id(&self) -> &str {
-            self.0
-        }
-        fn format(&self) -> &str {
-            "custom"
-        }
-        fn load(&self, path: &Path) -> Result<InputContract> {
-            let mut input = InputContract::new(InputSummary {
-                format: "custom".into(),
-                title: "Custom".into(),
-                version: None,
-                types: vec![],
-                operations: vec![],
-            });
-            input.publish(Native(std::fs::read_to_string(path)?))?;
-            Ok(input)
-        }
-    }
-
-    #[test]
-    fn community_provider_publishes_native_contract_without_core_enum_changes() {
-        let file = tempfile::NamedTempFile::new().unwrap();
-        std::fs::write(file.path(), "native contract").unwrap();
-        let mut registry = InputRegistry::new();
-        registry.register(Provider("custom.parser")).unwrap();
-        let input = registry.load("custom", None, file.path()).unwrap();
-        assert_eq!(input.contract.get::<Native>().unwrap().0, "native contract");
-        assert_eq!(input.provider, "custom.parser");
-        assert!(
-            input
-                .contract
-                .get::<Missing>()
-                .unwrap_err()
-                .to_string()
-                .contains("example.missing")
-        );
-    }
-
-    #[test]
-    fn replacements_need_explicit_selection_and_duplicate_ids_fail() {
-        let file = tempfile::NamedTempFile::new().unwrap();
-        let mut registry = InputRegistry::new();
-        registry.register(Provider("custom.first")).unwrap();
-        registry.register(Provider("custom.second")).unwrap();
-        assert!(
-            registry
-                .load("custom", None, file.path())
-                .err()
-                .unwrap()
-                .to_string()
-                .contains("multiple input providers")
-        );
-        assert!(
-            registry
-                .load("custom", Some("custom.second"), file.path())
-                .is_ok()
-        );
-        assert!(registry.register(Provider("custom.first")).is_err());
-        assert!(
-            registry
-                .load("other", Some("custom.first"), file.path())
-                .is_err()
-        );
-        assert!(registry.load("other", None, file.path()).is_err());
-        assert!(
-            registry
-                .load("custom", Some("unknown"), file.path())
-                .is_err()
-        );
-    }
-
-    #[test]
-    fn registry_rejects_invalid_ids_and_false_format_claims() {
-        struct Wrong;
-        impl InputPlugin for Wrong {
-            fn id(&self) -> &str {
-                "custom.wrong"
-            }
-            fn format(&self) -> &str {
-                "custom"
-            }
-            fn load(&self, _: &Path) -> Result<InputContract> {
-                Ok(InputContract::new(InputSummary {
-                    format: "other".into(),
-                    title: String::new(),
-                    version: None,
-                    types: vec![],
-                    operations: vec![],
-                }))
-            }
-        }
-        let mut registry = InputRegistry::new();
-        assert!(registry.register(Provider("../invalid")).is_err());
-        registry.register(Wrong).unwrap();
-        assert!(
-            registry
-                .load("custom", None, Path::new("unused"))
-                .err()
-                .unwrap()
-                .to_string()
-                .contains("published format")
-        );
-    }
-
-    #[test]
-    fn duplicate_publications_preserve_first_contract() {
-        let mut input = InputContract::new(InputSummary {
-            format: "custom".into(),
-            title: "Custom".into(),
-            version: None,
-            types: vec![],
-            operations: vec![],
-        });
-        input.publish(Native("first".into())).unwrap();
-        assert!(input.publish(Native("second".into())).is_err());
-        assert_eq!(input.get::<Native>().unwrap().0, "first");
-    }
-}
+mod tests;

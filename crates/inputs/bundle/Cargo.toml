@@ -9,14 +9,17 @@ description = "Convenience bundle of native input providers for Poolster"
 publish = ["crates-io"]
 
 [features]
-default = ["graphql", "asyncapi", "arazzo", "protobuf", "capnproto"]
+default = ["openapi", "graphql", "asyncapi", "arazzo", "protobuf", "capnproto"]
 graphql = ["dep:poolster-input-graphql"]
 asyncapi = ["dep:poolster-input-asyncapi"]
 arazzo = ["dep:poolster-input-arazzo"]
 protobuf = ["dep:poolster-input-protobuf"]
 capnproto = ["dep:poolster-input-capnproto"]
 
+openapi = ["dep:poolster-input-openapi"]
+
 [dependencies]
+poolster-input-openapi = { version = "0.5.0-alpha.1", path = "../openapi", optional = true }
 poolster-core = { version = "0.5.0-alpha.1", path = "../../core" }
 anyhow = "1.0.102"
 poolster-input-graphql = { version = "0.5.0-alpha.1", path = "../graphql", optional = true }

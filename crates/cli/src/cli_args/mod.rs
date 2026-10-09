@@ -65,6 +65,7 @@ pub(super) fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Act
         bail!("unknown command {:?}; run poolster --help", command)
     }
     let mut options = Generate {
+        native_output: NativeOutputConfig::default(),
         native_input: None,
         source: None,
         config: None,
@@ -131,6 +132,11 @@ pub(super) fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Act
                 | "--import-root"
                 | "--broker-config"
                 | "--workflow-source"
+                | "--module"
+                | "--protoc"
+                | "--protoc-gen-go"
+                | "--protoc-gen-go-grpc"
+                | "--go-package"
                 | "--output"
                 | "-o"
                 | "--language"
@@ -169,8 +175,42 @@ pub(super) fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Act
                         .map_err(|_| anyhow::anyhow!("--provider requires UTF-8"))?,
                 )
             }
+            "--module" => {
+                options.native_output.module = Some(
+                    value
+                        .into_string()
+                        .map_err(|_| anyhow::anyhow!("--module requires UTF-8"))?,
+                )
+            }
+            "--protoc" => options.native_output.toolchain.protoc = Some(value.into()),
+            "--protoc-gen-go" => options.native_output.toolchain.protoc_gen_go = Some(value.into()),
+            "--protoc-gen-go-grpc" => {
+                options.native_output.toolchain.protoc_gen_go_grpc = Some(value.into())
+            }
+            "--go-package" => {
+                let value = value
+                    .into_string()
+                    .map_err(|_| anyhow::anyhow!("--go-package requires UTF-8 file=mapping"))?;
+                let (file, mapping) = value
+                    .split_once('=')
+                    .context("--go-package requires file=mapping")?;
+                ensure!(
+                    !file.is_empty() && !mapping.is_empty(),
+                    "--go-package requires nonempty file=mapping"
+                );
+                ensure!(
+                    options
+                        .native_output
+                        .go_packages
+                        .insert(file.into(), mapping.into())
+                        .is_none(),
+                    "duplicate Go package mapping {file:?}"
+                );
+            }
             "--operation" => native_options.operation_files.push(value.into()),
-            "--import-root" => native_options.import_roots.push(value.into()),
+            "--import-root" => native_options
+                .import_roots
+                .push(std::env::current_dir()?.join(value)),
             "--broker-config" => {
                 let path = PathBuf::from(value);
                 native_options.broker = Some(
@@ -195,7 +235,7 @@ pub(super) fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Act
                 ensure!(
                     native_options
                         .workflow_sources
-                        .insert(name.into(), PathBuf::from(path))
+                        .insert(name.into(), std::env::current_dir()?.join(path))
                         .is_none(),
                     "duplicate workflow source {name:?}"
                 );
@@ -280,6 +320,14 @@ pub(super) fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Act
     {
         bail!("provider and operation/import options require --input-format");
     }
+    ensure!(
+        options.native_output == NativeOutputConfig::default()
+            || options
+                .native_input
+                .as_ref()
+                .is_some_and(|input| input.format == "protobuf"),
+        "gRPC output options require --input-format protobuf"
+    );
     let direct_mode = options.native_input.is_some()
         || options.source.is_some()
         || options.artifacts.is_some()

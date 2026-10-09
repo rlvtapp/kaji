@@ -1,0 +1,28 @@
+openapi: 3.1.0
+info: {title: Shop, version: 1.0.0}
+servers:
+  - url: http://127.0.0.1:1/api
+paths:
+  /session:
+    post:
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username]
+              properties:
+                username: {type: string}
+      responses:
+        '200': {description: Session created}
+  /orders/{id}:
+    post:
+      operationId: createOrder
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+        - {name: quantity, in: query, required: true, schema: {type: integer}}
+        - {name: X-Session, in: header, required: true, schema: {type: string}}
+      responses:
+        '201': {description: Order created}

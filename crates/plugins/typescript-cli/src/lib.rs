@@ -4,6 +4,7 @@
 //! OAuth refresh, credential persistence, request encoding, and output handling
 //! live in one generated runtime module so every command follows the same rules.
 
+mod options;
 use anyhow::{Result, bail};
 use poolster_core::{
     Api, GeneratedFile, Operation, SchemaKind, SchemaValue, SecuritySchemeCatalog,
@@ -58,42 +59,8 @@ pub struct OAuthConfig {
     pub redirect_uri: Option<String>,
 }
 
-impl OAuthConfig {
-    pub fn client_id(mut self, value: impl Into<String>) -> Self {
-        self.client_id = value.into();
-        self
-    }
-    pub fn security_scheme(mut self, value: impl Into<String>) -> Self {
-        self.security_scheme = Some(value.into());
-        self
-    }
-    pub fn scopes(mut self, values: impl IntoIterator<Item = impl Into<String>>) -> Self {
-        self.scopes = values.into_iter().map(Into::into).collect();
-        self
-    }
-    pub fn preferred_flow(mut self, value: impl Into<String>) -> Self {
-        self.preferred_flow = Some(value.into());
-        self
-    }
-    pub fn authorization_url(mut self, value: impl Into<String>) -> Self {
-        self.authorization_url = Some(value.into());
-        self
-    }
-    pub fn device_authorization_url(mut self, value: impl Into<String>) -> Self {
-        self.device_authorization_url = Some(value.into());
-        self
-    }
-    pub fn token_url(mut self, value: impl Into<String>) -> Self {
-        self.token_url = Some(value.into());
-        self
-    }
-    pub fn redirect_uri(mut self, value: impl Into<String>) -> Self {
-        self.redirect_uri = Some(value.into());
-        self
-    }
-}
-
 pub struct Cli {
+    http_input: poolster_core::engine::HttpInput,
     meta: Meta,
     command_name: Option<String>,
     base_url: Option<String>,
@@ -102,6 +69,7 @@ pub struct Cli {
 
 pub fn cli() -> Cli {
     Cli {
+        http_input: Default::default(),
         meta: Meta::new(),
         command_name: None,
         base_url: None,
@@ -109,33 +77,26 @@ pub fn cli() -> Cli {
     }
 }
 
-impl Cli {
-    pub fn command_name(mut self, value: impl Into<String>) -> Self {
-        self.command_name = Some(value.into());
-        self
-    }
-    pub fn base_url(mut self, value: impl Into<String>) -> Self {
-        self.base_url = Some(value.into());
-        self
-    }
-    pub fn oauth(mut self, value: OAuthConfig) -> Self {
-        self.oauth = Some(value);
-        self
-    }
-}
-
 impl Plugin<TypeScriptCli> for Cli {
+    fn supports_native_input(&self) -> bool {
+        self.http_input.is_explicit()
+    }
     fn kind(&self) -> &'static str {
         "typescript-cli"
     }
     fn meta(&self) -> &Meta {
         &self.meta
     }
+    fn requires(&self) -> Vec<poolster_core::engine::Requirement> {
+        self.http_input.requirements()
+    }
     fn generate(&self, cx: &mut PluginContext<'_, TypeScriptCli>) -> Result<()> {
+        let selected = self.http_input.resolve(cx)?;
+        let input_api = &selected.api;
         let command_name = self
             .command_name
             .clone()
-            .unwrap_or_else(|| kebab_case(&cx.api.name));
+            .unwrap_or_else(|| kebab_case(&input_api.name));
         if command_name.is_empty() {
             bail!("TypeScript CLI command name cannot be empty");
         }
@@ -148,15 +109,15 @@ impl Plugin<TypeScriptCli> for Cli {
             &command_name,
             self.base_url.as_deref(),
             self.oauth.as_ref(),
-            cx.security_schemes,
+            selected.security_schemes.as_ref(),
         )?;
         cx.files.emit(GeneratedFile::new(
             "package.json",
-            render_package_json(&package_name, &command_name, &cx.api.version),
+            render_package_json(&package_name, &command_name, &input_api.version),
         )?)?;
         cx.files
             .emit(GeneratedFile::new("tsconfig.json", render_tsconfig())?)?;
-        for (path, source) in render_command_modules(cx.api, &command_name, &config) {
+        for (path, source) in render_command_modules(input_api, &command_name, &config) {
             cx.files.emit(GeneratedFile::new(path, source)?)?;
         }
         cx.files
@@ -167,9 +128,14 @@ impl Plugin<TypeScriptCli> for Cli {
         )?)?;
         cx.files.emit(GeneratedFile::new(
             "README.md",
-            render_readme(cx.api, &package_name, &command_name, self.oauth.is_some()),
+            render_readme(
+                input_api,
+                &package_name,
+                &command_name,
+                self.oauth.is_some(),
+            ),
         )?)?;
-        for (group, reference) in render_skill_references(cx.api, &command_name) {
+        for (group, reference) in render_skill_references(input_api, &command_name) {
             cx.files.emit(GeneratedFile::new(
                 format!("references/{group}.md"),
                 reference,

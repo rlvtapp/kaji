@@ -1,6 +1,6 @@
-use poolster_core::adapter::openapi_sidecar::load_operations;
 use poolster_core::openapi32::{parameter_content, request_content, response_content};
 use poolster_core::{SchemaKind, SecuritySchemeKind};
+use poolster_input_openapi::openapi_sidecar::load_operations;
 
 #[test]
 fn typed_content_preserves_query_stream_and_nested_encoding() {
@@ -92,7 +92,7 @@ fn typed_content_preserves_query_stream_and_nested_encoding() {
         streamed.operations[0].success_schema().unwrap().kind,
         SchemaKind::Integer
     ));
-    let security = poolster_core::adapter::openapi_sidecar::OpenApiSidecar::new(dir, "API", "1");
+    let security = poolster_input_openapi::openapi_sidecar::OpenApiSidecar::new(dir, "API", "1");
     let catalog = poolster_core::Adapter::adapt(&security)
         .unwrap()
         .security_schemes;

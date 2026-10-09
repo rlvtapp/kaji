@@ -10,12 +10,14 @@ use poolster_core::{
 
 pub struct Entities {
     meta: Meta,
+    pub(crate) http: poolster_core::engine::HttpInput,
     infer: bool,
     resources: Vec<ResourceBinding>,
 }
 pub fn entities() -> Entities {
     Entities {
         meta: Meta::new(),
+        http: Default::default(),
         infer: true,
         resources: Vec::new(),
     }
@@ -44,16 +46,26 @@ impl Plugin<Terraform> for Entities {
         vec![Provision::of::<EntityCatalog>()]
     }
     fn generate(&self, cx: &mut PluginContext<'_, Terraform>) -> Result<()> {
-        cx.publish(analyze_with_security(
-            cx.api,
-            &self.resources,
-            self.infer,
-            cx.security_schemes,
-        )?)
+        self.http.run(cx, |cx| {
+            cx.publish(analyze_with_security(
+                cx.api,
+                &self.resources,
+                self.infer,
+                cx.security_schemes,
+            )?)
+        })
+    }
+    fn requires(&self) -> Vec<poolster_core::engine::Requirement> {
+        self.http.requirements()
+    }
+
+    fn supports_native_input(&self) -> bool {
+        self.http.is_explicit()
     }
 }
 pub struct Provider {
     meta: Meta,
+    pub(crate) http: poolster_core::engine::HttpInput,
     data_sources: bool,
     infer: bool,
     resources: Vec<ResourceBinding>,
@@ -62,6 +74,7 @@ pub struct Provider {
 pub fn provider() -> Provider {
     Provider {
         meta: Meta::new(),
+        http: Default::default(),
         data_sources: false,
         infer: true,
         resources: Vec::new(),
@@ -105,13 +118,18 @@ impl Plugin<Terraform> for Provider {
         }
     }
     fn requires(&self) -> Vec<Requirement> {
-        if self.catalog.is_some() {
-            vec![Requirement::on(self.catalog)]
-        } else {
-            vec![]
-        }
+        let mut requirements = self.http.requirements();
+        requirements.extend({
+            if self.catalog.is_some() {
+                vec![Requirement::on(self.catalog)]
+            } else {
+                vec![]
+            }
+        });
+        requirements
     }
     fn generate(&self, cx: &mut PluginContext<'_, Terraform>) -> Result<()> {
+        self.http.run(cx, |cx| {
         ensure!(
             self.catalog.is_none() || (self.resources.is_empty() && self.infer),
             "using_entities cannot be combined with explicit provider resource/inference overrides"
@@ -202,5 +220,67 @@ impl Plugin<Terraform> for Provider {
             cx.publish(catalog)?;
         }
         Ok(())
+        })
+    }
+    fn supports_native_input(&self) -> bool {
+        self.http.is_explicit()
+    }
+}
+
+impl Entities {
+    /// Select the authoritative HTTP contract produced by an input or transform.
+    pub fn input(
+        mut self,
+        input: poolster_core::engine::Handle<poolster_core::AdaptedApi>,
+    ) -> Self {
+        self.http = self.http.input(input);
+        self
+    }
+    /// Consume complete model blocks from the selected HTTP contract revision.
+    pub fn input_models(
+        mut self,
+        models: poolster_core::engine::Handle<poolster_core::blocks::Blocks<poolster_core::Schema>>,
+    ) -> Self {
+        self.http = self.http.input_models(models);
+        self
+    }
+    /// Consume complete endpoint blocks from the selected HTTP contract revision.
+    pub fn input_endpoints(
+        mut self,
+        endpoints: poolster_core::engine::Handle<
+            poolster_core::blocks::Blocks<poolster_core::Operation>,
+        >,
+    ) -> Self {
+        self.http = self.http.input_endpoints(endpoints);
+        self
+    }
+}
+
+impl Provider {
+    /// Select the authoritative HTTP contract produced by an input or transform.
+    pub fn input(
+        mut self,
+        input: poolster_core::engine::Handle<poolster_core::AdaptedApi>,
+    ) -> Self {
+        self.http = self.http.input(input);
+        self
+    }
+    /// Consume complete model blocks from the selected HTTP contract revision.
+    pub fn input_models(
+        mut self,
+        models: poolster_core::engine::Handle<poolster_core::blocks::Blocks<poolster_core::Schema>>,
+    ) -> Self {
+        self.http = self.http.input_models(models);
+        self
+    }
+    /// Consume complete endpoint blocks from the selected HTTP contract revision.
+    pub fn input_endpoints(
+        mut self,
+        endpoints: poolster_core::engine::Handle<
+            poolster_core::blocks::Blocks<poolster_core::Operation>,
+        >,
+    ) -> Self {
+        self.http = self.http.input_endpoints(endpoints);
+        self
     }
 }

@@ -47,18 +47,12 @@ pub(super) fn generate(mut options: Generate) -> Result<()> {
         let helper = compiler_path(options.compiler.clone())?;
         reporter.compiling(&source);
         let started = Instant::now();
-        let mut compiler = Command::new(&helper);
-        compiler.arg("--out").arg(temporary.path());
-        if let Some(source_url) = &compiler_source_url {
-            compiler.arg("--source-url").arg(source_url);
-        }
-        let status = compiler
-            .arg(&source)
-            .status()
-            .with_context(|| format!("cannot start OpenAPI compiler {}", helper.display()))?;
-        if !status.success() {
-            bail!("OpenAPI compiler failed ({status}); no SDK files were written")
-        }
+        poolster_input_openapi::compiler::compile(
+            &helper,
+            &source,
+            temporary.path(),
+            compiler_source_url.as_deref(),
+        )?;
         reporter.phase("OpenAPI", started.elapsed());
         // The compiler hashes the complete local reference closure. A root-only
         // digest would miss changes in referenced files in generation provenance.
@@ -84,7 +78,7 @@ pub(super) fn generate(mut options: Generate) -> Result<()> {
 
 fn write_sdk(artifacts: &Path, options: &Generate, reporter: &Reporter) -> Result<()> {
     let started = Instant::now();
-    let api = poolster_core::adapter::openapi_sidecar::load_operations(
+    let api = poolster_input_openapi::openapi_sidecar::load_operations(
         artifacts,
         options.name.clone(),
         options.version.clone(),
@@ -100,7 +94,7 @@ fn write_sdk(artifacts: &Path, options: &Generate, reporter: &Reporter) -> Resul
     }
     let api = slice_api_paths(api, &options.path_selection)?;
     let security_schemes =
-        poolster_core::adapter::openapi_sidecar::load_security_schemes(artifacts)?;
+        poolster_input_openapi::openapi_sidecar::load_security_schemes(artifacts)?;
     let mut tree = poolster::generate_with_security_catalog(
         &api,
         profiles(options)?,

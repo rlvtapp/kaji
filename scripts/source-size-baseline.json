@@ -4,7 +4,7 @@
     "crates/cli/src/migration.rs": 473,
     "crates/cli/src/sdk_automation.rs": 3299,
     "crates/cli/src/sdk_install.rs": 490,
-    "crates/core/src/adapter/openapi_sidecar.rs": 1352,
+    "crates/inputs/openapi/src/openapi_sidecar.rs": 1352,
     "crates/core/src/ast.rs": 604,
     "crates/core/src/engine.rs": 787,
     "crates/core/src/files.rs": 765,

@@ -1,14 +1,25 @@
 use super::*;
 use poolster_core::engine::{Meta, Plugin, PluginContext};
 pub struct OAuth {
+    http_input: poolster_core::engine::HttpInput,
     meta: Meta,
 }
 pub fn oauth() -> OAuth {
-    OAuth { meta: Meta::new() }
+    OAuth {
+        http_input: Default::default(),
+        meta: Meta::new(),
+    }
 }
 macro_rules! implementation {
     ($target:ty) => {
         impl Plugin<$target> for OAuth {
+            fn supports_native_input(&self) -> bool {
+                self.http_input.is_explicit()
+            }
+            fn requires(&self) -> Vec<poolster_core::engine::Requirement> {
+                self.http_input.requirements()
+            }
+
             fn kind(&self) -> &'static str {
                 "csharp-oauth"
             }
@@ -16,22 +27,26 @@ macro_rules! implementation {
                 &self.meta
             }
             fn generate(&self, cx: &mut PluginContext<'_, $target>) -> Result<()> {
-                let namespace = dotnet_namespace(
-                    cx.settings
-                        .package_name
-                        .as_deref()
-                        .unwrap_or(&format!("{}-sdk", kebab_case(&cx.api.name))),
-                );
-                cx.files.emit(GeneratedFile::new(
-                    "OAuthClientCredentials.cs",
-                    include_str!("../templates/oauth.cs.tmpl").replace("__PACKAGE__", &namespace),
-                )?)
+                self.http_input.with_context(cx, |cx| {
+                    let namespace = dotnet_namespace(
+                        cx.settings
+                            .package_name
+                            .as_deref()
+                            .unwrap_or(&format!("{}-sdk", kebab_case(&cx.api.name))),
+                    );
+                    cx.files.emit(GeneratedFile::new(
+                        "OAuthClientCredentials.cs",
+                        include_str!("../templates/oauth.cs.tmpl")
+                            .replace("__PACKAGE__", &namespace),
+                    )?)
+                })
             }
         }
     };
 }
 implementation!(CSharp);
 implementation!(crate::DotNet);
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -62,3 +77,6 @@ mod tests {
         );
     }
 }
+
+#[path = "oauth_input.rs"]
+mod http_input;

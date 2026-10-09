@@ -374,6 +374,15 @@
         },
         {
           "$ref": "#/$defs/graphqlPlugin"
+        },
+        {
+          "$ref": "#/$defs/workflowPlugin"
+        },
+        {
+          "$ref": "#/$defs/asyncapiPlugin"
+        },
+        {
+          "$ref": "#/$defs/grpcPlugin"
         }
       ]
     },
@@ -1625,6 +1634,75 @@
         "subscriptions": {
           "type": "boolean",
           "default": false
+        }
+      }
+    },
+    "workflowPlugin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "const": "workflow"
+        }
+      }
+    },
+    "asyncapiPlugin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "const": "asyncapi"
+        }
+      }
+    },
+    "grpcToolchain": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "protoc": {
+          "type": "string",
+          "minLength": 1
+        },
+        "protoc_gen_go": {
+          "type": "string",
+          "minLength": 1
+        },
+        "protoc_gen_go_grpc": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "grpcPlugin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "module"
+      ],
+      "properties": {
+        "name": {
+          "const": "grpc"
+        },
+        "module": {
+          "type": "string",
+          "minLength": 1
+        },
+        "toolchain": {
+          "$ref": "#/$defs/grpcToolchain"
+        },
+        "go_packages": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       }
     }

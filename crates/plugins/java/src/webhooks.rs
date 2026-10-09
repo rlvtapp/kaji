@@ -1,12 +1,23 @@
 use super::*;
 use poolster_core::engine::{Meta, Plugin, PluginContext};
 pub struct Webhooks {
+    http_input: poolster_core::engine::HttpInput,
     meta: Meta,
 }
 pub fn webhooks() -> Webhooks {
-    Webhooks { meta: Meta::new() }
+    Webhooks {
+        http_input: Default::default(),
+        meta: Meta::new(),
+    }
 }
 impl Plugin<Java> for Webhooks {
+    fn supports_native_input(&self) -> bool {
+        self.http_input.is_explicit()
+    }
+    fn requires(&self) -> Vec<poolster_core::engine::Requirement> {
+        self.http_input.requirements()
+    }
+
     fn kind(&self) -> &'static str {
         "java-webhooks"
     }
@@ -14,19 +25,21 @@ impl Plugin<Java> for Webhooks {
         &self.meta
     }
     fn generate(&self, cx: &mut PluginContext<'_, Java>) -> Result<()> {
-        let namespace = java_package_name(
-            cx.settings
-                .package_name
-                .as_deref()
-                .unwrap_or(&format!("io.poolster.{}", package_segment(&cx.api.name))),
-        );
-        cx.files.emit(GeneratedFile::new(
-            format!(
-                "src/main/java/{}/StandardWebhooks.java",
-                namespace.replace('.', "/")
-            ),
-            include_str!("../templates/webhooks.java.tmpl").replace("__PACKAGE__", &namespace),
-        )?)
+        self.http_input.with_context(cx, |cx| {
+            let namespace = java_package_name(
+                cx.settings
+                    .package_name
+                    .as_deref()
+                    .unwrap_or(&format!("io.poolster.{}", package_segment(&cx.api.name))),
+            );
+            cx.files.emit(GeneratedFile::new(
+                format!(
+                    "src/main/java/{}/StandardWebhooks.java",
+                    namespace.replace('.', "/")
+                ),
+                include_str!("../templates/webhooks.java.tmpl").replace("__PACKAGE__", &namespace),
+            )?)
+        })
     }
 }
 
@@ -100,3 +113,6 @@ mod tests {
         );
     }
 }
+
+#[path = "webhooks_input.rs"]
+mod http_input;

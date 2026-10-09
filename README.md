@@ -47,7 +47,10 @@ can parse, validate and publish their native contracts:
 
 Each new provider is its own Rust crate. Use one directly, or pick features in
 the `poolster-inputs` bundle. **Outputs must support the input's contract:** GraphQL,
-event, workflow and RPC SDK generators still need their own consumers.
+events, workflows and RPC use their own consumers. The unreleased `alpha-2`
+branch implements GraphQL → TypeScript, AsyncAPI → TypeScript/Kafka, Arazzo →
+TypeScript runners and Protobuf → Go gRPC. Cap’n Proto output remains planned.
+[Implemented pipelines and remaining work →](docs/native-pipelines.md)
 [Input support and inspection →](docs/input-plugins.md)
 
 ### Poolster itself

@@ -35,12 +35,14 @@ impl PackageExt for Package<Go> {
     }
 }
 pub struct Sdk {
+    http_input: poolster_core::engine::HttpInput,
     meta: Meta,
     client_style: Option<SdkClientStyle>,
     jobs: usize,
 }
 pub fn sdk() -> Sdk {
     Sdk {
+        http_input: Default::default(),
         meta: Meta::new(),
         client_style: None,
         jobs: 0,
@@ -66,6 +68,13 @@ impl Sdk {
     }
 }
 impl Plugin<Go> for Sdk {
+    fn supports_native_input(&self) -> bool {
+        self.http_input.is_explicit()
+    }
+    fn requires(&self) -> Vec<poolster_core::engine::Requirement> {
+        self.http_input.requirements()
+    }
+
     fn kind(&self) -> &'static str {
         "go-sdk"
     }
@@ -81,20 +90,25 @@ impl Plugin<Go> for Sdk {
         ]
     }
     fn generate(&self, cx: &mut PluginContext<'_, Go>) -> Result<()> {
-        cx.publish(crate::providers::model_contract(cx.api))?;
-        cx.publish(crate::providers::default_transport())?;
-        cx.publish(crate::providers::operation_contract(cx.api))?;
-        cx.publish(crate::providers::Client {
-            symbol: "Client".into(),
-        })?;
-        cx.files.append(crate::render_sdk(
-            cx.api,
-            ".",
-            cx.settings.package_name.as_deref(),
-            self.client_style
-                .or(cx.common.client_style)
-                .unwrap_or(SdkClientStyle::Namespaced),
-            self.jobs,
-        )?)
+        self.http_input.with_context(cx, |cx| {
+            cx.publish(crate::providers::model_contract(cx.api))?;
+            cx.publish(crate::providers::default_transport())?;
+            cx.publish(crate::providers::operation_contract(cx.api))?;
+            cx.publish(crate::providers::Client {
+                symbol: "Client".into(),
+            })?;
+            cx.files.append(crate::render_sdk(
+                cx.api,
+                ".",
+                cx.settings.package_name.as_deref(),
+                self.client_style
+                    .or(cx.common.client_style)
+                    .unwrap_or(SdkClientStyle::Namespaced),
+                self.jobs,
+            )?)
+        })
     }
 }
+
+#[path = "package_input.rs"]
+mod http_input;

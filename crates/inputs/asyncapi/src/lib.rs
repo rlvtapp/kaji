@@ -1,5 +1,10 @@
 //! AsyncAPI inputs retain their original version and native protocol model.
+pub mod blocks;
+pub mod contracts;
+pub use blocks::{EventMessageBlocks, event_messages, lower_message_blocks};
+mod lowering;
 use anyhow::{Context, Result, bail};
+pub use lowering::lower as lower_operations;
 use poolster_core::input::{InputOperation as OperationSummary, InputSummary as ContractSummary};
 use roas_asyncapi::validation::{Validate, ValidationOptions};
 use serde_json::Value;
@@ -129,14 +134,59 @@ impl poolster_core::input::InputPlugin for AsyncApiInput {
     fn format(&self) -> &str {
         "asyncapi"
     }
+    fn load_with_options(
+        &self,
+        path: &std::path::Path,
+        options: &poolster_core::input::InputOptions,
+    ) -> Result<poolster_core::input::InputContract> {
+        let document = parse(&std::fs::read_to_string(path)?)?;
+        let mut input = poolster_core::input::InputContract::new(document.summary());
+        let (messages, diagnostics) =
+            blocks::lower_message_blocks(&document, path.to_string_lossy());
+        let reference = poolster_core::blocks::ContractReference::from_bytes(
+            <AsyncApiDocument as poolster_core::engine::Contract>::NAME,
+            path.to_string_lossy(),
+            &serde_json::to_vec(&document.source)?,
+        );
+        input.publish(messages.with_parent(reference.clone()))?;
+        input.diagnostics.extend(diagnostics);
+        match lower_operations(&document, options) {
+            Ok(events) => input.publish(events)?,
+            Err(error) if options == &poolster_core::input::InputOptions::default() => {
+                input
+                    .diagnostics
+                    .push(poolster_core::input::InputDiagnostic {
+                        code: "asyncapi-generation-unsupported".into(),
+                        message: format!("{error:#}"),
+                    });
+            }
+            Err(error) => return Err(error),
+        }
+        input.publish_with_reference(document, reference)?;
+        Ok(input)
+    }
     fn load(&self, path: &std::path::Path) -> anyhow::Result<poolster_core::input::InputContract> {
         let document = parse(
             &std::fs::read_to_string(path)
                 .with_context(|| format!("cannot read contract {}", path.display()))?,
         )?;
         let mut input = poolster_core::input::InputContract::new(document.summary());
+        let (messages, diagnostics) =
+            blocks::lower_message_blocks(&document, path.to_string_lossy());
+        let reference = poolster_core::blocks::ContractReference::from_bytes(
+            <AsyncApiDocument as poolster_core::engine::Contract>::NAME,
+            path.to_string_lossy(),
+            &serde_json::to_vec(&document.source)?,
+        );
+        input.publish(messages.with_parent(reference.clone()))?;
+        input.diagnostics.extend(diagnostics);
 
-        input.publish(document)?;
+        if let Ok(events) =
+            lower_operations(&document, &poolster_core::input::InputOptions::default())
+        {
+            input.publish(events)?;
+        }
+        input.publish_with_reference(document, reference)?;
         Ok(input)
     }
 }

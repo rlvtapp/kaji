@@ -1,9 +1,20 @@
 # Generator completion backlog
 
-Audited on 2026-10-08. Checked items are delivered; unchecked items retain
+Updated on **2026-10-09**. Native protocol work has its own
+[implemented pipeline matrix and remaining checklist](native-pipelines.md#remaining-work).
+The `alpha-2` additions are unreleased; the fresh frozen-build HTTP corpus sweep is pending. Checked items are delivered; unchecked items retain
 remaining work. This backlog covers SDKs, framework helpers and generated artifacts. The
 [compatibility results](guru-compatibility.md) remain the source of truth for
 native compilation; the [feature catalog](features.md) describes current support.
+
+## Native protocol priorities
+
+GraphQL → TypeScript, Protobuf → Go gRPC, AsyncAPI → TypeScript/Kafka and Arazzo →
+TypeScript runners are implemented for documented subsets. Next: Cap’n Proto →
+Rust, standalone AsyncAPI message types, broader protocol features, npm native
+generation wiring and shared naming adoption. Forge overlays/migration and Cap’n
+Web remain separate unimplemented work. Follow the linked native checklist rather
+than treating parser availability as generated-output support.
 
 ## 1. Get every SDK language green
 

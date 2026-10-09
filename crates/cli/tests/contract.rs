@@ -26,7 +26,14 @@ fn lists_registered_providers_and_inspects_typed_graphql() {
     let plugins = run(&["contract", "plugins", "--format", "json"]);
     assert!(plugins.status.success());
     let plugins: Value = serde_json::from_slice(&plugins.stdout).unwrap();
-    assert_eq!(plugins.as_array().unwrap().len(), 5);
+    assert_eq!(plugins.as_array().unwrap().len(), 6);
+    assert!(
+        plugins
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|plugin| plugin["provider"] == "openapi.compiler-artifacts")
+    );
     assert!(
         plugins
             .as_array()

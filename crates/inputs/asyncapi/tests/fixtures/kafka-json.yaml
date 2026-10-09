@@ -1,0 +1,51 @@
+asyncapi: 3.0.0
+info: {title: Poolster Kafka JSON, version: 1.0.0}
+defaultContentType: application/json
+servers:
+  local:
+    host: 127.0.0.1:29092
+    protocol: kafka
+channels:
+  orders:
+    address: poolster-orders
+    bindings:
+      kafka: {topic: poolster-orders, bindingVersion: '0.5.0'}
+    messages:
+      created:
+        name: OrderCreated
+        payload:
+          $ref: '#/components/schemas/Order'
+        headers:
+          type: object
+          required: [trace]
+          properties:
+            trace: {type: string, minLength: 1}
+          additionalProperties: false
+        bindings:
+          kafka:
+            bindingVersion: '0.5.0'
+            key: {type: string, minLength: 1}
+operations:
+  sendOrder:
+    action: send
+    channel: {$ref: '#/channels/orders'}
+    messages: [{$ref: '#/channels/orders/messages/created'}]
+  receiveOrder:
+    action: receive
+    channel: {$ref: '#/channels/orders'}
+    messages: [{$ref: '#/channels/orders/messages/created'}]
+    bindings:
+      kafka:
+        groupId: {type: string, enum: [poolster-alpha2-orders]}
+        clientId: {type: string, enum: [poolster-alpha2-consumer]}
+        bindingVersion: '0.5.0'
+components:
+  schemas:
+    Order:
+      type: object
+      required: [id, quantity]
+      properties:
+        id: {type: string, minLength: 1}
+        quantity: {type: integer, minimum: 1}
+        note: {type: 'null'}
+      additionalProperties: false

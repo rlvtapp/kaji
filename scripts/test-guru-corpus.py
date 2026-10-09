@@ -1,5 +1,7 @@
 """Offline regression checks for corpus integrity, failure reporting and cleanup."""
 import hashlib
+import io
+import zipfile
 import importlib.util
 import json
 import os
@@ -52,6 +54,93 @@ class CorpusTests(unittest.TestCase):
             corpus.public.fetch(manifest, root / 'output', cache)
             self.assertEqual(corpus.public.source_path(root / 'output', contract).read_bytes(), data)
             self.assertEqual((root / 'output/sample/models/Child.yml').read_bytes(), helper)
+
+    def test_repeated_fetch_verifies_and_reuses_the_same_reference_tree(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest, cache, contract, data, helper = self.reference_fixture(root)
+            output = root / 'output'
+            corpus.public.fetch(manifest, output, cache)
+            files = [corpus.public.source_path(output, contract), output / 'sample/models/Child.yml']
+            before = [(path.read_bytes(), path.stat().st_mtime_ns) for path in files]
+            corpus.public.fetch(manifest, output, cache)
+            self.assertEqual(before, [(path.read_bytes(), path.stat().st_mtime_ns) for path in files])
+            self.assertEqual([data, helper], [path.read_bytes() for path in files])
+
+    def test_existing_reference_tree_rejects_corrupt_missing_and_extra_files(self):
+        for mutation in ['corrupt', 'missing', 'extra']:
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                manifest, cache, _, _, _ = self.reference_fixture(root)
+                output = root / 'output'
+                corpus.public.fetch(manifest, output, cache)
+                child = output / 'sample/models/Child.yml'
+                if mutation == 'corrupt':
+                    child.write_text('type: number\n')
+                elif mutation == 'missing':
+                    child.unlink()
+                else:
+                    (output / 'sample/stale.yml').write_text('type: string\n')
+                with self.assertRaisesRegex(ValueError, 'Reference output.*mismatch'):
+                    corpus.public.fetch(manifest, output, cache)
+                if mutation == 'corrupt':
+                    self.assertEqual(child.read_text(), 'type: number\n')
+
+    def test_repeated_fetch_still_checks_cached_reference_checksums(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest, cache, _, _, helper = self.reference_fixture(root)
+            corpus.public.fetch(manifest, root / 'output', cache)
+            (cache / 'sample/models/Child.yml').write_text('tampered cache')
+            with self.assertRaisesRegex(ValueError, 'checksum'):
+                corpus.public.fetch(manifest, root / 'output', cache)
+            self.assertEqual((root / 'output/sample/models/Child.yml').read_bytes(), helper)
+
+    def test_existing_reference_tree_rejects_file_directory_and_root_symlinks(self):
+        for mutation in ['file', 'directory', 'root']:
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                manifest, cache, _, _, helper = self.reference_fixture(root)
+                output = root / 'output'
+                corpus.public.fetch(manifest, output, cache)
+                tree = output / 'sample'
+                if mutation == 'file':
+                    outside = root / 'outside.yml'
+                    outside.write_bytes(helper)
+                    (tree / 'models/Child.yml').unlink()
+                    (tree / 'models/Child.yml').symlink_to(outside)
+                else:
+                    target = tree / 'models' if mutation == 'directory' else tree
+                    outside = root / 'outside'
+                    target.rename(outside)
+                    target.symlink_to(outside, target_is_directory=True)
+                with self.assertRaisesRegex(ValueError, 'symlink'):
+                    corpus.public.fetch(manifest, output, cache)
+
+    def test_archive_fetch_reuses_verified_tree_and_rejects_tampering(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            cache = root / 'cache'
+            cache.mkdir()
+            archive = io.BytesIO()
+            with zipfile.ZipFile(archive, 'w') as source:
+                source.writestr('bundle/api/source.yml', 'openapi: 3.1.0')
+                source.writestr('bundle/api/models/Child.yml', 'type: string')
+            data = archive.getvalue()
+            (cache / 'sample.zip').write_bytes(data)
+            manifest = root / 'manifest.json'
+            manifest.write_text(json.dumps({'contracts': [{'name': 'sample',
+                'url': 'https://example.invalid/archive', 'sha256': hashlib.sha256(data).hexdigest(),
+                'archive_entry': 'api/source.yml'}]}))
+            output = root / 'output'
+            corpus.public.fetch(manifest, output, cache)
+            entry = output / 'sample/api/source.yml'
+            before = entry.stat().st_mtime_ns
+            corpus.public.fetch(manifest, output, cache)
+            self.assertEqual(entry.stat().st_mtime_ns, before)
+            (output / 'sample/api/models/Child.yml').write_text('type: number')
+            with self.assertRaisesRegex(ValueError, 'checksum'):
+                corpus.public.fetch(manifest, output, cache)
 
     def test_corrupt_reference_fails_before_assembling_contract(self):
         with tempfile.TemporaryDirectory() as directory:

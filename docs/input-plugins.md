@@ -18,11 +18,14 @@ Source -> InputPlugin -> InputContract -> InputProvider<C> -> Plugin<L> -> files
 | `InputProvider<C>` | Publish the selected input capability in a package graph. |
 | `Plugin<L>` | Declare requirements, consume contracts and emit output. |
 
-Providers support inspection and native contract publication. GraphQL now also
-publishes Poolster-owned `GraphqlOperations` for the TypeScript native output
-pipeline. Existing HTTP SDKs consume `AdaptedApi`; RPC, event and workflow usable
-output pipelines remain follow-up work. See the [native support matrix](native-pipelines.md)
-and [architecture](architecture.md) for the boundaries.
+All six bundled inputs publish native contracts and available building blocks.
+OpenAPI publishes `AdaptedApi` for existing HTTP generators. GraphQL operations,
+RPC services, events and workflows use their own owned contracts, retaining native
+documents for details outside them. The `alpha-2` working tree implements GraphQL
+→ TypeScript, Protobuf → Go gRPC, AsyncAPI → TypeScript/Kafka and Arazzo → TypeScript
+runners; these additions are not an alpha.2 release yet. Cap’n Proto output is open.
+See the [support matrix](plugin-support-matrix.md), [remaining work](native-pipelines.md#remaining-work)
+and [contracts/block flow](input-contract-flow.md).
 
 The [Node API](../packages/npm/sdk/README.md#input-plugins) exposes the same five
 compiled Rust providers through individually installable npm input packages and
@@ -54,24 +57,31 @@ this inspection. Workflow inspection does not perform API calls.
 
 | Format | Provider | Published native contract | Scope |
 | --- | --- | --- | --- |
-| GraphQL SDL + operations | `graphql.apollo` | `GraphqlDocument`, optionally `GraphqlOperations` | Apollo validated native schema plus parser-independent selections/variables/results for TypeScript generation |
-| AsyncAPI | `asyncapi.roas` | `AsyncApiDocument` | 2.6.0, 3.0.0 and 3.1.0 typed models plus source JSON; channels/messages/bindings retained; invalid local references fail, external references require bundling |
-| Arazzo | `arazzo.roas` | `ArazzoDocument` | 1.0.0, 1.0.1 and 1.1.0 typed models plus source JSON; dependency/step checks, reusable references, source URLs and criteria retained; no execution |
-| Protobuf | `protobuf.protox` | `ProtobufDocument` | Pure Rust compilation to descriptor pool; imports relative to the root directory; message/enum/service types and all RPC streaming forms |
-| Cap'n Proto | `capnproto.capnp` | `CapnProtoDocument` | Official external `capnp` compiler; retained binary `CodeGeneratorRequest`, imported types and capability methods |
+| OpenAPI | `openapi.compiler-artifacts` | `AdaptedApi`, schema/operation blocks | Independent input crate reads compiler artifacts; existing CLI compiles source first. `openapi.compiler` is an explicitly registered raw-source provider. |
+| GraphQL SDL + operations | `graphql.apollo` | `GraphqlDocument`, input-model blocks, `GraphqlOperations` and operation blocks when documents are supplied | Validated schema, selection-specific results/variables; schema-only operation collections are unavailable |
+| AsyncAPI | `asyncapi.roas` | `AsyncApiDocument`, message blocks, `EventOperations` when Kafka lowering succeeds | Inspection 2.6/3.0/3.1; executable 3.0/3.1 Kafka subset; partial message blocks retain diagnostics |
+| Arazzo | `arazzo.roas` | `ArazzoDocument`, resolved `WorkflowOperations` and step blocks | Inspection 1.0.0/1.0.1/1.1.0; explicit local OpenAPI mappings enable the supported sequential runner subset; unresolved step collections are unavailable |
+| Protobuf | `protobuf.protox` | `ProtobufDocument`, `RpcContract`, method blocks | Proto2/proto3 descriptors, import roots and all RPC streaming directions; official Go gRPC output |
+| Cap’n Proto | `capnproto.capnp` | `CapnProtoDocument`, node/capability blocks | Official binary compiler request; real source compilation needs `capnp`; Rust output remains unimplemented |
 
-Cap'n Proto requires the `capnp` executable on PATH. Its binary descriptor parser
-is tested independently; real source compilation is a separate check requiring
-that executable. Protobuf include directories beyond the root directory are not
-configurable in this first interface. GraphQL accepts a complete SDL schema and `InputOptions.operation_files` for
-separate executable documents. Introspection JSON is not supported.
+Cap’n Proto requires `capnp` on PATH. Protobuf and Cap’n Proto support explicit
+`InputOptions.import_roots`. GraphQL uses `InputOptions.operation_files` with
+complete SDL; introspection JSON remains unsupported. AsyncAPI uses `broker`
+configuration; Arazzo uses `workflow_sources`. Unsupported provider options fail.
+Input inspection does not connect to a broker or execute workflow steps.
+
+Each input crate exposes public `contracts` and `blocks` modules. Shared owned
+definitions preserve graph type identity; output interfaces do not require parser
+library types. Custom inputs may publish whole contracts without any blocks.
+Collections distinguish `Complete`, `Partial { diagnostics }` and `Unavailable`;
+block handlers declare the completeness they need. See [contract safety and hooks](contracts-and-blocks.md).
 
 ## Select or replace a provider
 
 ### Include only the formats you need
 
 `InputRegistry` belongs to `poolster-core`; each parser and provider belongs to its own `poolster-input-*` crate under `crates/inputs/`.
-The `poolster-inputs` convenience bundle exposes optional Cargo features named `graphql`, `asyncapi`, `arazzo`,
+The `poolster-inputs` convenience bundle exposes optional Cargo features named `openapi`, `graphql`, `asyncapi`, `arazzo`,
 `protobuf` and `capnproto`, enabled by default. An embedded application can build
 only the providers it needs:
 
@@ -125,12 +135,12 @@ let input_handle = input.handle();
 
 Handles remain package-local. Generation consumers should request the
 Poolster-owned protocol capability; inspection consumers may request native parser
-documents. See [native generation](native-pipelines.md) for the GraphQL recipe,
+documents. See [native generation](native-pipelines.md) for the supported recipes,
 warning/skip policy and subscription transport boundary.
 See [typed plugin contracts](typed-plugins.md#contracts-describe-actual-outputs)
 for dependency declarations and output publication.
 
-## Supply a normalized HTTP input later
+## Supply or replace the normalized HTTP input
 
 An input plugin which normalizes an HTTP contract can publish `AdaptedApi`,
 including its security scheme catalog. `poolster::generate_with_input` passes this
@@ -145,7 +155,7 @@ SDK bridge. Input substitution does not establish OpenAPI parser equivalence.
 
 ```sh
 cargo test -p poolster-core input::
-cargo test -p poolster-inputs -p poolster-input-graphql -p poolster-input-asyncapi -p poolster-input-arazzo -p poolster-input-protobuf -p poolster-input-capnproto
+cargo test -p poolster-inputs -p poolster-input-openapi -p poolster-input-graphql -p poolster-input-asyncapi -p poolster-input-arazzo -p poolster-input-protobuf -p poolster-input-capnproto
 cargo test -p poolster-cli --test contract
 cargo test -p poolster --lib registered_input
 cargo check -p poolster-inputs --no-default-features
@@ -161,6 +171,7 @@ See [verification](verification.md) for toolchain coverage and baseline failures
 
 | Format | Crate | Provider |
 | --- | --- | --- |
+| OpenAPI | `poolster-input-openapi` | `OpenApiInput` |
 | GraphQL | `poolster-input-graphql` | `GraphqlInput` |
 | AsyncAPI | `poolster-input-asyncapi` | `AsyncApiInput` |
 | Arazzo | `poolster-input-arazzo` | `ArazzoInput` |
@@ -196,7 +207,7 @@ The CLI searches the input directory by default. Protobuf supports proto2/proto3
 and reports editions as unsupported. GraphQL validates SDL defaults in addition
 to Apollo’s schema checks.
 
-For GraphQL generation capabilities and concrete protocol/Forge follow-ups, see
+For implemented generation capabilities and concrete protocol/Forge follow-ups, see
 [native pipelines](native-pipelines.md). For the full test matrix, ignored
 toolchain checks and baseline failures, see [verification](verification.md). Corpus tests establish parsing and
 source-to-documentation routing; generated SDK compilation and runtime behavior

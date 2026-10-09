@@ -9,11 +9,13 @@ use serde_json::{Value, json};
 
 pub struct OperationTests {
     meta: Meta,
+    pub(crate) http: poolster_core::engine::HttpInput,
     models: Option<Handle<PythonModels>>,
 }
 pub fn operation_tests() -> OperationTests {
     OperationTests {
         meta: Meta::new(),
+        http: Default::default(),
         models: None,
     }
 }
@@ -23,7 +25,11 @@ impl OperationTests {
         self
     }
     pub fn models_from(self, sdk: &Sdk) -> Self {
-        self.using_models(sdk.models())
+        {
+            let mut selected = self.using_models(sdk.models());
+            selected.http = sdk.http.clone();
+            selected
+        }
     }
 }
 impl Plugin<Python> for OperationTests {
@@ -34,9 +40,12 @@ impl Plugin<Python> for OperationTests {
         &self.meta
     }
     fn requires(&self) -> Vec<Requirement> {
-        vec![Requirement::on(self.models)]
+        let mut requirements = self.http.requirements();
+        requirements.extend(vec![Requirement::on(self.models)]);
+        requirements
     }
     fn generate(&self, cx: &mut PluginContext<'_, Python>) -> Result<()> {
+        self.http.run(cx, |cx| {
         let models = cx.inputs.get::<PythonModels>()?;
         ensure!(
             models.module.split('.').all(|part| part
@@ -76,6 +85,10 @@ impl Plugin<Python> for OperationTests {
         let script = SCRIPT.replace("__MODULE__", &models.module);
         cx.files
             .emit(GeneratedFile::new("tests/test_operations.py", script)?)
+        })
+    }
+    fn supports_native_input(&self) -> bool {
+        self.http.is_explicit()
     }
 }
 fn sanitize(schema: &mut SchemaValue) {
@@ -342,6 +355,35 @@ class OperationSmokeTests(unittest.TestCase):
 
 if __name__ == '__main__': unittest.main()
 "#;
+
+impl OperationTests {
+    /// Select the authoritative HTTP contract produced by an input or transform.
+    pub fn input(
+        mut self,
+        input: poolster_core::engine::Handle<poolster_core::AdaptedApi>,
+    ) -> Self {
+        self.http = self.http.input(input);
+        self
+    }
+    /// Consume complete model blocks from the selected HTTP contract revision.
+    pub fn input_models(
+        mut self,
+        models: poolster_core::engine::Handle<poolster_core::blocks::Blocks<poolster_core::Schema>>,
+    ) -> Self {
+        self.http = self.http.input_models(models);
+        self
+    }
+    /// Consume complete endpoint blocks from the selected HTTP contract revision.
+    pub fn input_endpoints(
+        mut self,
+        endpoints: poolster_core::engine::Handle<
+            poolster_core::blocks::Blocks<poolster_core::Operation>,
+        >,
+    ) -> Self {
+        self.http = self.http.input_endpoints(endpoints);
+        self
+    }
+}
 
 #[cfg(test)]
 #[path = "operation_tests/tests.rs"]

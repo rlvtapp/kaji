@@ -40,6 +40,7 @@ impl Contract for Client {
 }
 #[derive(Default)]
 pub struct Workspace {
+    pub(crate) http_api: Option<poolster_core::Api>,
     pub(crate) models: bool,
     pub(crate) operations: bool,
     pub(crate) resources: bool,
@@ -47,13 +48,15 @@ pub struct Workspace {
 }
 impl Workspace {
     pub fn finalize(cx: &mut FinalizeContext<'_, Go>) -> Result<()> {
+        let selected_api = cx.workspace.http_api.clone();
+        let api = selected_api.as_ref().unwrap_or(cx.api);
         if !cx.workspace.models && !cx.workspace.operations {
             return Ok(());
         }
         let package =
-            crate::go_package_name(cx.settings.package_name.as_deref().unwrap_or(&cx.api.name));
+            crate::go_package_name(cx.settings.package_name.as_deref().unwrap_or(&api.name));
         let module =
-            crate::go_module_name(cx.settings.package_name.as_deref().unwrap_or(&cx.api.name));
+            crate::go_module_name(cx.settings.package_name.as_deref().unwrap_or(&api.name));
         cx.files
             .emit(GeneratedFile::new("go.mod", crate::render_go_mod(&module))?)?;
         if cx.workspace.operations {
@@ -62,7 +65,7 @@ impl Workspace {
             } else {
                 SdkClientStyle::Flat
             };
-            let prepared = crate::symbols::prepare(cx.api);
+            let prepared = crate::symbols::prepare(api);
             let runtime = crate::render_runtime(&prepared, &package, style).replace(
                 "httpClient = http.DefaultClient",
                 &format!(
@@ -90,6 +93,7 @@ enum Part {
     Client,
 }
 pub struct Provider {
+    http_input: poolster_core::engine::HttpInput,
     meta: Meta,
     part: Part,
     models: Option<Handle<Models>>,
@@ -100,6 +104,7 @@ pub struct Provider {
 }
 fn provider(part: Part) -> Provider {
     Provider {
+        http_input: Default::default(),
         meta: Meta::new(),
         part,
         models: None,
@@ -156,6 +161,9 @@ impl Provider {
     }
 }
 impl Plugin<Go> for Provider {
+    fn supports_native_input(&self) -> bool {
+        self.http_input.is_explicit()
+    }
     fn kind(&self) -> &'static str {
         match self.part {
             Part::Models => "go-models",
@@ -176,72 +184,81 @@ impl Plugin<Go> for Provider {
         }]
     }
     fn requires(&self) -> Vec<Requirement> {
-        match self.part {
-            Part::Operations => vec![
-                Requirement::on(self.models),
-                Requirement::on(self.transport),
-            ],
-            Part::Client => vec![Requirement::on(self.operations)],
-            _ => vec![],
-        }
+        let mut requirements = self.http_input.requirements();
+        requirements.extend({
+            match self.part {
+                Part::Operations => vec![
+                    Requirement::on(self.models),
+                    Requirement::on(self.transport),
+                ],
+                Part::Client => vec![Requirement::on(self.operations)],
+                _ => vec![],
+            }
+        });
+        requirements
     }
     fn generate(&self, cx: &mut PluginContext<'_, Go>) -> Result<()> {
-        match self.part {
-            Part::Transport => {
-                cx.publish(default_transport())?;
-                return Ok(());
+        self.http_input.with_context(cx, |cx| {
+            if matches!(self.part, Part::Operations) || cx.workspace.http_api.is_none() {
+                cx.workspace.http_api = Some(cx.api.clone());
             }
-            Part::Operations => {
-                let _ = cx.inputs.get::<Models>()?;
-                cx.workspace.transport = Some(cx.inputs.get::<Transport>()?.clone());
+            match self.part {
+                Part::Transport => {
+                    cx.publish(default_transport())?;
+                    return Ok(());
+                }
+                Part::Operations => {
+                    let _ = cx.inputs.get::<Models>()?;
+                    cx.workspace.transport = Some(cx.inputs.get::<Transport>()?.clone());
+                }
+                Part::Client => {
+                    let _ = cx.inputs.get::<Operations>()?;
+                }
+                _ => {}
             }
-            Part::Client => {
-                let _ = cx.inputs.get::<Operations>()?;
-            }
-            _ => {}
-        }
-        let style = if matches!(self.part, Part::Client) && self.namespaced {
-            SdkClientStyle::Namespaced
-        } else {
-            SdkClientStyle::Flat
-        };
-        let tree = crate::render_sdk(
-            cx.api,
-            ".",
-            cx.settings.package_name.as_deref(),
-            style,
-            self.jobs,
-        )?;
-        for (file, _) in tree.into_files() {
-            let name = file.path.file_name().unwrap().to_string_lossy();
-            let emit = match self.part {
-                Part::Models => name.starts_with("model_"),
-                Part::Operations => name.starts_with("operation_"),
-                Part::Client => name.starts_with("service_"),
-                Part::Transport => false,
+            let style = if matches!(self.part, Part::Client) && self.namespaced {
+                SdkClientStyle::Namespaced
+            } else {
+                SdkClientStyle::Flat
             };
-            if emit {
-                cx.files.emit(file)?;
+            let tree = crate::render_sdk(
+                cx.api,
+                ".",
+                cx.settings.package_name.as_deref(),
+                style,
+                self.jobs,
+            )?;
+            for (file, _) in tree.into_files() {
+                let name = file.path.file_name().unwrap().to_string_lossy();
+                let emit = match self.part {
+                    Part::Models => name.starts_with("model_"),
+                    Part::Operations => name.starts_with("operation_"),
+                    Part::Client => name.starts_with("service_"),
+                    Part::Transport => false,
+                };
+                if emit {
+                    cx.files.emit(file)?;
+                }
             }
-        }
-        match self.part {
-            Part::Models => {
-                cx.workspace.models = true;
-                cx.publish(model_contract(cx.api))?;
+            match self.part {
+                Part::Models => {
+                    cx.workspace.models = true;
+                    cx.publish(model_contract(cx.api))?;
+                }
+                Part::Operations => {
+                    cx.workspace.operations = true;
+                    cx.publish(operation_contract(cx.api))?;
+                }
+                Part::Client => {
+                    cx.workspace.resources = self.namespaced;
+                    cx.publish(Client {
+                        symbol: "Client".into(),
+                    })?;
+                }
+                _ => {}
             }
-            Part::Operations => {
-                cx.workspace.operations = true;
-                cx.publish(operation_contract(cx.api))?;
-            }
-            Part::Client => {
-                cx.workspace.resources = self.namespaced;
-                cx.publish(Client {
-                    symbol: "Client".into(),
-                })?;
-            }
-            _ => {}
-        }
-        Ok(())
+            Ok(())
+        })
     }
 }
 pub(crate) fn model_contract(api: &poolster_core::Api) -> Models {
@@ -261,12 +278,14 @@ pub(crate) fn default_transport() -> Transport {
 }
 
 pub struct RoundtripTests {
+    http_input: poolster_core::engine::HttpInput,
     meta: Meta,
     models: Option<Handle<Models>>,
     options: poolster_core::samples::SampleOptions,
 }
 pub fn roundtrip_tests() -> RoundtripTests {
     RoundtripTests {
+        http_input: Default::default(),
         meta: Meta::new(),
         models: None,
         options: Default::default(),
@@ -283,6 +302,9 @@ impl RoundtripTests {
     }
 }
 impl Plugin<Go> for RoundtripTests {
+    fn supports_native_input(&self) -> bool {
+        self.http_input.is_explicit()
+    }
     fn kind(&self) -> &'static str {
         "go-roundtrip-tests"
     }
@@ -290,9 +312,12 @@ impl Plugin<Go> for RoundtripTests {
         &self.meta
     }
     fn requires(&self) -> Vec<Requirement> {
-        vec![Requirement::on(self.models)]
+        let mut requirements = self.http_input.requirements();
+        requirements.extend(vec![Requirement::on(self.models)]);
+        requirements
     }
     fn generate(&self, cx: &mut PluginContext<'_, Go>) -> Result<()> {
+        self.http_input.with_context(cx, |cx| {
         let models = cx.inputs.get::<Models>()?;
         let package =
             crate::go_package_name(cx.settings.package_name.as_deref().unwrap_or(&cx.api.name));
@@ -319,115 +344,13 @@ impl Plugin<Go> for RoundtripTests {
             ".poolster/roundtrip-diagnostics.json",
             serde_json::to_string_pretty(&diagnostics)? + "\n",
         )?)
+     })
     }
 }
 
+#[path = "providers_input.rs"]
+mod http_input;
+
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use poolster_core::{
-        Api, HttpMethod, Operation, OperationResponse, Schema, SchemaKind, SchemaValue,
-        engine::Packages,
-    };
-    struct CustomTransport {
-        meta: Meta,
-    }
-    impl Plugin<Go> for CustomTransport {
-        fn kind(&self) -> &'static str {
-            "custom-http"
-        }
-        fn meta(&self) -> &Meta {
-            &self.meta
-        }
-        fn provides(&self) -> Vec<Provision> {
-            vec![Provision::of::<Transport>()]
-        }
-        fn generate(&self, cx: &mut PluginContext<'_, Go>) -> Result<()> {
-            cx.files.emit(GeneratedFile::new("custom_http.go",r#"package demo
-import("io";"net/http";"strings")
-type customHTTP struct{}
-func(customHTTP) Do(request *http.Request)(*http.Response,error){return &http.Response{StatusCode:200,Header:http.Header{"Content-Type":[]string{"application/json"}},Body:io.NopCloser(strings.NewReader(`"custom"`)),Request:request},nil}
-"#)?)?;
-            cx.publish(Transport {
-                constructor: "customHTTP{}".into(),
-            })
-        }
-    }
-    #[test]
-    fn custom_provider_and_generated_roundtrips_execute_without_network() {
-        let mut integer = SchemaValue::new(SchemaKind::Integer);
-        integer.format = Some("int64".into());
-        let api = Api {
-            name: "demo".into(),
-            version: "1.0.0".into(),
-            schemas: vec![
-                Schema::new(
-                    "Details",
-                    SchemaValue::new(SchemaKind::Object {
-                        fields: vec![poolster_core::Field {
-                            name: "note".into(),
-                            value: {
-                                let mut value = SchemaValue::new(SchemaKind::String);
-                                value.nullable = true;
-                                value
-                            },
-                            required: false,
-                            annotations: Default::default(),
-                        }],
-                        additional_properties: poolster_core::AdditionalProperties::Any,
-                    }),
-                ),
-                Schema::new("Counter", integer),
-                Schema::new("Label", SchemaValue::new(SchemaKind::String)),
-            ],
-            operations: vec![Operation {
-                id: "getLabel".into(),
-                method: HttpMethod::Get,
-                path: "/label".into(),
-                responses: vec![OperationResponse::json(
-                    "200",
-                    SchemaValue::new(SchemaKind::String),
-                )],
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
-        let model = models();
-        let model_handle = model.models_handle();
-        let custom = CustomTransport { meta: Meta::new() };
-        let transport_handle = custom.meta.handle::<Transport>();
-        let operation = operations()
-            .using_models(model_handle)
-            .using_transport(transport_handle);
-        let operation_handle = operation.operations_handle();
-        let tree = Packages::new()
-            .package(
-                crate::package("sdk")
-                    .with(client().using_operations(operation_handle))
-                    .with(operation)
-                    .with(custom)
-                    .with(model)
-                    .with(roundtrip_tests().using_models(model_handle)),
-            )
-            .generate(&api, None)
-            .unwrap();
-        let root = tempfile::tempdir().unwrap();
-        tree.write_to(root.path()).unwrap();
-        std::fs::write(root.path().join("sdk/custom_test.go"),r#"package demo
-import("context";"testing")
-func TestCustomTransport(t *testing.T){client,err:=NewClient(ClientConfig{BaseURL:"https://unused.example"});if err!=nil{t.Fatal(err)};result,err:=client.GetLabel(context.Background());if err!=nil{t.Fatal(err)};if result==nil || *result!="custom"{t.Fatal(result)}}
-"#).unwrap();
-        let output = std::process::Command::new("go")
-            .args(["test", "./..."])
-            .env("GOCACHE", root.path().join("go-cache"))
-            .current_dir(root.path().join("sdk"))
-            .output()
-            .unwrap();
-        assert!(
-            output.status.success(),
-            "{}{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
-}
+#[path = "providers_tests.rs"]
+mod tests;

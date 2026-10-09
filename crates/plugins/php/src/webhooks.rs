@@ -3,9 +3,13 @@ use poolster_core::engine::{Meta, Plugin, PluginContext};
 /// Optional raw-body Standard Webhooks v1 verifier. Native requirements: PHP 8.2+ with hash and JSON extensions.
 pub struct Webhooks {
     meta: Meta,
+    pub(crate) http: poolster_core::engine::HttpInput,
 }
 pub fn webhooks() -> Webhooks {
-    Webhooks { meta: Meta::new() }
+    Webhooks {
+        meta: Meta::new(),
+        http: Default::default(),
+    }
 }
 impl Plugin<crate::Php> for Webhooks {
     fn kind(&self) -> &'static str {
@@ -15,19 +19,58 @@ impl Plugin<crate::Php> for Webhooks {
         &self.meta
     }
     fn generate(&self, cx: &mut PluginContext<'_, crate::Php>) -> Result<()> {
-        let package = cx
-            .settings
-            .package_name
-            .clone()
-            .filter(|name| !name.trim().is_empty())
-            .unwrap_or_else(|| format!("poolster/{}-sdk", package_slug(&cx.api.name)));
-        let namespace = namespace_for_package(&package);
-        cx.files.emit(GeneratedFile::new(
-            "src/Webhooks.php",
-            include_str!("../templates/webhooks.php.tmpl").replace("__NAMESPACE__", &namespace),
-        )?)
+        self.http.run(cx, |cx| {
+            let package = cx
+                .settings
+                .package_name
+                .clone()
+                .filter(|name| !name.trim().is_empty())
+                .unwrap_or_else(|| format!("poolster/{}-sdk", package_slug(&cx.api.name)));
+            let namespace = namespace_for_package(&package);
+            cx.files.emit(GeneratedFile::new(
+                "src/Webhooks.php",
+                include_str!("../templates/webhooks.php.tmpl").replace("__NAMESPACE__", &namespace),
+            )?)
+        })
+    }
+    fn requires(&self) -> Vec<poolster_core::engine::Requirement> {
+        self.http.requirements()
+    }
+
+    fn supports_native_input(&self) -> bool {
+        self.http.is_explicit()
     }
 }
+
+impl Webhooks {
+    /// Select the authoritative HTTP contract produced by an input or transform.
+    pub fn input(
+        mut self,
+        input: poolster_core::engine::Handle<poolster_core::AdaptedApi>,
+    ) -> Self {
+        self.http = self.http.input(input);
+        self
+    }
+    /// Consume complete model blocks from the selected HTTP contract revision.
+    pub fn input_models(
+        mut self,
+        models: poolster_core::engine::Handle<poolster_core::blocks::Blocks<poolster_core::Schema>>,
+    ) -> Self {
+        self.http = self.http.input_models(models);
+        self
+    }
+    /// Consume complete endpoint blocks from the selected HTTP contract revision.
+    pub fn input_endpoints(
+        mut self,
+        endpoints: poolster_core::engine::Handle<
+            poolster_core::blocks::Blocks<poolster_core::Operation>,
+        >,
+    ) -> Self {
+        self.http = self.http.input_endpoints(endpoints);
+        self
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

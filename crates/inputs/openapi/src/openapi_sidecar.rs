@@ -4,21 +4,21 @@
 //! narrow boundary that turns its JSON-compatible schema definitions into the
 //! Rust-native, target-neutral AST used by every generator.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use serde::Deserialize;
-use serde_json::{Map, Value};
+use serde_json::Value;
 
-use crate::adapter::{AdaptedApi, Adapter};
-use crate::ast::{
-    AdditionalProperties, Discriminator, OAuthFlow, OperationMediaType, OperationParameter,
-    OperationRequestBody, OperationResponse, SchemaKind, SchemaValue, SecurityRequirement,
-    SecurityScheme, SecuritySchemeCatalog, SecuritySchemeKind,
+use poolster_core::ast::{
+    OAuthFlow, OperationMediaType, OperationParameter, OperationRequestBody, OperationResponse,
+    SchemaKind, SchemaValue, SecurityRequirement, SecurityScheme, SecuritySchemeCatalog,
+    SecuritySchemeKind,
 };
-use crate::{Api, Field, HttpMethod, Operation, Schema};
+use poolster_core::{AdaptedApi, Adapter};
+use poolster_core::{Api, HttpMethod, Operation, Schema};
 
 /// An [`Adapter`] over the artifact directory emitted by Poolster's bundled Go
 /// OpenAPI compiler.
@@ -105,7 +105,7 @@ struct SidecarBody {
 #[derive(Debug, Deserialize)]
 struct SidecarResponse {
     #[serde(flatten)]
-    content_metadata: crate::openapi32::ContentDefinition,
+    content_metadata: poolster_core::openapi32::ContentDefinition,
     code: String,
     #[serde(default)]
     example_json: Option<String>,
@@ -120,7 +120,7 @@ struct SidecarResponse {
 #[derive(Debug, Deserialize)]
 struct SidecarParameter {
     #[serde(default)]
-    content: Vec<crate::openapi32::ContentDefinition>,
+    content: Vec<poolster_core::openapi32::ContentDefinition>,
     name: String,
     #[serde(default)]
     allow_reserved: Option<bool>,
@@ -140,7 +140,7 @@ struct SidecarParameter {
     schema: Option<Value>,
 }
 
-type SidecarMediaType = crate::openapi32::ContentDefinition;
+type SidecarMediaType = poolster_core::openapi32::ContentDefinition;
 
 /// Kept source-compatible with `openapi.ExampleDoc`, which is also the shape
 /// consumed by Poolster Docs' operation playground payload.
@@ -293,15 +293,17 @@ pub fn load_operations(output_dir: &Path, name: String, version: String) -> Resu
             .responses
             .iter()
             .filter(|response| response.content_type.is_some())
-            .map(|response| crate::openapi32::ResponseContentDefinition {
-                status: response.code.clone(),
-                content: {
-                    let mut content = response.content_metadata.clone();
-                    content.content_type = response.content_type.clone().unwrap_or_default();
-                    content.schema_definition = response.schema_definition.clone();
-                    content
+            .map(
+                |response| poolster_core::openapi32::ResponseContentDefinition {
+                    status: response.code.clone(),
+                    content: {
+                        let mut content = response.content_metadata.clone();
+                        content.content_type = response.content_type.clone().unwrap_or_default();
+                        content.schema_definition = response.schema_definition.clone();
+                        content
+                    },
                 },
-            })
+            )
             .collect::<Vec<_>>();
         if !responses.is_empty() {
             annotations.insert(
@@ -347,7 +349,7 @@ pub fn load_operations(output_dir: &Path, name: String, version: String) -> Resu
                             parameter
                                 .content
                                 .first()
-                                .and_then(crate::openapi32::ContentDefinition::schema)
+                                .and_then(poolster_core::openapi32::ContentDefinition::schema)
                         }),
                         description: parameter.description,
                         annotations,
@@ -381,7 +383,7 @@ pub fn load_operations(output_dir: &Path, name: String, version: String) -> Resu
     let mut annotations = BTreeMap::new();
     let metadata_path = output_dir.join("api-metadata.json");
     if metadata_path.exists() {
-        let metadata: crate::openapi32::ApiMetadata = read_json(&metadata_path)?;
+        let metadata: poolster_core::openapi32::ApiMetadata = read_json(&metadata_path)?;
         annotations.insert(
             "poolster.openapi.metadata".into(),
             serde_json::to_value(metadata)?,
@@ -401,7 +403,7 @@ pub fn load_operations(output_dir: &Path, name: String, version: String) -> Resu
         Value::Null
     };
     disambiguate_source_operation_ids(&mut api.operations)?;
-    let report = crate::vendor::normalize_api(&mut api, &root);
+    let report = poolster_core::vendor::normalize_api(&mut api, &root);
     let mut operation_ids = std::collections::BTreeSet::new();
     for operation in &api.operations {
         anyhow::ensure!(
@@ -534,14 +536,14 @@ fn convert_media_type(media_type: &SidecarMediaType) -> OperationMediaType {
     }
 }
 
-fn item_array(content: &crate::openapi32::ContentDefinition) -> Option<SchemaValue> {
+fn item_array(content: &poolster_core::openapi32::ContentDefinition) -> Option<SchemaValue> {
     content.item_schema().map(|item| {
         SchemaValue::new(SchemaKind::Array {
             items: Box::new(item),
         })
     })
 }
-fn content_schema(content: &crate::openapi32::ContentDefinition) -> Option<SchemaValue> {
+fn content_schema(content: &poolster_core::openapi32::ContentDefinition) -> Option<SchemaValue> {
     if is_event_stream_media(&content.content_type) && content.item_schema_definition.is_some() {
         return content.item_schema();
     }
@@ -656,222 +658,7 @@ fn add_optional_annotation(
     }
 }
 
-/// Converts an OpenAPI Schema Object represented as JSON without rendering a
-/// target-language type string or discarding a schema composition keyword.
-pub(crate) fn convert_value(schema: &Value) -> SchemaValue {
-    let Some(object) = schema.as_object() else {
-        return SchemaValue::unknown();
-    };
-    let mut value = SchemaValue::new(convert_kind(object));
-    value.nullable = object
-        .get("nullable")
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
-        || object
-            .get("type")
-            .and_then(Value::as_array)
-            .is_some_and(|types| types.iter().any(|kind| kind.as_str() == Some("null")));
-    value.format = object
-        .get("format")
-        .and_then(Value::as_str)
-        .map(str::to_owned);
-    value.enum_values = object
-        .get("enum")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    value.const_value = object.get("const").cloned();
-    value.default = object.get("default").cloned();
-    value.title = object
-        .get("title")
-        .and_then(Value::as_str)
-        .map(str::to_owned);
-    value.description = object
-        .get("description")
-        .and_then(Value::as_str)
-        .map(str::to_owned);
-    value.deprecated = object
-        .get("deprecated")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    value.read_only = object
-        .get("readOnly")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    value.write_only = object
-        .get("writeOnly")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    value.discriminator = object.get("discriminator").and_then(convert_discriminator);
-    for (key, raw) in object {
-        if key.starts_with("x-") {
-            value.extensions.insert(key.clone(), raw.clone());
-        } else if is_constraint_key(key) {
-            value.constraints.insert(key.clone(), raw.clone());
-        }
-    }
-    value
-}
-
-fn convert_kind(schema: &Map<String, Value>) -> SchemaKind {
-    if let Some(reference) = schema.get("$ref").and_then(Value::as_str) {
-        return SchemaKind::Reference {
-            reference: reference.to_owned(),
-        };
-    }
-    if let Some(variants) = schema.get("oneOf").and_then(Value::as_array) {
-        return SchemaKind::OneOf {
-            variants: variants.iter().map(convert_value).collect(),
-        };
-    }
-    if let Some(variants) = schema.get("anyOf").and_then(Value::as_array) {
-        return SchemaKind::AnyOf {
-            variants: variants.iter().map(convert_value).collect(),
-        };
-    }
-    if let Some(variants) = schema.get("allOf").and_then(Value::as_array) {
-        return SchemaKind::AllOf {
-            variants: variants.iter().map(convert_value).collect(),
-        };
-    }
-    if let Some(negated) = schema.get("not") {
-        return SchemaKind::Not {
-            schema: Box::new(convert_value(negated)),
-        };
-    }
-    if let Some(types) = schema.get("type").and_then(Value::as_array) {
-        let variants = types
-            .iter()
-            .filter_map(Value::as_str)
-            .filter(|kind| *kind != "null")
-            .map(|kind| SchemaValue::new(kind_from_type(kind, schema)))
-            .collect::<Vec<_>>();
-        if variants.len() > 1 {
-            return SchemaKind::AnyOf { variants };
-        }
-        return variants
-            .into_iter()
-            .next()
-            .map(|value| value.kind)
-            .unwrap_or(SchemaKind::Null);
-    }
-    schema
-        .get("type")
-        .and_then(Value::as_str)
-        .map(|kind| kind_from_type(kind, schema))
-        .unwrap_or_else(|| {
-            if schema.contains_key("properties") || schema.contains_key("additionalProperties") {
-                kind_from_type("object", schema)
-            } else if schema.contains_key("items") {
-                kind_from_type("array", schema)
-            } else {
-                SchemaKind::Any
-            }
-        })
-}
-
-fn kind_from_type(kind: &str, schema: &Map<String, Value>) -> SchemaKind {
-    match kind {
-        "null" => SchemaKind::Null,
-        "boolean" => SchemaKind::Boolean,
-        "integer" => SchemaKind::Integer,
-        "number" => SchemaKind::Number,
-        "string" => SchemaKind::String,
-        "array" => SchemaKind::Array {
-            items: Box::new(
-                schema
-                    .get("items")
-                    .map(convert_value)
-                    .unwrap_or_else(SchemaValue::unknown),
-            ),
-        },
-        "object" => SchemaKind::Object {
-            fields: object_fields(schema),
-            additional_properties: additional_properties(schema.get("additionalProperties")),
-        },
-        _ => SchemaKind::Any,
-    }
-}
-
-fn object_fields(schema: &Map<String, Value>) -> Vec<Field> {
-    let required = schema
-        .get("required")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .collect::<BTreeSet<_>>();
-    schema
-        .get("properties")
-        .and_then(Value::as_object)
-        .into_iter()
-        .flatten()
-        .map(|(name, value)| Field {
-            name: name.clone(),
-            value: convert_value(value),
-            required: required.contains(name.as_str()),
-            annotations: BTreeMap::new(),
-        })
-        .collect()
-}
-
-fn additional_properties(value: Option<&Value>) -> AdditionalProperties {
-    match value {
-        None => AdditionalProperties::Unspecified,
-        Some(Value::Bool(true)) => AdditionalProperties::Any,
-        Some(Value::Bool(false)) => AdditionalProperties::Forbidden,
-        Some(value) => AdditionalProperties::Schema {
-            value: Box::new(convert_value(value)),
-        },
-    }
-}
-
-fn convert_discriminator(value: &Value) -> Option<Discriminator> {
-    let object = value.as_object()?;
-    Some(Discriminator {
-        property_name: object.get("propertyName")?.as_str()?.to_owned(),
-        mapping: object
-            .get("mapping")
-            .and_then(Value::as_object)
-            .map(|mapping| {
-                mapping
-                    .iter()
-                    .filter_map(|(key, value)| {
-                        value.as_str().map(|value| (key.clone(), value.to_owned()))
-                    })
-                    .collect()
-            })
-            .unwrap_or_default(),
-    })
-}
-
-fn is_constraint_key(key: &str) -> bool {
-    matches!(
-        key,
-        "multipleOf"
-            | "maximum"
-            | "exclusiveMaximum"
-            | "minimum"
-            | "exclusiveMinimum"
-            | "maxLength"
-            | "minLength"
-            | "pattern"
-            | "maxItems"
-            | "minItems"
-            | "uniqueItems"
-            | "maxProperties"
-            | "minProperties"
-            | "contentEncoding"
-            | "contentMediaType"
-            | "example"
-            | "examples"
-            | "$schema"
-            | "$id"
-            | "$anchor"
-            | "$comment"
-            | "unevaluatedProperties"
-    )
-}
+pub use poolster_core::schema_json::convert_value;
 
 fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T> {
     let content = fs::read_to_string(path)
@@ -909,6 +696,7 @@ fn operation_id(method: &str, path: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use poolster_core::AdditionalProperties;
     #[test]
     fn repeated_source_ids_remain_distinct_and_stable_under_reordering() {
         let operations = vec![
@@ -942,15 +730,15 @@ mod tests {
     #[test]
     fn openapi32_query_and_standard_methods_are_typed() {
         for (wire, method) in [
-            ("HEAD", crate::HttpMethod::Head),
-            ("OPTIONS", crate::HttpMethod::Options),
-            ("TRACE", crate::HttpMethod::Trace),
-            ("QUERY", crate::HttpMethod::Query),
+            ("HEAD", poolster_core::HttpMethod::Head),
+            ("OPTIONS", poolster_core::HttpMethod::Options),
+            ("TRACE", poolster_core::HttpMethod::Trace),
+            ("QUERY", poolster_core::HttpMethod::Query),
         ] {
             assert_eq!(super::parse_method(wire).unwrap(), method);
             assert_eq!(method.as_str(), wire);
             assert_eq!(
-                serde_json::from_str::<crate::HttpMethod>(&format!("\"{wire}\"")).unwrap(),
+                serde_json::from_str::<poolster_core::HttpMethod>(&format!("\"{wire}\"")).unwrap(),
                 method
             );
         }
@@ -1275,7 +1063,7 @@ mod tests {
                 .annotations
                 .contains_key("x-poolster-mock")
         );
-        let scenarios = crate::extract_mock_scenarios(&api).unwrap();
+        let scenarios = poolster_core::extract_mock_scenarios(&api).unwrap();
         assert_eq!(scenarios.len(), 1);
         assert_eq!(scenarios[0].name, "rate-limited");
         assert_eq!(scenarios[0].response.status, 429);

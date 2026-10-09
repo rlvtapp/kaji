@@ -1114,6 +1114,7 @@ version = "0.5.0-alpha.1"
 dependencies = [
  "anyhow",
  "poolster-core",
+ "poolster-input-openapi",
  "poolster-plugin-csharp",
  "poolster-plugin-dotnet",
  "poolster-plugin-elixir",
@@ -1142,6 +1143,7 @@ dependencies = [
  "anyhow",
  "poolster",
  "poolster-core",
+ "poolster-input-openapi",
  "poolster-inputs",
  "reqwest",
  "serde",
@@ -1202,6 +1204,18 @@ dependencies = [
  "anyhow",
  "apollo-compiler",
  "poolster-core",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "poolster-input-openapi"
+version = "0.5.0-alpha.1"
+dependencies = [
+ "anyhow",
+ "poolster-core",
+ "serde",
+ "serde_json",
  "tempfile",
 ]
 
@@ -1212,6 +1226,7 @@ dependencies = [
  "anyhow",
  "poolster-core",
  "protox",
+ "serde_json",
  "tempfile",
 ]
 
@@ -1225,6 +1240,7 @@ dependencies = [
  "poolster-input-asyncapi",
  "poolster-input-capnproto",
  "poolster-input-graphql",
+ "poolster-input-openapi",
  "poolster-input-protobuf",
  "tempfile",
 ]
@@ -1239,6 +1255,7 @@ dependencies = [
  "napi-derive",
  "poolster",
  "poolster-core",
+ "poolster-input-openapi",
  "poolster-inputs",
  "serde",
  "serde_json",
@@ -1278,6 +1295,7 @@ version = "0.5.0-alpha.1"
 dependencies = [
  "anyhow",
  "poolster-core",
+ "poolster-input-protobuf",
  "serde_json",
  "tempfile",
 ]
@@ -1389,6 +1407,8 @@ version = "0.5.0-alpha.1"
 dependencies = [
  "anyhow",
  "poolster-core",
+ "poolster-input-arazzo",
+ "poolster-input-asyncapi",
  "poolster-input-graphql",
  "serde",
  "serde_json",

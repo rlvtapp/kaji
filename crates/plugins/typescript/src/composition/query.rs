@@ -1,4 +1,5 @@
 //! Native framework consumers with stable provider-bound imports.
+mod options;
 use super::*;
 
 pub enum QueryFramework {
@@ -13,6 +14,7 @@ pub enum QueryKind {
 }
 
 pub struct Query {
+    http_input: poolster_core::engine::HttpInput,
     meta: Meta,
     framework: QueryFramework,
     provider: Option<Handle<Operations>>,
@@ -25,6 +27,7 @@ pub struct Query {
 }
 pub fn react_query() -> Query {
     Query {
+        http_input: Default::default(),
         meta: Meta::new(),
         framework: QueryFramework::React,
         provider: None,
@@ -50,49 +53,11 @@ pub fn swr() -> Query {
         ..react_query()
     }
 }
-impl Query {
-    pub fn layout(mut self, layout: poolster_core::SourceLayout) -> Self {
-        self.layout = Some(layout);
-        self
-    }
-    /// Select original operation IDs without changing the operation provider.
-    pub fn include_operations(mut self, ids: impl IntoIterator<Item = impl Into<String>>) -> Self {
-        self.include = Some(ids.into_iter().map(Into::into).collect());
-        self
-    }
-    pub fn operation_kind(mut self, id: impl Into<String>, kind: QueryKind) -> Self {
-        self.kinds.insert(id.into(), kind);
-        self
-    }
-    pub fn operation_name(mut self, id: impl Into<String>, name: impl Into<String>) -> Self {
-        self.names.insert(id.into(), name.into());
-        self
-    }
-    pub fn label(mut self, label: impl Into<String>) -> Self {
-        self.meta = self.meta.label(label);
-        self
-    }
-    pub fn using_operations(mut self, handle: Handle<Operations>) -> Self {
-        self.provider = Some(handle);
-        self
-    }
-    /// Bound generated helper modules; zero is rejected during generation.
-    pub fn max_operations_per_file(mut self, count: usize) -> Self {
-        self.operations_per_file = Some(count);
-        self
-    }
-    /// Preserve one aggregate helper module for callers that explicitly prefer it.
-    pub fn single_file(mut self) -> Self {
-        self.operations_per_file = None;
-        self.layout = Some(poolster_core::SourceLayout::SingleFile);
-        self
-    }
-    pub fn output(mut self, module: impl Into<String>) -> Self {
-        self.output = module.into();
-        self
-    }
-}
+
 impl Plugin<TypeScript> for Query {
+    fn supports_native_input(&self) -> bool {
+        self.http_input.is_explicit()
+    }
     fn kind(&self) -> &'static str {
         "typescript-query"
     }
@@ -100,9 +65,13 @@ impl Plugin<TypeScript> for Query {
         &self.meta
     }
     fn requires(&self) -> Vec<Requirement> {
-        vec![Requirement::on(self.provider)]
+        let mut requirements = vec![Requirement::on(self.provider)];
+        requirements.extend(self.http_input.requirements());
+        requirements
     }
     fn generate(&self, cx: &mut PluginContext<'_, TypeScript>) -> Result<()> {
+        let selected = self.http_input.resolve(cx)?;
+        let input_api = &selected.api;
         let config = render::ArtifactOptions {
             output_dir: Some(".".into()),
             group_by_tag: false,
@@ -116,8 +85,7 @@ impl Plugin<TypeScript> for Query {
         if let Some(count) = self.operations_per_file {
             anyhow::ensure!(count > 0, "max_operations_per_file must be positive");
         }
-        let known = cx
-            .api
+        let known = input_api
             .operations
             .iter()
             .map(|op| op.id.as_str())
@@ -134,8 +102,8 @@ impl Plugin<TypeScript> for Query {
                 "query consumer refers to unknown operation {id:?}"
             );
         }
-        let mut prepared = crate::symbols::prepare(cx.api);
-        for (original, native) in cx.api.operations.iter().zip(&mut prepared.operations) {
+        let mut prepared = crate::symbols::prepare(input_api);
+        for (original, native) in input_api.operations.iter().zip(&mut prepared.operations) {
             native.annotations.insert(
                 "poolster.query.operation_id".into(),
                 serde_json::json!(original.id),
@@ -293,7 +261,7 @@ impl Plugin<TypeScript> for Query {
                     contents.replace_range(start..end, &source);
                 }
 
-                for (operation, native) in cx.api.operations.iter().zip(&prepared.operations) {
+                for (operation, native) in input_api.operations.iter().zip(&prepared.operations) {
                     if !chunk.iter().any(|item| item.id == native.id) {
                         continue;
                     }

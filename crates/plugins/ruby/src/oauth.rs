@@ -26,6 +26,9 @@ impl Plugin<crate::Ruby> for OAuth {
     fn meta(&self) -> &Meta {
         &self.meta
     }
+    fn supports_native_input(&self) -> bool {
+        true
+    }
     fn requires(&self) -> Vec<Requirement> {
         vec![Requirement::on(self.models)]
     }

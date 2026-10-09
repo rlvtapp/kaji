@@ -1,12 +1,23 @@
 use super::*;
 use poolster_core::engine::{Meta, Plugin, PluginContext};
 pub struct OAuth {
+    http_input: poolster_core::engine::HttpInput,
     meta: Meta,
 }
 pub fn oauth() -> OAuth {
-    OAuth { meta: Meta::new() }
+    OAuth {
+        http_input: Default::default(),
+        meta: Meta::new(),
+    }
 }
 impl Plugin<Java> for OAuth {
+    fn supports_native_input(&self) -> bool {
+        self.http_input.is_explicit()
+    }
+    fn requires(&self) -> Vec<poolster_core::engine::Requirement> {
+        self.http_input.requirements()
+    }
+
     fn kind(&self) -> &'static str {
         "java-oauth"
     }
@@ -14,34 +25,37 @@ impl Plugin<Java> for OAuth {
         &self.meta
     }
     fn generate(&self, cx: &mut PluginContext<'_, Java>) -> Result<()> {
-        let namespace = java_package_name(
-            cx.settings
-                .package_name
-                .as_deref()
-                .unwrap_or(&format!("io.poolster.{}", package_segment(&cx.api.name))),
-        );
-        for (name, source) in [
-            (
-                "OAuthClientCredentials",
-                include_str!("../templates/oauth.java.tmpl"),
-            ),
-            (
-                "OAuthHttpClient",
-                include_str!("../templates/oauth_http.java.tmpl"),
-            ),
-        ] {
-            cx.files.emit(GeneratedFile::new(
-                format!(
-                    "src/main/java/{}/{}.java",
-                    namespace.replace('.', "/"),
-                    name
+        self.http_input.with_context(cx, |cx| {
+            let namespace = java_package_name(
+                cx.settings
+                    .package_name
+                    .as_deref()
+                    .unwrap_or(&format!("io.poolster.{}", package_segment(&cx.api.name))),
+            );
+            for (name, source) in [
+                (
+                    "OAuthClientCredentials",
+                    include_str!("../templates/oauth.java.tmpl"),
                 ),
-                source.replace("__PACKAGE__", &namespace),
-            )?)?;
-        }
-        Ok(())
+                (
+                    "OAuthHttpClient",
+                    include_str!("../templates/oauth_http.java.tmpl"),
+                ),
+            ] {
+                cx.files.emit(GeneratedFile::new(
+                    format!(
+                        "src/main/java/{}/{}.java",
+                        namespace.replace('.', "/"),
+                        name
+                    ),
+                    source.replace("__PACKAGE__", &namespace),
+                )?)?;
+            }
+            Ok(())
+        })
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -89,3 +103,6 @@ mod tests {
         );
     }
 }
+
+#[path = "oauth_input.rs"]
+mod http_input;

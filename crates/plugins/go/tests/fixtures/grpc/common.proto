@@ -1,0 +1,13 @@
+syntax = "proto3";
+package store.v1;
+option go_package = "example.com/poolster/grpc/storev1;storev1";
+import "google/protobuf/timestamp.proto";
+message Item {
+  string name = 1;
+  optional string note = 2;
+  oneof value { int32 count = 3; string text = 4; }
+  map<string,string> labels = 5;
+  enum State { UNKNOWN = 0; READY = 1; }
+  State state = 6;
+  google.protobuf.Timestamp created_at = 7;
+}

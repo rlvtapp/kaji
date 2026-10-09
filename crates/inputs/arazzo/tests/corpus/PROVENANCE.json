@@ -38,5 +38,15 @@
     "bytes": 5555,
     "sha256": "76167a6cd5994a13eadfde5d21ae39085e2f445af08223c3b46a1d2927df7644",
     "modified": false
+  },
+  {
+    "file": "oauth.openapi.yaml",
+    "source": "https://github.com/OAI/Arazzo-Specification/blob/12aa8bcb07a2df0719afd1f1f3d18334012a5172/examples/1.0.0/oauth.openapi.yaml",
+    "commit": "12aa8bcb07a2df0719afd1f1f3d18334012a5172",
+    "upstream_path": "examples/1.0.0/oauth.openapi.yaml",
+    "license": "Apache-2.0",
+    "bytes": 2629,
+    "sha256": "780a824b6b4f9cd25403692df892c7ca842e42c341fb10ef347f34d5713f86e1",
+    "modified": false
   }
 ]

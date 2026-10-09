@@ -8,6 +8,94 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 mod render;
+
+impl Examples {
+    /// Select the authoritative HTTP contract produced by an input or transform.
+    pub fn input(
+        mut self,
+        input: poolster_core::engine::Handle<poolster_core::AdaptedApi>,
+    ) -> Self {
+        self.http = self.http.input(input);
+        self
+    }
+    /// Consume complete model blocks from the selected HTTP contract revision.
+    pub fn input_models(
+        mut self,
+        models: poolster_core::engine::Handle<poolster_core::blocks::Blocks<poolster_core::Schema>>,
+    ) -> Self {
+        self.http = self.http.input_models(models);
+        self
+    }
+    /// Consume complete endpoint blocks from the selected HTTP contract revision.
+    pub fn input_endpoints(
+        mut self,
+        endpoints: poolster_core::engine::Handle<
+            poolster_core::blocks::Blocks<poolster_core::Operation>,
+        >,
+    ) -> Self {
+        self.http = self.http.input_endpoints(endpoints);
+        self
+    }
+}
+
+impl Collection {
+    /// Select the authoritative HTTP contract produced by an input or transform.
+    pub fn input(
+        mut self,
+        input: poolster_core::engine::Handle<poolster_core::AdaptedApi>,
+    ) -> Self {
+        self.http = self.http.input(input);
+        self
+    }
+    /// Consume complete model blocks from the selected HTTP contract revision.
+    pub fn input_models(
+        mut self,
+        models: poolster_core::engine::Handle<poolster_core::blocks::Blocks<poolster_core::Schema>>,
+    ) -> Self {
+        self.http = self.http.input_models(models);
+        self
+    }
+    /// Consume complete endpoint blocks from the selected HTTP contract revision.
+    pub fn input_endpoints(
+        mut self,
+        endpoints: poolster_core::engine::Handle<
+            poolster_core::blocks::Blocks<poolster_core::Operation>,
+        >,
+    ) -> Self {
+        self.http = self.http.input_endpoints(endpoints);
+        self
+    }
+}
+
+impl Environment {
+    /// Select the authoritative HTTP contract produced by an input or transform.
+    pub fn input(
+        mut self,
+        input: poolster_core::engine::Handle<poolster_core::AdaptedApi>,
+    ) -> Self {
+        self.http = self.http.input(input);
+        self
+    }
+    /// Consume complete model blocks from the selected HTTP contract revision.
+    pub fn input_models(
+        mut self,
+        models: poolster_core::engine::Handle<poolster_core::blocks::Blocks<poolster_core::Schema>>,
+    ) -> Self {
+        self.http = self.http.input_models(models);
+        self
+    }
+    /// Consume complete endpoint blocks from the selected HTTP contract revision.
+    pub fn input_endpoints(
+        mut self,
+        endpoints: poolster_core::engine::Handle<
+            poolster_core::blocks::Blocks<poolster_core::Operation>,
+        >,
+    ) -> Self {
+        self.http = self.http.input_endpoints(endpoints);
+        self
+    }
+}
+
 #[cfg(test)]
 mod tests;
 
@@ -74,9 +162,13 @@ impl Contract for EnvironmentTemplate {
 
 pub struct Examples {
     meta: Meta,
+    pub(crate) http: poolster_core::engine::HttpInput,
 }
 pub fn examples() -> Examples {
-    Examples { meta: Meta::new() }
+    Examples {
+        meta: Meta::new(),
+        http: Default::default(),
+    }
 }
 impl Examples {
     pub fn handle(&self) -> Handle<RequestExamples> {
@@ -94,11 +186,20 @@ impl Plugin<Postman> for Examples {
         vec![Provision::of::<RequestExamples>()]
     }
     fn generate(&self, cx: &mut PluginContext<'_, Postman>) -> Result<()> {
-        cx.publish(render::example_contract(cx.api)?)
+        self.http
+            .run(cx, |cx| cx.publish(render::example_contract(cx.api)?))
+    }
+    fn requires(&self) -> Vec<poolster_core::engine::Requirement> {
+        self.http.requirements()
+    }
+
+    fn supports_native_input(&self) -> bool {
+        self.http.is_explicit()
     }
 }
 pub struct Collection {
     meta: Meta,
+    pub(crate) http: poolster_core::engine::HttpInput,
     output: String,
     strict: bool,
     group_by_tag: bool,
@@ -108,6 +209,7 @@ pub struct Collection {
 pub fn collection() -> Collection {
     Collection {
         meta: Meta::new(),
+        http: Default::default(),
         output: "collection.json".into(),
         strict: false,
         group_by_tag: true,
@@ -153,62 +255,73 @@ impl Plugin<Postman> for Collection {
         &self.meta
     }
     fn requires(&self) -> Vec<Requirement> {
-        vec![Requirement::on::<RequestExamples>(self.examples).optional()]
+        let mut requirements = self.http.requirements();
+        requirements.extend(vec![
+            Requirement::on::<RequestExamples>(self.examples).optional(),
+        ]);
+        requirements
     }
     fn provides(&self) -> Vec<Provision> {
         vec![Provision::of::<CollectionDocument>()]
     }
     fn generate(&self, cx: &mut PluginContext<'_, Postman>) -> Result<()> {
-        let document = render::collection(
-            cx.api,
-            cx.security_schemes,
-            cx.settings,
-            cx.inputs.optional::<RequestExamples>()?,
-            self.group_by_tag,
-        )?;
-        if self.strict && document.diagnostics.iter().any(|d| d.severity == "error") {
-            bail!(
-                "Postman mapping incomplete: {}",
-                document
-                    .diagnostics
-                    .iter()
-                    .filter(|d| d.severity == "error")
-                    .map(|d| format!(
-                        "{}: {}",
-                        d.operation.as_deref().unwrap_or("collection"),
-                        d.message
-                    ))
-                    .collect::<Vec<_>>()
-                    .join("; ")
-            );
-        }
-        cx.files.emit(GeneratedFile::new(
-            &self.output,
-            serde_json::to_string_pretty(&document.document)? + "\n",
-        )?)?;
-        if self.split_by_group {
-            for (path, collection) in render::split_collections(&document.document)? {
-                cx.files.emit(GeneratedFile::new(
-                    path,
-                    serde_json::to_string_pretty(&collection)? + "\n",
-                )?)?;
+        self.http.run(cx, |cx| {
+            let document = render::collection(
+                cx.api,
+                cx.security_schemes,
+                cx.settings,
+                cx.inputs.optional::<RequestExamples>()?,
+                self.group_by_tag,
+            )?;
+            if self.strict && document.diagnostics.iter().any(|d| d.severity == "error") {
+                bail!(
+                    "Postman mapping incomplete: {}",
+                    document
+                        .diagnostics
+                        .iter()
+                        .filter(|d| d.severity == "error")
+                        .map(|d| format!(
+                            "{}: {}",
+                            d.operation.as_deref().unwrap_or("collection"),
+                            d.message
+                        ))
+                        .collect::<Vec<_>>()
+                        .join("; ")
+                );
             }
-        }
-        cx.files.emit(GeneratedFile::new(
-            "diagnostics.json",
-            serde_json::to_string_pretty(&document.diagnostics)? + "\n",
-        )?)?;
-        cx.publish(document)
+            cx.files.emit(GeneratedFile::new(
+                &self.output,
+                serde_json::to_string_pretty(&document.document)? + "\n",
+            )?)?;
+            if self.split_by_group {
+                for (path, collection) in render::split_collections(&document.document)? {
+                    cx.files.emit(GeneratedFile::new(
+                        path,
+                        serde_json::to_string_pretty(&collection)? + "\n",
+                    )?)?;
+                }
+            }
+            cx.files.emit(GeneratedFile::new(
+                "diagnostics.json",
+                serde_json::to_string_pretty(&document.diagnostics)? + "\n",
+            )?)?;
+            cx.publish(document)
+        })
+    }
+    fn supports_native_input(&self) -> bool {
+        self.http.is_explicit()
     }
 }
 pub struct Environment {
     meta: Meta,
+    pub(crate) http: poolster_core::engine::HttpInput,
     output: String,
     collection: Option<Handle<CollectionDocument>>,
 }
 pub fn environment() -> Environment {
     Environment {
         meta: Meta::new(),
+        http: Default::default(),
         output: "environment.json".into(),
         collection: None,
     }
@@ -234,12 +347,15 @@ impl Plugin<Postman> for Environment {
         &self.meta
     }
     fn requires(&self) -> Vec<Requirement> {
-        vec![Requirement::on::<CollectionDocument>(self.collection)]
+        let mut requirements = self.http.requirements();
+        requirements.extend(vec![Requirement::on::<CollectionDocument>(self.collection)]);
+        requirements
     }
     fn provides(&self) -> Vec<Provision> {
         vec![Provision::of::<EnvironmentTemplate>()]
     }
     fn generate(&self, cx: &mut PluginContext<'_, Postman>) -> Result<()> {
+        self.http.run(cx, |cx| {
         let collection = cx.inputs.get::<CollectionDocument>()?;
         let document = json!({"id":render::id(&format!("environment:{}",cx.api.name)),"name":cx.settings.name.as_deref().unwrap_or(&cx.api.name),"_postman_variable_scope":"environment","values":collection.variables.iter().map(|(name,secret)|json!({"key":name,"value":"","type":if *secret {"secret"} else {"default"},"enabled":true})).collect::<Vec<_>>()});
         cx.files.emit_custom(GeneratedFile::new(
@@ -247,6 +363,10 @@ impl Plugin<Postman> for Environment {
             serde_json::to_string_pretty(&document)? + "\n",
         )?)?;
         cx.publish(EnvironmentTemplate { document })
+        })
+    }
+    fn supports_native_input(&self) -> bool {
+        self.http.is_explicit()
     }
 }
 /// Resolve local schema references; external references remain diagnostic failures.

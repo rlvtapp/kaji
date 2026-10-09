@@ -1,5 +1,11 @@
 # Public-contract compatibility results
 
+**Alpha.2 update (9 October 2026):** the new frozen-build 205×10 sweep is complete:
+2,050 effective passes including regeneration, after audited infrastructure retries.
+The frozen binaries predate the latest output migration. The record below is the
+historical October 8 reconciled result, not confirmation of the current working
+tree. See [current verification](verification.md#current-alpha2-verification-9-october-2026).
+
 The October 8, 2026 follow-up records successful generation and native checks for
 all 205 pinned contracts in all ten SDK languages: **2,050 passing cases**.
 No contracts were excluded. These results reconcile full runs with targeted

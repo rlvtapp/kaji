@@ -5,12 +5,14 @@ use poolster_core::engine::{Meta, Plugin, PluginContext};
 pub struct OperationTests {
     provider: Option<poolster_core::engine::Handle<crate::package::RubyModels>>,
     meta: Meta,
+    pub(crate) http: poolster_core::engine::HttpInput,
     options: poolster_core::samples::SampleOptions,
     limit: usize,
 }
 pub fn operation_tests() -> OperationTests {
     OperationTests {
         meta: Meta::new(),
+        http: Default::default(),
         provider: None,
         options: Default::default(),
         limit: 128,
@@ -25,7 +27,11 @@ impl OperationTests {
         self
     }
     pub fn models_from(self, sdk: &crate::package::Sdk) -> Self {
-        self.using_models(sdk.models())
+        {
+            let mut selected = self.using_models(sdk.models());
+            selected.http = sdk.http.clone();
+            selected
+        }
     }
     pub fn sample_options(mut self, options: poolster_core::samples::SampleOptions) -> Self {
         self.options = options;
@@ -149,9 +155,12 @@ impl Plugin<crate::Ruby> for OperationTests {
         &self.meta
     }
     fn requires(&self) -> Vec<poolster_core::engine::Requirement> {
-        vec![poolster_core::engine::Requirement::on(self.provider)]
+        let mut requirements = self.http.requirements();
+        requirements.extend(vec![poolster_core::engine::Requirement::on(self.provider)]);
+        requirements
     }
     fn generate(&self, cx: &mut PluginContext<'_, crate::Ruby>) -> Result<()> {
+        self.http.run(cx, |cx| {
         let models = cx.inputs.get::<crate::package::RubyModels>()?;
         let mut cases = Vec::new();
         let mut skipped = BTreeMap::new();
@@ -192,8 +201,42 @@ impl Plugin<crate::Ruby> for OperationTests {
         cx.files
             .emit(GeneratedFile::new("test/operation_tests.rb", script)?)?;
         cx.files.emit(GeneratedFile::new("OPERATION_TESTS.md","Run `ruby -Ilib test/operation_tests.rb`. Bounded structural fixtures use native public calls and a fake transport; no network. Method/path, scalar query/headers, JSON body and decoded response are checked. Unsupported operations are listed in test/operation-fixtures.json. This smoke suite does not prove full schema or service behavior.")?)
+        })
+    }
+    fn supports_native_input(&self) -> bool {
+        self.http.is_explicit()
     }
 }
+
+impl OperationTests {
+    /// Select the authoritative HTTP contract produced by an input or transform.
+    pub fn input(
+        mut self,
+        input: poolster_core::engine::Handle<poolster_core::AdaptedApi>,
+    ) -> Self {
+        self.http = self.http.input(input);
+        self
+    }
+    /// Consume complete model blocks from the selected HTTP contract revision.
+    pub fn input_models(
+        mut self,
+        models: poolster_core::engine::Handle<poolster_core::blocks::Blocks<poolster_core::Schema>>,
+    ) -> Self {
+        self.http = self.http.input_models(models);
+        self
+    }
+    /// Consume complete endpoint blocks from the selected HTTP contract revision.
+    pub fn input_endpoints(
+        mut self,
+        endpoints: poolster_core::engine::Handle<
+            poolster_core::blocks::Blocks<poolster_core::Operation>,
+        >,
+    ) -> Self {
+        self.http = self.http.input_endpoints(endpoints);
+        self
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

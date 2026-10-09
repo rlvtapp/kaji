@@ -33,7 +33,7 @@ pub(super) fn show(options: Show) -> Result<()> {
     if !status.success() {
         bail!("OpenAPI compiler failed ({status})")
     }
-    let api = poolster_core::adapter::openapi_sidecar::load_operations(
+    let api = poolster_input_openapi::openapi_sidecar::load_operations(
         temporary.path(),
         "API".into(),
         "0.1.0".into(),

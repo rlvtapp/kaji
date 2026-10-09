@@ -3,6 +3,11 @@ use anyhow::{Context, Result, bail};
 use poolster_core::input::{InputOperation as OperationSummary, InputSummary as ContractSummary};
 use roas_arazzo::validation::Validate;
 use serde_json::Value;
+pub mod blocks;
+pub mod contracts;
+mod workflow_sources;
+mod workflow_values;
+mod workflows;
 
 #[derive(Debug)]
 pub enum ArazzoModel {
@@ -190,6 +195,41 @@ impl poolster_core::input::InputPlugin for ArazzoInput {
     fn format(&self) -> &str {
         "arazzo"
     }
+    fn load_with_options(
+        &self,
+        path: &std::path::Path,
+        options: &poolster_core::input::InputOptions,
+    ) -> Result<poolster_core::input::InputContract> {
+        if options == &poolster_core::input::InputOptions::default() {
+            return self.load(path);
+        }
+        let document = parse(
+            &std::fs::read_to_string(path)
+                .with_context(|| format!("read Arazzo {}", path.display()))?,
+        )?;
+        let contract = workflows::resolve(
+            &document,
+            options,
+            path.parent().unwrap_or(std::path::Path::new(".")),
+        )?;
+        let mut input = poolster_core::input::InputContract::new(document.summary());
+        let source = std::fs::canonicalize(path)
+            .with_context(|| format!("resolve Arazzo document identity {}", path.display()))?;
+        input.publish(blocks::step_blocks(
+            &contract,
+            source.to_string_lossy().into_owned(),
+        ))?;
+        input.publish_with_reference(
+            contract.clone(),
+            poolster_core::blocks::ContractReference::from_bytes(
+                <crate::contracts::WorkflowOperations as poolster_core::engine::Contract>::NAME,
+                source.to_string_lossy().into_owned(),
+                &serde_json::to_vec(&contract)?,
+            ),
+        )?;
+        input.publish(document)?;
+        Ok(input)
+    }
     fn load(&self, path: &std::path::Path) -> anyhow::Result<poolster_core::input::InputContract> {
         let document = parse(
             &std::fs::read_to_string(path)
@@ -199,7 +239,13 @@ impl poolster_core::input::InputPlugin for ArazzoInput {
         for source in &document.unresolved_sources {
             input.diagnostics.push(poolster_core::input::InputDiagnostic { code: "unresolved-source".into(), message: format!("Source contract {source} was retained but not loaded; its operation references remain unverified") });
         }
-        input.publish(document)?;
+        input.publish(blocks::WorkflowStepBlocks { parent: Some(poolster_core::blocks::ContractReference::from_bytes(<ArazzoDocument as poolster_core::engine::Contract>::NAME, path.canonicalize()?.to_string_lossy(), &serde_json::to_vec(&document.source)?)), state: poolster_core::blocks::CollectionState::Unavailable { diagnostics: vec!["Workflow operations require explicit local source mappings and supported resolution".into()] }, items: vec![] })?;
+        let reference = poolster_core::blocks::ContractReference::from_bytes(
+            <ArazzoDocument as poolster_core::engine::Contract>::NAME,
+            path.canonicalize()?.to_string_lossy(),
+            &serde_json::to_vec(&document.source)?,
+        );
+        input.publish_with_reference(document, reference)?;
         Ok(input)
     }
 }

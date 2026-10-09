@@ -9,8 +9,11 @@ use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    GeneratedFile,
-    engine::{Contract, Enforce, Language, Meta, Plugin, PluginContext, Provision},
+    AdaptedApi, GeneratedFile,
+    engine::{
+        Contract, Enforce, Handle, HttpInput, Language, Meta, Plugin, PluginContext, Provision,
+        Requirement,
+    },
 };
 
 pub const PACKAGE_METADATA_PATH: &str = ".poolster/package.json";
@@ -161,6 +164,7 @@ impl Contract for PackageMetadata {
 pub struct Metadata<L: Language> {
     meta: Meta,
     value: PackageMetadata,
+    input: Option<HttpInput>,
     language: PhantomData<L>,
 }
 
@@ -170,11 +174,26 @@ pub fn metadata<L: Language>(value: PackageMetadata) -> Metadata<L> {
     Metadata {
         meta: Meta::new(),
         value,
+        input: None,
         language: PhantomData,
     }
 }
 
+impl<L: Language> Metadata<L> {
+    /// Select HTTP version metadata explicitly; other native protocols stay generic.
+    pub fn input(mut self, input: Handle<AdaptedApi>) -> Self {
+        self.input = Some(HttpInput::default().input(input));
+        self
+    }
+}
+
 impl<L: Language> Plugin<L> for Metadata<L> {
+    fn requires(&self) -> Vec<Requirement> {
+        self.input
+            .as_ref()
+            .map(HttpInput::requirements)
+            .unwrap_or_default()
+    }
     fn supports_native_input(&self) -> bool {
         true
     }
@@ -191,6 +210,14 @@ impl<L: Language> Plugin<L> for Metadata<L> {
         vec![Provision::of::<PackageMetadata>()]
     }
     fn generate(&self, cx: &mut PluginContext<'_, L>) -> Result<()> {
+        if let Some(input) = &self.input {
+            return input.run(cx, |cx| self.render(cx));
+        }
+        self.render(cx)
+    }
+}
+impl<L: Language> Metadata<L> {
+    fn render(&self, cx: &mut PluginContext<'_, L>) -> Result<()> {
         let mut value = self.value.clone();
         if value.language.is_empty() {
             value.language = L::NAME.into();

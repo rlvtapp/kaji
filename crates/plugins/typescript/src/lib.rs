@@ -1,4 +1,9 @@
 //! TypeScript renderers and package configuration live outside neutral core.
+mod asyncapi;
+mod http_options;
+pub use asyncapi::{AsyncApi, KafkaClient, KafkaOperationSymbols, asyncapi};
+mod workflow;
+pub use workflow::{WorkflowClient, WorkflowRunner, workflow};
 mod graphql;
 pub use graphql::{Graphql, GraphqlClient, GraphqlOperationSymbols, graphql};
 mod oauth;
@@ -86,72 +91,24 @@ impl PackageExt for Package<TypeScript> {
 
 /// Generates a TypeScript SDK with one selected transport and typed options.
 pub struct Sdk {
+    http_input: poolster_core::engine::HttpInput,
     meta: Meta,
     options: sdk::SdkConfig,
     client_style: Option<SdkClientStyle>,
 }
 pub fn sdk() -> Sdk {
     Sdk {
+        http_input: Default::default(),
         meta: Meta::new(),
         options: sdk::SdkConfig::new("__package"),
         client_style: None,
     }
 }
-impl Sdk {
-    pub fn label(mut self, label: impl Into<String>) -> Self {
-        self.meta = self.meta.label(label);
-        self
-    }
-    pub fn fetch(mut self) -> Self {
-        self.options.transport = SdkTransport::Fetch;
-        self
-    }
-    pub fn axios(mut self) -> Self {
-        self.options.transport = SdkTransport::Axios;
-        self
-    }
-    pub fn client_name(mut self, name: impl Into<String>) -> Self {
-        self.options.client_name = Some(name.into());
-        self
-    }
-    pub fn flat(mut self) -> Self {
-        self.client_style = Some(SdkClientStyle::Flat);
-        self
-    }
-    pub fn namespaced(mut self) -> Self {
-        self.client_style = Some(SdkClientStyle::Namespaced);
-        self
-    }
-    pub fn raw(mut self) -> Self {
-        self.options.surface = SdkSurface::Raw;
-        self
-    }
-    pub fn group_by_tag(mut self, value: bool) -> Self {
-        self.options.group_by_tag = value;
-        self
-    }
-    pub fn model_options(mut self, options: ModelOptions) -> Self {
-        self.options.model_options = options;
-        self
-    }
-    /// Sets the default operation error behavior; callers may override per request.
-    pub fn throw_on_error(mut self, value: bool) -> Self {
-        self.options.throw_on_error = value;
-        self
-    }
-}
-impl Sdk {
-    pub fn operations_handle(&self) -> Handle<composition::Operations> {
-        self.meta.handle()
-    }
-    pub fn models_handle(&self) -> Handle<composition::Models> {
-        self.meta.handle()
-    }
-    pub fn transport_handle(&self) -> Handle<composition::Transport> {
-        self.meta.handle()
-    }
-}
+
 impl Plugin<TypeScript> for Sdk {
+    fn supports_native_input(&self) -> bool {
+        self.http_input.is_explicit()
+    }
     fn kind(&self) -> &'static str {
         "typescript-sdk"
     }
@@ -165,7 +122,12 @@ impl Plugin<TypeScript> for Sdk {
             Provision::of::<composition::Operations>(),
         ]
     }
+    fn requires(&self) -> Vec<poolster_core::engine::Requirement> {
+        self.http_input.requirements()
+    }
     fn generate(&self, cx: &mut PluginContext<'_, TypeScript>) -> Result<()> {
+        let selected = self.http_input.resolve(cx)?;
+        let input_api = &selected.api;
         let mut options = self.options.clone();
         options.client_name = options
             .client_name
@@ -175,7 +137,7 @@ impl Plugin<TypeScript> for Sdk {
             .or(cx.common.client_style)
             .unwrap_or(options.client_style);
         options.package_name = cx.settings.package_name.clone();
-        let tree = sdk::generate_sdk(cx.api, &options, cx.security_schemes)?;
+        let tree = sdk::generate_sdk(input_api, &options, selected.security_schemes.as_ref())?;
         for (path, contents) in tree.iter() {
             let relative = path.strip_prefix("__package")?;
             let file = GeneratedFile::new(relative, contents)?;
@@ -190,12 +152,11 @@ impl Plugin<TypeScript> for Sdk {
                 cx.files.emit(file)?;
             }
         }
-        let prepared_api = symbols::prepare(cx.api);
+        let prepared_api = symbols::prepare(input_api);
         let mut schemas = std::collections::BTreeMap::new();
         let mut operation_modules = std::collections::BTreeMap::new();
         let mut functions = std::collections::BTreeMap::new();
-        let schema_files = cx
-            .api
+        let schema_files = input_api
             .schemas
             .iter()
             .zip(&prepared_api.schemas)
@@ -206,8 +167,7 @@ impl Plugin<TypeScript> for Sdk {
                 )
             })
             .collect::<std::collections::BTreeMap<_, _>>();
-        let operation_types = cx
-            .api
+        let operation_types = input_api
             .operations
             .iter()
             .zip(&prepared_api.operations)
@@ -218,8 +178,7 @@ impl Plugin<TypeScript> for Sdk {
                 )
             })
             .collect::<std::collections::BTreeMap<_, _>>();
-        let operation_files = cx
-            .api
+        let operation_files = input_api
             .operations
             .iter()
             .zip(&prepared_api.operations)
@@ -276,39 +235,31 @@ impl Plugin<TypeScript> for Sdk {
         cx.publish(composition::Operations { functions })?;
         cx.files.emit(GeneratedFile::new(
             "STYLE_GUIDE.md",
-            style_guide(cx.api, &options),
+            style_guide(input_api, &options),
         )?)
     }
 }
 
 /// A standalone model generator which publishes real schema symbols.
 pub struct Types {
+    http_input: poolster_core::engine::HttpInput,
     meta: Meta,
     output: String,
     layout: Option<SourceLayout>,
 }
 pub fn types() -> Types {
     Types {
+        http_input: Default::default(),
         meta: Meta::new(),
         output: "models".into(),
         layout: None,
     }
 }
-impl Types {
-    pub fn layout(mut self, layout: SourceLayout) -> Self {
-        self.layout = Some(layout);
-        self
-    }
-    /// Module name without `.ts`, relative to this package.
-    pub fn output(mut self, module: impl Into<String>) -> Self {
-        self.output = module.into();
-        self
-    }
-    pub fn handle(&self) -> Handle<TsTypes> {
-        self.meta.handle()
-    }
-}
+
 impl Plugin<TypeScript> for Types {
+    fn supports_native_input(&self) -> bool {
+        self.http_input.is_explicit()
+    }
     fn kind(&self) -> &'static str {
         "typescript-types"
     }
@@ -318,10 +269,15 @@ impl Plugin<TypeScript> for Types {
     fn provides(&self) -> Vec<Provision> {
         vec![Provision::of::<TsTypes>()]
     }
+    fn requires(&self) -> Vec<poolster_core::engine::Requirement> {
+        self.http_input.requirements()
+    }
     fn generate(&self, cx: &mut PluginContext<'_, TypeScript>) -> Result<()> {
+        let selected = self.http_input.resolve(cx)?;
+        let input_api = &selected.api;
         let mut schemas = std::collections::BTreeMap::new();
-        let prepared = crate::auxiliary_layout::prepare(cx.api);
-        for (schema, original) in prepared.schemas.iter().zip(&cx.api.schemas) {
+        let prepared = crate::auxiliary_layout::prepare(input_api);
+        for (schema, original) in prepared.schemas.iter().zip(&input_api.schemas) {
             let symbol = cx.workspace.declare(
                 &self.output,
                 &render::type_identifier(&schema.name),
@@ -340,7 +296,7 @@ impl Plugin<TypeScript> for Types {
             layout: self.layout.clone().or_else(|| cx.common.layout.clone()),
             ..config
         };
-        for file in render::TypeScriptModels.generate(cx.api, &config)? {
+        for file in render::TypeScriptModels.generate(input_api, &config)? {
             let path = file.path.to_string_lossy();
             let target = if path == "models.ts" {
                 format!("{}.ts", self.output)
@@ -356,7 +312,7 @@ impl Plugin<TypeScript> for Types {
             );
             cx.files.emit(GeneratedFile::new(target, contents)?)?;
         }
-        for mut file in render::TypeScriptPackage.generate(cx.api, &config)? {
+        for mut file in render::TypeScriptPackage.generate(input_api, &config)? {
             if file.path == Path::new("index.ts") {
                 file.contents = format!(
                     "export type * from {};\n",

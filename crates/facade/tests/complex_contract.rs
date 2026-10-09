@@ -2,7 +2,7 @@
 //! not a claim of compatibility with a third-party API or all JSON Schema.
 use poolster::swift::PackageExt;
 use poolster::{ProfileSet, csharp, java, swift};
-use poolster_core::adapter::openapi_sidecar::OpenApiSidecar;
+use poolster_input_openapi::openapi_sidecar::OpenApiSidecar;
 use std::{path::PathBuf, process::Command};
 
 const SPEC: &str = include_str!("fixtures/complex-contract.openapi.json");

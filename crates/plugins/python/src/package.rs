@@ -41,12 +41,14 @@ impl PackageExt for Package<Python> {
 }
 pub struct Sdk {
     meta: Meta,
+    pub(crate) http: poolster_core::engine::HttpInput,
     client_style: Option<SdkClientStyle>,
     async_client: bool,
 }
 pub fn sdk() -> Sdk {
     Sdk {
         meta: Meta::new(),
+        http: Default::default(),
         client_style: None,
         async_client: false,
     }
@@ -80,51 +82,64 @@ impl Plugin<Python> for Sdk {
         vec![Provision::of::<PythonModels>()]
     }
     fn generate(&self, cx: &mut PluginContext<'_, Python>) -> Result<()> {
-        let mut api = cx.api.clone();
-        if cx.settings.open_enums {
-            for schema in &mut api.schemas {
-                schema
-                    .value
-                    .extensions
-                    .insert("x-poolster-open-enum".into(), serde_json::json!(true));
+        self.http.run(cx, |cx| {
+            let mut api = cx.api.clone();
+            if cx.settings.open_enums {
+                for schema in &mut api.schemas {
+                    schema
+                        .value
+                        .extensions
+                        .insert("x-poolster-open-enum".into(), serde_json::json!(true));
+                }
             }
-        }
-        cx.files.append(crate::render_sdk_with_async(
-            &api,
-            ".",
-            cx.settings.package_name.as_deref(),
-            self.client_style
-                .or(cx.common.client_style)
-                .unwrap_or(SdkClientStyle::Namespaced),
-            self.async_client,
-        )?)?;
-        let distribution = cx
-            .settings
-            .package_name
-            .clone()
-            .unwrap_or_else(|| format!("{}-sdk", crate::kebab_case(&cx.api.name)));
-        let symbols = crate::symbols::model_symbols(cx.api);
-        cx.publish(PythonModels {
-            module: crate::python_module_name(&distribution),
-            object_models: cx
-                .api
-                .schemas
-                .iter()
-                .filter(|schema| {
-                    matches!(schema.value.kind, poolster_core::SchemaKind::Object { .. })
-                })
-                .map(|schema| (schema.name.clone(), symbols[&schema.name].clone()))
-                .collect(),
+            cx.files.append(crate::render_sdk_with_async(
+                &api,
+                ".",
+                cx.settings.package_name.as_deref(),
+                self.client_style
+                    .or(cx.common.client_style)
+                    .unwrap_or(SdkClientStyle::Namespaced),
+                self.async_client,
+            )?)?;
+            let distribution = cx
+                .settings
+                .package_name
+                .clone()
+                .unwrap_or_else(|| format!("{}-sdk", crate::kebab_case(&cx.api.name)));
+            let symbols = crate::symbols::model_symbols(cx.api);
+            cx.publish(PythonModels {
+                module: crate::python_module_name(&distribution),
+                object_models: cx
+                    .api
+                    .schemas
+                    .iter()
+                    .filter(|schema| {
+                        matches!(schema.value.kind, poolster_core::SchemaKind::Object { .. })
+                    })
+                    .map(|schema| (schema.name.clone(), symbols[&schema.name].clone()))
+                    .collect(),
+            })
         })
+    }
+    fn requires(&self) -> Vec<poolster_core::engine::Requirement> {
+        self.http.requirements()
+    }
+
+    fn supports_native_input(&self) -> bool {
+        self.http.is_explicit()
     }
 }
 
 /// Independent Standard Webhooks HMAC verification consumer.
 pub struct Webhooks {
     meta: Meta,
+    pub(crate) http: poolster_core::engine::HttpInput,
 }
 pub fn webhooks() -> Webhooks {
-    Webhooks { meta: Meta::new() }
+    Webhooks {
+        meta: Meta::new(),
+        http: Default::default(),
+    }
 }
 impl Plugin<Python> for Webhooks {
     fn kind(&self) -> &'static str {
@@ -134,16 +149,25 @@ impl Plugin<Python> for Webhooks {
         &self.meta
     }
     fn generate(&self, cx: &mut PluginContext<'_, Python>) -> Result<()> {
-        let distribution = cx
-            .settings
-            .package_name
-            .clone()
-            .unwrap_or_else(|| format!("{}-sdk", crate::kebab_case(&cx.api.name)));
-        let module = crate::python_module_name(&distribution);
-        cx.files.emit(poolster_core::GeneratedFile::new(
-            format!("src/{module}/webhooks.py"),
-            include_str!("../templates/webhooks.py"),
-        )?)
+        self.http.run(cx, |cx| {
+            let distribution = cx
+                .settings
+                .package_name
+                .clone()
+                .unwrap_or_else(|| format!("{}-sdk", crate::kebab_case(&cx.api.name)));
+            let module = crate::python_module_name(&distribution);
+            cx.files.emit(poolster_core::GeneratedFile::new(
+                format!("src/{module}/webhooks.py"),
+                include_str!("../templates/webhooks.py"),
+            )?)
+        })
+    }
+    fn requires(&self) -> Vec<poolster_core::engine::Requirement> {
+        self.http.requirements()
+    }
+
+    fn supports_native_input(&self) -> bool {
+        self.http.is_explicit()
     }
 }
 
@@ -159,12 +183,14 @@ impl Contract for PythonModels {
 
 pub struct Roundtrips {
     meta: Meta,
+    pub(crate) http: poolster_core::engine::HttpInput,
     provider: Option<Handle<PythonModels>>,
     options: poolster_core::samples::SampleOptions,
 }
 pub fn roundtrips() -> Roundtrips {
     Roundtrips {
         meta: Meta::new(),
+        http: Default::default(),
         provider: None,
         options: Default::default(),
     }
@@ -172,6 +198,7 @@ pub fn roundtrips() -> Roundtrips {
 impl Roundtrips {
     pub fn models_from(mut self, sdk: &Sdk) -> Self {
         self.provider = Some(sdk.models());
+        self.http = sdk.http.clone();
         self
     }
     pub fn sample_options(mut self, options: poolster_core::samples::SampleOptions) -> Self {
@@ -187,9 +214,12 @@ impl Plugin<Python> for Roundtrips {
         &self.meta
     }
     fn requires(&self) -> Vec<Requirement> {
-        vec![Requirement::on(self.provider)]
+        let mut requirements = self.http.requirements();
+        requirements.extend(vec![Requirement::on(self.provider)]);
+        requirements
     }
     fn generate(&self, cx: &mut PluginContext<'_, Python>) -> Result<()> {
+        self.http.run(cx, |cx| {
         let models = cx.inputs.get::<PythonModels>()?;
         let mut cases = Vec::new();
         let mut diagnostics = Vec::new();
@@ -222,9 +252,100 @@ impl Plugin<Python> for Roundtrips {
             "tests/test_model_roundtrips.py",
             script,
         )?)
+        })
+    }
+    fn supports_native_input(&self) -> bool {
+        self.http.is_explicit()
     }
 }
 
 #[path = "operation_tests.rs"]
 mod operation_tests;
 pub use operation_tests::{OperationTests, operation_tests};
+
+impl Sdk {
+    /// Select the authoritative HTTP contract produced by an input or transform.
+    pub fn input(
+        mut self,
+        input: poolster_core::engine::Handle<poolster_core::AdaptedApi>,
+    ) -> Self {
+        self.http = self.http.input(input);
+        self
+    }
+    /// Consume complete model blocks from the selected HTTP contract revision.
+    pub fn input_models(
+        mut self,
+        models: poolster_core::engine::Handle<poolster_core::blocks::Blocks<poolster_core::Schema>>,
+    ) -> Self {
+        self.http = self.http.input_models(models);
+        self
+    }
+    /// Consume complete endpoint blocks from the selected HTTP contract revision.
+    pub fn input_endpoints(
+        mut self,
+        endpoints: poolster_core::engine::Handle<
+            poolster_core::blocks::Blocks<poolster_core::Operation>,
+        >,
+    ) -> Self {
+        self.http = self.http.input_endpoints(endpoints);
+        self
+    }
+}
+
+impl Webhooks {
+    /// Select the authoritative HTTP contract produced by an input or transform.
+    pub fn input(
+        mut self,
+        input: poolster_core::engine::Handle<poolster_core::AdaptedApi>,
+    ) -> Self {
+        self.http = self.http.input(input);
+        self
+    }
+    /// Consume complete model blocks from the selected HTTP contract revision.
+    pub fn input_models(
+        mut self,
+        models: poolster_core::engine::Handle<poolster_core::blocks::Blocks<poolster_core::Schema>>,
+    ) -> Self {
+        self.http = self.http.input_models(models);
+        self
+    }
+    /// Consume complete endpoint blocks from the selected HTTP contract revision.
+    pub fn input_endpoints(
+        mut self,
+        endpoints: poolster_core::engine::Handle<
+            poolster_core::blocks::Blocks<poolster_core::Operation>,
+        >,
+    ) -> Self {
+        self.http = self.http.input_endpoints(endpoints);
+        self
+    }
+}
+
+impl Roundtrips {
+    /// Select the authoritative HTTP contract produced by an input or transform.
+    pub fn input(
+        mut self,
+        input: poolster_core::engine::Handle<poolster_core::AdaptedApi>,
+    ) -> Self {
+        self.http = self.http.input(input);
+        self
+    }
+    /// Consume complete model blocks from the selected HTTP contract revision.
+    pub fn input_models(
+        mut self,
+        models: poolster_core::engine::Handle<poolster_core::blocks::Blocks<poolster_core::Schema>>,
+    ) -> Self {
+        self.http = self.http.input_models(models);
+        self
+    }
+    /// Consume complete endpoint blocks from the selected HTTP contract revision.
+    pub fn input_endpoints(
+        mut self,
+        endpoints: poolster_core::engine::Handle<
+            poolster_core::blocks::Blocks<poolster_core::Operation>,
+        >,
+    ) -> Self {
+        self.http = self.http.input_endpoints(endpoints);
+        self
+    }
+}

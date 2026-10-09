@@ -3,12 +3,14 @@ use super::*;
 use poolster_core::engine::{Handle, Meta, Plugin, PluginContext, Requirement};
 use serde_json::{Value, json};
 pub struct OperationTests {
+    http_input: poolster_core::engine::HttpInput,
     meta: Meta,
     sdk: Option<Handle<NativeSdk>>,
     max_operations: usize,
 }
 pub fn operation_tests() -> OperationTests {
     OperationTests {
+        http_input: Default::default(),
         meta: Meta::new(),
         sdk: None,
         max_operations: 128,
@@ -28,6 +30,9 @@ impl OperationTests {
     }
 }
 impl Plugin<Java> for OperationTests {
+    fn supports_native_input(&self) -> bool {
+        self.http_input.is_explicit()
+    }
     fn kind(&self) -> &'static str {
         "java-operation-tests"
     }
@@ -35,9 +40,12 @@ impl Plugin<Java> for OperationTests {
         &self.meta
     }
     fn requires(&self) -> Vec<Requirement> {
-        vec![Requirement::on(self.sdk)]
+        let mut requirements = self.http_input.requirements();
+        requirements.extend(vec![Requirement::on(self.sdk)]);
+        requirements
     }
     fn generate(&self, cx: &mut PluginContext<'_, Java>) -> Result<()> {
+        self.http_input.with_context(cx, |cx| {
         anyhow::ensure!(
             self.max_operations > 0 && self.max_operations <= 128,
             "operation test bound must be 1..128"
@@ -117,8 +125,10 @@ impl Plugin<Java> for OperationTests {
         )?)?;
         cx.files.emit(GeneratedFile::new("OPERATION_TESTS.md",format!("# Generated operation smoke tests\n\nAll HTTP is fake and in memory. Run:\n\n~~~sh\nmvn -q test-compile org.codehaus.mojo:exec-maven-plugin:3.5.0:java -Dexec.mainClass={}.PoolsterOperationTests -Dexec.classpathScope=test\n~~~\n\noperation-test-report.json records supported cases and exclusions. Bounded structural samples strip source examples, defaults and annotations. These tests verify public operation calls, wire controls, bodies and decoded models; dedicated fixtures are still needed for constraints, recursive/compositional schemas, auth, pagination, retries, and streaming.\n",sdk.namespace))?)?;
         Ok(())
+     })
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -302,3 +312,6 @@ mod tests {
         );
     }
 }
+
+#[path = "operation_tests_input.rs"]
+mod http_input;

@@ -1,12 +1,23 @@
 use super::*;
 use poolster_core::engine::{Meta, Plugin, PluginContext};
 pub struct Webhooks {
+    http_input: poolster_core::engine::HttpInput,
     meta: Meta,
 }
 pub fn webhooks() -> Webhooks {
-    Webhooks { meta: Meta::new() }
+    Webhooks {
+        http_input: Default::default(),
+        meta: Meta::new(),
+    }
 }
 impl Plugin<Swift> for Webhooks {
+    fn supports_native_input(&self) -> bool {
+        self.http_input.is_explicit()
+    }
+    fn requires(&self) -> Vec<poolster_core::engine::Requirement> {
+        self.http_input.requirements()
+    }
+
     fn kind(&self) -> &'static str {
         "swift-webhooks"
     }
@@ -14,18 +25,21 @@ impl Plugin<Swift> for Webhooks {
         &self.meta
     }
     fn generate(&self, cx: &mut PluginContext<'_, Swift>) -> Result<()> {
-        let namespace = type_name(
-            cx.settings
-                .package_name
-                .as_deref()
-                .unwrap_or(&format!("{}-sdk", kebab_case(&cx.api.name))),
-        );
-        cx.files.emit(GeneratedFile::new(
-            format!("Sources/{}/StandardWebhooks.swift", namespace),
-            include_str!("../templates/webhooks.swift.tmpl").replace("__PACKAGE__", &namespace),
-        )?)
+        self.http_input.with_context(cx, |cx| {
+            let namespace = type_name(
+                cx.settings
+                    .package_name
+                    .as_deref()
+                    .unwrap_or(&format!("{}-sdk", kebab_case(&cx.api.name))),
+            );
+            cx.files.emit(GeneratedFile::new(
+                format!("Sources/{}/StandardWebhooks.swift", namespace),
+                include_str!("../templates/webhooks.swift.tmpl").replace("__PACKAGE__", &namespace),
+            )?)
+        })
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -131,3 +145,6 @@ mod tests {
         );
     }
 }
+
+#[path = "webhooks_input.rs"]
+mod http_input;

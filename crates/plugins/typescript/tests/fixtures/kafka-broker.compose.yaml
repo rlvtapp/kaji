@@ -1,0 +1,16 @@
+# Pinned Kafka-compatible local broker; image digest verified with docker pull.
+services:
+  kafka:
+    image: docker.redpanda.com/redpandadata/redpanda:v25.3.11@sha256:48345e234472429b87cb4737fe11938ee8009774f818c9b6d8456aa2784f9c29
+    command:
+      - redpanda
+      - start
+      - --mode
+      - dev-container
+      - --smp
+      - '1'
+      - --kafka-addr
+      - 0.0.0.0:29092
+      - --advertise-kafka-addr
+      - 127.0.0.1:29092
+    ports: ['127.0.0.1:29092:29092']

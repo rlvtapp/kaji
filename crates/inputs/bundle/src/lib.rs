@@ -32,11 +32,18 @@ pub use poolster_input_capnproto::CapnProtoInput;
 
 /// Register the feature-enabled providers. Alternative providers can be added
 /// using the same core interface without depending on this bundle.
+#[cfg(feature = "openapi")]
+pub use poolster_input_openapi as openapi;
+#[cfg(feature = "openapi")]
+pub use poolster_input_openapi::OpenApiInput;
+
 pub fn default_registry() -> Result<InputRegistry> {
     #[allow(unused_mut)]
     let mut registry = InputRegistry::new();
     #[cfg(feature = "graphql")]
     registry.register(GraphqlInput)?;
+    #[cfg(feature = "openapi")]
+    registry.register(OpenApiInput)?;
     #[cfg(feature = "asyncapi")]
     registry.register(AsyncApiInput)?;
     #[cfg(feature = "arazzo")]

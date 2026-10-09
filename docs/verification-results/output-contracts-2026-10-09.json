@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-10-09T00:27:50.813277+00:00",
+  "branch": "alpha-2",
+  "head": "054b3394a914d63eb45216019557085782999437",
+  "source_snapshot_sha256": "d6a4267912b9fc69b91df2f2c356f55e75065aaad4d8d72d1a73406efb32f7eb",
+  "source_snapshot_algorithm": "Sorted crate .rs/Cargo.toml paths plus workspace Cargo.toml/Cargo.lock; hash path NUL contents NUL",
+  "source_snapshot_files": 465,
+  "scope": "Unreleased output contract/block migration; not a completed post-migration corpus sweep",
+  "workspace_tests": {
+    "command": "CARGO_INCREMENTAL=0 GOCACHE=/private/tmp/poolster-go-validation-cache POOLSTER_OPENAPI_BIN=/private/tmp/poolster-alpha2-guru-bin/poolster-openapi cargo test --workspace --locked --no-fail-fast --target-dir /private/tmp/poolster-openapi-validation",
+    "exit_code": 0,
+    "passed": 788,
+    "failed": 0,
+    "ignored": 138,
+    "log": "/private/tmp/poolster-output-migration-workspace-tests.log"
+  },
+  "format": {
+    "command": "cargo fmt --all --check",
+    "exit_code": 0
+  },
+  "clippy": {
+    "command": "CARGO_INCREMENTAL=0 cargo clippy --workspace --all-targets --locked --target-dir /private/tmp/poolster-openapi-validation -- -D warnings",
+    "exit_code": 0,
+    "log": "/private/tmp/poolster-output-migration-workspace-clippy.log"
+  },
+  "selected_external_runs": {
+    "typescript_http": 6,
+    "typescript_cli": 2,
+    "graphql": 6,
+    "kafka": 5,
+    "workflows": 5
+  },
+  "source_size_audit": {
+    "exit_code": 1,
+    "unchanged_preexisting_violations": [
+      {
+        "path": "crates/core/src/files.rs",
+        "lines": 862,
+        "budget": 765,
+        "unchanged_from_head": true
+      },
+      {
+        "path": "crates/cli/src/sdk_install.rs",
+        "lines": 526,
+        "budget": 490,
+        "unchanged_from_head": true
+      },
+      {
+        "path": "crates/cli/src/sdk_automation.rs",
+        "lines": 3427,
+        "budget": 3299,
+        "unchanged_from_head": true
+      }
+    ],
+    "migration_violations": []
+  },
+  "limitations": [
+    "Global two-phase naming remains opt-in",
+    "Typed Node hooks/native generation bridge still pending",
+    "Ongoing 205x10 corpus uses pre-migration frozen binaries; new run required for migration corpus coverage",
+    "External runtime counts are separate from default ignored tests"
+  ]
+}

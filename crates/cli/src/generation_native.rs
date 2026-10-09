@@ -1,23 +1,23 @@
 //! Native generation shares package assembly and generated-file ownership with HTTP.
+use super::native_profiles::{compatible as package_compatible, pipeline};
 use super::*;
-use poolster_core::{input::InputProvider, native::GraphqlOperations};
 
 fn skipped_outputs(options: &Generate, input: &NativeInputConfig) -> Vec<serde_json::Value> {
-    let supported_format = input.format == "graphql";
+    let supported_format = pipeline(&input.format).is_some();
     let reason = if supported_format {
-        "output does not consume GraphqlOperations"
+        "output does not consume the selected native contract"
     } else {
         "no usable output pipeline is bundled for this input format"
     };
     if let Some(packages) = &options.config_packages {
-        packages.iter().filter(|package| !supported_format || package.language != "typescript" || package.plugins.len() != 1 || package.plugins[0].name != "graphql").map(|package| serde_json::json!({
+        packages.iter().filter(|package| !package_compatible(&input.format,package)).map(|package| serde_json::json!({
             "input_format": input.format, "package": package.path, "language": package.language,
             "plugins": package.plugins.iter().map(|plugin| plugin.name.as_str()).collect::<Vec<_>>(), "reason": reason
         })).collect()
     } else {
-        options.languages.iter().filter(|language| !supported_format || language.as_str() != "typescript").map(|language| serde_json::json!({
+        options.languages.iter().filter(|language| pipeline(&input.format).is_none_or(|(target,_)| language.as_str() != target)).map(|language| serde_json::json!({
             "input_format": input.format, "package": language, "language": language,
-            "plugins": [if language == "typescript" { "graphql" } else { "sdk" }], "reason": reason
+            "plugins": [pipeline(&input.format).filter(|(target,_)|language.as_str()==*target).map(|(_,plugin)|plugin).unwrap_or("sdk")], "reason": reason
         })).collect()
     }
 }
@@ -47,18 +47,15 @@ pub(super) fn generate(options: Generate) -> Result<()> {
         }
         Ok(())
     };
-    if input.format != "graphql" {
+    if pipeline(&input.format).is_none() {
         eprintln!(
             "warning: no usable output pipeline is bundled for input format {:?}; no files exported",
             input.format
         );
         return report_empty();
     }
-    let compatible = |package: &PackageConfig| {
-        package.language == "typescript"
-            && package.plugins.len() == 1
-            && package.plugins[0].name == "graphql"
-    };
+    let compatible = |package: &PackageConfig| package_compatible(&input.format, package);
+    let (target_language, _) = pipeline(&input.format).expect("supported native format");
     if let Some(packages) = &options.config_packages {
         ensure!(
             !packages.is_empty(),
@@ -66,8 +63,8 @@ pub(super) fn generate(options: Generate) -> Result<()> {
         );
         for package in packages.iter().filter(|package| !compatible(package)) {
             eprintln!(
-                "warning: GraphQL input is incompatible with package {:?} ({}); package skipped",
-                package.path, package.language
+                "warning: {} input is incompatible with package {:?} ({}); package skipped",
+                input.format, package.path, package.language
             );
         }
         if !packages.iter().any(compatible) {
@@ -76,9 +73,12 @@ pub(super) fn generate(options: Generate) -> Result<()> {
     } else if !options
         .languages
         .iter()
-        .any(|language| language == "typescript")
+        .any(|language| language == target_language)
     {
-        eprintln!("warning: GraphQL input supports only TypeScript; no files exported");
+        eprintln!(
+            "warning: {} input supports only {target_language}; no files exported",
+            input.format
+        );
         return report_empty();
     }
     ensure!(
@@ -96,84 +96,31 @@ pub(super) fn generate(options: Generate) -> Result<()> {
                 options.typescript_transport,
                 Some(TypeScriptTransport::Axios)
             ),
-        "GraphQL supports the HTTP fetch transport; OpenAPI surface and client options are unsupported"
+        "native generation does not support OpenAPI surface/client or axios options"
     );
     ensure!(
         options.jobs == 0 && matches!(options.style, SdkClientStyle::Namespaced),
-        "GraphQL does not support OpenAPI client-style or Go worker options"
+        "native generation does not support OpenAPI client-style or Go worker options"
     );
-    let registry = std::sync::Arc::new(poolster_inputs::default_registry()?);
-    let mut profiles = ProfileSet::new(".");
-    let mut add_package = |path: &str,
-                           name: Option<&str>,
-                           version: Option<&str>,
-                           subscriptions: bool|
-     -> Result<()> {
-        let mut provider =
-            InputProvider::<GraphqlOperations>::new(registry.clone(), &input.format, &input.path)
-                .with_options(input.options.clone());
-        if let Some(id) = &input.provider {
-            provider = provider.using(id);
-        }
-        let handle = provider.handle();
-        let mut graphql = ts::graphql(Some(handle));
-        if subscriptions {
-            graphql = graphql.subscriptions();
-        }
-        let mut package = ts::package(path).with(provider).with(graphql);
-        if let Some(name) = name {
-            package = package.name(name);
-        }
-        let common = Common {
-            package_version: Some(version.unwrap_or(&options.version).to_owned()),
-            ..Default::default()
-        };
-        profiles =
-            std::mem::replace(&mut profiles, ProfileSet::new(".")).package(package.common(common));
-        Ok(())
-    };
-    if let Some(packages) = &options.config_packages {
-        ensure!(
-            !packages.is_empty(),
-            "native generation requires at least one package"
+    ensure!(
+        input.format == "graphql" || options.typescript_transport.is_none(),
+        "HTTP TypeScript transport options apply only to GraphQL native generation"
+    );
+    ensure!(
+        input.format == "protobuf" || options.native_output == NativeOutputConfig::default(),
+        "gRPC module/toolchain/mapping options require Protobuf input"
+    );
+    for language in options
+        .languages
+        .iter()
+        .filter(|language| language.as_str() != target_language)
+    {
+        eprintln!(
+            "warning: {} input is incompatible with {language}; package skipped",
+            input.format
         );
-        // Validate compatible packages before loading any source or running plugins.
-        for package in packages.iter().filter(|package| compatible(package)) {
-            ensure!(
-                package.layout.is_none() && package.middleware.is_empty() && !package.api_reference,
-                "GraphQL does not support HTTP layout, middleware or API-reference settings"
-            );
-            let plugin = &package.plugins[0];
-            ensure!(
-                plugin
-                    .transport
-                    .as_deref()
-                    .is_none_or(|value| value == "fetch"),
-                "GraphQL HTTP transport must be fetch"
-            );
-            ensure!(
-                plugin.uses.is_empty() && plugin.id.is_none(),
-                "GraphQL recipe provider bindings use input.provider"
-            );
-        }
-        for package in packages.iter().filter(|package| compatible(package)) {
-            add_package(
-                &package.path,
-                package.name.as_deref(),
-                package.version.as_deref(),
-                package.plugins[0].subscriptions.unwrap_or(false),
-            )?;
-        }
-    } else {
-        for language in options
-            .languages
-            .iter()
-            .filter(|language| language.as_str() != "typescript")
-        {
-            eprintln!("warning: GraphQL input is incompatible with {language}; package skipped");
-        }
-        add_package("typescript", None, None, false)?;
     }
+    let profiles = native_profiles::build(&options, input)?;
     let mut tree = poolster::generate_native(profiles)?;
     if let Some(packages) = &options.config_packages {
         for package in packages.iter().filter(|package| compatible(package)) {
@@ -210,9 +157,29 @@ pub(super) fn generate(options: Generate) -> Result<()> {
     for path in &input.options.operation_files {
         sources.insert(path.display().to_string(), sha256_file(path)?);
     }
+    for path in input.options.workflow_sources.values() {
+        sources.insert(path.display().to_string(), sha256_file(path)?);
+    }
+    if input.format == "protobuf" {
+        let loaded = poolster_inputs::default_registry()?.load_with_options(
+            &input.format,
+            input.provider.as_deref(),
+            &input.path,
+            &input.options,
+        )?;
+        for file in &loaded
+            .contract
+            .get::<poolster_core::native::rpc::RpcContract>()?
+            .files
+        {
+            if let Some(source) = &file.source {
+                sources.insert(format!("protobuf:{}", file.name), sha256(source.as_bytes()));
+            }
+        }
+    }
     let provenance = serde_json::json!({
         "version": 1, "generator": env!("CARGO_PKG_VERSION"),
-        "input": input, "sources": sources, "config_sha256": options.config_sha256,
+        "input": input, "native_output":options.native_output, "sources": sources, "config_sha256": options.config_sha256,
         "replay": "regenerate using the original recipe or native command; poolster update supports HTTP replay only"
     });
     let provenance_path = ".poolster-native-generation.json";
@@ -229,7 +196,7 @@ pub(super) fn generate(options: Generate) -> Result<()> {
         for language in options
             .languages
             .iter()
-            .filter(|language| language.as_str() != "typescript")
+            .filter(|language| language.as_str() != target_language)
         {
             tree.preserve_owned_prefix(&options.output, Path::new(language))?;
         }
@@ -260,123 +227,5 @@ pub(super) fn generate(options: Generate) -> Result<()> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn recipe(root: &Path, packages: serde_json::Value) -> PathBuf {
-        std::fs::write(root.join("schema.graphql"), "type Query { hello: String! }").unwrap();
-        std::fs::write(root.join("operations.graphql"), "query Hello { hello }").unwrap();
-        let path = root.join("poolster.json");
-        std::fs::write(&path, serde_json::to_vec(&serde_json::json!({
-            "input": {"format":"graphql", "provider":"graphql.apollo", "path":"schema.graphql", "options":{"operation_files":["operations.graphql"]}},
-            "output":{"path":"generated"}, "packages":packages
-        })).unwrap()).unwrap();
-        path
-    }
-
-    #[test]
-    fn native_recipe_resolves_operation_paths_and_checks_regeneration() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = recipe(
-            directory.path(),
-            serde_json::json!([{"language":"typescript","path":"sdk","name":"@example/graphql","plugins":[{"name":"graphql"}]}]),
-        );
-        generate_from_config(&path, ColorChoice::Never, false, false).unwrap();
-        assert!(directory.path().join("generated/sdk/package.json").exists());
-        generate_from_config(&path, ColorChoice::Never, true, false).unwrap();
-        std::fs::write(
-            directory.path().join("operations.graphql"),
-            "query Renamed { hello }",
-        )
-        .unwrap();
-        assert!(generate_from_config(&path, ColorChoice::Never, true, false).is_err());
-        generate_from_config(&path, ColorChoice::Never, false, false).unwrap();
-        generate_from_config(&path, ColorChoice::Never, true, false).unwrap();
-    }
-
-    #[test]
-    fn incompatible_outputs_warn_without_reading_schema_or_writing() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = recipe(
-            directory.path(),
-            serde_json::json!([{"language":"go","path":"sdk","plugins":[{"name":"sdk"}]}]),
-        );
-        std::fs::remove_file(directory.path().join("schema.graphql")).unwrap();
-        generate_from_config(&path, ColorChoice::Never, false, false).unwrap();
-        assert!(!directory.path().join("generated").exists());
-    }
-
-    #[test]
-    fn mixed_recipe_preserves_skipped_owned_files_including_local_edits() {
-        let directory = tempfile::tempdir().unwrap();
-        let output = directory.path().join("generated");
-        let mut previous = GeneratedTree::default();
-        previous
-            .insert(GeneratedFile::new("go/client.go", "old generated content").unwrap())
-            .unwrap();
-        previous.set_owner("go/client.go", "go-sdk").unwrap();
-        previous.write_to(&output).unwrap();
-        std::fs::write(output.join("go/client.go"), "local edits must survive").unwrap();
-        let path = recipe(
-            directory.path(),
-            serde_json::json!([
-                {"language":"typescript","path":"ts","plugins":[{"name":"graphql"}]},
-                {"language":"go","path":"go","plugins":[{"name":"sdk"}]}
-            ]),
-        );
-        generate_from_config(&path, ColorChoice::Never, false, false).unwrap();
-        assert_eq!(
-            std::fs::read_to_string(output.join("go/client.go")).unwrap(),
-            "local edits must survive"
-        );
-        assert!(output.join("ts/package.json").exists());
-        generate_from_config(&path, ColorChoice::Never, true, false).unwrap();
-    }
-
-    #[test]
-    fn empty_native_recipe_is_configuration_error_without_output() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = recipe(directory.path(), serde_json::json!([]));
-        let error = generate_from_config(&path, ColorChoice::Never, false, false).unwrap_err();
-        assert!(format!("{error:#}").contains("at least one package"));
-        assert!(!directory.path().join("generated").exists());
-    }
-
-    #[test]
-    fn unsupported_options_and_provider_selection_fail_without_export() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = recipe(
-            directory.path(),
-            serde_json::json!([{"language":"typescript","path":"ts","plugins":[{"name":"graphql"}]}]),
-        );
-        let mut config: serde_json::Value =
-            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-        config["input"]["provider"] = "graphql.missing".into();
-        std::fs::write(&path, serde_json::to_vec(&config).unwrap()).unwrap();
-        let error = generate_from_config(&path, ColorChoice::Never, false, false).unwrap_err();
-        assert!(format!("{error:#}").contains("unknown input provider"));
-        config["input"]["provider"] = "graphql.apollo".into();
-        config["input"]["options"]["broker"] = serde_json::json!({"kind":"nats"});
-        std::fs::write(&path, serde_json::to_vec(&config).unwrap()).unwrap();
-        assert!(generate_from_config(&path, ColorChoice::Never, false, false).is_err());
-        assert!(!directory.path().join("generated").exists());
-    }
-
-    #[test]
-    fn native_flags_parse_without_changing_openapi_default() {
-        let Action::Generate(options) = parse("generate schema.graphql --input-format graphql --provider graphql.apollo --operation a.graphql --operation b.graphql -o out -l typescript".split_whitespace().map(OsString::from)).unwrap() else { panic!() };
-        let input = options.native_input.unwrap();
-        assert_eq!(input.format, "graphql");
-        assert_eq!(input.options.operation_files.len(), 2);
-        let Action::Generate(options) = parse(
-            "generate api.yaml -o out -l go"
-                .split_whitespace()
-                .map(OsString::from),
-        )
-        .unwrap() else {
-            panic!()
-        };
-        assert!(options.native_input.is_none());
-        assert!(options.source.is_some());
-    }
-}
+#[path = "generation_native_tests.rs"]
+mod tests;

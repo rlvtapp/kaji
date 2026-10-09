@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "crates/inputs/bundle",
+    "crates/inputs/openapi",
     "crates/inputs/graphql",
     "crates/inputs/asyncapi",
     "crates/inputs/arazzo",

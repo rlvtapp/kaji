@@ -1,12 +1,14 @@
 use super::*;
 use poolster_core::engine::{Meta, Plugin, PluginContext};
 pub struct OperationTests {
+    http_input: poolster_core::engine::HttpInput,
     meta: Meta,
     options: poolster_core::samples::SampleOptions,
     limit: usize,
 }
 pub fn operation_tests() -> OperationTests {
     OperationTests {
+        http_input: Default::default(),
         meta: Meta::new(),
         options: Default::default(),
         limit: 128,
@@ -131,6 +133,13 @@ fn fixture(
     )
 }
 impl Plugin<crate::Swift> for OperationTests {
+    fn supports_native_input(&self) -> bool {
+        self.http_input.is_explicit()
+    }
+    fn requires(&self) -> Vec<poolster_core::engine::Requirement> {
+        self.http_input.requirements()
+    }
+
     fn kind(&self) -> &'static str {
         "swift-operation-tests"
     }
@@ -138,6 +147,7 @@ impl Plugin<crate::Swift> for OperationTests {
         &self.meta
     }
     fn generate(&self, cx: &mut PluginContext<'_, crate::Swift>) -> Result<()> {
+        self.http_input.with_context(cx, |cx| {
         let api = native_api(cx.api);
         let mut skipped = BTreeMap::new();
         let mut code = String::new();
@@ -208,8 +218,10 @@ impl Plugin<crate::Swift> for OperationTests {
             include_str!("../tests/fixtures/operation_tests.swift").replace("__CASES__", &code),
         )?)?;
         cx.files.emit(GeneratedFile::new("OPERATION_TESTS.md","Compile `swiftc -parse-as-library Sources/*/*.swift test/OperationTests.swift -o /tmp/poolster-operation-tests`, then run `/tmp/poolster-operation-tests`. Public native calls use a fake driver without network. Bounded structural samples assert wire values and decoded responses; explicit unsupported operations are in test/operation-diagnostics.json. Optional webhook dependencies require SwiftPM module search paths when compiling this probe.")?)
+     })
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -371,3 +383,6 @@ let cancelled=Task {try await slow.deleteThing()};try await Task.sleep(nanosecon
         );
     }
 }
+
+#[path = "operation_tests_input.rs"]
+mod http_input;

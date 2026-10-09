@@ -8,8 +8,8 @@ use napi::{Env, Error, Result, Status};
 use napi_derive::napi;
 use poolster::prelude::*;
 use poolster::{csharp, elixir, go, java, php, python, ruby, rust, swift, ts};
-use poolster_core::adapter::OpenApiSidecar;
 use poolster_core::{Api, GeneratedFile, GeneratedTree, SecuritySchemeCatalog};
+use poolster_input_openapi::OpenApiSidecar;
 use poolster_inputs::default_registry;
 use serde::{Deserialize, Serialize};
 

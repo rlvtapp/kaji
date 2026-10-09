@@ -1,4 +1,6 @@
 //! Cap'n Proto inspection uses the official compiler's schema descriptors.
+pub mod blocks;
+pub mod contracts;
 use anyhow::{Context, Result, bail};
 use capnp::schema_capnp::{code_generator_request, node};
 use poolster_core::input::{InputOperation as OperationSummary, InputSummary as ContractSummary};
@@ -122,10 +124,29 @@ impl poolster_core::input::InputPlugin for CapnProtoInput {
         "capnproto"
     }
     fn load(&self, path: &std::path::Path) -> anyhow::Result<poolster_core::input::InputContract> {
-        let document = load(path)?;
+        self.load_with_options(path, &Default::default())
+    }
+    fn load_with_options(
+        &self,
+        path: &Path,
+        options: &poolster_core::input::InputOptions,
+    ) -> Result<poolster_core::input::InputContract> {
+        anyhow::ensure!(
+            options.operation_files.is_empty()
+                && options.broker.is_none()
+                && options.workflow_sources.is_empty(),
+            "Cap'n Proto input supports import_roots only"
+        );
+        let document = load_with_includes(path, &options.import_roots)?;
         let mut input = poolster_core::input::InputContract::new(document.summary());
-
-        input.publish(document)?;
+        let source = path.canonicalize()?.to_string_lossy().replace('\\', "/");
+        let reference = poolster_core::blocks::ContractReference::from_bytes(
+            <CapnProtoDocument as poolster_core::engine::Contract>::NAME,
+            source.clone(),
+            &document.schema_request,
+        );
+        input.publish(document.node_blocks(source)?.with_parent(reference.clone()))?;
+        input.publish_with_reference(document, reference)?;
         Ok(input)
     }
 }

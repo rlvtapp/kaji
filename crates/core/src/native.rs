@@ -1,4 +1,9 @@
 //! Poolster-owned interchange contracts. Parser implementation types stay in inputs.
+pub mod capnproto;
+pub mod events;
+mod graphql_blocks;
+pub mod rpc;
+pub mod workflows;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 /// Nullability belongs to each wrapper; presence belongs to its containing field.

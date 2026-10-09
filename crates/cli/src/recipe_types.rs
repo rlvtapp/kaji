@@ -52,6 +52,46 @@ pub(super) struct NativeInputConfig {
     pub(super) options: poolster_core::input::InputOptions,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct GrpcToolchainConfig {
+    pub(super) protoc: Option<PathBuf>,
+    pub(super) protoc_gen_go: Option<PathBuf>,
+    pub(super) protoc_gen_go_grpc: Option<PathBuf>,
+}
+impl GrpcToolchainConfig {
+    pub(super) fn into_tools(self) -> go::GrpcToolchain {
+        let defaults = go::GrpcToolchain::default();
+        go::GrpcToolchain {
+            protoc: self.protoc.unwrap_or(defaults.protoc),
+            protoc_gen_go: self.protoc_gen_go.unwrap_or(defaults.protoc_gen_go),
+            protoc_gen_go_grpc: self
+                .protoc_gen_go_grpc
+                .unwrap_or(defaults.protoc_gen_go_grpc),
+        }
+    }
+    pub(super) fn resolve(&mut self, base: &Path) {
+        for path in [
+            &mut self.protoc,
+            &mut self.protoc_gen_go,
+            &mut self.protoc_gen_go_grpc,
+        ]
+        .into_iter()
+        .flatten()
+        {
+            if path.is_absolute() || path.components().count() > 1 {
+                *path = config_path(base, path.clone());
+            }
+        }
+    }
+}
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub(super) struct NativeOutputConfig {
+    pub(super) module: Option<String>,
+    pub(super) toolchain: GrpcToolchainConfig,
+    pub(super) go_packages: BTreeMap<String, String>,
+}
+
 /// Path filters intentionally use the same small glob language as Poolster's
 /// operation filters: `*` matches any sequence (including `/`) and `?` one
 /// Unicode scalar. Includes form an OR-set; an exclusion always wins.
@@ -270,6 +310,9 @@ pub(super) struct PluginConfig {
     pub(super) infer: Option<bool>,
     pub(super) data_sources: Option<bool>,
     pub(super) module: Option<String>,
+    pub(super) toolchain: Option<GrpcToolchainConfig>,
+    #[serde(default)]
+    pub(super) go_packages: BTreeMap<String, String>,
     pub(super) provider_name: Option<String>,
     pub(super) registry_namespace: Option<String>,
     #[serde(default)]

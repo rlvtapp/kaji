@@ -1,0 +1,10 @@
+syntax = "proto3";
+package store.v1;
+option go_package = "example.com/poolster/grpc/storev1;storev1";
+import "common.proto";
+service Store {
+  rpc Get(Item) returns (Item);
+  rpc Watch(Item) returns (stream Item);
+  rpc Upload(stream Item) returns (Item);
+  rpc Chat(stream Item) returns (stream Item);
+}

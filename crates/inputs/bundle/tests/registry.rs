@@ -3,6 +3,11 @@ use poolster_inputs::{InputPluginInfo, default_registry};
 #[test]
 fn bundle_registers_exactly_the_enabled_providers() {
     let mut expected: Vec<InputPluginInfo> = vec![
+        #[cfg(feature = "openapi")]
+        InputPluginInfo {
+            provider: "openapi.compiler-artifacts".into(),
+            format: "openapi".into(),
+        },
         #[cfg(feature = "graphql")]
         InputPluginInfo {
             provider: "graphql.apollo".into(),

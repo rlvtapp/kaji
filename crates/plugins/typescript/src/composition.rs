@@ -1,5 +1,6 @@
 //! Independently selectable SDK providers. Contracts describe emitted modules,
 //! so consumers never reconstruct imports from operation IDs or output recipes.
+mod options;
 use crate::{ModelOptions, Symbol, TypeScript, render, sdk};
 use anyhow::{Context, Result};
 use poolster_core::{
@@ -68,6 +69,7 @@ enum Part {
 }
 /// Uses the same maintained renderers as `sdk()`, emitting only its owned part.
 pub struct Provider {
+    http_input: poolster_core::engine::HttpInput,
     meta: Meta,
     part: Part,
     config: sdk::SdkConfig,
@@ -81,6 +83,7 @@ fn provider(part: Part, output: &str) -> Provider {
     config.group_by_tag = false;
     config.client_style = poolster_core::SdkClientStyle::Flat;
     Provider {
+        http_input: Default::default(),
         meta: Meta::new(),
         part,
         config,
@@ -102,60 +105,7 @@ pub fn operations() -> Provider {
 pub fn client() -> Provider {
     provider(Part::Client, "client")
 }
-impl Provider {
-    pub fn label(mut self, label: impl Into<String>) -> Self {
-        self.meta = self.meta.label(label);
-        self
-    }
-    pub fn output(mut self, module: impl Into<String>) -> Self {
-        self.output = module.into();
-        self
-    }
-    pub fn model_options(mut self, options: ModelOptions) -> Self {
-        self.config.model_options = options;
-        self
-    }
-    pub fn axios(mut self) -> Self {
-        self.config.transport = sdk::SdkTransport::Axios;
-        self
-    }
-    pub fn client_name(mut self, name: impl Into<String>) -> Self {
-        self.config.client_name = Some(name.into());
-        self
-    }
-    pub fn namespaced(mut self) -> Self {
-        self.config.client_style = poolster_core::SdkClientStyle::Namespaced;
-        self
-    }
-    pub fn throw_on_error(mut self, value: bool) -> Self {
-        self.config.throw_on_error = value;
-        self
-    }
-    pub fn using_models(mut self, handle: Handle<Models>) -> Self {
-        self.models = Some(handle);
-        self
-    }
-    pub fn using_transport(mut self, handle: Handle<Transport>) -> Self {
-        self.transport = Some(handle);
-        self
-    }
-    pub fn using_operations(mut self, handle: Handle<Operations>) -> Self {
-        self.operations = Some(handle);
-        self
-    }
-    pub fn models_handle(&self) -> Handle<Models> {
-        self.meta.handle()
-    }
-    pub fn transport_handle(&self) -> Handle<Transport> {
-        self.meta.handle()
-    }
-    pub fn operations_handle(&self) -> Handle<Operations> {
-        self.meta.handle()
-    }
-    pub fn client_handle(&self) -> Handle<Client> {
-        self.meta.handle()
-    }
-}
+
 fn module_import(module: &Path, file: &Path) -> Result<String> {
     Symbol {
         module: module.into(),
@@ -164,6 +114,9 @@ fn module_import(module: &Path, file: &Path) -> Result<String> {
     .import_from(file)
 }
 impl Plugin<TypeScript> for Provider {
+    fn supports_native_input(&self) -> bool {
+        self.http_input.is_explicit()
+    }
     fn kind(&self) -> &'static str {
         match self.part {
             Part::Models => "typescript-models",
@@ -184,7 +137,7 @@ impl Plugin<TypeScript> for Provider {
         }]
     }
     fn requires(&self) -> Vec<Requirement> {
-        match self.part {
+        let mut requirements = match self.part {
             Part::Operations => vec![
                 Requirement::on(self.models),
                 Requirement::on(self.transport),
@@ -194,9 +147,13 @@ impl Plugin<TypeScript> for Provider {
                 Requirement::on(self.transport),
             ],
             _ => vec![],
-        }
+        };
+        requirements.extend(self.http_input.requirements());
+        requirements
     }
     fn generate(&self, cx: &mut PluginContext<'_, TypeScript>) -> Result<()> {
+        let selected = self.http_input.resolve(cx)?;
+        let input_api = &selected.api;
         let output = GeneratedFile::new(&self.output, "")?.path;
         let mut config = self.config.clone();
         config.package_name = cx.settings.package_name.clone();
@@ -209,7 +166,7 @@ impl Plugin<TypeScript> for Provider {
                 "selected TypeScript transport does not support schema-directed lossless JSON; select a compatible transport or numeric model representation"
             );
         }
-        let prepared_api = crate::symbols::prepare(cx.api);
+        let prepared_api = crate::symbols::prepare(input_api);
         let mut tree = poolster_core::GeneratedTree::default();
         match self.part {
             Part::Models => {
@@ -238,7 +195,7 @@ impl Plugin<TypeScript> for Provider {
             Part::Transport => {
                 tree.insert(GeneratedFile::new(
                     "__package/.poolster/client.ts",
-                    sdk::poolster_runtime(config.transport, cx.security_schemes),
+                    sdk::poolster_runtime(config.transport, selected.security_schemes.as_ref()),
                 )?)?;
             }
             Part::Operations => {
@@ -254,7 +211,7 @@ impl Plugin<TypeScript> for Provider {
                         runtime_import_prefix: Some("..".into()),
                         runtime_dir: ".poolster".into(),
                     },
-                    cx.security_schemes,
+                    selected.security_schemes.as_ref(),
                 )? {
                     tree.insert(file)?;
                 }
@@ -263,7 +220,7 @@ impl Plugin<TypeScript> for Provider {
                 let name = config
                     .client_name
                     .clone()
-                    .unwrap_or_else(|| sdk::sdk_client_name(&cx.api.name));
+                    .unwrap_or_else(|| sdk::sdk_client_name(&input_api.name));
                 for file in sdk::poolster_sdk_client(
                     &prepared_api,
                     &name,
@@ -329,8 +286,7 @@ impl Plugin<TypeScript> for Provider {
                 continue;
             }
             if let Part::Operations = self.part {
-                let operation = cx
-                    .api
+                let operation = input_api
                     .operations
                     .iter()
                     .zip(&prepared_api.operations)
@@ -346,8 +302,7 @@ impl Plugin<TypeScript> for Provider {
                     .operation_modules
                     .get(&operation.id)
                     .context("model provider omitted operation")?;
-                let rendered = &prepared_api.operations[cx
-                    .api
+                let rendered = &prepared_api.operations[input_api
                     .operations
                     .iter()
                     .position(|o| o.id == operation.id)
@@ -368,7 +323,8 @@ impl Plugin<TypeScript> for Provider {
             }
             if let Part::Client = self.part {
                 let operations = cx.inputs.get::<Operations>()?;
-                for (operation, rendered) in cx.api.operations.iter().zip(&prepared_api.operations)
+                for (operation, rendered) in
+                    input_api.operations.iter().zip(&prepared_api.operations)
                 {
                     let symbol = operations
                         .functions
@@ -396,8 +352,7 @@ impl Plugin<TypeScript> for Provider {
                 }
             }
             if let Part::Models = self.part {
-                if let Some((schema, rendered)) = cx
-                    .api
+                if let Some((schema, rendered)) = input_api
                     .schemas
                     .iter()
                     .zip(&prepared_api.schemas)
@@ -414,8 +369,7 @@ impl Plugin<TypeScript> for Provider {
                             .declare(target.with_extension(""), &name, self.kind())?,
                     );
                 }
-                if let Some((operation, _)) = cx
-                    .api
+                if let Some((operation, _)) = input_api
                     .operations
                     .iter()
                     .zip(&prepared_api.operations)
@@ -493,7 +447,7 @@ impl Plugin<TypeScript> for Provider {
             Part::Client => {
                 let name = config
                     .client_name
-                    .unwrap_or_else(|| sdk::sdk_client_name(&cx.api.name));
+                    .unwrap_or_else(|| sdk::sdk_client_name(&input_api.name));
                 let symbol = cx.workspace.declare(output, &name, self.kind())?;
                 cx.publish(Client { symbol })
             }
@@ -506,6 +460,7 @@ pub use query::{Query, QueryFramework, QueryKind, react_query, swr, vue_query};
 
 /// Auxiliary artifacts tied to the selected model and operation providers.
 pub struct Auxiliary {
+    http_input: poolster_core::engine::HttpInput,
     meta: Meta,
     kind: AuxiliaryKind,
     output: String,
@@ -524,6 +479,7 @@ enum AuxiliaryKind {
 }
 fn auxiliary(kind: AuxiliaryKind, output: &str) -> Auxiliary {
     Auxiliary {
+        http_input: Default::default(),
         meta: Meta::new(),
         kind,
         output: output.into(),
@@ -547,42 +503,11 @@ pub fn msw() -> Auxiliary {
 pub fn cypress() -> Auxiliary {
     auxiliary(AuxiliaryKind::Cypress, "cypress")
 }
-impl Auxiliary {
-    pub fn layout(mut self, layout: poolster_core::SourceLayout) -> Self {
-        self.layout = Some(layout);
-        self
-    }
-    pub fn fixture_options(mut self, options: crate::FixtureOptions) -> Self {
-        self.fixture_options = options;
-        self
-    }
-    pub fn cypress_options(mut self, options: crate::CypressOptions) -> Self {
-        self.cypress_options = options;
-        self
-    }
-    /// Splits large auxiliary modules at declaration boundaries.
-    pub fn max_file_bytes(mut self, bytes: usize) -> Self {
-        self.max_file_bytes = bytes;
-        self
-    }
-    pub fn label(mut self, label: impl Into<String>) -> Self {
-        self.meta = self.meta.label(label);
-        self
-    }
-    pub fn output(mut self, module: impl Into<String>) -> Self {
-        self.output = module.into();
-        self
-    }
-    pub fn using_models(mut self, handle: Handle<Models>) -> Self {
-        self.models = Some(handle);
-        self
-    }
-    pub fn using_operations(mut self, handle: Handle<Operations>) -> Self {
-        self.operations = Some(handle);
-        self
-    }
-}
+
 impl Plugin<TypeScript> for Auxiliary {
+    fn supports_native_input(&self) -> bool {
+        self.http_input.is_explicit()
+    }
     fn kind(&self) -> &'static str {
         match self.kind {
             AuxiliaryKind::Zod => "typescript-zod",
@@ -595,13 +520,19 @@ impl Plugin<TypeScript> for Auxiliary {
         &self.meta
     }
     fn requires(&self) -> Vec<Requirement> {
-        let mut requirements = vec![Requirement::on(self.models)];
-        if matches!(self.kind, AuxiliaryKind::Msw | AuxiliaryKind::Cypress) {
-            requirements.push(Requirement::on(self.operations));
-        }
+        let mut requirements = {
+            let mut requirements = vec![Requirement::on(self.models)];
+            if matches!(self.kind, AuxiliaryKind::Msw | AuxiliaryKind::Cypress) {
+                requirements.push(Requirement::on(self.operations));
+            }
+            requirements
+        };
+        requirements.extend(self.http_input.requirements());
         requirements
     }
     fn generate(&self, cx: &mut PluginContext<'_, TypeScript>) -> Result<()> {
+        let selected = self.http_input.resolve(cx)?;
+        let input_api = &selected.api;
         let models = cx.inputs.get::<Models>()?;
         let target = GeneratedFile::new(format!("{}.ts", self.output), "")?.path;
         let config = render::ArtifactOptions {
@@ -612,14 +543,14 @@ impl Plugin<TypeScript> for Auxiliary {
             cypress_options: self.cypress_options.clone(),
             ..Default::default()
         };
-        let mut api = crate::symbols::prepare(cx.api);
-        for (prepared, original) in api.schemas.iter_mut().zip(&cx.api.schemas) {
+        let mut api = crate::symbols::prepare(input_api);
+        for (prepared, original) in api.schemas.iter_mut().zip(&input_api.schemas) {
             prepared.value.extensions.insert(
                 "poolster.aux.schema_name".into(),
                 original.name.clone().into(),
             );
         }
-        for (prepared, original) in api.operations.iter_mut().zip(&cx.api.operations) {
+        for (prepared, original) in api.operations.iter_mut().zip(&input_api.operations) {
             prepared.annotations.insert(
                 "poolster.aux.operation_id".into(),
                 original.id.clone().into(),
@@ -696,7 +627,7 @@ impl Plugin<TypeScript> for Auxiliary {
                                 .iter()
                                 .position(|schema| render::type_identifier(&schema.name) == local)
                                 .context("auxiliary model import has no provider schema")?;
-                            let original = &cx.api.schemas[index].name;
+                            let original = &input_api.schemas[index].name;
                             let symbol = models
                                 .schemas
                                 .get(original)
@@ -721,7 +652,7 @@ impl Plugin<TypeScript> for Auxiliary {
             }
             if matches!(self.kind, AuxiliaryKind::Msw | AuxiliaryKind::Cypress) {
                 let operations = cx.inputs.get::<Operations>()?;
-                for operation in &cx.api.operations {
+                for operation in &input_api.operations {
                     anyhow::ensure!(
                         operations.functions.contains_key(&operation.id),
                         "operation provider omitted {}",

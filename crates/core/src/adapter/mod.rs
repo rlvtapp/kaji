@@ -5,14 +5,11 @@
 //! it also carries security definitions which cannot be inferred from an
 //! operation's named requirements alone. OpenAPI parsing is supplied by
 //! Poolster's embedded Go compiler, whose JSON artifacts are read by
-//! [`openapi_sidecar`].
+//! the `poolster-input-openapi` package.
 
 use anyhow::Result;
 
 use crate::{Api, SecuritySchemeCatalog};
-
-pub mod openapi_sidecar;
-pub use openapi_sidecar::OpenApiSidecar;
 
 /// A normalized input contract ready for language plugins.
 ///
@@ -20,7 +17,7 @@ pub use openapi_sidecar::OpenApiSidecar;
 /// where it is useful to a generic transform, rather than exposing their
 /// parser's internal types to generators. An empty security catalog is valid
 /// for formats without reusable credential definitions.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct AdaptedApi {
     pub api: Api,
     pub security_schemes: SecuritySchemeCatalog,

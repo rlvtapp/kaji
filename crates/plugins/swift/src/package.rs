@@ -68,6 +68,7 @@ impl PackageExt for Package<Swift> {
 }
 
 pub struct Sdk {
+    http_input: poolster_core::engine::HttpInput,
     meta: Meta,
     client_style: Option<SdkClientStyle>,
     open_enums: bool,
@@ -75,6 +76,7 @@ pub struct Sdk {
 
 pub fn sdk() -> Sdk {
     Sdk {
+        http_input: Default::default(),
         meta: Meta::new(),
         client_style: None,
         open_enums: false,
@@ -100,6 +102,13 @@ impl Sdk {
 }
 
 impl Plugin<Swift> for Sdk {
+    fn supports_native_input(&self) -> bool {
+        self.http_input.is_explicit()
+    }
+    fn requires(&self) -> Vec<poolster_core::engine::Requirement> {
+        self.http_input.requirements()
+    }
+
     fn kind(&self) -> &'static str {
         "swift-sdk"
     }
@@ -109,14 +118,19 @@ impl Plugin<Swift> for Sdk {
     }
 
     fn generate(&self, cx: &mut PluginContext<'_, Swift>) -> Result<()> {
-        cx.files.append(crate::open_enums::render(
-            cx.api,
-            ".",
-            cx.settings.package_name.as_deref(),
-            self.client_style
-                .or(cx.common.client_style)
-                .unwrap_or(SdkClientStyle::Namespaced),
-            self.open_enums,
-        )?)
+        self.http_input.with_context(cx, |cx| {
+            cx.files.append(crate::open_enums::render(
+                cx.api,
+                ".",
+                cx.settings.package_name.as_deref(),
+                self.client_style
+                    .or(cx.common.client_style)
+                    .unwrap_or(SdkClientStyle::Namespaced),
+                self.open_enums,
+            )?)
+        })
     }
 }
+
+#[path = "package_input.rs"]
+mod http_input;

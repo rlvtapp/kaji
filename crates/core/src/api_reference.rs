@@ -1,7 +1,10 @@
 //! Optional target-neutral API reference consumer. Never includes example/default values.
 use crate::{
-    Api, GeneratedFile, SchemaKind, SchemaValue,
-    engine::{Contract, Handle, Language, Meta, Plugin, PluginContext, Provision},
+    AdaptedApi, Api, GeneratedFile, Operation, Schema, SchemaKind, SchemaValue,
+    blocks::Blocks,
+    engine::{
+        Contract, Handle, HttpInput, Language, Meta, Plugin, PluginContext, Provision, Requirement,
+    },
 };
 use anyhow::Result;
 use std::{fmt::Write, marker::PhantomData};
@@ -17,16 +20,30 @@ impl Contract for ApiReferenceDocument {
 pub struct ApiReference<L: Language> {
     meta: Meta,
     output: String,
+    input: HttpInput,
     language: PhantomData<L>,
 }
 pub fn api_reference<L: Language>() -> ApiReference<L> {
     ApiReference {
         meta: Meta::new(),
         output: "API_REFERENCE.md".into(),
+        input: HttpInput::default(),
         language: PhantomData,
     }
 }
 impl<L: Language> ApiReference<L> {
+    pub fn input(mut self, input: Handle<AdaptedApi>) -> Self {
+        self.input = self.input.input(input);
+        self
+    }
+    pub fn input_models(mut self, input: Handle<Blocks<Schema>>) -> Self {
+        self.input = self.input.input_models(input);
+        self
+    }
+    pub fn input_endpoints(mut self, input: Handle<Blocks<Operation>>) -> Self {
+        self.input = self.input.input_endpoints(input);
+        self
+    }
     pub fn handle(&self) -> Handle<ApiReferenceDocument> {
         self.meta.handle()
     }
@@ -36,6 +53,12 @@ impl<L: Language> ApiReference<L> {
     }
 }
 impl<L: Language> Plugin<L> for ApiReference<L> {
+    fn supports_native_input(&self) -> bool {
+        self.input.is_explicit()
+    }
+    fn requires(&self) -> Vec<Requirement> {
+        self.input.requirements()
+    }
     fn kind(&self) -> &'static str {
         "api-reference"
     }
@@ -46,12 +69,14 @@ impl<L: Language> Plugin<L> for ApiReference<L> {
         vec![Provision::of::<ApiReferenceDocument>()]
     }
     fn generate(&self, cx: &mut PluginContext<'_, L>) -> Result<()> {
-        let contents = render(cx.api);
-        cx.files
-            .emit(GeneratedFile::new(&self.output, &contents)?)?;
-        cx.publish(ApiReferenceDocument {
-            path: self.output.clone(),
-            contents,
+        self.input.run(cx, |cx| {
+            let contents = render(cx.api);
+            cx.files
+                .emit(GeneratedFile::new(&self.output, &contents)?)?;
+            cx.publish(ApiReferenceDocument {
+                path: self.output.clone(),
+                contents,
+            })
         })
     }
 }

@@ -1,5 +1,14 @@
 # `poolster.json` reference
 
+## Native inputs on alpha.2
+
+The unreleased `alpha-2` branch adds native `input` recipes for GraphQL →
+TypeScript, Protobuf → Go gRPC, AsyncAPI → TypeScript/Kafka and Arazzo →
+TypeScript workflow runners. Choose exactly one of `input` or `openapi`.
+Provider selection, supported plugin names and protocol options are documented
+in [native recipes and remaining work](native-pipelines.md#cli-and-recipe-selection).
+The existing OpenAPI recipe guide below remains applicable.
+
 [Recipe introduction](cli/config.md) · [Copyable recipes](cli/recipes.md) · [CLI reference](cli.md)
 
 > New to configuration? Start with the shorter [`poolster.json` recipe guide](cli/config.md)

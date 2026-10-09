@@ -3,7 +3,63 @@
 Generation, compilation and API behavior are separate checks. Run all three
 for the package you ship.
 
-## Latest 0.5.0 integration evidence
+## Current alpha.2 verification (9 October 2026)
+
+After output migration, the full `alpha-2` workspace suite passes:
+**788 passed, 0 failed, 138 ignored**. Formatting passes. The earlier
+pre-migration check recorded 752 passed, 0 failed and 136 ignored. Workspace Clippy with `-D warnings` also passes after migration. Ignored external probes are not counted as passed by that command.
+Initial sandbox-denied local-server tests passed when rerun with local-port access;
+an earlier overlapping-build artifact issue was resolved by a clean sequential run.
+No unresolved workspace failures remain in that completed run.
+
+Separate explicitly enabled integration runs established:
+
+| Pipeline | Executed evidence | Boundary |
+| --- | --- | --- |
+| GraphQL → TypeScript | Generated compilation and local GraphQL HTTP server; selections, errors/partial results, cancellation, injected subscriptions | No bundled network subscription transport |
+| Protobuf → Go gRPC | Two official-toolchain integration probes; local TCP unary/all streaming modes, errors/metadata/deadlines/cancellation/race checks and pinned upstream proto2 imports | Not editions or all old conformance extensions |
+| AsyncAPI → TypeScript/Kafka | Generated compilation and actual local Redpanda broker send/receive; keys/headers, invalid payloads, substitution and regeneration | Documented AsyncAPI 3.0/3.1 plaintext Kafka subset |
+| Arazzo → TypeScript | Generated compilation and local HTTP execution; checkout and pinned upstream source resolution | Sequential supported subset, no retries/actions/auth automation |
+| Cap’n Proto input | Explicit official-compiler source/block probe using capnp 1.5.0 | Input compilation only; no Rust generated package yet |
+
+The full workspace pass includes focused hook, provenance, completeness,
+compatibility, codec and symbol-planning tests. Symbol planning remains opt-in;
+this is not evidence that all existing generators use it or that Node typed hooks exist.
+
+The **pre-output-migration** frozen **205 pinned APIs.guru specs × 10 HTTP SDK
+languages** sweep is complete: **2,050 effective passes** for generation, native
+compilation or PHP/Ruby syntax checks, and deterministic regeneration after
+audited infrastructure retries. Original failures and retry evidence remain
+preserved. PHP emitted deprecation warnings in 140 contracts; syntax checks do
+not establish endpoint runtime behavior. These binaries predate the output
+contract migration, so the final migrated build still needs its own corpus run.
+The earlier [2,050-pass ledger](guru-compatibility.md) is a separate historical
+result. The reference-directory harness now verifies and reuses pinned trees;
+all 25 offline harness tests pass. [Harness evidence](verification-results/reference-harness-2026-10-09.json)
+records the helper revision separately from the frozen generator binaries.
+
+Reproduce external protocol checks after installing their pinned prerequisites:
+
+```sh
+POOLSTER_GRPC_TOOLS=/path/to/pinned/tools \
+cargo test -p poolster-plugin-go --test grpc_native -- --include-ignored
+POOLSTER_TSC_JS=/path/to/typescript/lib/tsc.js \
+cargo test -p poolster-plugin-typescript --test workflow_native -- --include-ignored
+```
+
+GraphQL's command is below. Kafka needs the real local broker and Node dependencies
+in the [reproduction guide](../crates/plugins/typescript/tests/fixtures/KAFKA.md).
+The [support matrix](plugin-support-matrix.md) distinguishes implemented output
+from parsing, and [remaining work](native-pipelines.md#remaining-work) records gaps.
+Alpha.2 release artifacts and publication have not been verified or released.
+
+The source-size audit has three pre-existing failures: `crates/core/src/files.rs`,
+`crates/cli/src/sdk_install.rs` and `crates/cli/src/sdk_automation.rs`. All three
+are byte-identical to `HEAD`; their line counts already exceed the recorded
+budgets there. Migration changes satisfy the ratchet without raising those budgets.
+See [output migration coverage](output-contract-migration.md).
+
+## Historical HTTP integration evidence (8 October 2026)
 
 The integrated workspace passes 483 tests, formatting checks and Clippy with
 warnings denied. The earlier shared HTTP check passed 163 scenarios across all
@@ -141,7 +197,7 @@ The probe covers plan/state consistency, import, drift, auth, 404 handling and
 identity recovery. It exercises Framework objects and mock HTTP.
 [Terraform CLI lifecycle and limits →](terraform-provider.md)
 
-## Latest 0.5.0 integration evidence
+## Historical input-plugin integration evidence
 
 The latest input-plugin worktree run recorded **634 passed, one failed and
 116 ignored Rust tests**. The failed output snapshot also fails on a pristine
@@ -193,7 +249,7 @@ by the mocked tests.
 
 ## Native GraphQL delivery verification (8 October 2026)
 
-The isolated `codex/graphql-native-pipeline` worktree from main passes
+The historical alpha.1 GraphQL implementation run from main passed
 `cargo test --workspace --locked --no-fail-fast`: **688 passed, 0 failed,
 130 ignored**. Formatting and workspace Clippy with warnings denied pass.
 Ignored tests are not counted as passes.
@@ -242,7 +298,6 @@ native skipped-package reports, and preserving skipped owned files/local edits
 without adopting modified hashes. CLI tests check actual JSON skip reports,
 relative operation paths, check/regeneration and preserved OpenAPI recipes.
 
-Cap’n Proto’s external compiler is absent from this environment; descriptor and
-inspection test results do not establish real source compilation here. No usable
-RPC/event/workflow/Cap’n Proto/Cap’n Web pipeline or Forge compatibility is claimed
-by this delivery. See the [support matrix and follow-ups](native-pipelines.md).
+At that alpha.1 delivery boundary, no usable RPC/event/workflow/Cap’n Proto/Cap’n
+Web output or Forge compatibility was established. The alpha.2 status below
+supersedes that boundary for gRPC, Kafka and sequential workflow generation.

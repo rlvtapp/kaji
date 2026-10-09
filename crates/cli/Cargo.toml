@@ -13,6 +13,7 @@ name = "poolster"
 path = "src/main.rs"
 
 [dependencies]
+poolster-input-openapi = { version = "0.5.0-alpha.1", path = "../inputs/openapi" }
 anyhow = "1.0.102"
 poolster = { version = "0.5.0-alpha.1", path = "../facade", features = ["all-plugins"] }
 poolster-core = { version = "0.5.0-alpha.1", path = "../core" }

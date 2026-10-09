@@ -64,6 +64,7 @@ mod mcp;
 mod migration;
 mod mock_http;
 mod mock_server;
+mod native_profiles;
 mod openapi_sources;
 mod profile_config;
 mod recipe_types;
@@ -115,12 +116,17 @@ Generate options (both modes):
       --format human|json              Change report format
   -o, --output <directory>             Output root (required)
   -l, --language <target,...>          Repeatable; use all for every SDK (required)
-      --input-format <format>         Native format; currently graphql generation
+      --input-format <format>         Native format: graphql, protobuf, asyncapi or arazzo
       --provider <id>                 Registered native input provider
       --operation <file>              Repeatable GraphQL operation documents
       --import-root <directory>       Repeatable provider import roots
       --broker-config <file>          Provider broker configuration as JSON
       --workflow-source <name=path>   Provider workflow source resolution
+      --module <path>                Protobuf Go module import path
+      --protoc <file>                 Official protoc toolchain executable
+      --protoc-gen-go <file>          Official Go message compiler plugin
+      --protoc-gen-go-grpc <file>     Official Go gRPC compiler plugin
+      --go-package <file=mapping>     Repeatable Go import/package mappings
       --name <name>                   API name (default: API)
       --sdk-version <version>         Generated package version (default: 0.1.0)
       --client-style <style>          namespaced (default) or flat

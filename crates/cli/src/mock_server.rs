@@ -51,7 +51,7 @@ pub(super) fn serve_mock(options: MockServe) -> Result<()> {
     if !status.success() {
         bail!("OpenAPI compiler failed ({status})")
     }
-    let api = Arc::new(poolster_core::adapter::openapi_sidecar::load_operations(
+    let api = Arc::new(poolster_input_openapi::openapi_sidecar::load_operations(
         temporary.path(),
         "API".into(),
         "0.1.0".into(),

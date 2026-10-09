@@ -60,8 +60,8 @@ pub mod prelude {
         ProfileSet,
     };
     pub use poolster_core::engine::{
-        Contract, Enforce, Handle, Language, Meta, Plugin, PluginContext, PluginPhase, Provision,
-        Requirement,
+        Contract, Enforce, Handle, HookContext, Hooks, Language, Meta, Plugin, PluginContext,
+        PluginPhase, Provision, Requirement, hooks,
     };
     pub use poolster_core::input::{InputContract, InputPlugin, InputProvider, InputRegistry};
     pub use poolster_core::{GeneratedFile, SdkClientStyle};
@@ -195,7 +195,7 @@ pub fn generate_openapi(
     version: impl Into<String>,
     profiles: ProfileSet,
 ) -> Result<GeneratedTree> {
-    let adapter = poolster_core::adapter::OpenApiSidecar::new(compiler_output, name, version);
+    let adapter = poolster_input_openapi::OpenApiSidecar::new(compiler_output, name, version);
     generate_with_adapter(&adapter, profiles)
 }
 

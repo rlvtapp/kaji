@@ -5,11 +5,13 @@ use poolster_core::{
     engine::{Meta, Plugin, PluginContext, Requirement},
 };
 pub struct OAuth {
+    http_input: poolster_core::engine::HttpInput,
     meta: Meta,
     transport: Option<poolster_core::engine::Handle<crate::composition::Transport>>,
 }
 pub fn oauth() -> OAuth {
     OAuth {
+        http_input: Default::default(),
         meta: Meta::new(),
         transport: None,
     }
@@ -24,6 +26,9 @@ impl OAuth {
     }
 }
 impl Plugin<Rust> for OAuth {
+    fn supports_native_input(&self) -> bool {
+        self.http_input.is_explicit()
+    }
     fn kind(&self) -> &'static str {
         "rust-oauth"
     }
@@ -31,21 +36,26 @@ impl Plugin<Rust> for OAuth {
         &self.meta
     }
     fn requires(&self) -> Vec<Requirement> {
-        vec![Requirement::on(self.transport)]
+        let mut requirements = self.http_input.requirements();
+        requirements.extend(vec![Requirement::on(self.transport)]);
+        requirements
     }
     fn generate(&self, cx: &mut PluginContext<'_, Rust>) -> Result<()> {
-        let transport = cx.inputs.get::<crate::composition::Transport>()?;
-        anyhow::ensure!(
-            transport.module == "crate::transport",
-            "OAuth requires the maintained Rust transport"
-        );
-        cx.workspace.oauth = true;
-        cx.files.emit(GeneratedFile::new(
-            "src/oauth.rs",
-            include_str!("../templates/oauth.rs.tmpl"),
-        )?)
+        self.http_input.with_context(cx, |cx| {
+            let transport = cx.inputs.get::<crate::composition::Transport>()?;
+            anyhow::ensure!(
+                transport.module == "crate::transport",
+                "OAuth requires the maintained Rust transport"
+            );
+            cx.workspace.oauth = true;
+            cx.files.emit(GeneratedFile::new(
+                "src/oauth.rs",
+                include_str!("../templates/oauth.rs.tmpl"),
+            )?)
+        })
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -106,3 +116,6 @@ mod tests {
         );
     }
 }
+
+#[path = "oauth_input.rs"]
+mod http_input;

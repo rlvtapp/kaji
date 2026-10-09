@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "recorded_at_utc": "2026-10-09T00:36:38.393814+00:00",
+  "scope": "Pinned reference-tree harness regeneration; frozen pre-output-migration binaries",
+  "helper_sha256": "c62eff9ddae839fb42718ccc4f75569bd56122713101774725f4dea67aab86c7",
+  "offline_tests": {
+    "guru_corpus": 21,
+    "public_contract_runner": 4,
+    "passed": 25,
+    "failed": 0
+  },
+  "normal_digitalocean_retries": {
+    "typescript": {
+      "passed": 1,
+      "failed": 0,
+      "generation_exit_code": 0,
+      "regeneration_exit_code": 0,
+      "regeneration_status": "passed",
+      "native_exit_code": 0,
+      "source_sha256": "5bd3a4800c4396372cb80d99cc82b49463e4a3f136b63d1794c19f13da37cf63",
+      "output_sha256": "d0c592da058b9694387d0404bc11cb96aa339982d1ab8a3a9f80a85337532a16",
+      "matches_original_output": true,
+      "report": "/private/tmp/poolster-alpha2-guru-typescript-digitalocean-harness-fixed/report.json"
+    },
+    "go": {
+      "passed": 1,
+      "failed": 0,
+      "generation_exit_code": 0,
+      "regeneration_exit_code": 0,
+      "regeneration_status": "passed",
+      "native_exit_code": 0,
+      "source_sha256": "5bd3a4800c4396372cb80d99cc82b49463e4a3f136b63d1794c19f13da37cf63",
+      "output_sha256": "03d63082ea89d95fe771c12e3e37de27b50ceeb20b4e0ea03a6d8326d4da23a5",
+      "matches_original_output": true,
+      "report": "/private/tmp/poolster-alpha2-guru-go-digitalocean-harness-fixed/report.json"
+    }
+  },
+  "policy": "Reuse an existing tree only after validating pinned file set, sizes and SHA256; reject corruption, missing/extra files and symlinks; retain original failure reports."
+}

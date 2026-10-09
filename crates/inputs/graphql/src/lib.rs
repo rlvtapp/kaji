@@ -2,6 +2,8 @@
 //! GraphQL operations; the validated schema retains fields, arguments, wrappers,
 //! directives, extensions and source locations for future generators.
 
+pub mod blocks;
+pub mod contracts;
 mod defaults;
 mod lowering;
 pub use lowering::lower as lower_operations;
@@ -80,14 +82,7 @@ impl poolster_core::input::InputPlugin for GraphqlInput {
         "graphql"
     }
     fn load(&self, path: &std::path::Path) -> anyhow::Result<poolster_core::input::InputContract> {
-        let document = parse(
-            &std::fs::read_to_string(path)
-                .with_context(|| format!("cannot read contract {}", path.display()))?,
-        )?;
-        let mut input = poolster_core::input::InputContract::new(document.summary());
-
-        input.publish(document)?;
-        Ok(input)
+        self.load_with_options(path, &Default::default())
     }
     fn load_with_options(
         &self,
@@ -101,7 +96,7 @@ impl poolster_core::input::InputPlugin for GraphqlInput {
             "GraphQL input supports operation_files only; imports, broker and workflow options are unsupported"
         );
         let source = std::fs::read_to_string(path)
-            .with_context(|| format!("cannot read schema {}", path.display()))?;
+            .with_context(|| format!("cannot read contract {}", path.display()))?;
         let document = parse(&source)?;
         let operations = options
             .operation_files
@@ -113,10 +108,51 @@ impl poolster_core::input::InputPlugin for GraphqlInput {
             .collect::<Result<Vec<_>>>()?
             .join("\n");
         let mut input = poolster_core::input::InputContract::new(document.summary());
+        let source_id = path.canonicalize()?.to_string_lossy().replace('\\', "/");
+        let models = poolster_core::native::GraphqlOperations {
+            schema_source: source.clone(),
+            operation_source: String::new(),
+            operations: vec![],
+            input_objects: lowering::input_objects(&document.schema),
+        };
         if !operations.trim().is_empty() {
-            input.publish(lower_operations(&document.schema, &source, &operations)?)?;
+            let lowered = lower_operations(&document.schema, &source, &operations)?;
+            let reference = poolster_core::blocks::ContractReference::from_bytes(
+                <poolster_core::native::GraphqlOperations as poolster_core::engine::Contract>::NAME,
+                source_id.clone(),
+                &serde_json::to_vec(&lowered)?,
+            );
+            input.publish(
+                blocks::input_models(&models, &source_id).with_parent(reference.clone()),
+            )?;
+            input
+                .publish(blocks::operations(&lowered, &source_id).with_parent(reference.clone()))?;
+            input.publish_with_reference(lowered, reference)?;
+        } else {
+            let reference = poolster_core::blocks::ContractReference::from_bytes(
+                <GraphqlDocument as poolster_core::engine::Contract>::NAME,
+                source_id.clone(),
+                source.as_bytes(),
+            );
+            input.publish(
+                blocks::input_models(&models, &source_id).with_parent(reference.clone()),
+            )?;
+            input.publish(blocks::OperationBlocks {
+                parent: Some(reference),
+                state: poolster_core::blocks::CollectionState::Unavailable {
+                    diagnostics: vec![
+                        "GraphQL schema-only input has no operation documents".into(),
+                    ],
+                },
+                items: vec![],
+            })?;
         }
-        input.publish(document)?;
+        let reference = poolster_core::blocks::ContractReference::from_bytes(
+            <GraphqlDocument as poolster_core::engine::Contract>::NAME,
+            source_id,
+            source.as_bytes(),
+        );
+        input.publish_with_reference(document, reference)?;
         Ok(input)
     }
 }
