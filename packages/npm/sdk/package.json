@@ -9,7 +9,7 @@
     "./plugins": { "types": "./plugins.d.ts", "import": "./plugins.mjs", "require": "./plugins.cjs" },
     "./package.json": "./package.json"
   },
-  "files": ["index.cjs", "index.mjs", "index.d.ts", "plugins.cjs", "plugins.mjs", "plugins.d.ts", "plugin-engine.cjs", "config.cjs", "README.md", "LICENSE"],
+  "files": ["index.cjs", "index.mjs", "index.d.ts", "plugins.cjs", "plugins.mjs", "plugins.d.ts", "plugin-engine.cjs", "plan.cjs", "config.cjs", "README.md", "LICENSE"],
   "engines": { "node": ">=18" },
   "scripts": {
     "test": "node --test test/*.test.cjs",

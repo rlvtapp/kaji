@@ -12,3 +12,6 @@ export const inspectInput = api.inspectInput;
 export const loadConfig = api.loadConfig;
 export const createPoolster = api.createPoolster;
 export const generate = api.generate;
+
+export const plan = api.plan;
+export const formatPlan = api.formatPlan;

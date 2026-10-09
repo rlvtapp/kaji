@@ -34,6 +34,15 @@ pub(super) fn generate_from_config(
             json_changes,
         );
     }
+    generate(load_config_options(path, color, check, json_changes)?)
+}
+
+pub(super) fn load_config_options(
+    path: &Path,
+    color: ColorChoice,
+    check: bool,
+    json_changes: bool,
+) -> Result<Generate> {
     let path = std::fs::canonicalize(path)
         .with_context(|| format!("cannot read Poolster config {}", path.display()))?;
     let source = std::fs::read_to_string(&path)
@@ -154,7 +163,7 @@ pub(super) fn generate_from_config(
         check,
         json_changes,
     };
-    generate(options)
+    Ok(options)
 }
 
 pub(super) fn init_config(init: Init) -> Result<()> {

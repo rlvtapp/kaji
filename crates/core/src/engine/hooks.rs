@@ -52,6 +52,7 @@ pub struct Hooks<L: Language> {
     requirements: Vec<Requirement>,
     provisions: Vec<Provision>,
     callbacks: Vec<Callback<L>>,
+    handler_labels: Vec<String>,
 }
 pub fn hooks<L: Language>() -> Hooks<L> {
     Hooks {
@@ -60,6 +61,7 @@ pub fn hooks<L: Language>() -> Hooks<L> {
         requirements: vec![],
         provisions: vec![],
         callbacks: vec![],
+        handler_labels: vec![],
     }
 }
 impl<L: Language> Hooks<L> {
@@ -84,6 +86,8 @@ impl<L: Language> Hooks<L> {
         provider: Option<Handle<C>>,
         handler: impl Fn(&C, &mut HookContext<'_, '_, L>) -> Result<()> + Send + Sync + 'static,
     ) -> Self {
+        self.handler_labels
+            .push(format!("on_contract<{}>", C::NAME));
         self.requirements.push(Requirement::on(provider));
         self.callbacks.push(Box::new(move |cx| {
             let input = cx.inputs.get::<C>()?;
@@ -108,6 +112,8 @@ impl<L: Language> Hooks<L> {
         provider: Option<Handle<C>>,
         handler: impl Fn(&C, &mut HookContext<'_, '_, L>) -> Result<()> + Send + Sync + 'static,
     ) -> Self {
+        self.handler_labels
+            .push(format!("on_optional_contract<{}>", C::NAME));
         self.requirements.push(Requirement::on(provider).optional());
         self.callbacks.push(Box::new(move |cx| {
             if let Some(input) = cx.inputs.optional::<C>()? {
@@ -154,6 +160,11 @@ impl<L: Language> Hooks<L> {
         + Sync
         + 'static,
     ) -> Self {
+        self.handler_labels.push(format!(
+            "on_derived_block<{}, {}>",
+            C::NAME,
+            T::CONTRACT_NAME
+        ));
         self.requirements.push(Requirement::on(whole));
         self.requirements.push(Requirement::on(blocks));
         self.callbacks.push(Box::new(move |cx| {
@@ -233,14 +244,18 @@ impl<L: Language> Hooks<L> {
         + Sync
         + 'static,
     ) -> Self {
-        self.on_contract(provider, move |blocks: &Blocks<T>, cx| {
+        let mut hooks = self.on_contract(provider, move |blocks: &Blocks<T>, cx| {
             blocks.validate()?;
             blocks.require_complete()?;
             for block in &blocks.items {
                 handler(block, cx)?;
             }
             Ok(())
-        })
+        });
+        if let Some(label) = hooks.handler_labels.last_mut() {
+            *label = format!("on_block<{}>", T::CONTRACT_NAME);
+        }
+        hooks
     }
 }
 impl<L: Language> Hooks<L> {
@@ -319,6 +334,9 @@ impl<L: Language> Hooks<L> {
 }
 
 impl<L: Language> Plugin<L> for Hooks<L> {
+    fn plan_handlers(&self) -> Vec<String> {
+        self.handler_labels.clone()
+    }
     fn kind(&self) -> &'static str {
         "typed-hooks"
     }

@@ -15,3 +15,5 @@ Want to create a plugin? Use [JavaScript plugin authoring](../plugins/javascript
 
 For command-line delivery, see [CLI automation](../cli/automation.md) and
 [ejection](../cli/customization.md).
+
+[Plan data and custom viewers](planning.md) — inspect without generation.

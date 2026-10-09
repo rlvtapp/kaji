@@ -67,6 +67,7 @@ mod mock_server;
 mod native_graphql_addons;
 mod native_profiles;
 mod openapi_sources;
+mod plan_command;
 mod profile_config;
 mod recipe_exporters;
 mod recipe_types;
@@ -84,6 +85,7 @@ mod update_command;
 const HELP: &str = "Poolster — native contract package generator
 
 Usage:
+  poolster plan --config poolster.json [--format text|json|html] [--output PATH]
   poolster migrate [project-or-config] [--input <file>] [--output <new-directory>] [--strict]
   poolster init [--config <file>] [--input <openapi-file>] [--output <directory>]
   poolster generate                         # reads ./poolster.json
@@ -264,6 +266,7 @@ fn main() -> ExitCode {
         Action::Sdk(options) => sdk_automation::run(options),
         Action::Eject(arguments) => eject::run(arguments),
         Action::Migrate(arguments) => migration::run(arguments),
+        Action::Plan(arguments) => plan_command::run(arguments),
         Action::Contract(arguments) => contract::run(arguments),
     };
     match result {

@@ -4,6 +4,7 @@
 //! Rust type. Language implementations own package settings and shared state.
 
 mod context;
+pub mod overview;
 use context::{Bindings, ContractReferences, Contracts, checked_path};
 pub use context::{Emitter, FinalizeContext, Inputs, PluginContext};
 
@@ -222,6 +223,10 @@ impl Enforce {
 
 pub trait Plugin<L: Language>: Send + Sync + 'static {
     fn kind(&self) -> &'static str;
+    /// Optional declarative handler labels for planning; callbacks are never inspected.
+    fn plan_handlers(&self) -> Vec<String> {
+        vec!["generate".into()]
+    }
     fn meta(&self) -> &Meta;
     /// Selects the plugin lifecycle phase. The default honors [`Self::enforce`]
     /// so a post plugin only needs to override that shorthand.
@@ -613,6 +618,7 @@ impl<L: Language> Package<L> {
 
 /// Type erasure only at the release boundary; package builders remain typed.
 trait ErasedPackage: Send + Sync {
+    fn overview(&self, native: bool) -> overview::PackagePlan;
     fn directory(&self) -> &str;
     fn validate(&self) -> Result<()>;
     fn native_incompatibility(&self) -> Option<String>;
@@ -625,6 +631,9 @@ trait ErasedPackage: Send + Sync {
     ) -> Result<GeneratedTree>;
 }
 impl<L: Language> ErasedPackage for Package<L> {
+    fn overview(&self, native: bool) -> overview::PackagePlan {
+        overview::describe(self, native)
+    }
     fn directory(&self) -> &str {
         &self.dir
     }
@@ -697,6 +706,13 @@ impl Packages {
     pub fn package<L: Language>(mut self, package: Package<L>) -> Self {
         self.packages.push(Box::new(package));
         self
+    }
+    /// Inspect declared dependencies without executing providers or generators.
+    pub fn plan(&self, native: bool) -> overview::GenerationPlan {
+        overview::GenerationPlan {
+            version: 1,
+            packages: self.packages.iter().map(|p| p.overview(native)).collect(),
+        }
     }
     pub fn is_empty(&self) -> bool {
         self.packages.is_empty()

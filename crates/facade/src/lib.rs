@@ -103,6 +103,10 @@ pub struct ProfileSet {
     packages: Packages,
 }
 impl ProfileSet {
+    /// Inspect the configured native graph without loading sources.
+    pub fn plan(&self, native: bool) -> poolster_core::engine::overview::GenerationPlan {
+        self.packages.plan(native)
+    }
     pub fn new(root: impl Into<String>) -> Self {
         Self {
             root: root.into(),

@@ -762,7 +762,7 @@ fn scaffold(
     }
     files.insert(
         ".poolster/SDK_AUTOMATION.md".into(),
-        include_str!("../../../docs/sdk-automation.md").into(),
+        include_str!("../../../docs/reference/automation/sdk-automation.md").into(),
     );
     // Repository bootstrap is committed by its owner. Routine App tokens need
     // contents/PR permissions, never permission to replace workflow definitions.
@@ -2091,7 +2091,7 @@ pub fn run(options: Options) -> Result<()> {
                     false,
                 )?;
                 println!(
-                    "App manifest written. Register and install the App using docs/github-app.md; no GitHub registration or secrets were created."
+                    "App manifest written. Register and install the App using docs/reference/automation/github-app.md; no GitHub registration or secrets were created."
                 );
             }
         }

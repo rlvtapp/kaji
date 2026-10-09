@@ -100,8 +100,8 @@ select one input source; Rust plugins can compose multiple typed contracts.
 - [ ] Runtime scalar codecs.
 - [ ] Introspection JSON and schema imports.
 - [ ] Incremental delivery (`@defer` / `@stream`) and custom executable directives.
-- [ ] GraphQL support in Zod, Faker, MSW, Cypress and query-hook outputs.
-- [ ] GraphQL generation through the npm configuration engine.
+- [x] GraphQL support in Zod, Faker, MSW, Cypress and query-hook outputs (current checkout; unreleased).
+- [x] GraphQL generation through the npm configuration engine (current checkout; unreleased).
 
 Unsupported output packages succeed with warnings and a structured skipped-plugin
 report. An all-skipped run leaves existing files untouched. Invalid input and
@@ -144,3 +144,13 @@ failures and successful retries remain in the audit trail. See
 
 See [native pipelines](reference/inputs/native-pipelines.md) for exact feature limits and concrete
 implementation/verification requirements for each follow-up.
+
+## Generation planning (unreleased)
+
+The [CLI planner](cli/plan.md) renders terminal lines or exports JSON/HTML without
+loading protocol inputs. [Rust planning](rust/planning.md) exposes the resolved
+typed package graph and handler declarations. [Node planning](javascript/planning.md)
+exposes JavaScript dependencies and callback names; native nodes are opaque
+configuration boundaries. Planning does not predict runtime revisions, block
+completeness, emitted files or timings. Execution tracing and a full Node native
+graph bridge remain follow-up work.

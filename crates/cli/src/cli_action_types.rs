@@ -1,6 +1,7 @@
 use super::*;
 
 pub(super) enum Action {
+    Plan(Vec<OsString>),
     Eject(Vec<OsString>),
     Migrate(Vec<OsString>),
     Contract(Vec<OsString>),

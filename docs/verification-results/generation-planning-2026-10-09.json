@@ -1,0 +1,33 @@
+{
+  "date": "2026-10-09",
+  "scope": "generation planning",
+  "core": {
+    "passed": 127,
+    "failed": 0,
+    "ignored": 0
+  },
+  "node_full_suite": {
+    "passed": 72,
+    "failed": 0,
+    "skipped": 1,
+    "skip_reason": "opt-in GraphQL runtime dependencies not supplied"
+  },
+  "latest_node_plan_tests": {
+    "passed": 3,
+    "failed": 0
+  },
+  "checks": [
+    "CLI build",
+    "Clippy core/facade/CLI with warnings denied",
+    "formatting",
+    "npm package includes plan.cjs",
+    "CLI execution-free planning with nonexistent source",
+    "HTML script syntax and escaping",
+    "documentation file links"
+  ],
+  "limitations": [
+    "Full workspace suite not rerun for this change",
+    "Optional HTML browser visual check blocked by local-file URL policy",
+    "Node native graph remains opaque; no execution tracing"
+  ]
+}

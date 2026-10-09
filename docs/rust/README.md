@@ -14,3 +14,5 @@ Rust GraphQL client, use the [Rust client guide](../reference/outputs/graphql-ru
 Want to extend the generator? Use [Rust plugin authoring](../plugins/rust/README.md).
 
 [All sections](../README.md)
+
+[Inspect the graph](planning.md) — structured planning and text output.

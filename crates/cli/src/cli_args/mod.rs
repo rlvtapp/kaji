@@ -19,6 +19,9 @@ pub(super) fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Act
     if command == "init" {
         return parse_init(args);
     }
+    if command == "plan" {
+        return Ok(Action::Plan(args.collect()));
+    }
     if command == "contract" {
         return Ok(Action::Contract(args.collect()));
     }

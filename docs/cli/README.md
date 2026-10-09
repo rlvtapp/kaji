@@ -63,3 +63,5 @@ The CLI recipe selects its bundled plugin set.
 - [GitHub Actions and generated PRs](automation.md)
 - [Release and publish an SDK](../reference/automation/sdk-publishing.md)
 - [Customize output and eject the generator](customization.md)
+
+[Inspect the generation plan](plan.md) — plugins, contracts and selected providers.

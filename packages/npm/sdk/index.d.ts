@@ -215,4 +215,17 @@ export function availableInputPlugins(): Array<{ provider: string; format: strin
 export function inspectInput(input: { path: string; plugin: NativeInputPlugin | JsInputPlugin }): Promise<InputReport>;
 export function loadConfig(file?: string): Promise<PoolsterConfig>;
 export function generate(config: PoolsterConfig, options?: { write?: boolean }): Promise<GenerateResult>;
-export function createPoolster(config: PoolsterConfig): { generate(options?: { write?: boolean }): Promise<GenerateResult>; inspectInput(): Promise<InputReport> };
+export function createPoolster(config: PoolsterConfig): { plan(): JavaScriptPlan; generate(options?: { write?: boolean }): Promise<GenerateResult>; inspectInput(): Promise<InputReport> };
+
+/** Execution-free declarations. Native nodes are opaque boundaries in Node. */
+export interface JavaScriptPlan {
+  version: 1;
+  runtime: 'javascript';
+  input: { format: string; provider: string };
+  plugins: Array<{ id: number; kind: string; phase: string; order: number | null; detail: string; hooks: string[]; provides: string[]; requires: string[] }>;
+  edges: Array<{ provider: number | null; consumer: number; contract: string | null; dependency: string | null; optional: boolean; selection: string }>;
+  stages: string[];
+  limitations: string[];
+}
+export function plan(config: PoolsterConfig): JavaScriptPlan;
+export function formatPlan(plan: JavaScriptPlan): string;

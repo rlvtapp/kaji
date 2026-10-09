@@ -8,6 +8,8 @@ const { spawn } = require('node:child_process');
 const { defineContract, providerHandle, requireContract, planPlugins, contractRuntime } = require('./plugin-engine.cjs');
 const { nativeAddonOptions, validateInput, defineInputPlugin, defineConfig, sdkPackage, normalizedPackagePath, definePlugin, validatePlugin, loadConfig } = require('./config.cjs');
 
+const { plan, formatPlan } = require('./plan.cjs');
+
 const root = path.resolve(__dirname, '../../..');
 
 function platformKey(platform = process.platform, arch = process.arch, report = process.report) {
@@ -313,7 +315,7 @@ async function generate(config, options = {}) {
 
 function createPoolster(config) {
   defineConfig(config);
-  return { generate: (options) => generate(config, options), inspectInput: () => inspectInput(config.input) };
+  return { plan: () => plan(config), generate: (options) => generate(config, options), inspectInput: () => inspectInput(config.input) };
 }
 
-module.exports = { defineConfig, definePlugin, defineInputPlugin, defineContract, providerHandle, requireContract, availableNativePlugins, availableInputPlugins, inspectInput, loadConfig, createPoolster, generate };
+module.exports = { plan, formatPlan, defineConfig, definePlugin, defineInputPlugin, defineContract, providerHandle, requireContract, availableNativePlugins, availableInputPlugins, inspectInput, loadConfig, createPoolster, generate };
