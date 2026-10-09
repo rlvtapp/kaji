@@ -8,12 +8,20 @@ use std::{
 };
 pub(super) struct Models<'a> {
     contract: &'a GraphqlOperations,
+    mappings: BTreeMap<String, super::GraphqlScalarMapping>,
     names: BTreeSet<String>,
     input_names: BTreeMap<String, String>,
     pub source: String,
 }
 impl<'a> Models<'a> {
+    #[cfg(test)]
     pub fn new(contract: &'a GraphqlOperations) -> Self {
+        Self::with_mappings(contract, &BTreeMap::new())
+    }
+    pub fn with_mappings(
+        contract: &'a GraphqlOperations,
+        mappings: &BTreeMap<String, super::GraphqlScalarMapping>,
+    ) -> Self {
         let mut names: BTreeSet<_> = [
             "String",
             "Vec",
@@ -41,6 +49,7 @@ impl<'a> Models<'a> {
             .collect();
         Self {
             contract,
+            mappings: mappings.clone(),
             names,
             input_names,
             source: String::from(
@@ -150,14 +159,24 @@ impl<'a> Models<'a> {
         current: Option<&str>,
     ) -> Result<String> {
         let value = match &ty.kind {
-            ModelKind::Scalar(name) => match name.as_str() {
-                "String" | "ID" => "String",
-                "Int" => "i32",
-                "Float" => "f64",
-                "Boolean" => "bool",
-                _ => "serde_json::Value",
+            ModelKind::Scalar(name) => {
+                if let Some(mapping) = self.mappings.get(name) {
+                    if input {
+                        mapping.input.clone()
+                    } else {
+                        mapping.output.clone()
+                    }
+                } else {
+                    match name.as_str() {
+                        "String" | "ID" => "String",
+                        "Int" => "i32",
+                        "Float" => "f64",
+                        "Boolean" => "bool",
+                        _ => "serde_json::Value",
+                    }
+                    .into()
+                }
             }
-            .into(),
             ModelKind::Named(name) => {
                 let resolved = self
                     .input_names

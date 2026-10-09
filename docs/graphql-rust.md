@@ -43,9 +43,41 @@ Optional non-null fields distinguish absent and a value. Required nullable resul
 fields must be present, even when null. Enum values retain their GraphQL wire
 strings, and selected abstract variants retain their selected fields.
 
-Custom scalars initially use `serde_json::Value`; TypeScript scalar expressions
-cannot be reused as Rust types. Runtime scalar codecs and subscription transports
-are outside this initial Rust increment.
+Unmapped custom scalars use `serde_json::Value`. Configure independent Rust input
+and output wire types when the server's representations are known:
+
+```rust
+let generator = rust::graphql(Some(input.handle()))
+    .scalar("Timestamp", rust::GraphqlScalarMapping::new("String", "i64"));
+```
+
+The same recipe plugin accepts language-specific mappings:
+
+```json
+{
+  "language": "rust",
+  "path": "client",
+  "plugins": [{
+    "name": "graphql",
+    "scalars": { "Timestamp": { "input": "String", "output": "i64" } }
+  }]
+}
+```
+
+Mappings apply recursively to variables/input objects and selected results,
+including lists. GraphQL presence and nullability wrappers remain independent.
+Supported self-contained types are `String`, primitive numbers/bool,
+`serde_json::Value`, and nested `Vec<T>`, `Option<T>` or `BTreeMap<String, T>`.
+The supported containers and `String` also accept their `std`-qualified paths;
+emitted types use canonical paths to avoid generated-name collisions.
+
+Unknown/unused scalar names, builtin overrides, malformed expressions and
+unsupported imported types fail before output is written. Borrowed types, custom
+structs and dependencies such as Chrono are not supplied by this mapping API.
+Mappings describe JSON wire values and install no codecs: `String` input and
+`i64` output work only if the server accepts strings and returns integers.
+An incompatible response produces a `GraphqlTransportError::Decode`.
+Subscriptions remain outside this increment.
 
 ## Node entry point
 
@@ -62,15 +94,17 @@ await generate({
     path: './schema.graphql',
     plugin: inputGraphql(),
     operations: ['./operations.graphql'],
+    rustScalars: { Timestamp: { input: 'String', output: 'i64' } },
   },
   output: './generated',
   plugins: [pluginRust({ path: 'client', name: 'example-graphql-client' })],
 });
 ```
 
-HTTP and GraphQL generators require separate Rust packages. Rust custom scalar
-mappings are not yet supported; generate a separate TypeScript configuration if
-it supplies TypeScript scalar mappings.
+HTTP and GraphQL generators require separate Rust packages. Node configuration
+uses `input.rustScalars` for Rust and `input.scalars` for TypeScript, allowing mixed
+language packages with independent mappings. TypeScript expressions are not
+interpreted as Rust types.
 
 The two explicit native tests pass: deterministic regeneration, and `.crate`
 pack/unpack plus clean consumer compilation/execution against a local GraphQL
@@ -81,3 +115,7 @@ See [verification](verification.md#graphql-client-completion-checks).
 
 Abstract selections without `__typename` use strict structural variants; ambiguous
 identical-key variants with different types require selecting `__typename`.
+
+The packaged runtime test also verifies a real custom GraphQL scalar with
+`String` input and `i64` output, nested/list/presence/nullability behavior, unmapped
+JSON values and incompatible server data.

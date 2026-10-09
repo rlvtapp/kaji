@@ -249,7 +249,7 @@ async function generate(config, options = {}) {
         graphqlFiles = compatible.length ? JSON.parse(await native().generateGraphql(JSON.stringify({
           source: path.resolve(config.input.path), provider: config.input.plugin.provider,
           operationFiles: (config.input.operations ?? []).map((file) => path.resolve(file)),
-          scalars: config.input.scalars ?? {}, subscriptions: config.input.subscriptions ?? false, packages: compatible,
+          scalars: config.input.scalars ?? {}, rustScalars: config.input.rustScalars ?? {}, subscriptions: config.input.subscriptions ?? false, packages: compatible,
         }))) : [];
       }
       if (!loaded.api && graphqlFiles === undefined && (packages.length || nativeAddons.length)) {

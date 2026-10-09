@@ -17,6 +17,8 @@ struct Request {
     scalars: BTreeMap<String, ts::GraphqlScalarMapping>,
     #[serde(default)]
     subscriptions: bool,
+    #[serde(default)]
+    rust_scalars: BTreeMap<String, rust::GraphqlScalarMapping>,
 }
 
 pub struct GenerateGraphql {
@@ -63,15 +65,13 @@ fn generate(request: &str) -> AnyResult<String> {
                     ..Default::default()
                 });
         if package.language == "rust" {
-            if !request.scalars.is_empty() || request.subscriptions || package.transport.is_some() {
-                bail!(
-                    "Rust GraphQL does not support scalar mappings, subscriptions, or transport options"
-                );
+            if request.subscriptions || package.transport.is_some() {
+                bail!("Rust GraphQL does not support subscriptions or transport options");
             }
             let common = package_common(&package)?;
             let mut target = rust::package(package.path)
                 .common(common)
-                .with(rust::graphql(Some(input.handle())))
+                .with(rust::graphql(Some(input.handle())).scalars(request.rust_scalars.clone()))
                 .with(input);
             if let Some(name) = package.name {
                 target = target.name(name);

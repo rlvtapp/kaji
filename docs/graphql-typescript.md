@@ -66,6 +66,8 @@ await generate({
 ```
 
 Config-file loading resolves operation paths alongside the config file. This
+For mixed TypeScript/Rust outputs, provide Rust mappings separately as
+`input.rustScalars`; `input.scalars` remains the TypeScript mapping surface. This
 entry point invokes the native GraphQL generator; it does not establish general
 Node dispatch for Rust contract/block hooks.
 

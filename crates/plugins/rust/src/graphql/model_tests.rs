@@ -55,3 +55,72 @@ fn abstract_variants_cannot_change_types_under_identical_response_keys() {
             .contains("select __typename")
     );
 }
+
+#[test]
+fn scalar_directions_preserve_presence_and_list_nullability() {
+    let mut contract = contract();
+    let scalar = ModelType {
+        nullable: true,
+        kind: ModelKind::Scalar("Timestamp".into()),
+    };
+    let fields = vec![ModelField {
+        name: "values".into(),
+        optional: true,
+        default_value: None,
+        ty: ModelType {
+            nullable: true,
+            kind: ModelKind::List(Box::new(scalar)),
+        },
+    }];
+    contract
+        .input_objects
+        .insert("Options".into(), fields.clone());
+    let mappings = BTreeMap::from([(
+        "Timestamp".into(),
+        super::super::GraphqlScalarMapping::new("String", "i64"),
+    )]);
+    let normalized = super::super::scalars::validate_mappings(&mappings, &contract).unwrap();
+    let mut models = Models::with_mappings(&contract, &normalized);
+    models.input_objects().unwrap();
+    let result = ModelType {
+        nullable: false,
+        kind: ModelKind::Object(fields),
+    };
+    models.result("ReadResult", &result).unwrap();
+    assert!(
+        models
+            .source
+            .contains("Presence<Vec<Option<std::string::String>>>")
+    );
+    assert!(models.source.contains("Presence<Vec<Option<i64>>>"));
+    let mut unmapped = Models::new(&contract);
+    unmapped.input_objects().unwrap();
+    assert!(
+        unmapped
+            .source
+            .contains("Presence<Vec<Option<serde_json::Value>>>")
+    );
+}
+#[test]
+fn scalar_configuration_rejects_builtin_unknown_and_malformed_types() {
+    let mut contract = contract();
+    contract.input_objects.insert(
+        "Options".into(),
+        vec![field(ModelKind::Scalar("Timestamp".into()))],
+    );
+    for (name, input) in [
+        ("Int", "String"),
+        ("TimeStampp", "String"),
+        ("Timestamp", "chrono::DateTime<Utc>"),
+        ("Timestamp", "Vec<String"),
+    ] {
+        let mappings = BTreeMap::from([(
+            name.into(),
+            super::super::GraphqlScalarMapping::new(input, "i64"),
+        )]);
+        assert!(
+            super::super::scalars::validate_mappings(&mappings, &contract).is_err(),
+            "accepted {name}: {input}"
+        );
+    }
+}

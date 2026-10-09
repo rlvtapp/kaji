@@ -151,6 +151,8 @@ export interface NativeInputConfig {
   operations?: string[];
   /** TypeScript wire types; does not perform runtime scalar conversion. */
   scalars?: Record<string, GraphqlScalarMapping>;
+  /** Supported Rust wire types; independent of TypeScript scalar mappings. */
+  rustScalars?: Record<string, GraphqlScalarMapping>;
   subscriptions?: boolean;
 }
 

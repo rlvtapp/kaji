@@ -1,5 +1,6 @@
 //! GraphQL operations render from owned contracts, independently of HTTP Api.
 mod models;
+mod scalars;
 use crate::Rust;
 use anyhow::{Result, ensure};
 use poolster_core::{
@@ -7,6 +8,7 @@ use poolster_core::{
     engine::{Contract, Handle, Meta, Plugin, PluginContext, Provision, Requirement},
     native::{GraphqlOperationKind, GraphqlOperations},
 };
+pub use scalars::GraphqlScalarMapping;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::Write,
@@ -28,14 +30,25 @@ impl Contract for GraphqlClient {
 pub struct Graphql {
     meta: Meta,
     provider: Option<Handle<GraphqlOperations>>,
+    scalars: BTreeMap<String, GraphqlScalarMapping>,
 }
 pub fn graphql(provider: Option<Handle<GraphqlOperations>>) -> Graphql {
     Graphql {
         meta: Meta::new(),
         provider,
+        scalars: BTreeMap::new(),
     }
 }
 impl Graphql {
+    pub fn scalar(mut self, name: impl Into<String>, mapping: GraphqlScalarMapping) -> Self {
+        self.scalars.insert(name.into(), mapping);
+        self
+    }
+    pub fn scalars(mut self, mappings: BTreeMap<String, GraphqlScalarMapping>) -> Self {
+        self.scalars = mappings;
+        self
+    }
+
     pub fn handle(&self) -> Handle<GraphqlClient> {
         self.meta.handle()
     }
@@ -99,7 +112,8 @@ impl Plugin<Rust> for Graphql {
             .package_version
             .clone()
             .unwrap_or_else(|| "0.0.0".into());
-        let mut models = models::Models::new(contract);
+        let mappings = scalars::validate_mappings(&self.scalars, contract)?;
+        let mut models = models::Models::with_mappings(contract, &mappings);
         models.input_objects()?;
         let mut source = String::new();
         let mut names = BTreeSet::new();
@@ -150,7 +164,7 @@ impl Plugin<Rust> for Graphql {
             "src/graphql_runtime.rs",
             include_str!("../templates/graphql_runtime.rs.tmpl"),
         )?)?;
-        cx.files.emit(GeneratedFile::new("README.md","# Rust GraphQL client\n\nSelection-specific query/mutation functions use a caller-provided reqwest Client and endpoint. Results distinguish Success, Partial and Error; transport failures are separate. Presence::Absent, Null and Value preserve nullable input and conditional-result presence. Optional::Absent/Value preserves nonnullable optional fields. Custom scalars retain serde_json::Value. Subscription and incremental transports are unsupported. Abstract selections without __typename use structural untagged unions; structurally indistinguishable variants cannot identify a concrete GraphQL type. Native schema/operation documents remain in the input contract.\n")?)?;
+        cx.files.emit(GeneratedFile::new("README.md","# Rust GraphQL client\n\nSelection-specific query/mutation functions use a caller-provided reqwest Client and endpoint. Results distinguish Success, Partial and Error; transport failures are separate. Presence::Absent, Null and Value preserve nullable input and conditional-result presence. Optional::Absent/Value preserves nonnullable optional fields. Unmapped custom scalars retain serde_json::Value. Configured input/output scalar mappings describe self-contained Rust JSON wire types; they do not install codecs. Subscription and incremental transports are unsupported. Abstract selections without __typename use structural untagged unions; structurally indistinguishable variants cannot identify a concrete GraphQL type. Native schema/operation documents remain in the input contract.\n")?)?;
         cx.workspace.graphql_package = Some(NativePackage { name, version });
         cx.publish(GraphqlClient { operations })
     }

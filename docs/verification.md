@@ -6,8 +6,9 @@ for the package you ship.
 ## Current alpha.2 verification (9 October 2026)
 
 After output migration and GraphQL TypeScript/Rust completion, the full workspace
-suite passes **798 tests, 0 failures, 141 ignored**. Formatting and workspace
-Clippy with `-D warnings` pass. Earlier checks recorded 788/0/138 after output
+suite passes **801 tests, 0 failures, 141 ignored**. Formatting and workspace
+Clippy with `-D warnings` pass. Earlier checks recorded 798/0/141 after initial
+GraphQL completion and 788/0/138 after output
 migration and 752/0/136 before that migration. Ignored external probes are not counted as passed by that command.
 Initial sandbox-denied local-server tests passed when rerun with local-port access;
 an earlier overlapping-build artifact issue was resolved by a clean sequential run.
@@ -91,6 +92,28 @@ with the current addon; focused native CLI tests cover TypeScript, Rust and mixe
 packages. Clean npm tarball installation also passes using a locally built native addon
 override; this does not verify unpublished binaries for every platform. The final workspace counts above include this increment. Runtime tests enabled
 separately are not counted as passes in the default suite.
+
+### Rust scalar mapping follow-up
+
+[Scalar mapping test record](verification-results/rust-graphql-scalars-2026-10-09.json)
+records final-source counts and artifact/log hashes.
+
+Rust custom scalars now support independent input/output types through
+`.scalar()` / `.scalars()`, recipe `plugin.scalars`, and Node `input.rustScalars`.
+TypeScript keeps its separate Node `input.scalars` map, including mixed generation.
+The existing two Rust packaged-client tests explicitly pass with a real custom
+scalar accepting strings and returning integers, preserving nested inputs, lists,
+nullability, conditional fields and omission. Unmapped JSON values remain intact;
+incompatible output data produces a decoding error, and incorrectly typed input
+fails consumer compilation. Five focused source tests pass, including supported
+type normalization and malformed/unknown/builtin mapping rejection.
+
+The follow-up workspace passes **801/0/141**. CLI focused tests pass **13/13**;
+Node focused tests pass **7/7**, including mixed scalar maps and local-server use;
+the final full npm SDK suite passes **67/67**, with zero skips.
+Installed npm tarballs also generate both mapped packages with a local native
+addon override. Supported Rust mappings are self-contained Serde-compatible wire
+types; no extra dependencies or runtime scalar codecs are installed.
 
 ## Historical HTTP integration evidence (8 October 2026)
 

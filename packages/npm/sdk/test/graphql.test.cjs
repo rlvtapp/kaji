@@ -58,16 +58,21 @@ test('loaded GraphQL config resolves operation files alongside schema', async (t
   assert.deepEqual(config.input.operations,[path.join(dir,'query.graphql')]);
 });
 
-test('native GraphQL also routes the existing Rust package without HTTP adaptation', async (t) => {
+test('mixed native GraphQL uses independent TypeScript and Rust scalar maps', async (t) => {
   const {dir,input}=await fixture(t);
-  delete input.scalars;
-  const config={input,output:path.join(dir,'out'),plugins:[bundle.pluginRust({name:'graphql_client'})]};
+  input.rustScalars={DateTime:{input:'String',output:'String'}};
+  const config={input,output:path.join(dir,'out'),plugins:[bundle.pluginTypeScript(),bundle.pluginRust({name:'graphql_client'})]};
   const result=await generate(config);
   assert.ok(result.files.some(file=>file.path.endsWith('Cargo.toml')));
+  assert.ok(result.files.some(file=>/pub joined_at: std::string::String/.test(file.contents)));
+  assert.ok(result.files.some(file=>/"joinedAt": \(string\)/.test(file.contents)));
   assert.deepEqual(result.skipped,[]);
   assert.deepEqual((await generate(config)).changes,{added:[],modified:[],removed:[]});
-  input.scalars={DateTime:{input:'string',output:'string'}};
-  await assert.rejects(generate(config),/Rust GraphQL does not support scalar mappings/);
+  input.rustScalars.DateTime.output='string';
+  await assert.rejects(generate(config), /scalar|Rust|unsupported/i);
+  input.rustScalars.DateTime.output='String';
+  input.rustScalars.DateTime.extra='invalid';
+  await assert.rejects(generate(config), /unknown field/i);
 });
 test('npm GraphQL package compiles and executes against a local GraphQL server', async (t) => {
   const dependencies = process.env.POOLSTER_GRAPHQL_TEST_NODE_MODULES;

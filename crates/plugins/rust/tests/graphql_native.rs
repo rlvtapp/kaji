@@ -11,8 +11,8 @@ use std::{
     process::{Command, Output},
     sync::Arc,
 };
-const SCHEMA: &str = "input Options { note: String = \"input-default\" } type User { id: ID! name: String! nickname: String fragile: String } interface Node { id:ID! } type Person implements Node { id:ID! name:String! } type Robot implements Node { id:ID! code:String! } type Query { node:Node! user(id: ID!): User! fatal: String! echo(input:String = \"argument-default\"):String inputEcho(options:Options):String } type Mutation { rename(name:String!):User! }";
-const OPS: &str = "query AbstractNode { node { id ... on Person { name } ... on Robot { code } } } query Read($id:ID!){person:user(id:$id){id name nickname}} query Partial($id:ID!){user(id:$id){name fragile}} query Fatal{fatal} mutation Rename($name:String!){rename(name:$name){name}} query PresenceQuery($value:String){value:echo(input:$value)} query InputPresence($options:Options){value:inputEcho(options:$options)} query Conditional($include:Boolean!){user(id:\"7\"){name @include(if:$include) nickname @include(if:$include)}} query Defaulted($include:Boolean! = false){user(id:\"7\"){name @include(if:$include) nickname @include(if:$include)}}";
+const SCHEMA: &str = "scalar Timestamp scalar Json input ScalarInput { required:Timestamp! values:[Timestamp]! optional:Timestamp } type ScalarResult { timestamp:Timestamp! values:[Timestamp]! nullable:Timestamp optional:Timestamp raw:Json! } input Options { note: String = \"input-default\" } type User { id: ID! name: String! nickname: String fragile: String } interface Node { id:ID! } type Person implements Node { id:ID! name:String! } type Robot implements Node { id:ID! code:String! } type Query { scalars(value:Timestamp!,input:ScalarInput!,optional:Timestamp):ScalarResult! node:Node! user(id: ID!): User! fatal: String! echo(input:String = \"argument-default\"):String inputEcho(options:Options):String } type Mutation { rename(name:String!):User! }";
+const OPS: &str = "query Scalars($value:Timestamp!,$input:ScalarInput!,$optional:Timestamp,$include:Boolean!){scalars(value:$value,input:$input,optional:$optional){timestamp values nullable optional @include(if:$include) raw}} query AbstractNode { node { id ... on Person { name } ... on Robot { code } } } query Read($id:ID!){person:user(id:$id){id name nickname}} query Partial($id:ID!){user(id:$id){name fragile}} query Fatal{fatal} mutation Rename($name:String!){rename(name:$name){name}} query PresenceQuery($value:String){value:echo(input:$value)} query InputPresence($options:Options){value:inputEcho(options:$options)} query Conditional($include:Boolean!){user(id:\"7\"){name @include(if:$include) nickname @include(if:$include)}} query Defaulted($include:Boolean! = false){user(id:\"7\"){name @include(if:$include) nickname @include(if:$include)}}";
 fn generate(root: &Path) -> Result<GeneratedTree> {
     std::fs::write(root.join("schema.graphql"), SCHEMA)?;
     std::fs::write(root.join("operations.graphql"), OPS)?;
@@ -27,7 +27,10 @@ fn generate(root: &Path) -> Result<GeneratedTree> {
         operation_files: vec![root.join("operations.graphql")],
         ..Default::default()
     });
-    let generator = rust::graphql(Some(input.handle()));
+    let generator = rust::graphql(Some(input.handle())).scalar(
+        "Timestamp",
+        rust::GraphqlScalarMapping::new("String", "i64"),
+    );
     Packages::new()
         .package(
             rust::package("sdk")
@@ -129,7 +132,7 @@ fn packaged_graphql_client_compiles_and_executes() -> Result<()> {
     std::fs::create_dir(consumer.join("src/bin"))?;
     std::fs::write(
         consumer.join("src/bin/invalid.rs"),
-        "use client::*; fn main() { let _ = ReadVariables { id: 7 }; } fn invalid(result: ReadResult) { let _ = result.person.fragile; }",
+        "use client::*; fn main() { let _ = ReadVariables { id: 7 }; let _ = ScalarInput { required: 123, values: vec![], optional: Presence::Absent }; } fn invalid(result: ReadResult) { let _ = result.person.fragile; }",
     )?;
     let invalid = Command::new("cargo")
         .args(["check", "--offline", "--bin", "invalid"])

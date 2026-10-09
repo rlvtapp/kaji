@@ -233,15 +233,29 @@ fn graphql_rust_recipe_generates_without_http_adaptation() {
 }
 
 #[test]
-fn graphql_rust_recipe_rejects_typescript_scalar_options() {
+fn graphql_rust_recipe_scalar_mappings_are_language_specific() {
     let directory = tempfile::tempdir().unwrap();
     let path = recipe(
         directory.path(),
-        serde_json::json!([{"language":"rust","path":"client","plugins":[{"name":"graphql","scalars":{"DateTime":{"input":"string","output":"string"}}}]}]),
+        serde_json::json!([{"language":"rust","path":"client","name":"graphql_client","plugins":[{"name":"graphql","scalars":{"DateTime":{"input":"String","output":"String"}}}]}]),
     );
-    let error = generate_from_config(&path, ColorChoice::Never, false, false).unwrap_err();
-    assert!(error.to_string().contains("Rust GraphQL scalar mappings"));
-    assert!(!directory.path().join("generated").exists());
+    std::fs::write(
+        directory.path().join("schema.graphql"),
+        "scalar DateTime\ntype Query { joinedAt: DateTime! }",
+    )
+    .unwrap();
+    std::fs::write(
+        directory.path().join("operations.graphql"),
+        "query Joined { joinedAt }",
+    )
+    .unwrap();
+    generate_from_config(&path, ColorChoice::Never, false, false).unwrap();
+    generate_from_config(&path, ColorChoice::Never, true, false).unwrap();
+    let mut config: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    config["packages"][0]["plugins"][0]["scalars"]["DateTime"]["output"] = "string".into();
+    std::fs::write(&path, serde_json::to_vec(&config).unwrap()).unwrap();
+    assert!(generate_from_config(&path, ColorChoice::Never, false, false).is_err());
 }
 
 #[test]

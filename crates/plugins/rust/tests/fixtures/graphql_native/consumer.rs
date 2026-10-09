@@ -5,6 +5,15 @@ async fn main(){
  let endpoint=std::env::var("GRAPHQL_ENDPOINT").unwrap();
  let http=reqwest::Client::builder().timeout(std::time::Duration::from_secs(3)).build().unwrap();
  let transport=GraphqlHttpTransport::new(&endpoint,http.clone());
+ let scalar_variables=ScalarsVariables{value:"wire-time".into(),input:ScalarInput{required:"nested-time".into(),values:vec![Some("list-time".into()),None],optional:Presence::Null},optional:Presence::Absent,include:false};
+ let mapped=success(scalars(&transport,&scalar_variables).await.unwrap()).scalars;
+ let timestamp:i64=mapped.timestamp;assert_eq!(timestamp,1700000000);
+ let values:Vec<Option<i64>>=mapped.values;assert_eq!(values,vec![Some(1700000001),None]);
+ assert_eq!(mapped.nullable,None);assert!(matches!(mapped.optional,Presence::Absent));assert_eq!(mapped.raw["retained"][1],42);
+ let mapped=success(scalars(&transport,&ScalarsVariables{include:true,..scalar_variables.clone()}).await.unwrap()).scalars;
+ assert!(matches!(mapped.optional,Presence::Value(1700000002)));
+ let malformed=GraphqlHttpTransport::new(format!("{endpoint}/bad-scalar"),http.clone());
+ assert!(matches!(scalars(&malformed,&scalar_variables).await.unwrap_err(),GraphqlTransportError::Decode(_)));
  let abstract_data=success(abstract_node(&transport,&AbstractNodeVariables{}).await.unwrap());
  assert_eq!(serde_json::to_value(abstract_data).unwrap()["node"]["code"],"retained-second-variant");
  let data=success(read(&transport,&ReadVariables{id:"7".into()}).await.unwrap());

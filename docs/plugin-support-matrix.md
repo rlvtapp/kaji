@@ -5,9 +5,8 @@ Manifests still use `0.5.0-alpha.1`; the additions below are unreleased alpha.2
 work. This matrix describes implemented generation, not parser availability.
 For remaining work, start with the [native pipeline backlog](native-pipelines.md#remaining-work).
 
-GraphQL client work is verified for TypeScript and Rust. TypeScript supports
-separate input/output scalar mappings; Rust custom scalars currently retain JSON
-values. Both are wired through the CLI and existing npm language plugin packages.
+GraphQL client work is verified for TypeScript and Rust, including separate
+input/output scalar mappings. Unmapped Rust custom scalars retain JSON values. Both are wired through the CLI and existing npm language plugin packages.
 Packaged clients compile and execute against local GraphQL servers. These changes
 are not yet published; see the [TypeScript guide](graphql-typescript.md),
 [Rust guide](graphql-rust.md) and [verification](verification.md#graphql-client-completion-checks).
@@ -72,8 +71,9 @@ selection, block consumption, finalization and compatibility boundaries.
 | Arazzo 1.0.0 / 1.0.1 / 1.1.0 | ✅ | TypeScript sequential runners with resolved local OpenAPI sources |
 | Cap’n Proto | ✅ | — |
 
-The npm input wrappers expose parsing/inspection. The native package pipelines
-are exposed through Rust / CLI, not yet through the npm configuration engine. CLI recipes currently
+The npm input wrappers expose parsing/inspection and GraphQL client generation
+through the existing TypeScript/Rust language packages. Other native package
+pipelines are exposed through Rust / CLI; general typed Node hooks remain open. CLI recipes currently
 select one input source; Rust plugins can compose multiple typed contracts.
 
 ## GraphQL checks
@@ -81,12 +81,14 @@ select one input source; Rust plugins can compose multiple typed contracts.
 - [x] Validate schema and operation documents together.
 - [x] Selection-specific results, aliases, fragments and concrete abstract alternatives.
 - [x] Preserve nullability, optional presence, lists and input defaults.
-- [x] Generate variables and query/mutation functions with Fetch POST transport.
+- [x] Generate variables and query/mutation functions with TypeScript Fetch and Rust Reqwest transports.
 - [x] Represent GraphQL errors and partial results explicitly.
-- [x] Compile generated TypeScript and execute against a local GraphQL server.
-- [x] Separate subscription capability with an injected async-iterable transport.
+- [x] Compile generated TypeScript/Rust packages and execute against a local GraphQL server.
+- [x] Separate TypeScript subscription capability with an injected async-iterable transport.
 - [ ] Bundle a WebSocket or SSE subscription transport.
-- [ ] Custom scalar mappings/codecs (currently `unknown`).
+- [x] Separate input/output TypeScript scalar mappings.
+- [x] Separate input/output Rust scalar mappings for validated self-contained wire types.
+- [ ] Runtime scalar codecs.
 - [ ] Introspection JSON and schema imports.
 - [ ] Incremental delivery (`@defer` / `@stream`) and custom executable directives.
 - [ ] GraphQL support in Zod, Faker, MSW, Cypress and query-hook outputs.
@@ -98,7 +100,7 @@ unsupported features in an otherwise supported pipeline still fail explicitly.
 
 ## Verification and release checks
 
-Post-migration alpha.2 workspace check: **798 passed, 0 failed, 141 ignored**;
+Post-migration alpha.2 workspace check: **801 passed, 0 failed, 141 ignored**;
 formatting and workspace Clippy with warnings denied passed. Ignored tests are not passes.
 Selected external GraphQL, gRPC, Kafka and workflow integration tests were also
 run explicitly and passed; commands and boundaries are in [verification](verification.md).

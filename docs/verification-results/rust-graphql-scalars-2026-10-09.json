@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-09",
+  "scope": "Rust GraphQL scalar mappings with independent input/output wire types, CLI recipes and language-specific npm mappings",
+  "source_sha256": "0b778aa5a7b549c38efaf36fd2320ed0efd300e6f11a7226356aff86797052e8",
+  "source_file_count": 705,
+  "results": {
+    "workspace": {
+      "passed": 801,
+      "failed": 0,
+      "ignored": 141
+    },
+    "npm_sdk": {
+      "passed": 67,
+      "failed": 0,
+      "skipped": 0
+    },
+    "rust_package_explicit": {
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    "rust_focused_source": {
+      "passed": 5
+    },
+    "cli_focused": {
+      "passed": 13
+    },
+    "npm_focused": {
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0
+    },
+    "clippy": "workspace/all-targets/locked/-D warnings passed",
+    "format": "passed",
+    "npm_package_generator": "--check passed",
+    "installed_mixed_mapping_probe": "passed with local native addon override"
+  },
+  "coverage": [
+    "Real GraphQL custom scalar String input and i64 output",
+    "Nested inputs, lists, nullable items, omitted/null/value and conditional selected fields",
+    "Unmapped scalar JSON values preserved",
+    "Wrong mapped variable type rejected by consumer compilation",
+    "Incompatible server wire value returns GraphqlTransportError::Decode",
+    "Unsupported/malformed/unknown scalar mappings and builtin overrides rejected",
+    "Clean .crate unpack and consumer compile/runtime; regeneration",
+    "Independent TypeScript input.scalars and Rust input.rustScalars in mixed npm generation"
+  ],
+  "logs_sha256": {
+    "/private/tmp/poolster-rust-scalars-workspace.log": "1dc132cc87748b8aa693dcf815329b1b12d399f127380f0006a8b6d4b1ead932",
+    "/private/tmp/poolster-rust-scalars-workspace-clippy.log": "49c534b4ee0d85743bf5d52523127551c3050dbbe75c5d2d409284e5e4f48dd6",
+    "/private/tmp/poolster-rust-scalars-npm-full.log": "0551134fb72a39949d834bfacec6c0833239a38a2e5c382f63f190f58f5e3613",
+    "/private/tmp/poolster-graphql-rust-scalars-validation.log": "0d9ff0d25c11285556abeaf2424bf95a82134261098fd10d0b6f04cca50dfe4b",
+    "/private/tmp/poolster-graphql-rust-scalars-cli.log": "a63bc5e200043849e8e9bffb383623fdd48931fb11790ad4516a44c597ae1f70",
+    "/private/tmp/poolster-graphql-rust-scalars-npm.log": "472195fe89b2bd14930da6034e8e2839810aebb99fbcf692356acf896a5218ce"
+  },
+  "native_addon_sha256": "2c448409a5e1ec5de8ce916838036881477d7236ce44f32a31b5e5bbd51b0e24",
+  "limits": [
+    "Mappings are validated self-contained wire types; no imported custom types or dependency injection.",
+    "No runtime codecs or automatic date parsing.",
+    "Subscriptions and incremental delivery remain outside Rust support.",
+    "Default ignored probes are not passes; explicit package runtime tests were enabled separately.",
+    "Clean npm installation uses a local native addon, not unpublished platform binaries.",
+    "Three unchanged pre-existing source-size violations remain.",
+    "Full HTTP corpus evidence remains the earlier frozen 205x10 sweep."
+  ],
+  "publication": "none"
+}

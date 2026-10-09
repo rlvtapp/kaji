@@ -62,7 +62,26 @@ pub(super) fn build(options: &Generate, input: &NativeInputConfig) -> Result<Pro
             let input_provider = provider::<GraphqlOperations>(input, registry.clone());
             let mut package = rust::package(path)
                 .common(common)
-                .with(rust::graphql(Some(input_provider.handle())))
+                .with(
+                    rust::graphql(Some(input_provider.handle())).scalars(
+                        plugin
+                            .map(|p| {
+                                p.scalars
+                                    .iter()
+                                    .map(|(name, mapping)| {
+                                        (
+                                            name.clone(),
+                                            rust::GraphqlScalarMapping::new(
+                                                &mapping.input,
+                                                &mapping.output,
+                                            ),
+                                        )
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default(),
+                    ),
+                )
                 .with(input_provider);
             if let Some(name) = name {
                 package = package.name(name);
@@ -209,10 +228,6 @@ pub(super) fn validate_recipe(document: &serde_json::Value, config: &ProjectConf
         }
         let plugin = &package.plugins[0];
         if input.format == "graphql" && package.language == "rust" {
-            ensure!(
-                plugin.scalars.is_empty(),
-                "Rust GraphQL scalar mappings are not supported"
-            );
             ensure!(
                 plugin.subscriptions != Some(true),
                 "Rust GraphQL subscriptions are not supported"

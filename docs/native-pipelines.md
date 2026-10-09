@@ -56,7 +56,7 @@ capabilities and release checklists.
 | Pipeline | Native parsing/inspection | Usable package generation | Remaining work |
 | --- | --- | --- | --- |
 | OpenAPI → existing languages | Existing compiler and adapter | Existing SDK pipelines preserved | Existing target-specific limits still apply |
-| GraphQL → TypeScript / Rust | Validated SDL and operation documents | Selected query/mutation clients; TypeScript scalar mappings and injected subscriptions | Runtime codecs, bundled subscriptions, introspection/imports, incremental delivery and other outputs |
+| GraphQL → TypeScript / Rust | Validated SDL and operation documents | Selected query/mutation clients; TypeScript/Rust scalar mappings; TypeScript injected subscriptions | Runtime codecs, bundled subscriptions, introspection/imports, incremental delivery and other outputs |
 | Protobuf → Go gRPC | Proto2/proto3 descriptors, imports and RPC metadata | Official messages, clients and server interfaces; unary and all streaming directions | Editions, broader official fixture coverage and additional output languages |
 | AsyncAPI → TypeScript | 2.6/3.0/3.1 native document and message blocks | 3.0/3.1 JSON messages and Kafka producer/consumer | Types-only output, broader schemas/bindings, security and other brokers |
 | Arazzo → TypeScript | Native document and explicit local source resolution | Sequential HTTP runners with local workflow dependencies | Actions/retries, richer expressions/criteria and additional source types |
@@ -166,8 +166,9 @@ and GraphQL errors; HTTP/network/protocol/decoding failures are separate.
 
 Nullable optional input and conditional-result fields preserve absent/null/value;
 optional non-null fields preserve absent/value. Required nullable results must be
-present. Custom scalars retain `serde_json::Value`, without codecs or scalar type
-mappings. Subscriptions are rejected. Structurally ambiguous abstract selections
+present. Custom scalars default to `serde_json::Value`; separate input/output
+Rust mappings support validated self-contained wire types without codecs or extra
+dependencies. Subscriptions are rejected. Structurally ambiguous abstract selections
 need `__typename`; untagged variants reject unknown fields rather than discard
 selected data. HTTP and GraphQL generators require separate Rust packages.
 
@@ -259,7 +260,7 @@ servers. This does not establish support for the complete upstream OAuth workflo
 
 | Input | Package language | Recipe plugin name | Required configuration |
 | --- | --- | --- | --- |
-| GraphQL | `typescript` or `rust` | `graphql` | `input.options.operation_files`; scalar expressions and injected subscriptions are TypeScript-only |
+| GraphQL | `typescript` or `rust` | `graphql` | `input.options.operation_files`; language-specific scalar mappings; injected subscriptions are TypeScript-only |
 | Protobuf | `go` | `grpc` | Plugin `module`; toolchain paths if not on PATH; source `go_package` or plugin `go_packages` |
 | AsyncAPI | `typescript` | `asyncapi` | Supported Kafka servers or `input.options.broker` |
 | Arazzo | `typescript` | `workflow` | `input.options.workflow_sources` |
@@ -280,7 +281,7 @@ have usable, tested subsets described above.
 The frozen pre-output-migration HTTP corpus is **complete: 205 APIs × 10 languages,
 2,050 effective passes** for generation, native compilation or syntax checks and
 regeneration after recorded infrastructure retries. The migrated workspace passed
-**798 tests**, with **141 ignored**. PHP syntax lint reported deprecation warnings
+**801 tests**, with **141 ignored**. PHP syntax lint reported deprecation warnings
 in 140 contracts; lint does not establish endpoint runtime behavior.
 
 These are the remaining implementation and release gaps:
@@ -298,7 +299,7 @@ These are the remaining implementation and release gaps:
   authentication and nested workflows.
 - [ ] **RPC-1:** Assess editions/toolchain alignment and additional RPC outputs;
   broaden pinned upstream fixtures without treating parser support as generation support.
-- [x] **GRAPHQL-SCALARS:** Separate input/output TypeScript scalar mappings,
+- [x] **GRAPHQL-SCALARS:** Separate input/output TypeScript and Rust scalar mappings,
   preserving nullability and presence; runtime codecs remain unsupported.
 - [ ] **GRAPHQL-1:** Runtime scalar codecs, introspection/imports, incremental
   delivery and bundled subscription transport; each needs independent runtime tests.
