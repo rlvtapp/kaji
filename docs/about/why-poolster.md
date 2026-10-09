@@ -1,77 +1,79 @@
 # Why Relevate built Poolster
 
-At Relevate, we made Poolster to generate the Relevate Email SDKs. We needed the
-Relevate Email OpenAPI contract to drive more than a client library: client
-interfaces, frontend hooks, validation schemas, mocks, documentation, and tools
-used by AI agents, without maintaining each one as a separate, hand-written
-integration.
+We built Poolster for Relevate Email. An API change needed to reach our SDKs,
+frontend hooks, validators, mocks and documentation without maintaining every
+artifact by hand.
 
-Poolster exists to make that possible: one OpenAPI contract, multiple outputs.
+That started with OpenAPI. Poolster now also has native GraphQL, Protobuf,
+AsyncAPI, Arazzo and Cap’n Proto inputs. Each protocol keeps its own semantics;
+GraphQL operations and event messages do not become pretend HTTP endpoints.
 
-It is built first for Relevate Email's own SDK and integration workflow. An API
-change should have one explicit, reviewable path to every developer-facing
-artifact it affects, rather than becoming a string of manual updates that drift
-apart over time.
+## One source, several useful outputs
 
-```text
-OpenAPI
-  │
-  ▼
-Poolster
-  ├── SDKs      TypeScript · Go · Python · Rust · Java · .NET · PHP · Elixir
-  ├── Clients   Fetch · Axios
-  ├── Frontend  TanStack React Query · Vue Query · SWR
-  ├── Schema    Zod · Faker
-  ├── Testing   MSW · Cypress · HTTP mocks
-  ├── Docs      ReDoc
-  └── AI        MCP
-```
+Choose the artifacts your project needs and generate them together:
+
+| Source | Implemented pipelines in the current checkout |
+| --- | --- |
+| OpenAPI | HTTP SDKs in multiple languages, query hooks, validators, fixtures, mocks and other tooling |
+| GraphQL schema + operations | TypeScript and Rust clients; TypeScript query hooks, validators, fixtures and testing helpers |
+| Protobuf | Go messages and gRPC clients/server interfaces, including streaming |
+| AsyncAPI | TypeScript Kafka message models and producer/consumer support |
+| Arazzo | TypeScript sequential workflow runners with resolved local OpenAPI sources |
+| Cap’n Proto | Parsing and inspection; bundled generation remains planned |
+
+These are specific supported pipelines, not universal support for every protocol
+feature or output plugin. Some additions are unreleased. The
+[support matrix](../plugin-support-matrix.md) records the exact boundaries and
+verification status.
+
+GraphQL clients use supplied operation documents to generate selection-specific
+results. AsyncAPI describes messages and broker interactions. Those differences
+matter to the generated package, so they remain visible throughout generation.
+
+## Extend the pipeline, not just a template
+
+Input plugins publish typed contracts. Output plugins consume compatible
+contracts and produce owned files. Contracts can also expose building blocks,
+such as models, endpoints or operations, for focused handlers. Decomposition is
+optional: a custom plugin can consume a whole contract directly.
+
+Declared dependencies connect plugins. Revisions, provenance and completeness
+checks help consumers detect inconsistent inputs. Package assembly,
+customization and ownership checks keep those outputs in one regeneration
+workflow.
+
+Use the [JavaScript SDK](../javascript/README.md) from Node, the
+[Rust SDK](../rust/README.md) inside an application, or the
+[CLI](../cli/README.md) in a repository. JavaScript and Rust plugin APIs have
+different capabilities; their tutorials explain what each exposes:
+[JavaScript plugins](../plugins/javascript/README.md) ·
+[Rust plugins](../plugins/rust/README.md).
+
+## Keep generation reviewable
+
+A committed recipe makes generation repeatable. Check for drift in CI, prepare
+SDK changes as pull requests, and test generated packages with their native
+language tools. Customize generated sources through the supported regeneration
+workflow, or eject the generator source when you want to maintain your own renderer.
+
+- [GitHub Actions and generated PRs](../cli/automation.md)
+- [Customization, regeneration and ejection](../cli/customization.md)
+- [Verification results and remaining checks](../verification/verification.md)
+
+Repeatable generation and a passing build do not prove every endpoint or
+protocol feature works. We keep runtime checks, ignored tests and remaining
+work visible so teams can decide whether a pipeline fits their needs.
 
 ## Built for our own use, released for yours
 
-Poolster is not a generic product idea looking for an enterprise tier. We maintain
-it because Relevate Email uses it. Publishing it as open source means other teams
-can use it too, inspect how it works, and help make it better.
+Relevate Email is why we maintain Poolster. Publishing it as open source lets
+other teams use it, inspect the implementation and contribute their own plugins.
 
-## What Poolster is not
+Poolster is MIT licensed and free to use, including for commercial work. We will
+not add a paid tier, feature-gate the generator, sell a commercial license or
+create an enterprise-only edition.
 
-- not a hosted code-generation platform
-- not a paid SDK generator with a free teaser tier
-- not a commercial-license funnel
-- not an enterprise-only product with the useful features held back
-
-## More than an SDK generator
-
-An SDK generator solves only one of the contract's downstream problems. Poolster
-keeps the generated pieces together without forcing every consumer into the same
-runtime or workflow:
-
-- Generate one language or several, from one command or a committed `poolster.json` recipe.
-- Choose client surfaces deliberately: namespaced or flat clients, Fetch or Axios,
-  or TypeScript operations without a client class.
-- Keep generated SDKs, fixtures, mocks, docs, and helper code traceable to the
-  same contract and easy to reproduce in CI.
-- Use the native CLI in a repository or CI job, or embed the Rust library and
-  compose typed plugins when generation belongs inside an application.
-
-The point is boring reliability: a Relevate Email contract change should have
-one obvious, repeatable path to every artifact it affects.
-
-## Our commitment
-
-Poolster is MIT licensed and will remain free to use, including for commercial work.
-We will not add a paid tier, feature-gate the generator, sell a commercial
-license, or create an enterprise-only edition. The source, release history, and
-generated output should remain useful without asking anyone to buy permission.
-
-If you need Poolster to do something it does not yet do, open an issue, propose a
-design, or contribute a plugin. The project should improve because its users
-need better software, not because a feature can be put behind a sales call.
-
-## Start here
-
-- [CLI quickstart](../cli/quickstart.md) for a first generated SDK.
-- [`poolster.json` recipes](../cli/config.md) for repeatable multi-package output.
-- [Generated SDK guide](../reference/outputs/generated-sdks.md) for runtime expectations.
-- [Examples](../../examples/README.md) for working projects, mocks, frontend
-  integrations, and embedded generation.
+If something is missing, open an issue, propose a design or contribute a plugin.
+Start with the [documentation overview](../README.md), the
+[working examples](../../examples/README.md), or the
+[contracts and lifecycle guides](../internals/README.md).
