@@ -35,8 +35,10 @@ conditional publications, generated files and timings require execution.
 poolster plan --config poolster.json --format html --output plan.html
 ```
 
-Open the standalone local file to see Generate, contract and Post lanes. Select
-a node for its declarations. It uses no CDN or external scripts. You can build
+Open the standalone local file to see a connected flowchart with lifecycle
+columns, plugin boundaries and individually labelled handler nodes. Select a node for its declarations.
+Solid arrows show selected dependencies; dashed arrows show plugin-level
+publications whose producing callback is not known. It uses no CDN or external scripts. You can build
 your own viewer from the JSON instead.
 
 ## Scope
