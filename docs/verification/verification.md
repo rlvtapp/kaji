@@ -422,3 +422,15 @@ relative operation paths, check/regeneration and preserved OpenAPI recipes.
 At that alpha.1 delivery boundary, no usable RPC/event/workflow/Cap’n Proto/Cap’n
 Web output or Forge compatibility was established. The alpha.2 status below
 supersedes that boundary for gRPC, Kafka and sequential workflow generation.
+
+## GraphQL Go/Python outputs and Rust call ergonomics
+
+The [test record](../verification-results/graphql-go-python-rust-styles-2026-10-09.json)
+records the latest checks. The npm SDK suite passes 75/75 with no skipped tests.
+The CLI suite and all changed output crate suites pass; ignored tests are recorded
+separately, including explicitly executed pinned GraphQL.js 16.14.2 runtime probes.
+Go and Python package compilation/runtime checks cover native GraphQL generation;
+Rust packaged tests cover raw, flat, idiomatic and custom grouped clients.
+
+Go/Python limitations remain documented in their usage guides. This verification
+does not rerun the full workspace or the earlier 205-spec compatibility corpus.

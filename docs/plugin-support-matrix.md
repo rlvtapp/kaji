@@ -10,11 +10,12 @@ have separate generated compilation and runtime checks. These checks establish
 the documented GraphQL subset, rather than every existing HTTP plugin option.
 See the [integration guide](reference/outputs/graphql-integrations.md) for API and limitations.
 
-GraphQL client work is verified for TypeScript and Rust, including separate
-input/output scalar mappings. Unmapped Rust custom scalars retain JSON values. Both are wired through the CLI and existing npm language plugin packages.
+GraphQL clients are implemented for TypeScript, Rust, Go and Python. TypeScript
+and Rust support separate input/output scalar mappings. Unmapped Rust custom scalars retain JSON values. All four are wired through the CLI and existing npm language plugin packages.
 Packaged clients compile and execute against local GraphQL servers. These changes
 are not yet published; see the [TypeScript guide](reference/outputs/graphql-typescript.md),
-[Rust guide](reference/outputs/graphql-rust.md) and [verification](verification/verification.md#graphql-client-completion-checks).
+[Rust guide](reference/outputs/graphql-rust.md), [Go guide](reference/outputs/graphql-go.md),
+[Python guide](reference/outputs/graphql-python.md) and [verification](verification/verification.md#graphql-client-completion-checks).
 
 ✅ = implemented for the stated contract; — = no bundled generation support.
 A check does not imply support for every feature of a specification. Target-specific
@@ -32,9 +33,9 @@ limitations still apply. GraphQL is a separate contract even when its transport 
 | React Query | TypeScript query/mutation hooks | ✅ | ✅ | — | — | — | — |
 | Vue Query | TypeScript query/mutation hooks | ✅ | ✅ | — | — | — | — |
 | SWR | TypeScript query/mutation hooks | ✅ | ✅ | — | — | — | — |
-| Go | HTTP SDK; official Protobuf messages and gRPC clients/server interfaces | ✅ | — | ✅ | — | — | — |
+| Go | HTTP SDK; GraphQL client; official Protobuf messages and gRPC clients/server interfaces | ✅ | ✅ | ✅ | — | — | — |
 | Rust | HTTP SDK; selection-specific GraphQL query/mutation client | ✅ | ✅ | — | — | — | — |
-| Python | Python SDK | ✅ | — | — | — | — | — |
+| Python | HTTP SDK; synchronous GraphQL client | ✅ | ✅ | — | — | — | — |
 | Java | Java SDK | ✅ | — | — | — | — | — |
 | C# | C# SDK | ✅ | — | — | — | — | — |
 | .NET | .NET SDK | ✅ | — | — | — | — | — |
@@ -74,7 +75,7 @@ selection, block consumption, finalization and compatibility boundaries.
 | Input format | Parsing / inspection | Usable bundled output |
 | --- | :---: | --- |
 | OpenAPI | ✅ | HTTP output plugins above |
-| GraphQL SDL + operation documents | ✅ | TypeScript and Rust through Rust API, CLI and npm entry points |
+| GraphQL SDL + operation documents | ✅ | TypeScript, Rust, Go and Python through Rust API, CLI and npm entry points |
 | Protobuf proto2/proto3 | ✅ | Go messages and gRPC clients/server interfaces |
 | AsyncAPI 2.6 / 3.0 / 3.1 | ✅ | TypeScript Kafka for the supported 3.0/3.1 subset |
 | Arazzo 1.0.0 / 1.0.1 / 1.1.0 | ✅ | TypeScript sequential runners with resolved local OpenAPI sources |
@@ -154,3 +155,5 @@ exposes JavaScript dependencies and callback names; native nodes are opaque
 configuration boundaries. Planning does not predict runtime revisions, block
 completeness, emitted files or timings. Execution tracing and a full Node native
 graph bridge remain follow-up work.
+
+Go and Python GraphQL boundaries: [Go](reference/outputs/graphql-go.md) · [Python](reference/outputs/graphql-python.md).

@@ -48,14 +48,19 @@ pub fn graphql(provider: Option<Handle<GraphqlOperations>>) -> Graphql {
     }
 }
 impl Graphql {
+    /// Emit free operation functions taking an explicit HTTP transport.
     pub fn raw(mut self) -> Self {
         self.style = GraphqlStyle::Raw;
         self
     }
+    /// Add bound snake_case methods such as `client.read_user(&variables).await`.
+    /// Operations without variable declarations take no method arguments.
     pub fn flat(mut self) -> Self {
         self.style = GraphqlStyle::Flat;
         self
     }
+    /// Group bound methods by operation kind: `client.query().read_user(&variables)`.
+    /// Custom groups can override the operation-kind grouping.
     pub fn idiomatic(mut self) -> Self {
         self.style = GraphqlStyle::Idiomatic;
         self
@@ -63,6 +68,8 @@ impl Graphql {
     pub fn namespaced(self) -> Self {
         self.idiomatic()
     }
+    /// Assign an operation to a custom group and method, normalized to snake_case.
+    /// This requires idiomatic style; unassigned operations keep their kind group.
     pub fn group(
         mut self,
         group: impl Into<String>,

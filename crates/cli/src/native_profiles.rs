@@ -19,11 +19,11 @@ pub(super) fn pipeline(format: &str) -> Option<(&'static str, &'static str)> {
     }
 }
 pub(super) fn language_compatible(format: &str, language: &str) -> bool {
-    (format == "graphql" && language == "rust")
+    (format == "graphql" && ["rust", "go", "python"].contains(&language))
         || pipeline(format).is_some_and(|(target, _)| language == target)
 }
 pub(super) fn compatible(format: &str, package: &PackageConfig) -> bool {
-    if format == "graphql" && package.language == "rust" {
+    if format == "graphql" && ["rust", "go", "python"].contains(&package.language.as_str()) {
         return package.plugins.len() == 1
             && matches!(package.plugins[0].name.as_str(), "graphql" | "sdk");
     }
@@ -127,6 +127,52 @@ pub(super) fn build(options: &Generate, input: &NativeInputConfig) -> Result<Pro
                 generator.idiomatic()
             };
             let mut package = rust::package(path)
+                .common(common)
+                .with(generator)
+                .with(input_provider);
+            if let Some(name) = name {
+                package = package.name(name);
+            }
+            old.package(package)
+        } else if input.format == "graphql" && language == "go" {
+            ensure!(
+                plugin.is_none_or(|p| p.scalars.is_empty()),
+                "go GraphQL custom scalar mappings are not supported"
+            );
+            let input_provider = provider::<GraphqlOperations>(input, registry.clone());
+            let generator = go::graphql(Some(input_provider.handle()))
+                .groups(plugin.map(|p| p.groups.clone()).unwrap_or_default());
+            let generator = if raw || style == "raw" {
+                generator.raw()
+            } else if style == "flat" {
+                generator.flat()
+            } else {
+                generator.idiomatic()
+            };
+            let mut package = go::package(path)
+                .common(common)
+                .with(generator)
+                .with(input_provider);
+            if let Some(name) = name {
+                package = package.name(name);
+            }
+            old.package(package)
+        } else if input.format == "graphql" && language == "python" {
+            ensure!(
+                plugin.is_none_or(|p| p.scalars.is_empty()),
+                "python GraphQL custom scalar mappings are not supported"
+            );
+            let input_provider = provider::<GraphqlOperations>(input, registry.clone());
+            let generator = python::graphql(Some(input_provider.handle()))
+                .groups(plugin.map(|p| p.groups.clone()).unwrap_or_default());
+            let generator = if raw || style == "raw" {
+                generator.raw()
+            } else if style == "flat" {
+                generator.flat()
+            } else {
+                generator.idiomatic()
+            };
+            let mut package = python::package(path)
                 .common(common)
                 .with(generator)
                 .with(input_provider);
@@ -342,14 +388,18 @@ pub(super) fn validate_recipe(document: &serde_json::Value, config: &ProjectConf
             input.format == "graphql" || (package.client_style.is_none() && !package.sdk_raw),
             "native client style/raw applies only to GraphQL"
         );
-        if input.format == "graphql" && package.language == "rust" {
+        if input.format == "graphql"
+            && ["rust", "go", "python"].contains(&package.language.as_str())
+        {
             ensure!(
                 plugin.subscriptions != Some(true),
-                "Rust GraphQL subscriptions are not supported"
+                "{} GraphQL subscriptions are not supported",
+                package.language
             );
             ensure!(
                 plugin.transport.is_none(),
-                "Rust GraphQL transport options are not supported"
+                "{} GraphQL transport options are not supported",
+                package.language
             );
         }
         if input.format == "graphql" && package.language == "typescript" {

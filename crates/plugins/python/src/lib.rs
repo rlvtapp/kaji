@@ -354,3 +354,6 @@ pub use package::{
 
 #[cfg(test)]
 mod openapi32_native_tests;
+
+mod graphql;
+pub use graphql::{Graphql, GraphqlClient, GraphqlStyle, graphql};

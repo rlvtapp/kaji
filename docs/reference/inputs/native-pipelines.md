@@ -365,3 +365,23 @@ Generated-source add/replace/patch customization remains a separate stage from
 schema overlays. It cannot validate that a schema-level JSONPath overlay was
 applied. A format parser, workflow inspector or configuration translator alone is
 insufficient evidence of Forge compatibility.
+
+### GraphQL Go and Python clients (unreleased)
+
+The existing Go and Python output packages now consume `GraphqlOperations` through
+Rust composition, CLI recipes and npm configuration. Both support raw, flat and
+grouped query/mutation clients; no HTTP `Api` conversion is involved. Rust bound
+operations without variables now omit the empty variables argument.
+
+Go uses standard-library HTTP/context and selection-specific structs. Optional
+fields distinguish absence from null; required result presence is not runtime
+revalidated. Unions/interfaces, subscriptions and incremental delivery are
+explicitly unsupported. Custom scalars use `json.RawMessage`.
+
+Python uses synchronous urllib, selection-specific `TypedDict` models and response
+envelopes. Optional-only variables may be omitted. Type annotations do not perform
+runtime result schema validation; custom scalars use `Any`. Subscriptions,
+incremental delivery and mapping codecs remain unsupported.
+
+Both generated outputs compile and execute against pinned GraphQL.js 16.14.2.
+See [Go usage](../outputs/graphql-go.md) and [Python usage](../outputs/graphql-python.md).

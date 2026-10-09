@@ -37,6 +37,9 @@ followed by `client.read(&variables).await`. Grouped style emits
 `client.query().read(&variables)` and `client.mutation().rename(&variables)`;
 explicit `.group("user", "read", "Read")` mappings provide
 `client.user().read(&variables)`. Raw style emits only the standalone functions.
+Operations without variables expose no-argument bound calls such as
+`client.health().await` or `client.query().health().await`. Raw free functions
+still take the generated empty variables struct.
 Standalone functions remain available in every style. Grouped style is the
 default; `.idiomatic()` and `.namespaced()` select it.
 

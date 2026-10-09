@@ -1,0 +1,75 @@
+{
+  "date": "2026-10-09",
+  "scope": "Rust GraphQL style improvements and Go/Python native GraphQL outputs",
+  "languages": [
+    "typescript",
+    "rust",
+    "go",
+    "python"
+  ],
+  "node": {
+    "passed": 75,
+    "failed": 0,
+    "skipped": 0
+  },
+  "cli": {
+    "passed": 126,
+    "failed": 0,
+    "ignored": 9
+  },
+  "rust_library": {
+    "passed": 30,
+    "failed": 0,
+    "ignored": 8
+  },
+  "rust_graphql_standard": {
+    "passed": 3,
+    "ignored": 1
+  },
+  "rust_graphql_explicit_runtime": {
+    "passed": 1,
+    "styles": [
+      "raw",
+      "flat",
+      "idiomatic",
+      "custom-grouped"
+    ]
+  },
+  "python_library": {
+    "passed": 39,
+    "failed": 0,
+    "ignored": 3
+  },
+  "python_graphql_explicit": {
+    "passed": 4
+  },
+  "go_library": {
+    "passed": 46,
+    "failed": 0,
+    "ignored": 1
+  },
+  "go_graphql_explicit_server": {
+    "passed": 1
+  },
+  "server": "GraphQL.js 16.14.2",
+  "checks": [
+    "CLI and Node builds",
+    "generated package compilation and local-server execution",
+    "omission/null and partial results",
+    "regeneration through CLI and npm",
+    "unsupported-output preservation",
+    "all-target Clippy for changed output crates/CLI/Node with warnings denied",
+    "formatting and documentation file links"
+  ],
+  "initial_failures": [
+    "legacy skip fixtures assumed Go unsupported; updated to Java",
+    "sandbox npm runtime server failed; rerun with loopback permission passed",
+    "Rust HTTP library tests attempted DNS; offline rerun passed"
+  ],
+  "limitations": [
+    "Full workspace and 205-spec corpus not rerun for this change",
+    "Go abstract results, subscriptions and custom scalar mappings unsupported",
+    "Python synchronous only, subscriptions and scalar mapping codecs unsupported",
+    "Go/Python typed result models do not revalidate required schema fields at runtime"
+  ]
+}

@@ -13,6 +13,7 @@ pub enum GraphqlStyle {
 pub(super) struct Layout {
     pub methods: BTreeMap<String, String>,
     groups: BTreeMap<String, (String, Vec<(String, String)>)>,
+    without_variables: BTreeSet<String>,
 }
 fn identifier(value: &str) -> Result<()> {
     ensure!(
@@ -44,8 +45,13 @@ pub(super) fn layout(
         "GraphQL custom groups require idiomatic/namespaced style"
     );
     let mut assignments = BTreeMap::new();
+    let mut group_names = BTreeSet::new();
     for (group, members) in custom {
         let group = checked_name(group)?;
+        ensure!(
+            group_names.insert(group.clone()),
+            "Rust GraphQL group name collision: {group}"
+        );
         for (method, operation) in members {
             let method = checked_name(method)?;
             ensure!(
@@ -120,7 +126,17 @@ pub(super) fn layout(
             },
         );
     }
-    Ok(Layout { methods, groups })
+    let without_variables = contract
+        .operations
+        .iter()
+        .filter(|op| op.variables.is_empty())
+        .map(|op| op.name.clone())
+        .collect();
+    Ok(Layout {
+        methods,
+        groups,
+        without_variables,
+    })
 }
 impl Layout {
     pub fn reserved(&self) -> Vec<String> {
@@ -174,6 +190,14 @@ impl Layout {
     ) -> Result<()> {
         for (operation, method) in members {
             let symbols = &operations[operation];
+            if self.without_variables.contains(operation) {
+                writeln!(
+                    source,
+                    "    pub async fn {method}(&self) -> std::result::Result<crate::graphql_runtime::GraphqlResponse<{}>, crate::graphql_runtime::GraphqlTransportError> {{ {}({transport}, &{} {{}}).await }}",
+                    symbols.result, symbols.function, symbols.variables
+                )?;
+                continue;
+            }
             writeln!(
                 source,
                 "    pub async fn {method}(&self, variables: &{}) -> std::result::Result<crate::graphql_runtime::GraphqlResponse<{}>, crate::graphql_runtime::GraphqlTransportError> {{ {}({transport}, variables).await }}",

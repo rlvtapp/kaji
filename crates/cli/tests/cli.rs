@@ -866,7 +866,7 @@ fn native_cli_reports_all_skipped_plugins_without_reading_or_exporting() {
     let result = cli()
         .arg("generate")
         .arg(directory.path().join("missing.graphql"))
-        .args(["--input-format", "graphql", "--language", "go", "--json"])
+        .args(["--input-format", "graphql", "--language", "java", "--json"])
         .arg("--output")
         .arg(&output)
         .output()
@@ -881,7 +881,7 @@ fn native_cli_reports_all_skipped_plugins_without_reading_or_exporting() {
     assert_eq!(report["added"], serde_json::json!([]));
     assert_eq!(report["modified"], serde_json::json!([]));
     assert_eq!(report["removed"], serde_json::json!([]));
-    assert_eq!(report["skipped"][0]["language"], "go");
+    assert_eq!(report["skipped"][0]["language"], "java");
     assert_eq!(report["skipped"][0]["plugins"], serde_json::json!(["sdk"]));
     assert!(!output.exists());
 }
@@ -902,15 +902,15 @@ fn native_cli_reports_mixed_recipe_plugins_and_preserves_skipped_files() {
     let output = directory.path().join("generated");
     let mut previous = poolster_core::GeneratedTree::default();
     previous
-        .insert(poolster_core::GeneratedFile::new("go/client.go", "original").unwrap())
+        .insert(poolster_core::GeneratedFile::new("java/Client.java", "original").unwrap())
         .unwrap();
     previous.write_to(&output).unwrap();
-    fs::write(output.join("go/client.go"), "local edit").unwrap();
+    fs::write(output.join("java/Client.java"), "local edit").unwrap();
     let recipe = directory.path().join("poolster.json");
     fs::write(&recipe, serde_json::to_vec(&serde_json::json!({
         "input":{"format":"graphql","path":"schema.graphql","options":{"operation_files":["operations.graphql"]}},
         "output":{"path":"generated"},
-        "packages":[{"language":"typescript","path":"ts","plugins":[{"name":"graphql"}]},{"language":"go","path":"go","plugins":[{"name":"sdk"}]}]
+        "packages":[{"language":"typescript","path":"ts","plugins":[{"name":"graphql"}]},{"language":"java","path":"java","plugins":[{"name":"sdk"}]}]
     })).unwrap()).unwrap();
     let result = cli()
         .arg("generate")
@@ -927,11 +927,11 @@ fn native_cli_reports_mixed_recipe_plugins_and_preserves_skipped_files() {
     assert!(String::from_utf8_lossy(&result.stderr).contains("warning:"));
     let report: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
     assert!(!report["added"].as_array().unwrap().is_empty());
-    assert_eq!(report["skipped"][0]["package"], "go");
+    assert_eq!(report["skipped"][0]["package"], "java");
     assert_eq!(report["skipped"][0]["plugins"], serde_json::json!(["sdk"]));
     assert!(output.join("ts/package.json").is_file());
     assert_eq!(
-        fs::read_to_string(output.join("go/client.go")).unwrap(),
+        fs::read_to_string(output.join("java/Client.java")).unwrap(),
         "local edit"
     );
 }

@@ -226,10 +226,10 @@ async function generate(config, options = {}) {
   const jsPlugins = plan.order;
   const output = path.resolve(typeof config.output === 'string' ? config.output : config.output.path);
   if (config.input.plugin?.format === 'graphql' && packages.length &&
-      packages.every((p) => !['typescript', 'rust'].includes(p.language)) &&
+      packages.every((p) => !['typescript', 'rust', 'go', 'python'].includes(p.language)) &&
       nativeAddons.length === 0 && jsPlugins.length === 0) {
     const skipped = packages.map((p) => ({ path: p.path, language: p.language,
-      reason: 'GraphQL output currently supports TypeScript and Rust' }));
+      reason: 'GraphQL output currently supports TypeScript, Rust, Go and Python' }));
     for (const entry of skipped) console.warn(`Poolster: skipping ${entry.path}: ${entry.reason}`);
     return { api: null, files: [], changes: { added: [], modified: [], removed: [] }, output, skipped };
   }
@@ -241,9 +241,9 @@ async function generate(config, options = {}) {
     if (config.input.plugin) {
       const loaded = await loadInput(config.input);
       if (!loaded.api && config.input.plugin.format === 'graphql' && packages.length) {
-        const compatible = packages.filter((p) => ['typescript', 'rust'].includes(p.language));
-        for (const p of packages.filter((p) => !['typescript', 'rust'].includes(p.language))) {
-          const entry = { path: p.path, language: p.language, reason: 'GraphQL output currently supports TypeScript and Rust' };
+        const compatible = packages.filter((p) => ['typescript', 'rust', 'go', 'python'].includes(p.language));
+        for (const p of packages.filter((p) => !['typescript', 'rust', 'go', 'python'].includes(p.language))) {
+          const entry = { path: p.path, language: p.language, reason: 'GraphQL output currently supports TypeScript, Rust, Go and Python' };
           skipped.push(entry);
           console.warn(`Poolster: skipping ${p.path}: ${entry.reason}`);
         }

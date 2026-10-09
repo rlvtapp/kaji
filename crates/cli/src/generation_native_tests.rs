@@ -36,7 +36,7 @@ fn incompatible_outputs_warn_without_reading_schema_or_writing() {
     let directory = tempfile::tempdir().unwrap();
     let path = recipe(
         directory.path(),
-        serde_json::json!([{"language":"go","path":"sdk","plugins":[{"name":"sdk"}]}]),
+        serde_json::json!([{"language":"java","path":"sdk","plugins":[{"name":"sdk"}]}]),
     );
     std::fs::remove_file(directory.path().join("schema.graphql")).unwrap();
     generate_from_config(&path, ColorChoice::Never, false, false).unwrap();
@@ -49,21 +49,21 @@ fn mixed_recipe_preserves_skipped_owned_files_including_local_edits() {
     let output = directory.path().join("generated");
     let mut previous = GeneratedTree::default();
     previous
-        .insert(GeneratedFile::new("go/client.go", "old generated content").unwrap())
+        .insert(GeneratedFile::new("java/Client.java", "old generated content").unwrap())
         .unwrap();
-    previous.set_owner("go/client.go", "go-sdk").unwrap();
+    previous.set_owner("java/Client.java", "java-sdk").unwrap();
     previous.write_to(&output).unwrap();
-    std::fs::write(output.join("go/client.go"), "local edits must survive").unwrap();
+    std::fs::write(output.join("java/Client.java"), "local edits must survive").unwrap();
     let path = recipe(
         directory.path(),
         serde_json::json!([
             {"language":"typescript","path":"ts","plugins":[{"name":"graphql"}]},
-            {"language":"go","path":"go","plugins":[{"name":"sdk"}]}
+            {"language":"java","path":"java","plugins":[{"name":"sdk"}]}
         ]),
     );
     generate_from_config(&path, ColorChoice::Never, false, false).unwrap();
     assert_eq!(
-        std::fs::read_to_string(output.join("go/client.go")).unwrap(),
+        std::fs::read_to_string(output.join("java/Client.java")).unwrap(),
         "local edits must survive"
     );
     assert!(output.join("ts/package.json").exists());
@@ -194,3 +194,24 @@ fn protobuf_native_flags_and_recipe_tool_paths_are_explicit() {
 
 #[path = "generation_graphql_tests.rs"]
 mod graphql;
+
+#[test]
+fn graphql_go_python_packages_generate_and_regenerate_through_recipe() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = recipe(
+        directory.path(),
+        serde_json::json!([
+            {"language":"go","path":"go","name":"example/graphqlclient","plugins":[{"name":"sdk","contracts":{"graphql":{"style":"flat"}}}]},
+            {"language":"python","path":"python","name":"example-graphql-client","plugins":[{"name":"sdk","contracts":{"graphql":{"style":"flat"}}}]}
+        ]),
+    );
+    generate_from_config(&path, ColorChoice::Never, false, false).unwrap();
+    assert!(directory.path().join("generated/go/graphql.go").exists());
+    assert!(
+        directory
+            .path()
+            .join("generated/python/pyproject.toml")
+            .exists()
+    );
+    generate_from_config(&path, ColorChoice::Never, true, false).unwrap();
+}

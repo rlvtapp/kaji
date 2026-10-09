@@ -40,8 +40,8 @@ fn generate(request: &str) -> AnyResult<String> {
     let mut profiles = ProfileSet::new(".");
     for mut package in request.packages {
         output_options::apply(&mut package, "graphql")?;
-        if !["typescript", "rust"].contains(&package.language.as_str()) {
-            bail!("GraphQL requires TypeScript or Rust output");
+        if !["typescript", "rust", "go", "python"].contains(&package.language.as_str()) {
+            bail!("GraphQL requires TypeScript, Rust, Go or Python output");
         }
         if package.client_name.is_some()
             || package.jobs.is_some()
@@ -97,6 +97,56 @@ fn generate(request: &str) -> AnyResult<String> {
                 generator.idiomatic()
             };
             let mut target = rust::package(package.path)
+                .common(common)
+                .with(generator)
+                .with(input);
+            if let Some(name) = package.name {
+                target = target.name(name);
+            }
+            profiles = profiles.package(target);
+            continue;
+        }
+        if package.language == "go" {
+            if request.subscriptions || package.transport.is_some() {
+                bail!("go GraphQL does not support subscriptions or transport options");
+            }
+            if !package.scalars.is_empty() {
+                bail!("go GraphQL custom scalar mappings are not supported");
+            }
+            let generator = go::graphql(Some(input.handle())).groups(package.groups.clone());
+            let generator = if package.raw.unwrap_or(false) || style == "raw" {
+                generator.raw()
+            } else if style == "flat" {
+                generator.flat()
+            } else {
+                generator.idiomatic()
+            };
+            let mut target = go::package(package.path)
+                .common(common)
+                .with(generator)
+                .with(input);
+            if let Some(name) = package.name {
+                target = target.name(name);
+            }
+            profiles = profiles.package(target);
+            continue;
+        }
+        if package.language == "python" {
+            if request.subscriptions || package.transport.is_some() {
+                bail!("python GraphQL does not support subscriptions or transport options");
+            }
+            if !package.scalars.is_empty() {
+                bail!("python GraphQL custom scalar mappings are not supported");
+            }
+            let generator = python::graphql(Some(input.handle())).groups(package.groups.clone());
+            let generator = if package.raw.unwrap_or(false) || style == "raw" {
+                generator.raw()
+            } else if style == "flat" {
+                generator.flat()
+            } else {
+                generator.idiomatic()
+            };
+            let mut target = python::package(package.path)
                 .common(common)
                 .with(generator)
                 .with(input);

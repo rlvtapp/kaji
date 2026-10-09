@@ -28,7 +28,7 @@ test('unsupported GraphQL outputs warn and leave prior files intact', async (t) 
   const output = path.join(dir,'out');
   await fs.mkdir(output); await fs.writeFile(path.join(output,'local.txt'),'keep');
   input.path=path.join(dir,'missing.graphql');
-  const result = await generate({input,output,plugins:[bundle.pluginGo()]});
+  const result = await generate({input,output,plugins:[bundle.pluginJava()]});
   assert.equal(result.skipped.length,1);
   assert.deepEqual(result.changes,{added:[],modified:[],removed:[]});
   assert.equal(await fs.readFile(path.join(output,'local.txt'),'utf8'),'keep');
@@ -37,11 +37,11 @@ test('mixed GraphQL generation preserves skipped owned outputs and local edits',
   const {dir,input} = await fixture(t);
   const output=path.join(dir,'out');
   const binding=require(process.env.POOLSTER_NODE_BINARY);
-  await binding.materialize(JSON.stringify([{path:'go/client.go',contents:'old',owner:'go-sdk',preserveExisting:false}]),output,true);
-  await fs.writeFile(path.join(output,'go/client.go'),'locally edited');
-  const result=await generate({input,output,plugins:[bundle.pluginTypeScript(),bundle.pluginGo()]});
+  await binding.materialize(JSON.stringify([{path:'java/Client.java',contents:'old',owner:'java-sdk',preserveExisting:false}]),output,true);
+  await fs.writeFile(path.join(output,'java/Client.java'),'locally edited');
+  const result=await generate({input,output,plugins:[bundle.pluginTypeScript(),bundle.pluginJava()]});
   assert.equal(result.skipped.length,1);
-  assert.equal(await fs.readFile(path.join(output,'go/client.go'),'utf8'),'locally edited');
+  assert.equal(await fs.readFile(path.join(output,'java/Client.java'),'utf8'),'locally edited');
   assert.ok(result.files.some(file=>file.path.endsWith('graphql.ts')));
 });
 test('GraphQL invalid operations fail before output is written', async (t) => {
@@ -163,4 +163,19 @@ test('HTTP selects its own contract options without applying GraphQL configurati
   const scoped=await generate(config(input,path.join(dir,'http-scoped'),[bundle.pluginTypeScript({contracts:{http:{style:'flat'},graphql:{style:'grouped',groups:{user:{read:'NotAnHttpOperation'}},scalars:{DateTime:{input:'string',output:'string'}}}}})]),{write:false});
   assert.deepEqual(scoped.files,baseline.files);
   await assert.rejects(generate(config(input,path.join(dir,'http-bad'),[bundle.pluginTypeScript({scalars:{DateTime:{input:'string',output:'string'}}})])),/require GraphQL input/);
+});
+test('GraphQL Go and Python packages use existing factories and regenerate without HTTP lowering', async (t) => {
+  const { dir, input } = await fixture(t);
+  const configuration = { input, output: path.join(dir, 'native-languages'), plugins: [
+    bundle.pluginGo({ contracts: { graphql: { style: 'flat' } } }),
+    bundle.pluginPython({ contracts: { graphql: { style: 'flat' } } }),
+  ] };
+  const first = await generate(configuration);
+  assert.equal(first.api, null);
+  assert.deepEqual(first.skipped, []);
+  assert.ok(first.files.some(f => f.path.endsWith('graphql.go')));
+  assert.ok(first.files.some(f => f.path.endsWith('.py')));
+  assert.deepEqual((await generate(configuration)).changes, { added: [], modified: [], removed: [] });
+  configuration.plugins = [bundle.pluginPython({ contracts: { graphql: { scalars: { DateTime: { input: 'str', output: 'str' } } } } })];
+  await assert.rejects(generate(configuration, { write: false }), /custom scalar mappings/);
 });

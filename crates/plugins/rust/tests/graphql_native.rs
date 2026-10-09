@@ -44,6 +44,15 @@ fn generate_style(root: &Path, style: &str) -> Result<GeneratedTree> {
     let generator = match style {
         "raw" => generator.raw(),
         "flat" | "collision" => generator.flat(),
+        "reserved-group" => generator.idiomatic().group("new", "read", "Read"),
+        "group-collision" => generator
+            .idiomatic()
+            .group("userProfile", "read", "Read")
+            .group("user_profile", "rename", "Rename"),
+        "method-collision" => generator
+            .idiomatic()
+            .group("user", "readUser", "Read")
+            .group("user", "read_user", "Rename"),
         "unknown-group" => generator
             .idiomatic()
             .group("user", "read", "MissingOperation"),
@@ -85,12 +94,13 @@ fn graphql_regeneration_is_stable() -> Result<()> {
 #[test]
 #[ignore = "requires cached Cargo dependencies and POOLSTER_GRAPHQL_JS16.14.2; executes local HTTP server"]
 fn packaged_graphql_client_compiles_and_executes() -> Result<()> {
+    let target = tempfile::tempdir()?;
     for style in ["raw", "flat", "idiomatic", "grouped"] {
-        packaged_style(style)?;
+        packaged_style(style, target.path())?;
     }
     Ok(())
 }
-fn packaged_style(style: &str) -> Result<()> {
+fn packaged_style(style: &str, target: &Path) -> Result<()> {
     use std::io::{BufRead, BufReader};
     let dir = tempfile::tempdir()?;
     generate_style(dir.path(), style)?.write_to(dir.path())?;
@@ -159,7 +169,7 @@ fn packaged_style(style: &str) -> Result<()> {
             .args(["run", "--offline", "--quiet"])
             .current_dir(&consumer)
             .env("GRAPHQL_ENDPOINT", endpoint.trim())
-            .env("CARGO_TARGET_DIR", dir.path().join("consumer-target")),
+            .env("CARGO_TARGET_DIR", target),
     )?;
     std::fs::create_dir(consumer.join("src/bin"))?;
     std::fs::write(
@@ -169,7 +179,7 @@ fn packaged_style(style: &str) -> Result<()> {
     let invalid = Command::new("cargo")
         .args(["check", "--offline", "--bin", "invalid"])
         .current_dir(&consumer)
-        .env("CARGO_TARGET_DIR", dir.path().join("consumer-target"))
+        .env("CARGO_TARGET_DIR", target)
         .output()?;
     ensure!(
         !invalid.status.success(),
@@ -212,7 +222,7 @@ fn style_consumer(style: &str) -> String {
  assert_eq!(success({read}.read(&ReadVariables{{id:"7".into()}}).await.unwrap()).person.name,"Ada");
  assert_eq!(success({mutation}.rename(&RenameVariables{{name:"Style".into()}}).await.unwrap()).rename.name,"Style");
  assert!(matches!({query}.partial(&PartialVariables{{id:"7".into()}}).await.unwrap(),GraphqlResponse::Partial{{..}}));
- assert!(matches!({query}.fatal(&FatalVariables{{}}).await.unwrap(),GraphqlResponse::Error{{..}}));
+ assert!(matches!({query}.fatal().await.unwrap(),GraphqlResponse::Error{{..}}));
  assert!(success({query}.presence_query(&PresenceQueryVariables{{value:Presence::Null}}).await.unwrap()).value.is_none());
  assert!(matches!(success({query}.conditional(&ConditionalVariables{{include:false}}).await.unwrap()).user.name,Optional::Absent));
  let variables=ScalarsVariables{{value:"wire-time".into(),input:ScalarInput{{required:"nested-time".into(),values:vec![Some("list-time".into()),None],optional:Presence::Null}},optional:Presence::Absent,include:false}};
@@ -234,6 +244,9 @@ fn graphql_style_collision_and_unknown_operation_are_diagnostics() -> Result<()>
     for (style, expected) in [
         ("collision", "collision"),
         ("unknown-group", "MissingOperation"),
+        ("reserved-group", "reserved"),
+        ("group-collision", "group name collision"),
+        ("method-collision", "method collision"),
     ] {
         let root = tempfile::tempdir()?;
         let error =
@@ -241,6 +254,31 @@ fn graphql_style_collision_and_unknown_operation_are_diagnostics() -> Result<()>
         ensure!(
             format!("{error:#}").contains(expected),
             "unexpected diagnostic: {error:#}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn graphql_bound_styles_have_snake_case_methods_and_zero_argument_queries() -> Result<()> {
+    for (style, expected) in [
+        ("flat", "pub async fn presence_query"),
+        ("idiomatic", "pub fn query"),
+        ("grouped", "pub fn user"),
+    ] {
+        let root = tempfile::tempdir()?;
+        let tree = generate_style(root.path(), style)?;
+        tree.write_to(root.path())?;
+        let source = std::fs::read_to_string(root.path().join("sdk/src/graphql.rs"))?;
+        ensure!(source.contains(expected), "missing {expected} for {style}");
+        ensure!(
+            source.contains("pub async fn fatal(&self)"),
+            "empty variables must not require a dummy argument"
+        );
+        ensure!(source.contains("pub async fn read(&self, variables: &ReadVariables)"));
+        ensure!(
+            source.contains("pub async fn fatal(transport:"),
+            "raw transport functions remain available"
         );
     }
     Ok(())

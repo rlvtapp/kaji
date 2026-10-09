@@ -67,3 +67,6 @@ Selections come from operation documents. A dynamic `fields` parameter is
 
 **Next:** [Scalar mappings and transport](../reference/outputs/graphql-typescript.md) ·
 [Query hooks and mocks](../reference/outputs/graphql-integrations.md) · [Runnable example](../../examples/graphql-native/README.md)
+
+The existing Go and Python plugin factories also accept GraphQL input:
+[Go client](../reference/outputs/graphql-go.md) · [Python client](../reference/outputs/graphql-python.md).

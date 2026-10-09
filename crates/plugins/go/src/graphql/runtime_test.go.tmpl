@@ -1,0 +1,23 @@
+package graphqlclient
+import("context";"encoding/json";"errors";"net/http";"net/http/httptest";"testing")
+func TestClient(t *testing.T) {
+ mode:="success"
+ server:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
+ if r.Method!="POST" {t.Errorf("method: %s",r.Method)}
+ var payload struct{Query string;OperationName string;Variables map[string]json.RawMessage};if err:=json.NewDecoder(r.Body).Decode(&payload);err!=nil{t.Error(err)}
+ if payload.OperationName!="ReadUser" || payload.Query!=ReadUserDocument {t.Error("operation document not preserved")}
+ if string(payload.Variables["id"])!=`"42"` {t.Error("id not encoded")}
+ if mode=="null" && string(payload.Variables["nickname"])!="null" {t.Error("explicit null lost")}
+ if mode=="success" {if _,ok:=payload.Variables["nickname"];ok {t.Error("omitted variable emitted")}}
+ w.Header().Set("Content-Type","application/graphql-response+json")
+ switch mode {case "partial":w.Write([]byte(`{"data":{"readUser":{"name":"Alice","nickname":null}},"errors":[{"message":"partial","path":["readUser","nickname"]}]}`));case "bad":w.Write([]byte(`{broken`));case "empty":w.Write([]byte(`{}`));case "http":w.WriteHeader(503);w.Write([]byte(`{"errors":[{"message":"offline"}]}`));default:w.Write([]byte(`{"data":{"readUser":{"name":"Alice"}}}`))}
+ }));defer server.Close()
+ client:=NewClient(server.URL,nil);ctx:=context.Background();variables:=ReadUserVariables{ID:"42"}
+ result,err:=CALL_OPERATION;if err!=nil || result.Data.ReadUser.Name!="Alice" || result.Data.ReadUser.Nickname.Set {t.Fatalf("success/presence: %+v %v",result,err)}
+ mode="null";variables.Nickname=Null[string]();_,err=CALL_OPERATION;if err!=nil{t.Fatal(err)}
+ mode="partial";result,err=CALL_OPERATION;var gql GraphQLErrors;if !errors.As(err,&gql) || result.Data.ReadUser.Name!="Alice" || !result.Data.ReadUser.Nickname.Set || result.Data.ReadUser.Nickname.Value!=nil {t.Fatalf("partial/null: %+v %v",result,err)}
+ mode="http";result,err=CALL_OPERATION;var httpErr *HTTPError;if !errors.As(err,&httpErr)||httpErr.StatusCode!=503||len(result.Errors)!=1{t.Fatal(err)}
+ mode="bad";_,err=CALL_OPERATION;if err==nil {t.Fatal("malformed response accepted")}
+ mode="empty";_,err=CALL_OPERATION;if err==nil {t.Fatal("empty envelope accepted")}
+ cancelled,cancel:=context.WithCancel(ctx);cancel();ctx=cancelled;_,err=CALL_OPERATION;if !errors.Is(err,context.Canceled) {t.Fatalf("cancellation: %v",err)}
+}
