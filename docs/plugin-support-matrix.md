@@ -94,7 +94,8 @@ select one input source; Rust plugins can compose multiple typed contracts.
 - [x] Preserve nullability, optional presence, lists and input defaults.
 - [x] Generate variables and query/mutation functions with TypeScript Fetch and Rust Reqwest transports.
 - [x] Represent GraphQL errors and partial results explicitly.
-- [x] Compile generated TypeScript/Rust packages and execute against a local GraphQL server.
+- [x] Compile generated packages for all ten SDK languages and execute against a local GraphQL server.
+- [x] Modular GraphQL source layouts, deterministic filenames and regeneration checks.
 - [x] Separate TypeScript subscription capability with an injected async-iterable transport.
 - [ ] Bundle a WebSocket or SSE subscription transport.
 - [x] Separate input/output TypeScript scalar mappings.
@@ -111,7 +112,7 @@ unsupported features in an otherwise supported pipeline still fail explicitly.
 
 ## Verification and release checks
 
-Current alpha.2 workspace check: **816 passed, 0 failed, 143 ignored**;
+Earlier alpha.2 workspace check (before the latest GraphQL source-layout changes): **816 passed, 0 failed, 143 ignored**;
 formatting and workspace Clippy with warnings denied passed. Ignored tests are not passes.
 Selected external GraphQL, gRPC, Kafka and workflow integration tests were also
 run explicitly and passed; commands and boundaries are in [verification](verification/verification.md).
@@ -197,4 +198,11 @@ budget rather than a hard limit on all valid GraphQL selections.
 
 Raw, flat and grouped call paths are preserved. Java model imports move from nested
 `Client` records to `<package>.models` types. Generated-source customizations using
-old paths require migration. See each language guide for its actual file tree.
+old paths require migration. See the [layout overview](reference/outputs/graphql-layout.md)
+and each language guide for its actual file tree.
+
+Latest source-layout verification: npm SDK **76 passed, 0 skipped**; CLI **127 passed,
+9 ignored**; TypeScript selected GraphQL/integration checks **22 passed**. All ten
+languages have generated compilation and local-server checks. Ignored full-suite
+tests are recorded separately. This batch did not rerun the full workspace or the
+205-spec HTTP corpus. See the [verification record](verification-results/graphql-source-layout-2026-10-09.json).
