@@ -42,7 +42,7 @@ supported. Version 0.5.0 is on the branch; use a source build until published.
 | Existing generator projects | Stainless/Fern/Speakeasy config import and direct generation; supported annotations normalized; unsupported settings reported for review | [Migration](migration.md) |
 | Large public contract regression | Pinned Graph, six official contracts and 205 APIs.guru contracts (including five Azure services); [2,050 reconciled generation/native passes](guru-compatibility.md); fresh alpha.2 frozen-build sweep pending | [Large specs](large-specs.md) |
 | Native input providers | OpenAPI, GraphQL, AsyncAPI, Arazzo, Protobuf and Cap’n Proto; whole contracts and available typed blocks | [Input plugins](input-plugins.md) |
-| Native generation (`alpha-2`, unreleased) | GraphQL → TypeScript; Protobuf → Go gRPC; AsyncAPI → TypeScript/Kafka; Arazzo → TypeScript sequential runners. Cap’n Proto output remains open | [Support matrix](plugin-support-matrix.md) |
+| Native generation (`alpha-2`, unreleased) | GraphQL → TypeScript/Rust (CLI and npm); Protobuf → Go gRPC; AsyncAPI → TypeScript/Kafka; Arazzo → TypeScript sequential runners. Cap’n Proto output remains open | [Support matrix](plugin-support-matrix.md) |
 | Arbitrary custom languages | Rust library `Language`/`Plugin` implementations and optional delivery metadata. CLI needs explicit registry integration | [Library plugins](library/plugins.md) |
 | Ejectable generator sources | `poolster eject` exports rebuildable renderers, runtime sources and plugin interfaces, with a SHA-256 manifest | [Own the sources](source-customization.md) |
 
@@ -149,8 +149,8 @@ presence is not evidence that registry trust or live delivery works.
 
 ## Tests and confidence
 
-The October 9 alpha.2 workspace check passed **788 tests**, with **0 failures**
-and **138 ignored** after output migration; formatting passed. The older October 8
+The October 9 alpha.2 workspace check passed **798 tests**, with **0 failures**
+and **141 ignored** after output migration; formatting passed. The older October 8
 generator-fix check passed 483 workspace tests. New native probes
 exercise scoped query caching, invalidation, failures, callbacks, cancellation,
 recursive schemas, split CLI commands and Swift resource boundaries. The earlier

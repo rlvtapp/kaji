@@ -43,7 +43,8 @@ jobs:
           npm install --prefix "$RUNNER_TEMP/poolster-graphql-runtime" --no-audit --no-fund typescript@5.9.3 graphql@16.14.2
           export POOLSTER_TSC_JS="$RUNNER_TEMP/poolster-graphql-runtime/node_modules/typescript/lib/tsc.js"
           export POOLSTER_GRAPHQL_JS="$RUNNER_TEMP/poolster-graphql-runtime/node_modules/graphql/index.js"
-          cargo test -p poolster-plugin-typescript --test graphql_native --locked -- --include-ignored
+          cargo test -p poolster-plugin-typescript --test graphql_native --test graphql_release --test graphql_scalars --locked -- --include-ignored
+          cargo test -p poolster-plugin-rust --test graphql_native --locked -- --include-ignored
       - name: Test embedded OpenAPI compiler
         working-directory: openapi
         run: go test ./...
@@ -54,6 +55,8 @@ jobs:
           cargo build -p poolster-cli --locked
           (cd openapi && go build -o ../target/debug/poolster-openapi .)
       - name: Verify Node embedding and plugins
+        env:
+          POOLSTER_GRAPHQL_TEST_NODE_MODULES: ${{ runner.temp }}/poolster-graphql-runtime/node_modules
         run: |
           node packages/npm/sdk/scripts/build-native.mjs
           node packages/npm/generate-plugins.mjs --check

@@ -19,8 +19,10 @@ concrete variants of interfaces/unions, and conditional presence from
 Schema and combined operation text remain available for native details.
 
 Query, mutation and subscription operations are represented separately;
-subscription transport support is an output capability. The TypeScript HTTP
-transport supports queries and mutations. Custom scalar representations are
+subscription transport support is an output capability. TypeScript and Rust HTTP
+clients support queries and mutations through the CLI and npm language plugins.
+See the [TypeScript guide](../../../docs/graphql-typescript.md) and
+[Rust guide](../../../docs/graphql-rust.md). Custom scalar representations are
 unknown unless an output provides a mapping. Executable directives other than
 `@skip` and `@include`, variable directives, and fragment definition directives
 are rejected rather than silently assigned invented execution semantics.

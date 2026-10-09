@@ -18,7 +18,14 @@ pub(super) fn pipeline(format: &str) -> Option<(&'static str, &'static str)> {
         _ => None,
     }
 }
+pub(super) fn language_compatible(format: &str, language: &str) -> bool {
+    (format == "graphql" && language == "rust")
+        || pipeline(format).is_some_and(|(target, _)| language == target)
+}
 pub(super) fn compatible(format: &str, package: &PackageConfig) -> bool {
+    if format == "graphql" && package.language == "rust" {
+        return package.plugins.len() == 1 && package.plugins[0].name == "graphql";
+    }
     pipeline(format).is_some_and(|(language, plugin)| {
         package.language == language
             && package.plugins.len() == 1
@@ -40,7 +47,8 @@ fn provider<C: Contract>(
 pub(super) fn build(options: &Generate, input: &NativeInputConfig) -> Result<ProfileSet> {
     let registry = Arc::new(poolster_inputs::default_registry()?);
     let mut profiles = ProfileSet::new(".");
-    let mut append = |path: &str,
+    let mut append = |language: &str,
+                      path: &str,
                       name: Option<&str>,
                       version: Option<&str>,
                       plugin: Option<&PluginConfig>|
@@ -50,7 +58,17 @@ pub(super) fn build(options: &Generate, input: &NativeInputConfig) -> Result<Pro
             ..Default::default()
         };
         let old = std::mem::replace(&mut profiles, ProfileSet::new("."));
-        profiles = if input.format == "protobuf" {
+        profiles = if input.format == "graphql" && language == "rust" {
+            let input_provider = provider::<GraphqlOperations>(input, registry.clone());
+            let mut package = rust::package(path)
+                .common(common)
+                .with(rust::graphql(Some(input_provider.handle())))
+                .with(input_provider);
+            if let Some(name) = name {
+                package = package.name(name);
+            }
+            old.package(package)
+        } else if input.format == "protobuf" {
             let output = plugin
                 .map(|plugin| NativeOutputConfig {
                     module: plugin.module.clone(),
@@ -76,7 +94,8 @@ pub(super) fn build(options: &Generate, input: &NativeInputConfig) -> Result<Pro
             let package = match input.format.as_str() {
                 "graphql" => {
                     let input_provider = provider::<GraphqlOperations>(input, registry.clone());
-                    let output_plugin = ts::graphql(Some(input_provider.handle()));
+                    let output_plugin = ts::graphql(Some(input_provider.handle()))
+                        .scalars(plugin.map(|p| p.scalars.clone()).unwrap_or_default());
                     let output_plugin = if plugin
                         .and_then(|plugin| plugin.subscriptions)
                         .unwrap_or(false)
@@ -116,6 +135,7 @@ pub(super) fn build(options: &Generate, input: &NativeInputConfig) -> Result<Pro
             .filter(|package| compatible(&input.format, package))
         {
             append(
+                &package.language,
                 &package.path,
                 package.name.as_deref(),
                 package.version.as_deref(),
@@ -123,8 +143,13 @@ pub(super) fn build(options: &Generate, input: &NativeInputConfig) -> Result<Pro
             )?;
         }
     } else {
-        let (language, _) = pipeline(&input.format).context("unsupported native format")?;
-        append(language, None, None, None)?;
+        for language in options
+            .languages
+            .iter()
+            .filter(|language| language_compatible(&input.format, language))
+        {
+            append(language, language, None, None, None)?;
+        }
     }
     Ok(profiles)
 }
@@ -167,7 +192,7 @@ pub(super) fn validate_recipe(document: &serde_json::Value, config: &ProjectConf
             );
         }
         let allowed: &[&str] = match input.format.as_str() {
-            "graphql" => &["name", "transport", "subscriptions"],
+            "graphql" => &["name", "transport", "subscriptions", "scalars"],
             "protobuf" => &["name", "module", "toolchain", "go_packages"],
             _ => &["name"],
         };
@@ -183,7 +208,21 @@ pub(super) fn validate_recipe(document: &serde_json::Value, config: &ProjectConf
             );
         }
         let plugin = &package.plugins[0];
-        if input.format == "graphql" {
+        if input.format == "graphql" && package.language == "rust" {
+            ensure!(
+                plugin.scalars.is_empty(),
+                "Rust GraphQL scalar mappings are not supported"
+            );
+            ensure!(
+                plugin.subscriptions != Some(true),
+                "Rust GraphQL subscriptions are not supported"
+            );
+            ensure!(
+                plugin.transport.is_none(),
+                "Rust GraphQL transport options are not supported"
+            );
+        }
+        if input.format == "graphql" && package.language == "typescript" {
             ensure!(
                 plugin.transport.as_deref().is_none_or(|v| v == "fetch"),
                 "GraphQL HTTP transport must be fetch"

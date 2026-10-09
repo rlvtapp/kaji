@@ -1634,6 +1634,27 @@
         "subscriptions": {
           "type": "boolean",
           "default": false
+        },
+        "scalars": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "input",
+              "output"
+            ],
+            "properties": {
+              "input": {
+                "type": "string",
+                "minLength": 1
+              },
+              "output": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
         }
       }
     },

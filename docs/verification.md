@@ -5,9 +5,10 @@ for the package you ship.
 
 ## Current alpha.2 verification (9 October 2026)
 
-After output migration, the full `alpha-2` workspace suite passes:
-**788 passed, 0 failed, 138 ignored**. Formatting passes. The earlier
-pre-migration check recorded 752 passed, 0 failed and 136 ignored. Workspace Clippy with `-D warnings` also passes after migration. Ignored external probes are not counted as passed by that command.
+After output migration and GraphQL TypeScript/Rust completion, the full workspace
+suite passes **798 tests, 0 failures, 141 ignored**. Formatting and workspace
+Clippy with `-D warnings` pass. Earlier checks recorded 788/0/138 after output
+migration and 752/0/136 before that migration. Ignored external probes are not counted as passed by that command.
 Initial sandbox-denied local-server tests passed when rerun with local-port access;
 an earlier overlapping-build artifact issue was resolved by a clean sequential run.
 No unresolved workspace failures remain in that completed run.
@@ -16,7 +17,8 @@ Separate explicitly enabled integration runs established:
 
 | Pipeline | Executed evidence | Boundary |
 | --- | --- | --- |
-| GraphQL → TypeScript | Generated compilation and local GraphQL HTTP server; selections, errors/partial results, cancellation, injected subscriptions | No bundled network subscription transport |
+| GraphQL → TypeScript | Clean installed package, compilation and local GraphQL server; selections, errors/partial, scalar mappings, cancellation and injected subscriptions | No bundled network subscription transport or scalar codecs |
+| GraphQL → Rust | Clean `.crate` consumer, compilation and local server; selections, presence/nullability, partial/errors and transport failures | Custom scalars are JSON values; subscriptions unsupported |
 | Protobuf → Go gRPC | Two official-toolchain integration probes; local TCP unary/all streaming modes, errors/metadata/deadlines/cancellation/race checks and pinned upstream proto2 imports | Not editions or all old conformance extensions |
 | AsyncAPI → TypeScript/Kafka | Generated compilation and actual local Redpanda broker send/receive; keys/headers, invalid payloads, substitution and regeneration | Documented AsyncAPI 3.0/3.1 plaintext Kafka subset |
 | Arazzo → TypeScript | Generated compilation and local HTTP execution; checkout and pinned upstream source resolution | Sequential supported subset, no retries/actions/auth automation |
@@ -58,6 +60,37 @@ The source-size audit has three pre-existing failures: `crates/core/src/files.rs
 are byte-identical to `HEAD`; their line counts already exceed the recorded
 budgets there. Migration changes satisfy the ratchet without raising those budgets.
 See [output migration coverage](output-contract-migration.md).
+
+## GraphQL client completion checks
+
+[Final-source test record](verification-results/graphql-clients-2026-10-09.json)
+records counts, dependency versions, artifact/log hashes and audit boundaries.
+
+The focused TypeScript GraphQL suites pass **10 tests with ignored tests explicitly
+enabled**: six existing native-client checks, two packaged-client checks and two
+scalar mapping checks. Dependencies are pinned to TypeScript **5.9.3** and GraphQL
+**16.14.2**. The scalar fixture initially expected an incorrect `complete` result
+kind; it was corrected to the existing `success` API and its two tests pass.
+
+Package checks use `npm pack`, an offline install into a clean consumer, strict
+compilation through package exports and execution against a local GraphQL server.
+They cover queries/mutations, selected fields, variables/defaults, nullability,
+partial data/errors, HTTP/malformed-response/network/cancellation failures,
+customization and deterministic regeneration. Scalar tests exercise independent
+input/output wire types against real server-side scalar coercion, without adding
+client-side codecs. The updated CLI example generates, compiles, runs and passes
+`--check` with a mapped `DateTime` field.
+
+Rust GraphQL explicitly enabled tests pass **2/2**. They pack a `.crate` archive,
+unpack it into a clean consumer, compile and run against the pinned local GraphQL
+server. Omitted/null/value input states, defaults, conditional results, required
+nullable fields, partial/errors and network/HTTP/protocol/decoding failures are
+covered, including second-variant field retention without `__typename` and
+negative consumer compilation checks. The npm suite passes **67 tests, zero skips**
+with the current addon; focused native CLI tests cover TypeScript, Rust and mixed
+packages. Clean npm tarball installation also passes using a locally built native addon
+override; this does not verify unpublished binaries for every platform. The final workspace counts above include this increment. Runtime tests enabled
+separately are not counted as passes in the default suite.
 
 ## Historical HTTP integration evidence (8 October 2026)
 

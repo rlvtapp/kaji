@@ -11,7 +11,10 @@
       "language": "typescript",
       "path": "client",
       "name": "@example/graphql-person",
-      "plugins": [{ "name": "graphql" }]
+      "plugins": [{
+        "name": "graphql",
+        "scalars": { "DateTime": { "input": "string", "output": "string" } }
+      }]
     }
   ]
 }

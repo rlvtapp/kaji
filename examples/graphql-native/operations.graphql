@@ -1,5 +1,5 @@
 query PersonName($id: ID!) {
-  person(id: $id) { id name }
+  person(id: $id) { id name joinedAt }
 }
 mutation RenamePerson($id: ID!, $name: String!) {
   rename(id: $id, name: $name) { id name }

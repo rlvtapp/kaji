@@ -5,6 +5,7 @@ export async function runConsumer(endpoint) {
   const transport = createGraphqlHttpTransport(endpoint);
   const first = await PersonName(transport, { id: '1' });
   assert.equal(first.kind, 'success');
+  assert.equal(first.data.person.joinedAt, '2026-10-09T00:00:00Z');
   console.log('Query:', first.data.person);
 
   const renamed = await RenamePerson(transport, { id: '1', name: 'Grace' });

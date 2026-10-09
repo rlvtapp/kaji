@@ -2,7 +2,9 @@
 
 Updated on **2026-10-09**. Native protocol work has its own
 [implemented pipeline matrix and remaining checklist](native-pipelines.md#remaining-work).
-The `alpha-2` additions are unreleased; the fresh frozen-build HTTP corpus sweep is pending. Checked items are delivered; unchecked items retain
+The alpha.2 additions are merged into `main` and unreleased. The frozen-build
+HTTP corpus is complete (2,050 effective passes); corpus coverage of the final
+migrated binaries remains open. Checked items are delivered; unchecked items retain
 remaining work. This backlog covers SDKs, framework helpers and generated artifacts. The
 [compatibility results](guru-compatibility.md) remain the source of truth for
 native compilation; the [feature catalog](features.md) describes current support.

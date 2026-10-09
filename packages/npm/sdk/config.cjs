@@ -32,6 +32,10 @@ function defineConfig(config) {
     throw new TypeError('Poolster config must be an object');
   }
   validateInput(config.input);
+  if (config.input.plugin?.format === 'graphql') {
+    if (config.input.operations != null && (!Array.isArray(config.input.operations) || config.input.operations.some((file) => typeof file !== 'string' || !file))) throw new TypeError('GraphQL operations must be nonempty file paths');
+    if (config.input.subscriptions != null && typeof config.input.subscriptions !== 'boolean') throw new TypeError('GraphQL subscriptions must be boolean');
+  }
   if (!config.input.plugin && (typeof config.name !== 'string' || !config.name.trim())) throw new TypeError('name is required');
   if (!config.input.plugin && (typeof config.version !== 'string' || !config.version.trim())) throw new TypeError('version is required');
   const destination = typeof config.output === 'string' ? config.output : config.output?.path;
@@ -111,7 +115,7 @@ async function loadConfig(configFile) {
   return {
     ...config,
     input: typeof config.input === 'string' ? resolve(config.input) : config.input.plugin
-      ? { ...config.input, path: resolve(config.input.path) }
+      ? { ...config.input, path: resolve(config.input.path), ...(config.input.operations ? { operations: config.input.operations.map(resolve) } : {}) }
       : { artifacts: resolve(config.input.artifacts) },
     output: typeof config.output === 'string' ? resolve(config.output) : { ...config.output, path: resolve(config.output.path) },
     ...(config.compiler ? { compiler: resolve(config.compiler) } : {}),

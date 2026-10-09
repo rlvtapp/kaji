@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "scope": "GraphQL TypeScript scalar mappings, Rust generation, CLI/npm wiring and packaged clients; commit only, no publication",
+  "date": "2026-10-09",
+  "source_sha256": "0e08e33289037197f77a97dd470a1bca41ad4f41d5fe5a9598da2f397ca41c62",
+  "source_file_count": 704,
+  "results": {
+    "workspace": {
+      "passed": 798,
+      "failed": 0,
+      "ignored": 141
+    },
+    "typescript_graphql_explicit": {
+      "passed": 10,
+      "failed": 0,
+      "ignored": 0
+    },
+    "rust_graphql_explicit": {
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    "npm_sdk_final_addon": {
+      "passed": 67,
+      "failed": 0,
+      "skipped": 0
+    },
+    "native_cli_focused": {
+      "passed": 13
+    },
+    "clippy": "workspace/all-targets/locked/-D warnings passed",
+    "format": "cargo fmt --all --check passed",
+    "npm_package_generator": "--check passed",
+    "cli_mixed_languages": {
+      "languages": [
+        "typescript",
+        "rust"
+      ],
+      "skipped": []
+    }
+  },
+  "dependencies": {
+    "typescript": "5.9.3",
+    "graphql": "16.14.2",
+    "generated_rust": {
+      "reqwest": "0.12.28",
+      "serde": "1.0.229",
+      "serde_json": "1.0.151"
+    }
+  },
+  "logs_sha256": {
+    "/private/tmp/poolster-graphql-final-workspace-unrestricted.log": "48d7786198b27e8bf3b426b0cdd9e4563ac5c0d26317862d32492a35d4f64091",
+    "/private/tmp/poolster-graphql-final-clippy.log": "293da100ffbd723cfdc637821544f78c071249bb160dca5d32034ef2f9fdd001",
+    "/private/tmp/poolster-graphql-final-ts.log": "bc5044deae4ddfaadf2a16754cad7e4021e560ca54c32a9974fabd82ee6d98c7",
+    "/private/tmp/poolster-graphql-final-rust.log": "a5adc17bef402aa72be5cb425de3f770ed3579c17055a5742b512f63f5d8b810",
+    "/private/tmp/poolster-graphql-final-npm.log": "49c06a264890b2665df8ebb21630c5c806c3393c5fd063c3a197255875933344",
+    "/private/tmp/poolster-graphql-cli-mixed-final.log": "d73bdd95b0c7d87958a782c75958882a2e9c95b7a8651e01349a0b7f003cdbbd"
+  },
+  "native_addon_sha256": "b032dd0475819ca0d226a8ebb81032bb922050d7e9ecdc0ea891d0aa94b53fc4",
+  "commands": [
+    "CARGO_INCREMENTAL=0 GOCACHE=/private/tmp/poolster-go-validation-cache POOLSTER_OPENAPI_BIN=/private/tmp/poolster-alpha2-guru-bin/poolster-openapi cargo test --workspace --locked --no-fail-fast --target-dir /private/tmp/poolster-openapi-validation",
+    "cargo clippy --workspace --all-targets --locked -- -D warnings",
+    "cargo test -p poolster-plugin-typescript --test graphql_native --test graphql_release --test graphql_scalars --locked -- --include-ignored",
+    "cargo test -p poolster-plugin-rust --test graphql_native --locked -- --include-ignored",
+    "node --test --test-concurrency=1 packages/npm/sdk/test/*.test.cjs"
+  ],
+  "audit_notes": [
+    "Initial sandboxed workspace attempt failed eight existing Go/Rust runtime tests on local-port permissions and registry DNS; unrestricted full suite passed without source fixes.",
+    "New scalar runtime fixture initially expected complete instead of existing success discriminator; corrected fixture and final explicit suite passed.",
+    "Clean npm wrapper installation used locally built native addon override, not unpublished platform artifacts.",
+    "New source modules pass size ratchet; three unchanged pre-existing violations remain in core/files.rs, cli/sdk_install.rs and cli/sdk_automation.rs.",
+    "The completed 205x10 HTTP corpus used earlier frozen binaries; this increment does not claim a final-source full corpus run."
+  ],
+  "limitations": [
+    "TS scalar mappings describe JSON wire types and do not install codecs.",
+    "Rust custom scalars use serde_json::Value; no Rust mappings or subscriptions.",
+    "Rust ambiguous structural abstract variants require selecting __typename.",
+    "No bundled subscription network transport or incremental delivery.",
+    "General Node contract/block hook dispatch remains open."
+  ]
+}

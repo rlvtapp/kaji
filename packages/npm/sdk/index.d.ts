@@ -144,8 +144,18 @@ export interface InputReport {
   data?: unknown;
 }
 
+export interface GraphqlScalarMapping { input: string; output: string; }
+export interface NativeInputConfig {
+  path: string; plugin: NativeInputPlugin | JsInputPlugin;
+  /** GraphQL operation files, resolved beside a loaded config file. */
+  operations?: string[];
+  /** TypeScript wire types; does not perform runtime scalar conversion. */
+  scalars?: Record<string, GraphqlScalarMapping>;
+  subscriptions?: boolean;
+}
+
 export interface PoolsterConfig {
-  input: string | { artifacts: string } | { path: string; plugin: NativeInputPlugin | JsInputPlugin };
+  input: string | { artifacts: string } | NativeInputConfig;
   output: string | { path: string };
   name?: string;
   version?: string;
@@ -165,6 +175,7 @@ export interface GenerateResult {
   files: OutputFile[];
   changes: OutputChanges;
   output: string;
+  skipped?: Array<{ path: string; language: string; reason: string }>;
 }
 
 export function defineConfig<T extends PoolsterConfig>(config: T): T;

@@ -75,6 +75,7 @@ impl Contract for Client {
 }
 #[derive(Default)]
 pub struct Workspace {
+    pub(crate) graphql_package: Option<crate::graphql::NativePackage>,
     pub(crate) http_api: Option<poolster_core::Api>,
     pub(crate) operation_tests: bool,
     pub(crate) webhooks: bool,
@@ -87,6 +88,9 @@ pub struct Workspace {
 }
 impl Workspace {
     pub fn finalize(cx: &mut FinalizeContext<'_, Rust>) -> Result<()> {
+        if let Some(package) = cx.workspace.graphql_package.take() {
+            return package.finalize(cx);
+        }
         let selected_api = cx.workspace.http_api.clone();
         let api = selected_api.as_ref().unwrap_or(cx.api);
         if !cx.workspace.models && !cx.workspace.operations {

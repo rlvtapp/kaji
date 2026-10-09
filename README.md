@@ -1,5 +1,9 @@
 <h1><img src="docs/assets/banner.svg" alt="Poolster: one contract, lots of possibilities, your code" width="100%"></h1>
 
+> [!IMPORTANT]
+> **Poolster is under active development. OpenAPI generation is ready to use; we're currently expanding GraphQL support.**
+> Other native pipelines have varying levels of support. Check the [plugin support matrix](docs/plugin-support-matrix.md) for tested outputs, limitations and remaining work.
+
 **One contract. Lots of possibilities. Your code.**
 
 Poolster turns API contracts into SDKs, CLIs, docs and tools. Pick your plugins,

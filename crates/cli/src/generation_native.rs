@@ -1,5 +1,5 @@
 //! Native generation shares package assembly and generated-file ownership with HTTP.
-use super::native_profiles::{compatible as package_compatible, pipeline};
+use super::native_profiles::{compatible as package_compatible, language_compatible, pipeline};
 use super::*;
 
 fn skipped_outputs(options: &Generate, input: &NativeInputConfig) -> Vec<serde_json::Value> {
@@ -15,7 +15,7 @@ fn skipped_outputs(options: &Generate, input: &NativeInputConfig) -> Vec<serde_j
             "plugins": package.plugins.iter().map(|plugin| plugin.name.as_str()).collect::<Vec<_>>(), "reason": reason
         })).collect()
     } else {
-        options.languages.iter().filter(|language| pipeline(&input.format).is_none_or(|(target,_)| language.as_str() != target)).map(|language| serde_json::json!({
+        options.languages.iter().filter(|language| !language_compatible(&input.format, language)).map(|language| serde_json::json!({
             "input_format": input.format, "package": language, "language": language,
             "plugins": [pipeline(&input.format).filter(|(target,_)|language.as_str()==*target).map(|(_,plugin)|plugin).unwrap_or("sdk")], "reason": reason
         })).collect()
@@ -55,7 +55,6 @@ pub(super) fn generate(options: Generate) -> Result<()> {
         return report_empty();
     }
     let compatible = |package: &PackageConfig| package_compatible(&input.format, package);
-    let (target_language, _) = pipeline(&input.format).expect("supported native format");
     if let Some(packages) = &options.config_packages {
         ensure!(
             !packages.is_empty(),
@@ -73,10 +72,10 @@ pub(super) fn generate(options: Generate) -> Result<()> {
     } else if !options
         .languages
         .iter()
-        .any(|language| language == target_language)
+        .any(|language| language_compatible(&input.format, language))
     {
         eprintln!(
-            "warning: {} input supports only {target_language}; no files exported",
+            "warning: {} input does not support the requested output languages; no files exported",
             input.format
         );
         return report_empty();
@@ -103,6 +102,13 @@ pub(super) fn generate(options: Generate) -> Result<()> {
         "native generation does not support OpenAPI client-style or Go worker options"
     );
     ensure!(
+        input.format != "graphql"
+            || options.config_packages.is_some()
+            || !options.languages.iter().any(|language| language == "rust")
+            || options.typescript_transport.is_none(),
+        "Rust GraphQL does not support TypeScript transport options"
+    );
+    ensure!(
         input.format == "graphql" || options.typescript_transport.is_none(),
         "HTTP TypeScript transport options apply only to GraphQL native generation"
     );
@@ -113,7 +119,7 @@ pub(super) fn generate(options: Generate) -> Result<()> {
     for language in options
         .languages
         .iter()
-        .filter(|language| language.as_str() != target_language)
+        .filter(|language| !language_compatible(&input.format, language))
     {
         eprintln!(
             "warning: {} input is incompatible with {language}; package skipped",
@@ -196,7 +202,7 @@ pub(super) fn generate(options: Generate) -> Result<()> {
         for language in options
             .languages
             .iter()
-            .filter(|language| language.as_str() != target_language)
+            .filter(|language| !language_compatible(&input.format, language))
         {
             tree.preserve_owned_prefix(&options.output, Path::new(language))?;
         }

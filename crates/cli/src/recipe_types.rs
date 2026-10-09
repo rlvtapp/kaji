@@ -282,6 +282,8 @@ pub(super) struct PluginConfig {
     pub(super) preserve_presence: Option<bool>,
     pub(super) transport: Option<String>,
     pub(super) subscriptions: Option<bool>,
+    #[serde(default)]
+    pub(super) scalars: BTreeMap<String, poolster::ts::GraphqlScalarMapping>,
     pub(super) surface: Option<String>,
     pub(super) client_name: Option<String>,
     pub(super) group_by_tag: Option<bool>,

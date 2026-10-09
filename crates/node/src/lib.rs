@@ -1,5 +1,8 @@
 //! Node-API boundary for Poolster's normalized contract and safe output tree.
 
+pub mod graphql;
+pub mod materialize;
+
 use std::path::Path;
 
 use anyhow::{Context, Result as AnyResult, bail};
@@ -381,53 +384,4 @@ impl Task for GenerateSdk {
 #[napi]
 pub fn generate_sdk(contract: String, packages: String) -> AsyncTask<GenerateSdk> {
     AsyncTask::new(GenerateSdk { contract, packages })
-}
-
-pub struct Materialize {
-    files: String,
-    output: String,
-    write: bool,
-}
-
-impl Task for Materialize {
-    type Output = String;
-    type JsValue = String;
-
-    fn compute(&mut self) -> Result<Self::Output> {
-        let files: Vec<OutputFile> = serde_json::from_str(&self.files).map_err(napi_error)?;
-        let mut tree = GeneratedTree::default();
-        for file in files {
-            let path = file.path.clone();
-            let generated = GeneratedFile::new(&path, file.contents).map_err(napi_error)?;
-            if file.preserve_existing {
-                tree.insert_custom(generated).map_err(napi_error)?;
-            } else {
-                tree.insert(generated).map_err(napi_error)?;
-            }
-            if let Some(owner) = file.owner {
-                tree.set_owner(path, owner).map_err(napi_error)?;
-            }
-        }
-        let output = Path::new(&self.output);
-        let changes = tree.check(output).map_err(napi_error)?;
-        if self.write {
-            tree.write_to(output)
-                .with_context(|| format!("write generated output to {}", output.display()))
-                .map_err(napi_anyhow)?;
-        }
-        serde_json::to_string(&changes).map_err(napi_error)
-    }
-
-    fn resolve(&mut self, _: Env, output: Self::Output) -> Result<Self::JsValue> {
-        Ok(output)
-    }
-}
-
-#[napi]
-pub fn materialize(files: String, output: String, write: bool) -> AsyncTask<Materialize> {
-    AsyncTask::new(Materialize {
-        files,
-        output,
-        write,
-    })
 }

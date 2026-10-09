@@ -236,3 +236,24 @@ npm test --prefix packages/npm/sdk
 The packages are prepared in this repository; npm installation requires
 publishing them first. Initial native targets are macOS ARM64/x64, Linux x64
 glibc, and Windows x64.
+
+### Native GraphQL generation
+
+The existing TypeScript plugin also generates GraphQL packages. Supply a schema and operation documents:
+
+```js
+import { defineConfig } from '@relevate/poolster';
+import { inputGraphql } from '@relevate/poolster-input-graphql';
+import { pluginTypeScript } from '@relevate/poolster-plugin-typescript';
+export default defineConfig({
+  input: { path: './schema.graphql', plugin: inputGraphql(),
+    operations: ['./operations.graphql'],
+    scalars: { DateTime: { input: 'string', output: 'string' } } },
+  output: './generated',
+  plugins: [pluginTypeScript({ path: 'client' })],
+});
+```
+
+Loaded config files resolve operation paths beside the config. Direct API calls resolve paths from the current directory. Custom scalar mappings describe input and result wire types; they do not convert values at runtime. Unmapped scalars use `unknown`. Subscriptions require `input.subscriptions: true` and an injected subscription transport. HTTP SDK customization options and auxiliaries are rejected for GraphQL. JavaScript hooks receive the input inspection report and emitted files; this API does not expose native typed graph hooks. Unsupported language packages appear in `result.skipped`, warn, and preserve existing owned outputs.
+
+Rust GraphQL output uses the existing `pluginRust()` package. Its initial custom scalar representation is `serde_json::Value`; scalar mappings, subscriptions, and transport options are rejected. Use separate configurations when TypeScript needs scalar mappings alongside Rust output.

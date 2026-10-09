@@ -21,7 +21,7 @@ const cases = [
 test('Rust input providers are registered and inspect native contracts from Node', async () => {
   const registered = availableInputPlugins();
   assert.deepEqual(registered.map((item) => item.format).sort(),
-    ['arazzo', 'asyncapi', 'capnproto', 'graphql', 'protobuf']);
+    ['arazzo', 'asyncapi', 'capnproto', 'graphql', 'openapi', 'protobuf']);
   for (const [format, factory, relative] of cases) {
     if (format === 'capnproto' && spawnSync('capnp', ['--version']).error) {
       await assert.rejects(
@@ -60,13 +60,13 @@ test('Rust GraphQL input and JavaScript output plugin generate and regenerate to
   assert.deepEqual(second.changes, { added: [], modified: [], removed: [] });
 });
 
-test('native input rejects HTTP SDK consumers without a matching contract', async (t) => {
+test('GraphQL generation requires operation documents before writing', async (t) => {
   const dir = await temporary(t);
   await assert.rejects(generate({
     input: { path: path.join(root, cases[0][2]), plugin: bundle.inputGraphql() },
     output: path.join(dir, 'out'),
     plugins: [bundle.pluginTypeScript()],
-  }), /did not publish poolster\.http-api/);
+  }), /operation|GraphQL/i);
   await assert.rejects(fs.stat(path.join(dir, 'out')), { code: 'ENOENT' });
 });
 

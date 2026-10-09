@@ -21,8 +21,8 @@ Source -> InputPlugin -> InputContract -> InputProvider<C> -> Plugin<L> -> files
 All six bundled inputs publish native contracts and available building blocks.
 OpenAPI publishes `AdaptedApi` for existing HTTP generators. GraphQL operations,
 RPC services, events and workflows use their own owned contracts, retaining native
-documents for details outside them. The `alpha-2` working tree implements GraphQL
-→ TypeScript, Protobuf → Go gRPC, AsyncAPI → TypeScript/Kafka and Arazzo → TypeScript
+documents for details outside them. The unreleased alpha.2 implementation supports GraphQL
+→ TypeScript/Rust through CLI and npm, Protobuf → Go gRPC, AsyncAPI → TypeScript/Kafka and Arazzo → TypeScript
 runners; these additions are not an alpha.2 release yet. Cap’n Proto output is open.
 See the [support matrix](plugin-support-matrix.md), [remaining work](native-pipelines.md#remaining-work)
 and [contracts/block flow](input-contract-flow.md).

@@ -27,3 +27,8 @@ npm run demo
 Expected output includes the query result for Ada, the mutation result for Grace, partial data with `nickname: null`, and `Nickname service unavailable`. HTTP failures throw `GraphqlHttpError`; malformed response envelopes throw `GraphqlProtocolError`. GraphQL application errors return `success`, `partial`, or `error` envelopes.
 
 `npm run server` also starts the same server at http://127.0.0.1:4000 for manual experiments. This example exercises HTTP query and mutation generation. Network subscriptions require a separately supplied transport and are outside this example.
+
+The recipe maps the custom `DateTime` scalar to `string` for both input and
+output. `PersonName` selects `joinedAt`, and the consumer checks its JSON string
+value. Mappings describe the wire representation; they do not parse dates or
+serialize application objects. Unconfigured custom scalars stay `unknown`.

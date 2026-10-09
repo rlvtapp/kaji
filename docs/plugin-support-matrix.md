@@ -1,9 +1,16 @@
 # Poolster plugin support matrix
 
-Audited **9 October 2026**, against the current **`alpha-2` working tree**.
+Audited **9 October 2026**, against the unreleased alpha.2 implementation in this checkout.
 Manifests still use `0.5.0-alpha.1`; the additions below are unreleased alpha.2
 work. This matrix describes implemented generation, not parser availability.
 For remaining work, start with the [native pipeline backlog](native-pipelines.md#remaining-work).
+
+GraphQL client work is verified for TypeScript and Rust. TypeScript supports
+separate input/output scalar mappings; Rust custom scalars currently retain JSON
+values. Both are wired through the CLI and existing npm language plugin packages.
+Packaged clients compile and execute against local GraphQL servers. These changes
+are not yet published; see the [TypeScript guide](graphql-typescript.md),
+[Rust guide](graphql-rust.md) and [verification](verification.md#graphql-client-completion-checks).
 
 ✅ = implemented for the stated contract; — = no bundled generation support.
 A check does not imply support for every feature of a specification. Target-specific
@@ -22,7 +29,7 @@ limitations still apply. GraphQL is a separate contract even when its transport 
 | Vue Query | TypeScript query hooks | ✅ | — | — | — | — | — |
 | SWR | TypeScript query hooks | ✅ | — | — | — | — | — |
 | Go | HTTP SDK; official Protobuf messages and gRPC clients/server interfaces | ✅ | — | ✅ | — | — | — |
-| Rust | Rust SDK | ✅ | — | — | — | — | — |
+| Rust | HTTP SDK; selection-specific GraphQL query/mutation client | ✅ | ✅ | — | — | — | — |
 | Python | Python SDK | ✅ | — | — | — | — | — |
 | Java | Java SDK | ✅ | — | — | — | — | — |
 | C# | C# SDK | ✅ | — | — | — | — | — |
@@ -41,7 +48,8 @@ The TypeScript output package contains several generators: `ts::sdk()` /
 `ts::types()` for HTTP, `ts::graphql()` for `GraphqlOperations`, `ts::asyncapi()`
 for Kafka `EventOperations`, and `ts::workflow()` for `WorkflowOperations`.
 These are generators within one plugin package, not separate language packages.
-Go similarly provides its HTTP SDK and `go::grpc()` for `RpcContract`.
+Go similarly provides its HTTP SDK and `go::grpc()` for `RpcContract`. Rust provides
+`rust::graphql()` for GraphQL and its existing HTTP generators in one language package.
 
 Zod, mocks and query-hook plugins still consume HTTP-generated contracts; adding a
 native TypeScript generator does not automatically make those helpers support it.
@@ -58,7 +66,7 @@ selection, block consumption, finalization and compatibility boundaries.
 | Input format | Parsing / inspection | Usable bundled output |
 | --- | :---: | --- |
 | OpenAPI | ✅ | HTTP output plugins above |
-| GraphQL SDL + operation documents | ✅ | TypeScript through Rust API / CLI |
+| GraphQL SDL + operation documents | ✅ | TypeScript and Rust through Rust API, CLI and npm entry points |
 | Protobuf proto2/proto3 | ✅ | Go messages and gRPC clients/server interfaces |
 | AsyncAPI 2.6 / 3.0 / 3.1 | ✅ | TypeScript Kafka for the supported 3.0/3.1 subset |
 | Arazzo 1.0.0 / 1.0.1 / 1.1.0 | ✅ | TypeScript sequential runners with resolved local OpenAPI sources |
@@ -90,29 +98,33 @@ unsupported features in an otherwise supported pipeline still fail explicitly.
 
 ## Verification and release checks
 
-Post-migration alpha.2 workspace check: **788 passed, 0 failed, 138 ignored**;
+Post-migration alpha.2 workspace check: **798 passed, 0 failed, 141 ignored**;
 formatting and workspace Clippy with warnings denied passed. Ignored tests are not passes.
 Selected external GraphQL, gRPC, Kafka and workflow integration tests were also
 run explicitly and passed; commands and boundaries are in [verification](verification.md).
 
 The pre-output-migration frozen-build **205 specs × 10 HTTP SDK targets** sweep
-is running. The post-migration full workspace check passed separately.
-It includes deterministic regeneration. Results are pending; the earlier
-[2,050-pass record](guru-compatibility.md) combines runs across fixes and is not
-proof of this alpha.2 working tree. The supplemental-reference regeneration harness has been fixed and tested;
-DigitalOcean passes the normal TypeScript/Go runner with unchanged output hashes.
-Original harness failures remain in the audit trail; other language retries continue.
+is complete: **2,050 effective passes**, including deterministic regeneration,
+after audited infrastructure retries. PHP used native syntax lint and emitted
+deprecation warnings in 140 contracts. These results do not establish endpoint
+runtime behavior or corpus coverage of the later output migration. The migrated
+workspace passed separately; final migrated-binary corpus coverage and clean
+installation checks of release artifacts remain open. Original infrastructure
+failures and successful retries remain in the audit trail. See
+[current verification](verification.md#current-alpha2-verification-9-october-2026).
 
 - [x] Existing OpenAPI snapshots and workspace tests pass.
 - [x] Provider substitution, typed downstream hooks and regeneration have focused tests.
-- [x] GraphQL → TypeScript generation and local-server execution.
+- [x] GraphQL → TypeScript and Rust generation, clean packaged consumers and local-server execution.
 - [x] Protobuf → Go official messages, gRPC clients/server interfaces and all streaming modes.
 - [x] AsyncAPI → TypeScript message models and Kafka producer/consumer for the documented subset.
 - [x] Arazzo → source-resolved sequential TypeScript runners and local integration tests.
 - [x] All six inputs expose whole contracts and optional standard block collections.
 - [x] Revision/provenance checks, completeness checks, typed hooks and opt-in deterministic symbol planning.
-- [ ] Finish and record the fresh alpha.2 frozen-build OpenAPI corpus sweep.
-- [ ] Broaden native protocol features and expose generation through the npm engine.
+- [x] Complete the frozen pre-output-migration OpenAPI corpus: 2,050 effective passes.
+- [ ] Run the corpus against final migrated binaries.
+- [x] GraphQL generation through existing TypeScript/Rust npm plugin packages.
+- [ ] Broaden native protocol features and expose other pipelines/general typed hooks through npm.
 - [ ] Cap’n Proto → Rust messages/capability RPC using the official toolchain.
 - [ ] Schema-level JSONPath overlays.
 - [ ] Audited Forge migration and a tested compatibility matrix.

@@ -1,6 +1,6 @@
 # Native generation in Poolster
 
-Audited **9 October 2026** against the unreleased `alpha-2` working tree.
+Audited **9 October 2026** against the unreleased alpha.2 implementation in this checkout.
 The manifests still carry `0.5.0-alpha.1`; this is implementation status, not a
 claim that the additions are already in that published release.
 
@@ -56,7 +56,7 @@ capabilities and release checklists.
 | Pipeline | Native parsing/inspection | Usable package generation | Remaining work |
 | --- | --- | --- | --- |
 | OpenAPI → existing languages | Existing compiler and adapter | Existing SDK pipelines preserved | Existing target-specific limits still apply |
-| GraphQL → TypeScript | Validated SDL and operation documents | First native pipeline in this change | See feature and verification details below |
+| GraphQL → TypeScript / Rust | Validated SDL and operation documents | Selected query/mutation clients; TypeScript scalar mappings and injected subscriptions | Runtime codecs, bundled subscriptions, introspection/imports, incremental delivery and other outputs |
 | Protobuf → Go gRPC | Proto2/proto3 descriptors, imports and RPC metadata | Official messages, clients and server interfaces; unary and all streaming directions | Editions, broader official fixture coverage and additional output languages |
 | AsyncAPI → TypeScript | 2.6/3.0/3.1 native document and message blocks | 3.0/3.1 JSON messages and Kafka producer/consumer | Types-only output, broader schemas/bindings, security and other brokers |
 | Arazzo → TypeScript | Native document and explicit local source resolution | Sequential HTTP runners with local workflow dependencies | Actions/retries, richer expressions/criteria and additional source types |
@@ -94,11 +94,11 @@ codecs are available, but typed Node hook dispatch is still follow-up work.
 | Results | Discriminated `success`, `partial`, `error` results preserve GraphQL errors, partial data and extensions |
 | Transport errors | HTTP failures throw `GraphqlHttpError`; malformed envelopes/JSON throw `GraphqlProtocolError` |
 | Subscriptions | Separately enabled, injected `SubscriptionTransport` yielding async results; no bundled WebSocket/SSE transport |
-| Custom scalars | Generated as `unknown`; application-specific scalar codecs/mappings are follow-up work |
+| Custom scalars | Separate input/output TypeScript mappings; defaults to `unknown`; no automatic runtime codecs |
 | Introspection/imports | Introspection JSON and schema imports are unsupported; supply complete SDL |
 | Executable extensions | Custom executable directives, defer/stream and operation/variable/fragment-definition directives are rejected |
 | TypeScript symbol names | Unsupported identifiers/collisions fail explicitly rather than emitting invalid code |
-| Node generation API | Existing parser inspection unchanged; this new usable output is exposed through Rust/CLI, not the npm configuration engine |
+| Node generation API | Schema + operation files generate TypeScript clients through the existing TypeScript plugin package; general typed Node hook dispatch remains open |
 
 ```json
 {
@@ -152,8 +152,30 @@ if (result.kind === 'success' || result.kind === 'partial') console.log(result.d
 if (result.kind !== 'success') console.error(result.errors);
 ```
 
-A complete [runnable example](../examples/graphql-native/README.md) includes a
+See the [GraphQL client guide](graphql-typescript.md) for configuration, scalar mappings
+and result handling. A complete [runnable example](../examples/graphql-native/README.md) includes a
 local GraphQL server and consumer that checks successful and partial results.
+
+## GraphQL → Rust
+
+`rust::graphql(Some(handle))` consumes the same owned `GraphqlOperations`
+contract, producing selected Serde result/variables types and async query/mutation
+functions. Generated packages use pinned Reqwest/Serde dependencies and a
+caller-provided HTTP client. Responses distinguish success, partial data/errors,
+and GraphQL errors; HTTP/network/protocol/decoding failures are separate.
+
+Nullable optional input and conditional-result fields preserve absent/null/value;
+optional non-null fields preserve absent/value. Required nullable results must be
+present. Custom scalars retain `serde_json::Value`, without codecs or scalar type
+mappings. Subscriptions are rejected. Structurally ambiguous abstract selections
+need `__typename`; untagged variants reject unknown fields rather than discard
+selected data. HTTP and GraphQL generators require separate Rust packages.
+
+A `.crate` archive is unpacked into a clean consumer, compiled and executed against
+a local GraphQL server. Tests cover variables/defaults, presence/nullability,
+queries/mutations, partial/errors, transport failures, abstract selections,
+regeneration and expected consumer compilation failures. See the
+[Rust client guide](graphql-rust.md).
 
 ## Protobuf → Go gRPC
 
@@ -237,7 +259,7 @@ servers. This does not establish support for the complete upstream OAuth workflo
 
 | Input | Package language | Recipe plugin name | Required configuration |
 | --- | --- | --- | --- |
-| GraphQL | `typescript` | `graphql` | `input.options.operation_files` |
+| GraphQL | `typescript` or `rust` | `graphql` | `input.options.operation_files`; scalar expressions and injected subscriptions are TypeScript-only |
 | Protobuf | `go` | `grpc` | Plugin `module`; toolchain paths if not on PATH; source `go_package` or plugin `go_packages` |
 | AsyncAPI | `typescript` | `asyncapi` | Supported Kafka servers or `input.options.broker` |
 | Arazzo | `typescript` | `workflow` | `input.options.workflow_sources` |
@@ -250,7 +272,18 @@ one input source, and existing `openapi` recipes remain valid.
 
 ## Remaining work
 
-These are implementation gaps, not claims of existing support:
+Completed foundation: contracts, optional blocks, typed hooks, provenance/revision
+checks, OpenAPI input extraction and first-party HTTP output migration. GraphQL →
+TypeScript, Protobuf → Go gRPC, AsyncAPI → TypeScript Kafka and Arazzo → TypeScript
+have usable, tested subsets described above.
+
+The frozen pre-output-migration HTTP corpus is **complete: 205 APIs × 10 languages,
+2,050 effective passes** for generation, native compilation or syntax checks and
+regeneration after recorded infrastructure retries. The migrated workspace passed
+**798 tests**, with **141 ignored**. PHP syntax lint reported deprecation warnings
+in 140 contracts; lint does not establish endpoint runtime behavior.
+
+These are the remaining implementation and release gaps:
 
 - [ ] **CAPNP-1:** Pin official capnp/capnpc and capnp-rpc; generate Rust messages
   and capability clients/server interfaces while preserving IDs, ordinals, unions,
@@ -261,19 +294,36 @@ These are implementation gaps, not claims of existing support:
   security support and failure tests before advertising them. Other brokers need
   their own tested transport adapter.
 - [ ] **WORKFLOW-1:** Add retries/actions and richer expressions/criteria with
-  explicit side-effect/cancellation semantics and local execution tests.
+  explicit side-effect/cancellation semantics and local execution tests; extend
+  authentication and nested workflows.
 - [ ] **RPC-1:** Assess editions/toolchain alignment and additional RPC outputs;
   broaden pinned upstream fixtures without treating parser support as generation support.
-- [ ] **GRAPHQL-1:** Scalar mappings/codecs, introspection/imports, incremental
+- [x] **GRAPHQL-SCALARS:** Separate input/output TypeScript scalar mappings,
+  preserving nullability and presence; runtime codecs remain unsupported.
+- [ ] **GRAPHQL-1:** Runtime scalar codecs, introspection/imports, incremental
   delivery and bundled subscription transport; each needs independent runtime tests.
+- [x] **GRAPHQL-RUST:** Selection-specific Rust query/mutation clients with
+  presence/nullability, explicit partial/errors, Reqwest transport and clean
+  package compilation/local-server execution; CLI and npm entry points wired.
+- [ ] **GRAPHQL-LANGUAGES:** Add GraphQL client generators to remaining language output
+  packages using the existing `GraphqlOperations` contract. Each output needs
+  selection-specific variables/results, its own transport/error/partial-result
+  representation, scalar mappings and local-server compile/runtime tests.
+  Current outputs other than TypeScript and Rust support HTTP, not GraphQL. Prioritize one language
+  at a time; do not infer GraphQL support from an existing HTTP SDK.
 - [ ] **NODE-1:** Expose native generation and versioned typed hook envelopes through
-  the npm engine; current wrappers provide inspection, not the Rust/CLI pipelines.
+  the npm engine; GraphQL client generation is wired separately, but this does not
+  provide general contract/block hook dispatch for every native pipeline.
 - [ ] **COMPOSE-1:** Multi-input recipes with explicit bindings; preserve current
   single-input recipes. Do not auto-parallelize until shared writes/contracts are planned.
 - [ ] **SYMBOL-1:** Migrate existing generators to shared two-phase deterministic
   naming, proving stable output across plugin registration order and regeneration.
-- [ ] **VERIFY-1:** Finish the frozen alpha.2 205×10 HTTP corpus sweep, classify
-  harness failures separately, and record direct regeneration confirmations.
+- [x] **VERIFY-1:** Complete the frozen pre-output-migration 205×10 HTTP corpus
+  sweep, classify infrastructure failures separately and confirm regeneration.
+- [ ] **VERIFY-2:** Run the same corpus against the final migrated binaries;
+  keep this distinct from the completed frozen-build run.
+- [ ] **HTTP-1:** Address PHP optional-before-required deprecation warnings and
+  strengthen generated HTTP runtime checks beyond compilation/syntax lint.
 - [ ] **RELEASE-1:** Set alpha.2 versions, verify built artifacts/installations and
   publish only after the final release checks.
 

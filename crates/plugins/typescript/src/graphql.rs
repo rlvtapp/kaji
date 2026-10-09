@@ -1,4 +1,6 @@
 //! Selection-specific SDKs consume Poolster contracts rather than parser ASTs.
+mod render;
+mod scalars;
 use crate::TypeScript;
 use anyhow::{Result, bail};
 use poolster_core::{
@@ -6,6 +8,8 @@ use poolster_core::{
     engine::{Contract, Handle, Meta, Plugin, PluginContext, Provision, Requirement},
     native::{GraphqlOperationKind, GraphqlOperations, ModelField, ModelKind, ModelType},
 };
+use render::{render_fields, render_type};
+pub use scalars::GraphqlScalarMapping;
 use std::{collections::BTreeMap, fmt::Write, path::PathBuf};
 /// Actual emitted GraphQL operation symbols for downstream generation plugins.
 #[derive(Clone, Debug)]
@@ -29,15 +33,26 @@ pub struct Graphql {
     meta: Meta,
     provider: Option<Handle<GraphqlOperations>>,
     subscriptions: bool,
+    scalars: BTreeMap<String, GraphqlScalarMapping>,
 }
 pub fn graphql(provider: Option<Handle<GraphqlOperations>>) -> Graphql {
     Graphql {
         meta: Meta::new(),
         provider,
         subscriptions: false,
+        scalars: BTreeMap::new(),
     }
 }
 impl Graphql {
+    /// Map a custom scalar's input and output wire types without installing codecs.
+    pub fn scalar(mut self, name: impl Into<String>, mapping: GraphqlScalarMapping) -> Self {
+        self.scalars.insert(name.into(), mapping);
+        self
+    }
+    pub fn scalars(mut self, mappings: BTreeMap<String, GraphqlScalarMapping>) -> Self {
+        self.scalars.extend(mappings);
+        self
+    }
     pub fn handle(&self) -> Handle<GraphqlClient> {
         self.meta.handle()
     }
@@ -69,6 +84,7 @@ impl Plugin<TypeScript> for Graphql {
     }
     fn generate(&self, cx: &mut PluginContext<'_, TypeScript>) -> Result<()> {
         let contract = cx.inputs.get::<GraphqlOperations>()?;
+        scalars::validate_mappings(&self.scalars, contract)?;
         if contract.operations.is_empty() {
             bail!("GraphQL generation requires operation documents");
         }
@@ -104,7 +120,11 @@ impl Plugin<TypeScript> for Graphql {
         }
         for (name, fields) in &contract.input_objects {
             identifier(name)?;
-            writeln!(out, "export type {name} = {};", render_fields(fields))?;
+            writeln!(
+                out,
+                "export type {name} = {};",
+                render_fields(fields, &self.scalars, true)
+            )?;
             if !names.insert(name.clone()) {
                 bail!("GraphQL TypeScript symbol collision: {name}");
             }
@@ -138,9 +158,13 @@ impl Plugin<TypeScript> for Graphql {
             writeln!(
                 out,
                 "export type {variables} = {};",
-                render_fields(&op.variables)
+                render_fields(&op.variables, &self.scalars, true)
             )?;
-            writeln!(out, "export type {result} = {};", render_type(&op.result))?;
+            writeln!(
+                out,
+                "export type {result} = {};",
+                render_type(&op.result, &self.scalars, false)
+            )?;
             let doc = serde_json::to_string(&op.document)?;
             let name = serde_json::to_string(&op.name)?;
             if op.kind == GraphqlOperationKind::Subscription {
@@ -250,53 +274,6 @@ fn identifier(value: &str) -> Result<()> {
     }
     Ok(())
 }
-fn render_fields(fields: &[ModelField]) -> String {
-    let mut out = String::from("{ ");
-    for f in fields {
-        write!(
-            out,
-            "{}{}: {}; ",
-            serde_json::to_string(&f.name).unwrap(),
-            if f.optional { "?" } else { "" },
-            render_type(&f.ty)
-        )
-        .unwrap();
-    }
-    out.push('}');
-    out
-}
-fn render_type(ty: &ModelType) -> String {
-    let value = match &ty.kind {
-        ModelKind::Scalar(s) => match s.as_str() {
-            "Int" | "Float" => "number",
-            "String" | "ID" => "string",
-            "Boolean" => "boolean",
-            _ => "unknown",
-        }
-        .into(),
-        ModelKind::Enum(values) => values
-            .iter()
-            .map(|v| serde_json::to_string(v).unwrap())
-            .collect::<Vec<_>>()
-            .join(" | "),
-        ModelKind::Literal(value) => serde_json::to_string(value).unwrap(),
-        ModelKind::Named(name) => name.clone(),
-        ModelKind::List(item) => format!("Array<{}>", render_type(item)),
-        ModelKind::Object(fields) => render_fields(fields),
-        ModelKind::Union(types) if types.is_empty() => "never".into(),
-        ModelKind::Union(types) => types
-            .iter()
-            .map(render_type)
-            .collect::<Vec<_>>()
-            .join(" | "),
-    };
-    if ty.nullable {
-        format!("({value}) | null")
-    } else {
-        value
-    }
-}
-
 fn validate_type(ty: &ModelType, contract: &GraphqlOperations) -> Result<()> {
     match &ty.kind {
         ModelKind::Named(name) => {
@@ -355,10 +332,14 @@ mod tests {
             .is_err()
         );
         assert_eq!(
-            render_type(&ModelType {
-                nullable: false,
-                kind: ModelKind::Union(vec![])
-            }),
+            render_type(
+                &ModelType {
+                    nullable: false,
+                    kind: ModelKind::Union(vec![])
+                },
+                &BTreeMap::new(),
+                false
+            ),
             "never"
         );
     }

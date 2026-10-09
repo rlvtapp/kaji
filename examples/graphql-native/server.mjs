@@ -6,7 +6,7 @@ import { graphql, buildSchema } from 'graphql';
 export function createGraphqlServer() {
   const schema = buildSchema(readFileSync(new URL('./schema.graphql', import.meta.url), 'utf8'));
   let name = 'Ada';
-  const person = id => ({ id, name, nickname() { throw new Error('Nickname service unavailable'); } });
+  const person = id => ({ id, name, joinedAt: '2026-10-09T00:00:00Z', nickname() { throw new Error('Nickname service unavailable'); } });
   const rootValue = {
     person: ({ id }) => person(id),
     rename: ({ id, name: next }) => { name = next; return person(id); },

@@ -5,7 +5,7 @@ pub use asyncapi::{AsyncApi, KafkaClient, KafkaOperationSymbols, asyncapi};
 mod workflow;
 pub use workflow::{WorkflowClient, WorkflowRunner, workflow};
 mod graphql;
-pub use graphql::{Graphql, GraphqlClient, GraphqlOperationSymbols, graphql};
+pub use graphql::{Graphql, GraphqlClient, GraphqlOperationSymbols, GraphqlScalarMapping, graphql};
 mod oauth;
 pub use oauth::{OAuth, oauth};
 mod webhooks;

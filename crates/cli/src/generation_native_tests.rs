@@ -190,3 +190,99 @@ fn protobuf_native_flags_and_recipe_tool_paths_are_explicit() {
     assert_eq!(tools.protoc, Some(PathBuf::from("/recipe/bin/protoc")));
     assert_eq!(tools.protoc_gen_go, Some(PathBuf::from("protoc-gen-go")));
 }
+
+#[test]
+fn graphql_recipe_scalar_mapping_reaches_generated_selection() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = recipe(
+        directory.path(),
+        serde_json::json!([{"language":"typescript","path":"sdk","plugins":[{"name":"graphql","scalars":{"DateTime":{"input":"string","output":"string"}}}]}]),
+    );
+    std::fs::write(
+        directory.path().join("schema.graphql"),
+        "scalar DateTime\ntype Query { joinedAt: DateTime! }",
+    )
+    .unwrap();
+    std::fs::write(
+        directory.path().join("operations.graphql"),
+        "query Joined { joinedAt }",
+    )
+    .unwrap();
+    generate_from_config(&path, ColorChoice::Never, false, false).unwrap();
+    let generated =
+        std::fs::read_to_string(directory.path().join("generated/sdk/graphql.ts")).unwrap();
+    assert!(generated.contains("\"joinedAt\": (string)"));
+    generate_from_config(&path, ColorChoice::Never, true, false).unwrap();
+}
+
+#[test]
+fn graphql_rust_recipe_generates_without_http_adaptation() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = recipe(
+        directory.path(),
+        serde_json::json!([{"language":"rust","path":"client","name":"graphql_client","plugins":[{"name":"graphql"}]}]),
+    );
+    generate_from_config(&path, ColorChoice::Never, false, false).unwrap();
+    assert!(
+        directory
+            .path()
+            .join("generated/client/Cargo.toml")
+            .exists()
+    );
+    generate_from_config(&path, ColorChoice::Never, true, false).unwrap();
+}
+
+#[test]
+fn graphql_rust_recipe_rejects_typescript_scalar_options() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = recipe(
+        directory.path(),
+        serde_json::json!([{"language":"rust","path":"client","plugins":[{"name":"graphql","scalars":{"DateTime":{"input":"string","output":"string"}}}]}]),
+    );
+    let error = generate_from_config(&path, ColorChoice::Never, false, false).unwrap_err();
+    assert!(error.to_string().contains("Rust GraphQL scalar mappings"));
+    assert!(!directory.path().join("generated").exists());
+}
+
+#[test]
+fn direct_graphql_generates_rust_and_mixed_languages_without_skips() {
+    for languages in ["rust", "typescript,rust"] {
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::write(
+            directory.path().join("schema.graphql"),
+            "type Query { hello: String! }",
+        )
+        .unwrap();
+        std::fs::write(
+            directory.path().join("operations.graphql"),
+            "query Hello { hello }",
+        )
+        .unwrap();
+        let args = vec![
+            OsString::from("generate"),
+            directory.path().join("schema.graphql").into_os_string(),
+            OsString::from("--input-format"),
+            OsString::from("graphql"),
+            OsString::from("--operation"),
+            directory.path().join("operations.graphql").into_os_string(),
+            OsString::from("-o"),
+            directory.path().join("generated").into_os_string(),
+            OsString::from("-l"),
+            OsString::from(languages),
+        ];
+        let Action::Generate(options) = parse(args.into_iter()).unwrap() else {
+            panic!()
+        };
+        assert!(skipped_outputs(&options, options.native_input.as_ref().unwrap()).is_empty());
+        generate(*options).unwrap();
+        assert!(directory.path().join("generated/rust/Cargo.toml").exists());
+        if languages.contains("typescript") {
+            assert!(
+                directory
+                    .path()
+                    .join("generated/typescript/package.json")
+                    .exists()
+            );
+        }
+    }
+}

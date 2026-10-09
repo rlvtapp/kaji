@@ -223,15 +223,39 @@ async function generate(config, options = {}) {
   const plan = planPlugins(jsPluginsUnordered, names);
   const jsPlugins = plan.order;
   const output = path.resolve(typeof config.output === 'string' ? config.output : config.output.path);
+  if (config.input.plugin?.format === 'graphql' && packages.length &&
+      packages.every((p) => !['typescript', 'rust'].includes(p.language)) &&
+      nativeAddons.length === 0 && jsPlugins.length === 0) {
+    const skipped = packages.map((p) => ({ path: p.path, language: p.language,
+      reason: 'GraphQL output currently supports TypeScript and Rust' }));
+    for (const entry of skipped) console.warn(`Poolster: skipping ${entry.path}: ${entry.reason}`);
+    return { api: null, files: [], changes: { added: [], modified: [], removed: [] }, output, skipped };
+  }
   let temporary;
   try {
     let contract;
+    let graphqlFiles;
+    const skipped = [];
     if (config.input.plugin) {
       const loaded = await loadInput(config.input);
-      if (!loaded.api && (packages.length || nativeAddons.length)) {
+      if (!loaded.api && config.input.plugin.format === 'graphql' && packages.length) {
+        if (nativeAddons.length) throw new Error('GraphQL does not support HTTP SDK auxiliaries');
+        const compatible = packages.filter((p) => ['typescript', 'rust'].includes(p.language));
+        for (const p of packages.filter((p) => !['typescript', 'rust'].includes(p.language))) {
+          const entry = { path: p.path, language: p.language, reason: 'GraphQL output currently supports TypeScript and Rust' };
+          skipped.push(entry);
+          console.warn(`Poolster: skipping ${p.path}: ${entry.reason}`);
+        }
+        graphqlFiles = compatible.length ? JSON.parse(await native().generateGraphql(JSON.stringify({
+          source: path.resolve(config.input.path), provider: config.input.plugin.provider,
+          operationFiles: (config.input.operations ?? []).map((file) => path.resolve(file)),
+          scalars: config.input.scalars ?? {}, subscriptions: config.input.subscriptions ?? false, packages: compatible,
+        }))) : [];
+      }
+      if (!loaded.api && graphqlFiles === undefined && (packages.length || nativeAddons.length)) {
         throw new Error(`Input ${config.input.plugin.format} did not publish poolster.http-api, which the selected SDK plugins require`);
       }
-      if (!loaded.api && jsPlugins.length === 0) throw new Error('native input generation needs a JavaScript output plugin');
+      if (!loaded.api && graphqlFiles === undefined && jsPlugins.length === 0) throw new Error('native input generation needs a JavaScript output plugin');
       contract = { api: loaded.api, securitySchemes: loaded.securitySchemes, input: loaded.report };
     } else {
       let artifacts;
@@ -258,7 +282,7 @@ async function generate(config, options = {}) {
         }
       }
     }
-    const nativeFiles = contract.api ? JSON.parse(await native().generateSdk(JSON.stringify(contract), JSON.stringify(packages))) : [];
+    const nativeFiles = contract.api ? JSON.parse(await native().generateSdk(JSON.stringify(contract), JSON.stringify(packages))) : (graphqlFiles ?? []);
     const { files, caseFoldedPaths } = makeFileStore(nativeFiles);
     const contracts = contractRuntime(plan);
     for (const phase of ['generate', 'post']) {
@@ -277,11 +301,12 @@ async function generate(config, options = {}) {
       }
     }
     const rendered = [...files.values()];
-    const rawChanges = JSON.parse(await native().materialize(JSON.stringify(rendered), output, options.write !== false));
+    const rawChanges = rendered.length === 0 && skipped.length > 0 ? { added: [], modified: [], removed: [] }
+      : JSON.parse(await native().materialize(JSON.stringify(rendered), output, options.write !== false, skipped.map((p) => p.path)));
     const changes = Object.fromEntries(
       ['added', 'modified', 'removed'].map((kind) => [kind, rawChanges[kind].map((file) => file.replaceAll('\\', '/'))]),
     );
-    return { api: contract.api, input: contract.input, files: rendered, changes, output };
+    return { api: contract.api, input: contract.input, files: rendered, changes, output, ...(graphqlFiles !== undefined ? { skipped } : {}) };
   } finally {
     if (temporary) await fsp.rm(temporary, { recursive: true, force: true });
   }
