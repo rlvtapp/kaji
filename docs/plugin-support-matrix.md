@@ -18,7 +18,7 @@ runtime scalar callbacks and experimental multipart deferSpec=20220824 increment
 delivery. TypeScript incremental generation is raw only; scalar value boundaries
 vary by language. All selections remain fixed operation documents. See the
 [advanced capability guide](reference/outputs/graphql-capabilities.md).
-See the [language guides](reference/README.md) and [verification](verification/verification.md#graphql-client-completion-checks)
+See the [language guides](reference/README.md) and [verification](verification/verification.md#advanced-graphql-checks-10-october-2026)
 for tested features and per-language limits. These additions are not yet published.
 
 ✅ = implemented for the stated contract; — = no bundled generation support.
@@ -38,7 +38,7 @@ limitations still apply. GraphQL is a separate contract even when its transport 
 | Vue Query | TypeScript query/mutation hooks | ✅ | ✅ | — | — | — | — |
 | SWR | TypeScript query/mutation hooks | ✅ | ✅ | — | — | — | — |
 | Go | HTTP SDK; GraphQL client; official Protobuf messages and gRPC clients/server interfaces | ✅ | ✅ | ✅ | — | — | — |
-| Rust | HTTP SDK; selection-specific GraphQL query/mutation client | ✅ | ✅ | — | — | — | — |
+| Rust | HTTP SDK; selection-specific GraphQL client | ✅ | ✅ | — | — | — | — |
 | Python | HTTP SDK; synchronous GraphQL client | ✅ | ✅ | — | — | — | — |
 | Java | Java HTTP SDK; GraphQL client | ✅ | ✅ | — | — | — | — |
 | C# | C# HTTP SDK; GraphQL client | ✅ | ✅ | — | — | — | — |
@@ -73,6 +73,34 @@ output yet, although input message blocks are available to custom plugins.
 
 See [output migration coverage](verification/output-contract-migration.md) for typed HTTP
 selection, block consumption, finalization and compatibility boundaries.
+
+## GraphQL capability chart
+
+✅ = implemented within the documented boundary; — = unsupported.
+Incremental delivery is experimental multipart `deferSpec=20220824`. Subscriptions
+use distinct-connection SSE. These columns describe separate opt-in capabilities.
+
+| Output | Queries / mutations | SSE subscriptions | Runtime scalar codecs | Incremental delivery |
+| --- | :---: | :---: | :---: | :---: |
+| TypeScript SDK | ✅ | ✅ | ✅ | ✅ Raw only |
+| Rust SDK | ✅ | ✅ | ✅ | ✅ |
+| Go SDK | ✅ | ✅ | ✅ | ✅ |
+| Python SDK | ✅ | ✅ | ✅ | ✅ |
+| PHP SDK | ✅ | ✅ | ✅ | ✅ |
+| Java SDK | ✅ | ✅ | ✅ | ✅ |
+| C# SDK / dotnet alias | ✅ | ✅ | ✅ | ✅ |
+| Ruby SDK | ✅ | ✅ | ✅ | ✅ |
+| Swift SDK | ✅ | ✅ | ✅ | ✅ |
+| Elixir SDK | ✅ | ✅ | ✅ | ✅ |
+| React Query / Vue Query / SWR | ✅ | — | Via selected SDK client | — |
+| Zod / Faker / MSW / Cypress | ✅ Selected operation helpers | — | Primitive wire mappings only | — |
+| Rust CLI / TypeScript CLI | ✅ | — | — | — |
+| Postman | ✅ | — | — | — |
+
+Scalar callback value domains and abstract selection requirements vary by language;
+see [language boundaries](#graphql-language-boundaries) and the
+[advanced capability guide](reference/outputs/graphql-capabilities.md). No WebSocket,
+multiplexing, reconnect/replay or newer ID-based incremental dialect is claimed.
 
 ## Input providers
 
@@ -118,8 +146,13 @@ unsupported features in an otherwise supported pipeline still fail explicitly.
 
 ## Verification and release checks
 
-Earlier alpha.2 workspace check (before the latest GraphQL source-layout changes): **816 passed, 0 failed, 143 ignored**;
-formatting and workspace Clippy with warnings denied passed. Ignored tests are not passes.
+Latest advanced GraphQL workspace check: **895 passed, 0 failed, 170 ignored**.
+The npm SDK suite passes **78 tests, 0 failures, 0 skips**; release configuration
+passes **4 tests**. Formatting and Clippy for all changed crates and targets with
+warnings denied pass. Explicit generated compilation and local-server probes pass
+for all ten SDK languages. Ignored tests are not passes. See the
+[batch verification record](verification-results/graphql-advanced-2026-10-10.json).
+The earlier alpha.2 workspace check recorded 816 passes and 143 ignored tests.
 Selected external GraphQL, gRPC, Kafka and workflow integration tests were also
 run explicitly and passed; commands and boundaries are in [verification](verification/verification.md).
 
@@ -131,7 +164,7 @@ runtime behavior or corpus coverage of the later output migration. The migrated
 workspace passed separately; final migrated-binary corpus coverage and clean
 installation checks of release artifacts remain open. Original infrastructure
 failures and successful retries remain in the audit trail. See
-[current verification](verification/verification.md#current-alpha2-verification-9-october-2026).
+[current verification](verification/verification.md#earlier-alpha2-verification-9-october-2026).
 
 - [x] Existing OpenAPI snapshots and workspace tests pass.
 - [x] Provider substitution, typed downstream hooks and regeneration have focused tests.
@@ -211,10 +244,10 @@ Raw, flat and grouped call paths are preserved. Java model imports move from nes
 old paths require migration. See the [layout overview](reference/outputs/graphql-layout.md)
 and each language guide for its actual file tree.
 
-Latest source-layout verification: npm SDK **76 passed, 0 skipped**; CLI **127 passed,
+Earlier source-layout verification: npm SDK **76 passed, 0 skipped**; CLI **127 passed,
 9 ignored**; TypeScript selected GraphQL/integration checks **22 passed**. All ten
 languages have generated compilation and local-server checks. Ignored full-suite
-tests are recorded separately. This batch did not rerun the full workspace or the
+tests are recorded separately. That source-layout batch did not rerun the full workspace or the
 205-spec HTTP corpus. See the [verification record](verification-results/graphql-source-layout-2026-10-09.json).
 
 ## GraphQL collections and executable CLIs
