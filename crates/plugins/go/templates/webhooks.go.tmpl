@@ -2,58 +2,130 @@
 package __PACKAGE__
 
 import (
- "crypto/hmac"
- "crypto/sha256"
- "encoding/base64"
- "encoding/json"
- "fmt"
- "net/http"
- "strconv"
- "strings"
- "time"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
 )
 
 // WebhookVerificationOptions sets the trusted clock and symmetric timestamp window.
 // Omitted options use time.Now and five minutes. Explicit zero tolerance means exact time.
-type WebhookVerificationOptions struct { Now time.Time; Tolerance time.Duration }
+type WebhookVerificationOptions struct {
+	Now       time.Time
+	Tolerance time.Duration
+}
+
 // WebhookVerificationError never includes message contents, signatures or signing secrets.
-type WebhookVerificationError struct { Reason string }
+type WebhookVerificationError struct{ Reason string }
+
 func (e *WebhookVerificationError) Error() string { return "poolster: " + e.Reason }
 
 // VerifyWebhook verifies Standard Webhooks HMAC v1 over the original bytes.
 // Verify before parsing. Persist webhook-id separately for replay deduplication.
 // Ed25519/v1a signatures are unsupported and never treated as HMAC signatures.
-func VerifyWebhook(rawBody []byte, headers http.Header, secrets []string, options ...WebhookVerificationOptions) (json.RawMessage,error) {
- fail:=func(reason string)(json.RawMessage,error){return nil,&WebhookVerificationError{reason}}
- if len(options)>1{return fail("one webhook options value is allowed")}
- now:=time.Now();tolerance:=5*time.Minute
- if len(options)==1 { tolerance=options[0].Tolerance;if !options[0].Now.IsZero(){now=options[0].Now} }
- if tolerance<0{return fail("webhook tolerance must be nonnegative")}
- metadata:=map[string]string{}
- for name,values:=range headers { lower:=strings.ToLower(name);if lower!="webhook-id"&&lower!="webhook-timestamp"&&lower!="webhook-signature" {continue};if _,exists:=metadata[lower];exists||len(values)!=1{return fail("duplicate webhook metadata header")};metadata[lower]=values[0] }
- id,stamp,signatures:=metadata["webhook-id"],metadata["webhook-timestamp"],metadata["webhook-signature"]
- if id==""||strings.Contains(id,".")||stamp==""{return fail("invalid webhook metadata")}
- for _,ch:=range stamp{if ch<'0'||ch>'9'{return fail("invalid webhook metadata")}}
- timestamp,err:=strconv.ParseInt(stamp,10,64);if err!=nil{return fail("invalid webhook metadata")}
- delivered:=time.Unix(timestamp,0)
- if now.Before(delivered.Add(-tolerance))||now.After(delivered.Add(tolerance)){return fail("webhook timestamp outside tolerance")}
- keys:=make([][]byte,0,len(secrets))
- for _,secret:=range secrets {
-  if !strings.HasPrefix(secret,"whsec_"){return fail("HMAC webhook secrets must use whsec_ prefix")}
-  encoded:=strings.TrimPrefix(secret,"whsec_");if strings.ContainsAny(encoded,"\r\n\t "){return fail("invalid webhook signing secret")}
-  key,err:=base64.StdEncoding.Strict().DecodeString(encoded);if err!=nil||len(key)<24||len(key)>64{return fail("HMAC webhook secrets must contain 24 to 64 bytes")};keys=append(keys,key)
- }
- if len(keys)==0{return fail("at least one trusted webhook signing secret is required")}
- signed:=append([]byte(id+"."+stamp+"."),rawBody...)
- valid:=false
- for _,entry:=range strings.Fields(signatures) {
-  version,encoded,found:=strings.Cut(entry,",");if !found||version!="v1"{continue}
-  signature,err:=base64.StdEncoding.Strict().DecodeString(encoded);if err!=nil||len(signature)!=sha256.Size{continue}
-  for _,key:=range keys { mac:=hmac.New(sha256.New,key);_,_=mac.Write(signed);match:=hmac.Equal(mac.Sum(nil),signature);valid=match||valid }
- }
- if !valid{return fail("webhook signature does not match a trusted key")}
- if !json.Valid(rawBody){return fail("verified webhook payload is not JSON")}
- return append(json.RawMessage(nil),rawBody...),nil
+func VerifyWebhook(rawBody []byte, headers http.Header, secrets []string, options ...WebhookVerificationOptions) (json.RawMessage, error) {
+	fail := func(reason string) (json.RawMessage, error) { return nil, &WebhookVerificationError{reason} }
+	if len(options) > 1 {
+		return fail("one webhook options value is allowed")
+	}
+	now := time.Now()
+	tolerance := 5 * time.Minute
+	if len(options) == 1 {
+		tolerance = options[0].Tolerance
+		if !options[0].Now.IsZero() {
+			now = options[0].Now
+		}
+	}
+	if tolerance < 0 {
+		return fail("webhook tolerance must be nonnegative")
+	}
+	metadata := map[string]string{}
+	for name, values := range headers {
+		lower := strings.ToLower(name)
+		if lower != "webhook-id" && lower != "webhook-timestamp" && lower != "webhook-signature" {
+			continue
+		}
+		if _, exists := metadata[lower]; exists || len(values) != 1 {
+			return fail("duplicate webhook metadata header")
+		}
+		metadata[lower] = values[0]
+	}
+	id, stamp, signatures := metadata["webhook-id"], metadata["webhook-timestamp"], metadata["webhook-signature"]
+	if id == "" || strings.Contains(id, ".") || stamp == "" {
+		return fail("invalid webhook metadata")
+	}
+	for _, ch := range stamp {
+		if ch < '0' || ch > '9' {
+			return fail("invalid webhook metadata")
+		}
+	}
+	timestamp, err := strconv.ParseInt(stamp, 10, 64)
+	if err != nil {
+		return fail("invalid webhook metadata")
+	}
+	delivered := time.Unix(timestamp, 0)
+	if now.Before(delivered.Add(-tolerance)) || now.After(delivered.Add(tolerance)) {
+		return fail("webhook timestamp outside tolerance")
+	}
+	keys := make([][]byte, 0, len(secrets))
+	for _, secret := range secrets {
+		if !strings.HasPrefix(secret, "whsec_") {
+			return fail("HMAC webhook secrets must use whsec_ prefix")
+		}
+		encoded := strings.TrimPrefix(secret, "whsec_")
+		if strings.ContainsAny(encoded, "\r\n\t ") {
+			return fail("invalid webhook signing secret")
+		}
+		key, err := base64.StdEncoding.Strict().DecodeString(encoded)
+		if err != nil || len(key) < 24 || len(key) > 64 {
+			return fail("HMAC webhook secrets must contain 24 to 64 bytes")
+		}
+		keys = append(keys, key)
+	}
+	if len(keys) == 0 {
+		return fail("at least one trusted webhook signing secret is required")
+	}
+	signed := append([]byte(id+"."+stamp+"."), rawBody...)
+	valid := false
+	for _, entry := range strings.Fields(signatures) {
+		version, encoded, found := strings.Cut(entry, ",")
+		if !found || version != "v1" {
+			continue
+		}
+		signature, err := base64.StdEncoding.Strict().DecodeString(encoded)
+		if err != nil || len(signature) != sha256.Size {
+			continue
+		}
+		for _, key := range keys {
+			mac := hmac.New(sha256.New, key)
+			_, _ = mac.Write(signed)
+			match := hmac.Equal(mac.Sum(nil), signature)
+			valid = match || valid
+		}
+	}
+	if !valid {
+		return fail("webhook signature does not match a trusted key")
+	}
+	if !json.Valid(rawBody) {
+		return fail("verified webhook payload is not JSON")
+	}
+	return append(json.RawMessage(nil), rawBody...), nil
 }
+
 // VerifyWebhookAndDecode verifies before unmarshalling into any supplied generated model.
-func VerifyWebhookAndDecode[T any](rawBody []byte,headers http.Header,secrets []string,options ...WebhookVerificationOptions)(T,error){var result T;verified,err:=VerifyWebhook(rawBody,headers,secrets,options...);if err!=nil{return result,err};if err=json.Unmarshal(verified,&result);err!=nil{return result,fmt.Errorf("poolster: verified webhook payload does not match destination type")};return result,nil}
+func VerifyWebhookAndDecode[T any](rawBody []byte, headers http.Header, secrets []string, options ...WebhookVerificationOptions) (T, error) {
+	var result T
+	verified, err := VerifyWebhook(rawBody, headers, secrets, options...)
+	if err != nil {
+		return result, err
+	}
+	if err = json.Unmarshal(verified, &result); err != nil {
+		return result, fmt.Errorf("poolster: verified webhook payload does not match destination type")
+	}
+	return result, nil
+}

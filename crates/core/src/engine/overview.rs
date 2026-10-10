@@ -111,6 +111,9 @@ pub(super) fn describe<L: Language>(package: &Package<L>, native: bool) -> Packa
     if !package.customizations.is_empty() {
         stages.push("source customization".into());
     }
+    if package.common.source_quality.is_some() {
+        stages.push("source formatting and final-byte quality checks".into());
+    }
     stages.push("ownership checks at check/write".into());
     PackagePlan {
         path: package.dir.clone(),

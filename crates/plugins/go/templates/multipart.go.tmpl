@@ -1,97 +1,226 @@
-
 // PoolsterMultipartBody explicitly selects multipart/form-data for upload operations.
 // Parts are buffered once, so replay-safe requests reuse identical bytes/boundaries.
 // Do not mutate the body while a request is executing.
-type PoolsterMultipartBody struct { Parts []PoolsterMultipartPart; ContentType string }
+type PoolsterMultipartBody struct {
+	Parts       []PoolsterMultipartPart
+	ContentType string
+}
 type PoolsterMultipartPart struct {
-    Name string
-    Filename string
-    ContentType string
-    Data []byte
-    Headers http.Header
-    Nested *PoolsterMultipartBody
-}
-func (body *PoolsterMultipartBody) AddText(name, value string) {
-    body.Parts = append(body.Parts, PoolsterMultipartPart{Name:name, ContentType:"text/plain; charset=utf-8", Data:[]byte(value)})
-}
-func (body *PoolsterMultipartBody) AddFile(name, filename, contentType string, data []byte) {
-    body.Parts = append(body.Parts, PoolsterMultipartPart{Name:name, Filename:filename, ContentType:contentType, Data:append([]byte(nil),data...)})
-}
-func (body *PoolsterMultipartBody) AddJSON(name string, value any) error {
-    data, err := json.Marshal(value)
-    if err != nil { return fmt.Errorf("poolster: encode multipart JSON: %w",err) }
-    body.Parts = append(body.Parts, PoolsterMultipartPart{Name:name, ContentType:"application/json", Data:data})
-    return nil
-}
-type poolsterMultipartBuffer struct { bytes.Buffer }
-func (buffer *poolsterMultipartBuffer) Write(data []byte) (int,error) {
-    if len(data) > (64<<20)-buffer.Len() { return 0,fmt.Errorf("poolster: multipart body exceeds 64 MiB") }
-    return buffer.Buffer.Write(data)
-}
-func (body *PoolsterMultipartBody) encode() ([]byte,string,error) {
-    return body.encodeDepth(0)
-}
-func (body *PoolsterMultipartBody) encodeDepth(depth int) ([]byte,string,error) {
-    if depth>16{return nil,"",fmt.Errorf("poolster: multipart nesting exceeds 16 levels")}
-    if body == nil { return nil,"",fmt.Errorf("poolster: multipart body is required") }
-    if len(body.Parts)>10000 { return nil,"",fmt.Errorf("poolster: multipart exceeds 10000 parts") }
-    media:=body.ContentType;if media==""{media="multipart/form-data"};parsed,parameters,err:=mime.ParseMediaType(media);if err!=nil||!strings.HasPrefix(parsed,"multipart/"){return nil,"",fmt.Errorf("poolster: multipart content type required")};if _,present:=parameters["boundary"];present{return nil,"",fmt.Errorf("poolster: multipart boundary is generated")}
-    buffer:=&poolsterMultipartBuffer{}
-    writer:=multipart.NewWriter(buffer)
-    for _,part:=range body.Parts {
-        if (parsed=="multipart/form-data" && part.Name=="") || len(part.Name)>4096 || len(part.Filename)>4096 || strings.ContainsAny(part.Name+part.Filename,"\r\n\x00") {
-            return nil,"",fmt.Errorf("poolster: invalid multipart name or filename")
-        }
-        if len(part.Data)>64<<20 {return nil,"",fmt.Errorf("poolster: multipart body exceeds 64 MiB")}
-        data:=part.Data
-        contentType:=part.ContentType
-        if part.Nested!=nil {var err error;data,contentType,err=part.Nested.encodeDepth(depth+1);if err!=nil{return nil,"",err}}
-        if contentType=="" {if part.Filename!="" {contentType="application/octet-stream"} else {contentType="text/plain; charset=utf-8"}}
-        if len(contentType)>1024 {return nil,"",fmt.Errorf("poolster: invalid multipart content type")}
-        if _,_,err:=mime.ParseMediaType(contentType);err!=nil{return nil,"",fmt.Errorf("poolster: invalid multipart content type")}
-        headers:=textproto.MIMEHeader{}
-        dispositionParameters:=map[string]string{}
-        if part.Name!="" {dispositionParameters["name"]=part.Name}
-        if part.Filename!="" {dispositionParameters["filename"]=part.Filename}
-        if parsed=="multipart/form-data" {headers.Set("Content-Disposition",mime.FormatMediaType("form-data",dispositionParameters))} else if part.Name!=""||part.Filename!="" {headers.Set("Content-Disposition",mime.FormatMediaType("attachment",dispositionParameters))}
-        headers.Set("Content-Type",contentType)
-        if len(part.Headers)>64{return nil,"",fmt.Errorf("poolster: too many multipart headers")}
-        for name,values:=range part.Headers {
-            if len(name)==0||len(name)>256||strings.EqualFold(name,"Content-Disposition")||strings.EqualFold(name,"Content-Type"){return nil,"",fmt.Errorf("poolster: invalid multipart header")}
-            for _,character:=range name {if !strings.ContainsRune("!#$%&'*+-.^_`|~0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",character){return nil,"",fmt.Errorf("poolster: invalid multipart header")}}
-            if len(values)>64{return nil,"",fmt.Errorf("poolster: too many multipart header values")}
-            for _,value:=range values {if len(value)>8192||strings.ContainsAny(value,"\r\n\x00"){return nil,"",fmt.Errorf("poolster: invalid multipart header")};headers.Add(name,value)}
-        }
-        target,err:=writer.CreatePart(headers)
-        if err!=nil{return nil,"",err}
-        if _,err:=target.Write(data);err!=nil{return nil,"",err}
-    }
-    if err:=writer.Close();err!=nil{return nil,"",err}
-    parameters["boundary"]=writer.Boundary()
-    return buffer.Bytes(),mime.FormatMediaType(parsed,parameters),nil
-}
-func encodePoolsterBody(body any) ([]byte,string,error) {
-    if multipartBody,ok:=body.(*PoolsterMultipartBody);ok{return multipartBody.encode()}
-    data,err:=json.Marshal(body)
-    return data,"application/json",err
+	Name        string
+	Filename    string
+	ContentType string
+	Data        []byte
+	Headers     http.Header
+	Nested      *PoolsterMultipartBody
 }
 
-type poolsterPartEncoding struct {ContentType string `json:"contentType"`;Headers map[string]struct{Required bool `json:"required"`} `json:"headers"`;Encoding map[string]poolsterPartEncoding `json:"encoding"`;PrefixEncoding []poolsterPartEncoding `json:"prefixEncoding"`;ItemEncoding *poolsterPartEncoding `json:"itemEncoding"`}
-type poolsterMultipartDefinition struct {ContentType string `json:"content_type"`;Encoding map[string]poolsterPartEncoding `json:"encoding"`;PrefixEncoding []poolsterPartEncoding `json:"prefix_encoding"`;ItemEncoding *poolsterPartEncoding `json:"item_encoding"`}
-func poolsterDeclaredMultipart(body *PoolsterMultipartBody,metadata string)(*PoolsterMultipartBody,error){
- var definition poolsterMultipartDefinition;if err:=json.Unmarshal([]byte(metadata),&definition);err!=nil{return nil,err}
- return poolsterPrepareMultipart(body,definition.ContentType,definition.Encoding,definition.PrefixEncoding,definition.ItemEncoding,0)
+func (body *PoolsterMultipartBody) AddText(name, value string) {
+	body.Parts = append(body.Parts, PoolsterMultipartPart{Name: name, ContentType: "text/plain; charset=utf-8", Data: []byte(value)})
 }
-func poolsterPrepareMultipart(body *PoolsterMultipartBody,contentType string,named map[string]poolsterPartEncoding,prefix []poolsterPartEncoding,item *poolsterPartEncoding,depth int)(*PoolsterMultipartBody,error){
- if depth>16{return nil,fmt.Errorf("poolster: multipart nesting exceeds 16 levels")}
- if body==nil{return nil,fmt.Errorf("poolster: nested multipart body required")}
- result:=&PoolsterMultipartBody{ContentType:contentType,Parts:append([]PoolsterMultipartPart(nil),body.Parts...)}
- if body.ContentType!=""{result.ContentType=body.ContentType}
- for i:=range result.Parts{part:=&result.Parts[i];var encoding poolsterPartEncoding
-  if len(prefix)>0||item!=nil{if i<len(prefix){encoding=prefix[i]}else if item!=nil{encoding=*item}}else{encoding=named[part.Name]}
-  if part.ContentType==""&&encoding.ContentType!=""{if strings.Contains(encoding.ContentType,","){return nil,fmt.Errorf("poolster: select explicit part content type from declared alternatives")};part.ContentType=encoding.ContentType}
-  for name,header:=range encoding.Headers{if strings.EqualFold(name,"Content-Type"){continue};if header.Required&&len(part.Headers.Values(name))==0{return nil,fmt.Errorf("poolster: required multipart header %s missing",name)}}
-  if part.Nested!=nil{nestedType:=part.ContentType;if nestedType==""{nestedType="multipart/mixed"};var err error;part.Nested,err=poolsterPrepareMultipart(part.Nested,nestedType,encoding.Encoding,encoding.PrefixEncoding,encoding.ItemEncoding,depth+1);if err!=nil{return nil,err}}
- }
- return result,nil
+func (body *PoolsterMultipartBody) AddFile(name, filename, contentType string, data []byte) {
+	body.Parts = append(body.Parts, PoolsterMultipartPart{Name: name, Filename: filename, ContentType: contentType, Data: append([]byte(nil), data...)})
+}
+func (body *PoolsterMultipartBody) AddJSON(name string, value any) error {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("poolster: encode multipart JSON: %w", err)
+	}
+	body.Parts = append(body.Parts, PoolsterMultipartPart{Name: name, ContentType: "application/json", Data: data})
+	return nil
+}
+
+type poolsterMultipartBuffer struct{ bytes.Buffer }
+
+func (buffer *poolsterMultipartBuffer) Write(data []byte) (int, error) {
+	if len(data) > (64<<20)-buffer.Len() {
+		return 0, fmt.Errorf("poolster: multipart body exceeds 64 MiB")
+	}
+	return buffer.Buffer.Write(data)
+}
+func (body *PoolsterMultipartBody) encode() ([]byte, string, error) {
+	return body.encodeDepth(0)
+}
+func (body *PoolsterMultipartBody) encodeDepth(depth int) ([]byte, string, error) {
+	if depth > 16 {
+		return nil, "", fmt.Errorf("poolster: multipart nesting exceeds 16 levels")
+	}
+	if body == nil {
+		return nil, "", fmt.Errorf("poolster: multipart body is required")
+	}
+	if len(body.Parts) > 10000 {
+		return nil, "", fmt.Errorf("poolster: multipart exceeds 10000 parts")
+	}
+	media := body.ContentType
+	if media == "" {
+		media = "multipart/form-data"
+	}
+	parsed, parameters, err := mime.ParseMediaType(media)
+	if err != nil || !strings.HasPrefix(parsed, "multipart/") {
+		return nil, "", fmt.Errorf("poolster: multipart content type required")
+	}
+	if _, present := parameters["boundary"]; present {
+		return nil, "", fmt.Errorf("poolster: multipart boundary is generated")
+	}
+	buffer := &poolsterMultipartBuffer{}
+	writer := multipart.NewWriter(buffer)
+	for _, part := range body.Parts {
+		if (parsed == "multipart/form-data" && part.Name == "") || len(part.Name) > 4096 || len(part.Filename) > 4096 || strings.ContainsAny(part.Name+part.Filename, "\r\n\x00") {
+			return nil, "", fmt.Errorf("poolster: invalid multipart name or filename")
+		}
+		if len(part.Data) > 64<<20 {
+			return nil, "", fmt.Errorf("poolster: multipart body exceeds 64 MiB")
+		}
+		data := part.Data
+		contentType := part.ContentType
+		if part.Nested != nil {
+			var err error
+			data, contentType, err = part.Nested.encodeDepth(depth + 1)
+			if err != nil {
+				return nil, "", err
+			}
+		}
+		if contentType == "" {
+			if part.Filename != "" {
+				contentType = "application/octet-stream"
+			} else {
+				contentType = "text/plain; charset=utf-8"
+			}
+		}
+		if len(contentType) > 1024 {
+			return nil, "", fmt.Errorf("poolster: invalid multipart content type")
+		}
+		if _, _, err := mime.ParseMediaType(contentType); err != nil {
+			return nil, "", fmt.Errorf("poolster: invalid multipart content type")
+		}
+		headers := textproto.MIMEHeader{}
+		dispositionParameters := map[string]string{}
+		if part.Name != "" {
+			dispositionParameters["name"] = part.Name
+		}
+		if part.Filename != "" {
+			dispositionParameters["filename"] = part.Filename
+		}
+		if parsed == "multipart/form-data" {
+			headers.Set("Content-Disposition", mime.FormatMediaType("form-data", dispositionParameters))
+		} else if part.Name != "" || part.Filename != "" {
+			headers.Set("Content-Disposition", mime.FormatMediaType("attachment", dispositionParameters))
+		}
+		headers.Set("Content-Type", contentType)
+		if len(part.Headers) > 64 {
+			return nil, "", fmt.Errorf("poolster: too many multipart headers")
+		}
+		for name, values := range part.Headers {
+			if len(name) == 0 || len(name) > 256 || strings.EqualFold(name, "Content-Disposition") || strings.EqualFold(name, "Content-Type") {
+				return nil, "", fmt.Errorf("poolster: invalid multipart header")
+			}
+			for _, character := range name {
+				if !strings.ContainsRune("!#$%&'*+-.^_`|~0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", character) {
+					return nil, "", fmt.Errorf("poolster: invalid multipart header")
+				}
+			}
+			if len(values) > 64 {
+				return nil, "", fmt.Errorf("poolster: too many multipart header values")
+			}
+			for _, value := range values {
+				if len(value) > 8192 || strings.ContainsAny(value, "\r\n\x00") {
+					return nil, "", fmt.Errorf("poolster: invalid multipart header")
+				}
+				headers.Add(name, value)
+			}
+		}
+		target, err := writer.CreatePart(headers)
+		if err != nil {
+			return nil, "", err
+		}
+		if _, err := target.Write(data); err != nil {
+			return nil, "", err
+		}
+	}
+	if err := writer.Close(); err != nil {
+		return nil, "", err
+	}
+	parameters["boundary"] = writer.Boundary()
+	return buffer.Bytes(), mime.FormatMediaType(parsed, parameters), nil
+}
+func encodePoolsterBody(body any) ([]byte, string, error) {
+	if multipartBody, ok := body.(*PoolsterMultipartBody); ok {
+		return multipartBody.encode()
+	}
+	data, err := json.Marshal(body)
+	return data, "application/json", err
+}
+
+type poolsterPartEncoding struct {
+	ContentType string `json:"contentType"`
+	Headers     map[string]struct {
+		Required bool `json:"required"`
+	} `json:"headers"`
+	Encoding       map[string]poolsterPartEncoding `json:"encoding"`
+	PrefixEncoding []poolsterPartEncoding          `json:"prefixEncoding"`
+	ItemEncoding   *poolsterPartEncoding           `json:"itemEncoding"`
+}
+type poolsterMultipartDefinition struct {
+	ContentType    string                          `json:"content_type"`
+	Encoding       map[string]poolsterPartEncoding `json:"encoding"`
+	PrefixEncoding []poolsterPartEncoding          `json:"prefix_encoding"`
+	ItemEncoding   *poolsterPartEncoding           `json:"item_encoding"`
+}
+
+func poolsterDeclaredMultipart(body *PoolsterMultipartBody, metadata string) (*PoolsterMultipartBody, error) {
+	var definition poolsterMultipartDefinition
+	if err := json.Unmarshal([]byte(metadata), &definition); err != nil {
+		return nil, err
+	}
+	return poolsterPrepareMultipart(body, definition.ContentType, definition.Encoding, definition.PrefixEncoding, definition.ItemEncoding, 0)
+}
+func poolsterPrepareMultipart(body *PoolsterMultipartBody, contentType string, named map[string]poolsterPartEncoding, prefix []poolsterPartEncoding, item *poolsterPartEncoding, depth int) (*PoolsterMultipartBody, error) {
+	if depth > 16 {
+		return nil, fmt.Errorf("poolster: multipart nesting exceeds 16 levels")
+	}
+	if body == nil {
+		return nil, fmt.Errorf("poolster: nested multipart body required")
+	}
+	result := &PoolsterMultipartBody{ContentType: contentType, Parts: append([]PoolsterMultipartPart(nil), body.Parts...)}
+	if body.ContentType != "" {
+		result.ContentType = body.ContentType
+	}
+	for i := range result.Parts {
+		part := &result.Parts[i]
+		var encoding poolsterPartEncoding
+		if len(prefix) > 0 || item != nil {
+			if i < len(prefix) {
+				encoding = prefix[i]
+			} else if item != nil {
+				encoding = *item
+			}
+		} else {
+			encoding = named[part.Name]
+		}
+		if part.ContentType == "" && encoding.ContentType != "" {
+			if strings.Contains(encoding.ContentType, ",") {
+				return nil, fmt.Errorf("poolster: select explicit part content type from declared alternatives")
+			}
+			part.ContentType = encoding.ContentType
+		}
+		for name, header := range encoding.Headers {
+			if strings.EqualFold(name, "Content-Type") {
+				continue
+			}
+			if header.Required && len(part.Headers.Values(name)) == 0 {
+				return nil, fmt.Errorf("poolster: required multipart header %s missing", name)
+			}
+		}
+		if part.Nested != nil {
+			nestedType := part.ContentType
+			if nestedType == "" {
+				nestedType = "multipart/mixed"
+			}
+			var err error
+			part.Nested, err = poolsterPrepareMultipart(part.Nested, nestedType, encoding.Encoding, encoding.PrefixEncoding, encoding.ItemEncoding, depth+1)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	return result, nil
 }

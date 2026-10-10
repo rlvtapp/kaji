@@ -155,10 +155,10 @@ impl Layout {
         if style == GraphqlStyle::Raw {
             return Ok(files);
         }
-        files.insert("client".into(), "pub struct Client { transport: crate::graphql_runtime::GraphqlHttpTransport }\nimpl Client {\n    pub fn new(endpoint: impl Into<String>, client: reqwest::Client) -> Self { Self::from_transport(crate::graphql_runtime::GraphqlHttpTransport::new(endpoint,client)) }\n    pub fn from_transport(transport: crate::graphql_runtime::GraphqlHttpTransport) -> Self { Self { transport } }\n}\n".into());
+        files.insert("client".into(), "pub struct Client {\n    transport: crate::graphql_runtime::GraphqlHttpTransport,\n}\n\nimpl Client {\n    pub fn new(endpoint: impl Into<String>, client: reqwest::Client) -> Self {\n        Self::from_transport(crate::graphql_runtime::GraphqlHttpTransport::new(endpoint, client))\n    }\n\n    pub fn from_transport(transport: crate::graphql_runtime::GraphqlHttpTransport) -> Self {\n        Self { transport }\n    }\n}\n".into());
         for (group, (ty, members)) in &self.groups {
             if !group.is_empty() {
-                files.insert(format!("group_{group}"), format!("pub struct {ty}<'a> {{ transport: &'a crate::graphql_runtime::GraphqlHttpTransport }}\nimpl Client {{\n    pub fn {group}(&self) -> {ty}<'_> {{ {ty} {{ transport: &self.transport }} }}\n}}\n"));
+                files.insert(format!("group_{group}"), format!("pub struct {ty}<'a> {{\n    transport: &'a crate::graphql_runtime::GraphqlHttpTransport,\n}}\n\nimpl Client {{\n    pub fn {group}(&self) -> {ty}<'_> {{\n        {ty} {{ transport: &self.transport }}\n    }}\n}}\n"));
             }
             for member in members {
                 let mut source = if group.is_empty() {
@@ -221,14 +221,14 @@ impl Layout {
             if self.without_variables.contains(operation) {
                 writeln!(
                     source,
-                    "    pub async fn {method}(&self) -> std::result::Result<{response}, crate::graphql_runtime::GraphqlTransportError> {{ {}({transport}, &{} {{}}).await }}",
+                    "    pub async fn {method}(&self) -> std::result::Result<{response}, crate::graphql_runtime::GraphqlTransportError> {{\n        {}({transport}, &{} {{}}).await\n    }}",
                     symbols.function, symbols.variables
                 )?;
                 continue;
             }
             writeln!(
                 source,
-                "    pub async fn {method}(&self, variables: &{}) -> std::result::Result<{response}, crate::graphql_runtime::GraphqlTransportError> {{ {}({transport}, variables).await }}",
+                "    pub async fn {method}(&self, variables: &{}) -> std::result::Result<{response}, crate::graphql_runtime::GraphqlTransportError> {{\n        {}({transport}, variables).await\n    }}",
                 symbols.variables, symbols.function
             )?;
         }

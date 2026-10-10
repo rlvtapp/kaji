@@ -56,7 +56,7 @@ pub(super) fn render_model_parts(
     let declarations = fields.iter().map(|field| {
         let native = &names[&field.name]; let ty = java_type(&field.value);
         let omit = if field.required { "" } else { "@JsonInclude(JsonInclude.Include.NON_NULL) " };
-        format!("    {omit}@JsonProperty({:?}) private {ty} {native};\n    public {ty} {native}() {{ return {native}; }}\n    public {name} {native}({ty} value) {{ this.{native} = value; return ({name}) this; }}\n", field.name)
+        format!("    {omit}@JsonProperty({:?}) private {ty} {native};\n\n    public {ty} {native}() {{\n  return {native};\n\n}}\n\n    public {name} {native}({ty} value) {{\n  this.{native} = value;\n  return ({name}) this;\n\n}}\n\n", field.name)
     }).collect::<Vec<_>>();
     let imports = format!(
         "package {package}.model;\nimport com.fasterxml.jackson.annotation.*;\nimport com.fasterxml.jackson.databind.JsonNode;\nimport java.util.*;\n{NOTICE}"
@@ -79,7 +79,7 @@ pub(super) fn render_model_parts(
         } else {
             format!(" extends PoolsterModelPart{index:05}_{:03}", part - 1)
         };
-        let mut source = format!("{imports}public abstract class {holder}{parent} {{\n");
+        let mut source = format!("{imports}public abstract class {holder}{parent} {{\n  ");
         for index in indices {
             source.push_str(&declarations[*index]);
         }
@@ -105,7 +105,7 @@ pub(super) fn render_model_parts(
     }
     let _ = writeln!(
         source,
-        "public final class {name} extends PoolsterModelPart{index:05}_{:03} {{",
+        "public final class {name} extends PoolsterModelPart{index:05}_{:03} {{\n  ",
         groups.len() - 1
     );
     if !matches!(additional_properties, AdditionalProperties::Forbidden) {
@@ -115,7 +115,7 @@ pub(super) fn render_model_parts(
         };
         let _ = writeln!(
             source,
-            "    private final Map<String,{ty}> poolsterExtra = new LinkedHashMap<>();\n    @JsonAnyGetter public Map<String,{ty}> poolsterAdditionalProperties() {{ return Collections.unmodifiableMap(poolsterExtra); }}\n    @JsonAnySetter public void poolsterAdditionalProperty(String poolsterWirePropertyName, {ty} value) {{ if (poolsterIsDeclaredProperty(poolsterWirePropertyName)) throw new IllegalArgumentException(\"additional property shadows declared field\"); poolsterExtra.put(poolsterWirePropertyName,value); }}"
+            "    private final Map<String,{ty}> poolsterExtra = new LinkedHashMap<>();\n\n    @JsonAnyGetter public Map<String,{ty}> poolsterAdditionalProperties() {{\n  return Collections.unmodifiableMap(poolsterExtra);\n\n}}\n\n    @JsonAnySetter public void poolsterAdditionalProperty(String poolsterWirePropertyName, {ty} value) {{\n  if (poolsterIsDeclaredProperty(poolsterWirePropertyName)) throw new IllegalArgumentException(\"additional property shadows declared field\");\n  poolsterExtra.put(poolsterWirePropertyName,value);\n\n}}"
         );
     }
     source.push_str("}\n");
@@ -148,7 +148,7 @@ fn render_object_model(
     );
     if fields.len() > 200 {
         let mut source = format!(
-            "package {package}.model;\nimport com.fasterxml.jackson.annotation.*;\nimport com.fasterxml.jackson.databind.JsonNode;\nimport java.util.*;\npublic final class {name} {{\n"
+            "package {package}.model;\n\nimport com.fasterxml.jackson.annotation.*;\n\nimport com.fasterxml.jackson.databind.JsonNode;\n\nimport java.util.*;\n\npublic final class {name} {{\n  "
         );
         if matches!(additional_properties, AdditionalProperties::Forbidden) {
             source = source.replace(
@@ -166,7 +166,7 @@ fn render_object_model(
             };
             let _ = writeln!(
                 source,
-                "    {omit}@JsonProperty({:?}) private {ty} {native};\n    public {ty} {native}() {{ return {native}; }}\n    public {name} {native}({ty} value) {{ this.{native} = value; return this; }}",
+                "    {omit}@JsonProperty({:?}) private {ty} {native};\n\n    public {ty} {native}() {{\n  return {native};\n\n}}\n\n    public {name} {native}({ty} value) {{\n  this.{native} = value;\n  return this;\n\n}}",
                 field.name
             );
         }
@@ -182,7 +182,7 @@ fn render_object_model(
                 .join(", ");
             let _ = writeln!(
                 source,
-                "    private final Map<String,{ty}> poolsterExtra = new LinkedHashMap<>();\n    @JsonAnyGetter public Map<String,{ty}> poolsterAdditionalProperties() {{ return Collections.unmodifiableMap(poolsterExtra); }}\n    @JsonAnySetter public void poolsterAdditionalProperty(String poolsterWirePropertyName, {ty} value) {{ if (Set.of({known}).contains(poolsterWirePropertyName)) throw new IllegalArgumentException(\"additional property shadows declared field\"); poolsterExtra.put(poolsterWirePropertyName,value); }}"
+                "    private final Map<String,{ty}> poolsterExtra = new LinkedHashMap<>();\n\n    @JsonAnyGetter public Map<String,{ty}> poolsterAdditionalProperties() {{\n  return Collections.unmodifiableMap(poolsterExtra);\n\n}}\n\n    @JsonAnySetter public void poolsterAdditionalProperty(String poolsterWirePropertyName, {ty} value) {{\n  if (Set.of({known}).contains(poolsterWirePropertyName)) throw new IllegalArgumentException(\"additional property shadows declared field\");\n  poolsterExtra.put(poolsterWirePropertyName,value);\n\n}}"
             );
         }
         source.push_str("}\n");
@@ -232,7 +232,7 @@ fn render_object_model(
     if open {
         let _ = writeln!(
             output,
-            "\n) {{\n    public {name} {{\n        {extra_name} = {extra_name} == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>({extra_name}));"
+            "\n) {{\n  public {name} {{\n    {extra_name} = {extra_name} == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>({extra_name}));\n    "
         );
         for field in fields {
             let _ = writeln!(
@@ -255,7 +255,10 @@ fn render_object_model(
                 .chain(std::iter::once("Map.of()".into()))
                 .collect::<Vec<_>>()
                 .join(", ");
-            let _ = writeln!(output, "    public {name}({args}) {{ this({values}); }}");
+            let _ = writeln!(
+                output,
+                "    public {name}({args}) {{\n  this({values});\n\n}}"
+            );
         }
         output.push_str("}\n");
     } else {
@@ -266,7 +269,7 @@ fn render_object_model(
 
 fn render_enum(name: &str, value: &SchemaValue, package: &str) -> String {
     let mut output = format!(
-        "package {package}.model;\n\nimport com.fasterxml.jackson.annotation.JsonCreator;\nimport com.fasterxml.jackson.annotation.JsonValue;\n\n{NOTICE}\npublic enum {name} {{\n"
+        "package {package}.model;\n\n\nimport com.fasterxml.jackson.annotation.JsonCreator;\n\nimport com.fasterxml.jackson.annotation.JsonValue;\n\n\n{NOTICE}\npublic enum {name} {{\n  "
     );
     let mut used = BTreeSet::new();
     for (index, item) in value.enum_values.iter().enumerate() {
@@ -295,7 +298,7 @@ fn render_enum(name: &str, value: &SchemaValue, package: &str) -> String {
 
 fn render_open_enum(name: &str, value: &SchemaValue, package: &str) -> String {
     let mut output = format!(
-        "package {package}.model;\n\nimport com.fasterxml.jackson.annotation.JsonCreator;\nimport com.fasterxml.jackson.annotation.JsonValue;\nimport java.util.Objects;\n\n{NOTICE}/** Extensible wire value; unknown response values are preserved. */\npublic final class {name} {{\n"
+        "package {package}.model;\n\n\nimport com.fasterxml.jackson.annotation.JsonCreator;\n\nimport com.fasterxml.jackson.annotation.JsonValue;\n\nimport java.util.Objects;\n\n\n{NOTICE}/** Extensible wire value;\nunknown response values are preserved. */\npublic final class {name} {{\n  "
     );
     let mut constants = Vec::new();
     let mut used = BTreeSet::new();
@@ -321,29 +324,29 @@ fn render_open_enum(name: &str, value: &SchemaValue, package: &str) -> String {
     output.push_str("\n    @JsonValue\n    public String value() { return value; }\n");
     let _ = writeln!(
         output,
-        "    public static {name}[] values() {{ return new {name}[] {{ {} }}; }}",
+        "    public static {name}[] values() {{\n  return new {name}[] {{\n    {}\n  }};\n\n}}",
         constants.join(", ")
     );
     let _ = writeln!(
         output,
-        "\n    @JsonCreator\n    public static {name} fromValue(String value) {{"
+        "\n    @JsonCreator\n    public static {name} fromValue(String value) {{\n  "
     );
     output.push_str("        for (var candidate : values()) {\n            if (candidate.value.equals(value)) return candidate;\n        }\n");
     let _ = writeln!(output, "        return new {name}(value);\n    }}");
     let _ = writeln!(
         output,
-        "\n    /** Reject values not declared by the API when strict request validation is desired. */\n    public static {name} fromKnownValue(String value) {{\n        for (var candidate : values()) {{\n            if (candidate.value.equals(value)) return candidate;\n        }}\n        throw new IllegalArgumentException(\"Unknown enum value: \" + value);\n    }}"
+        "\n    /** Reject values not declared by the API when strict request validation is desired. */\n    public static {name} fromKnownValue(String value) {{\n  for (var candidate : values()) {{\n    if (candidate.value.equals(value)) return candidate;\n    \n\n  }}\n  \n        throw new IllegalArgumentException(\"Unknown enum value: \" + value);\n  \n\n}}"
     );
     let _ = writeln!(
         output,
-        "\n    public boolean isKnown() {{\n        for (var candidate : values()) if (candidate.value.equals(value)) return true;\n        return false;\n    }}\n    @Override public boolean equals(Object other) {{ return other instanceof {name} candidate && value.equals(candidate.value); }}\n    @Override public int hashCode() {{ return value.hashCode(); }}\n    @Override public String toString() {{ return value; }}\n}}"
+        "\n    public boolean isKnown() {{\n  for (var candidate : values()) if (candidate.value.equals(value)) return true;\n  \n        return false;\n  \n\n}}\n\n    @Override public boolean equals(Object other) {{\n  return other instanceof {name} candidate && value.equals(candidate.value);\n\n}}\n\n    @Override public int hashCode() {{\n  return value.hashCode();\n\n}}\n\n    @Override public String toString() {{\n  return value;\n\n}}\n\n}}"
     );
     output
 }
 
 fn render_value_model(name: &str, value: &SchemaValue, package: &str) -> String {
     format!(
-        "package {package}.model;\n\nimport com.fasterxml.jackson.annotation.JsonValue;\nimport com.fasterxml.jackson.annotation.JsonCreator;\nimport com.fasterxml.jackson.databind.JsonNode;\nimport java.util.List;\nimport java.util.Map;\n\n{NOTICE}\n/** Wrapper for the {name} schema. */\npublic record {name}(@JsonValue {} value) {{\n    @JsonCreator(mode = JsonCreator.Mode.DELEGATING)\n    public {name} {{}}\n}}\n",
+        "package {package}.model;\n\n\nimport com.fasterxml.jackson.annotation.JsonValue;\n\nimport com.fasterxml.jackson.annotation.JsonCreator;\n\nimport com.fasterxml.jackson.databind.JsonNode;\n\nimport java.util.List;\n\nimport java.util.Map;\n\n\n{NOTICE}\n/** Wrapper for the {name} schema. */\npublic record {name}(@JsonValue {} value) {{\n  @JsonCreator(mode = JsonCreator.Mode.DELEGATING)\n    public {name} {{}}\n}}\n\n",
         java_type(value)
     )
 }

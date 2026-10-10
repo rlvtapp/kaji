@@ -6,7 +6,11 @@ export interface WorkflowRunOptions {
   signal?: AbortSignal;
   fetch?: typeof globalThis.fetch;
 }
-export interface WorkflowStepResult { status: number; body: unknown; outputs: Record<string, unknown> }
+export interface WorkflowStepResult {
+  status: number;
+  body: unknown;
+  outputs: Record<string, unknown>;
+}
 export interface WorkflowExecution {
   workflowId: string;
   outputs: Record<string, unknown>;
@@ -14,69 +18,141 @@ export interface WorkflowExecution {
   dependencies: Record<string, WorkflowExecution>;
 }
 export class WorkflowExecutionError extends Error {
-  constructor(message: string, readonly execution: WorkflowExecution, readonly stepId?: string, options?: ErrorOptions) {
-    super(message, options); this.name = 'WorkflowExecutionError';
+  constructor(
+    message: string,
+    readonly execution: WorkflowExecution,
+    readonly stepId?: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = "WorkflowExecutionError";
   }
 }
-export interface WorkflowValue { kind: string; value?: unknown }
-interface ModelType { nullable: boolean; kind: Record<string, unknown> }
-interface InputField { name: string; ty: ModelType; optional: boolean; default_value: string | null }
+export interface WorkflowValue {
+  kind: string;
+  value?: unknown;
+}
+interface ModelType {
+  nullable: boolean;
+  kind: Record<string, unknown>;
+}
+interface InputField {
+  name: string;
+  ty: ModelType;
+  optional: boolean;
+  default_value: string | null;
+}
 export interface WorkflowDefinition {
-  id: string; inputs: InputField[]; dependencies: string[];
+  id: string;
+  inputs: InputField[];
+  dependencies: string[];
   steps: Array<{
-    id: string; operation: { source: string; method: string; path: string; base_url: string };
-    parameters: Array<{name: string; location: string; value: WorkflowValue}>;
-    request_body: WorkflowValue | null; expected_statuses: number[]; outputs: Record<string, WorkflowValue>;
+    id: string;
+    operation: { source: string; method: string; path: string; base_url: string };
+    parameters: Array<{ name: string; location: string; value: WorkflowValue }>;
+    request_body: WorkflowValue | null;
+    expected_statuses: number[];
+    outputs: Record<string, WorkflowValue>;
   }>;
   outputs: Record<string, WorkflowValue>;
 }
 function pointer(body: unknown, path: string): unknown {
   let value = body;
-  if (path === '') return value;
-  for (const segment of path.slice(1).split('/')) {
-    const key = segment.replace(/~1/g, '/').replace(/~0/g, '~');
-    if (value === null || typeof value !== 'object' || !Object.hasOwn(value, key)) throw new Error(`Missing response JSON pointer ${path}`);
+  if (path === "") return value;
+  for (const segment of path.slice(1).split("/")) {
+    const key = segment.replace(/~1/g, "/").replace(/~0/g, "~");
+    if (value === null || typeof value !== "object" || !Object.hasOwn(value, key))
+      throw new Error(`Missing response JSON pointer ${path}`);
     value = (value as Record<string, unknown>)[key];
   }
   return value;
 }
-function evaluate(expression: WorkflowValue, inputs: Record<string, unknown>, execution: WorkflowExecution, response?: WorkflowStepResult): unknown {
+function evaluate(
+  expression: WorkflowValue,
+  inputs: Record<string, unknown>,
+  execution: WorkflowExecution,
+  response?: WorkflowStepResult,
+): unknown {
   const value = expression.value;
   switch (expression.kind) {
-    case 'literal': return value;
-    case 'input': {
-      const name = String(value); if (!Object.hasOwn(inputs, name)) throw new Error(`Missing workflow input ${name}`); return inputs[name];
+    case "literal":
+      return value;
+    case "input": {
+      const name = String(value);
+      if (!Object.hasOwn(inputs, name)) throw new Error(`Missing workflow input ${name}`);
+      return inputs[name];
     }
-    case 'step_output': {
-      const ref = value as {step: string; name: string}; const outputs = execution.steps[ref.step]?.outputs;
-      if (!outputs || !Object.hasOwn(outputs, ref.name)) throw new Error(`Missing step output ${ref.step}.${ref.name}`);
+    case "step_output": {
+      const ref = value as { step: string; name: string };
+      const outputs = execution.steps[ref.step]?.outputs;
+      if (!outputs || !Object.hasOwn(outputs, ref.name))
+        throw new Error(`Missing step output ${ref.step}.${ref.name}`);
       return outputs[ref.name];
     }
-    case 'workflow_output': {
-      const ref = value as {workflow: string; name: string}; const outputs = execution.dependencies[ref.workflow]?.outputs;
-      if (!outputs || !Object.hasOwn(outputs, ref.name)) throw new Error(`Missing dependency output ${ref.workflow}.${ref.name}`);
+    case "workflow_output": {
+      const ref = value as { workflow: string; name: string };
+      const outputs = execution.dependencies[ref.workflow]?.outputs;
+      if (!outputs || !Object.hasOwn(outputs, ref.name))
+        throw new Error(`Missing dependency output ${ref.workflow}.${ref.name}`);
       return outputs[ref.name];
     }
-    case 'response_body': if (!response) throw new Error('Response expression outside step'); return pointer(response.body, String(value));
-    case 'status_code': if (!response) throw new Error('Status expression outside step'); return response.status;
-    case 'object': return Object.fromEntries(Object.entries(value as Record<string, WorkflowValue>).map(([key, expr]) => [key, evaluate(expr, inputs, execution, response)]));
-    case 'array': return (value as WorkflowValue[]).map(expr => evaluate(expr, inputs, execution, response));
-    default: throw new Error(`Unsupported workflow expression ${expression.kind}`);
+    case "response_body":
+      if (!response) throw new Error("Response expression outside step");
+      return pointer(response.body, String(value));
+    case "status_code":
+      if (!response) throw new Error("Status expression outside step");
+      return response.status;
+    case "object":
+      return Object.fromEntries(
+        Object.entries(value as Record<string, WorkflowValue>).map(([key, expr]) => [
+          key,
+          evaluate(expr, inputs, execution, response),
+        ]),
+      );
+    case "array":
+      return (value as WorkflowValue[]).map((expr) => evaluate(expr, inputs, execution, response));
+    default:
+      throw new Error(`Unsupported workflow expression ${expression.kind}`);
   }
 }
 function validate(value: unknown, model: ModelType, name: string): void {
   if (value === null && model.nullable) return;
   const kind = model.kind;
-  if ('Scalar' in kind) {
+  if ("Scalar" in kind) {
     const scalar = kind.Scalar;
-    if ((scalar === 'String' && typeof value === 'string') || (scalar === 'Boolean' && typeof value === 'boolean') || ((scalar === 'Int' || scalar === 'Float') && typeof value === 'number' && Number.isFinite(value) && (scalar !== 'Int' || Number.isInteger(value)))) return;
-  } else if ('Enum' in kind) { if ((kind.Enum as unknown[]).includes(value)) return;
-  } else if ('List' in kind) { if (Array.isArray(value)) { value.forEach((item, index) => validate(item, kind.List as ModelType, `${name}[${index}]`)); return; }
-  } else if ('Object' in kind) { if (value !== null && typeof value === 'object' && !Array.isArray(value)) { Object.assign(value, applyInputs(kind.Object as InputField[], value as Record<string, unknown>, name)); return; } }
+    if (
+      (scalar === "String" && typeof value === "string") ||
+      (scalar === "Boolean" && typeof value === "boolean") ||
+      ((scalar === "Int" || scalar === "Float") &&
+        typeof value === "number" &&
+        Number.isFinite(value) &&
+        (scalar !== "Int" || Number.isInteger(value)))
+    )
+      return;
+  } else if ("Enum" in kind) {
+    if ((kind.Enum as unknown[]).includes(value)) return;
+  } else if ("List" in kind) {
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => validate(item, kind.List as ModelType, `${name}[${index}]`));
+      return;
+    }
+  } else if ("Object" in kind) {
+    if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+      Object.assign(
+        value,
+        applyInputs(kind.Object as InputField[], value as Record<string, unknown>, name),
+      );
+      return;
+    }
+  }
   throw new Error(`Invalid workflow input ${name}`);
 }
-function applyInputs(fields: InputField[], supplied: Record<string, unknown>, prefix = 'inputs'): Record<string, unknown> {
-  const values = {...supplied};
+function applyInputs(
+  fields: InputField[],
+  supplied: Record<string, unknown>,
+  prefix = "inputs",
+): Record<string, unknown> {
+  const values = { ...supplied };
   for (const field of fields) {
     if (!Object.hasOwn(values, field.name) || values[field.name] === undefined) {
       if (field.default_value !== null) values[field.name] = JSON.parse(field.default_value);
@@ -87,51 +163,128 @@ function applyInputs(fields: InputField[], supplied: Record<string, unknown>, pr
   }
   return values;
 }
-export async function executeWorkflow(definitions: readonly WorkflowDefinition[], workflowId: string, supplied: Record<string, unknown>, options: WorkflowRunOptions = {}): Promise<WorkflowExecution> {
-  const finished = new Map<string, WorkflowExecution>(); const active = new Set<string>();
-  async function execute(id: string, provided: Record<string, unknown>): Promise<WorkflowExecution> {
-    const cached = finished.get(id); if (cached) return cached;
+export async function executeWorkflow(
+  definitions: readonly WorkflowDefinition[],
+  workflowId: string,
+  supplied: Record<string, unknown>,
+  options: WorkflowRunOptions = {},
+): Promise<WorkflowExecution> {
+  const finished = new Map<string, WorkflowExecution>();
+  const active = new Set<string>();
+  async function execute(
+    id: string,
+    provided: Record<string, unknown>,
+  ): Promise<WorkflowExecution> {
+    const cached = finished.get(id);
+    if (cached) return cached;
     if (active.has(id)) throw new Error(`Workflow dependency cycle at ${id}`);
-    const definition = definitions.find(workflow => workflow.id === id); if (!definition) throw new Error(`Unknown workflow ${id}`);
+    const definition = definitions.find((workflow) => workflow.id === id);
+    if (!definition) throw new Error(`Unknown workflow ${id}`);
     active.add(id);
-    const execution: WorkflowExecution = {workflowId: id, outputs: {}, steps: {}, dependencies: {}};
+    const execution: WorkflowExecution = {
+      workflowId: id,
+      outputs: {},
+      steps: {},
+      dependencies: {},
+    };
     let stepId: string | undefined;
     try {
       const inputs = applyInputs(definition.inputs, provided);
-      for (const dependency of definition.dependencies) execution.dependencies[dependency] = await execute(dependency, options.workflowInputs?.[dependency] ?? provided);
+      for (const dependency of definition.dependencies)
+        execution.dependencies[dependency] = await execute(
+          dependency,
+          options.workflowInputs?.[dependency] ?? provided,
+        );
       for (const step of definition.steps) {
         stepId = step.id;
-        if (options.signal?.aborted) throw options.signal.reason ?? new Error('Workflow cancelled');
-        let pathname = step.operation.path; const query = new URLSearchParams(); const headers = new Headers(options.headers);
+        if (options.signal?.aborted) throw options.signal.reason ?? new Error("Workflow cancelled");
+        let pathname = step.operation.path;
+        const query = new URLSearchParams();
+        const headers = new Headers(options.headers);
         for (const parameter of step.parameters) {
           const value = evaluate(parameter.value, inputs, execution);
-          if (!['string', 'number', 'boolean'].includes(typeof value)) throw new Error(`Parameter ${parameter.name} must be primitive`);
-          if (parameter.location === 'path') pathname = pathname.replaceAll(`{${parameter.name}}`, encodeURIComponent(String(value)));
-          else if (parameter.location === 'query') query.append(parameter.name, String(value));
-          else if (parameter.location === 'header') headers.set(parameter.name, String(value));
+          if (!["string", "number", "boolean"].includes(typeof value))
+            throw new Error(`Parameter ${parameter.name} must be primitive`);
+          if (parameter.location === "path")
+            pathname = pathname.replaceAll(
+              `{${parameter.name}}`,
+              encodeURIComponent(String(value)),
+            );
+          else if (parameter.location === "query") query.append(parameter.name, String(value));
+          else if (parameter.location === "header") headers.set(parameter.name, String(value));
           else throw new Error(`Unsupported parameter location ${parameter.location}`);
         }
-        if (pathname.includes('{')) throw new Error('Unresolved operation path parameter');
+        if (pathname.includes("{")) throw new Error("Unresolved operation path parameter");
         const base = options.sourceBaseUrls?.[step.operation.source] ?? step.operation.base_url;
         const parsedBase = new URL(base);
-        if (!['http:', 'https:'].includes(parsedBase.protocol) || parsedBase.username || parsedBase.password || parsedBase.search || parsedBase.hash) throw new Error('Workflow source must be a plain HTTP URL');
-        const url = new URL(base.replace(/\/$/, '') + pathname);
+        if (
+          !["http:", "https:"].includes(parsedBase.protocol) ||
+          parsedBase.username ||
+          parsedBase.password ||
+          parsedBase.search ||
+          parsedBase.hash
+        )
+          throw new Error("Workflow source must be a plain HTTP URL");
+        const url = new URL(base.replace(/\/$/, "") + pathname);
         url.search = query.toString();
         let body: string | undefined;
-        if (step.request_body !== null) { headers.set('Content-Type', 'application/json'); body = JSON.stringify(evaluate(step.request_body, inputs, execution)); }
-        const response = await (options.fetch ?? globalThis.fetch)(url, {method: step.operation.method, headers, body, signal: options.signal, redirect: 'error'});
+        if (step.request_body !== null) {
+          headers.set("Content-Type", "application/json");
+          body = JSON.stringify(evaluate(step.request_body, inputs, execution));
+        }
+        const response = await (options.fetch ?? globalThis.fetch)(url, {
+          method: step.operation.method,
+          headers,
+          body,
+          signal: options.signal,
+          redirect: "error",
+        });
         const text = await response.text();
-        const result: WorkflowStepResult = {status: response.status, body: text === '' ? null : text, outputs: {}};
+        const result: WorkflowStepResult = {
+          status: response.status,
+          body: text === "" ? null : text,
+          outputs: {},
+        };
         execution.steps[step.id] = result;
-        if (text !== '') { try { result.body = JSON.parse(text); } catch { throw new Error('Workflow response is not JSON'); } }
-        if (step.expected_statuses.length ? !step.expected_statuses.includes(response.status) : !response.ok) throw new Error(`Workflow success criterion failed: HTTP ${response.status}`);
-        result.outputs = Object.fromEntries(Object.entries(step.outputs).map(([name, value]) => [name, evaluate(value, inputs, execution, result)]));
+        if (text !== "") {
+          try {
+            result.body = JSON.parse(text);
+          } catch {
+            throw new Error("Workflow response is not JSON");
+          }
+        }
+        if (
+          step.expected_statuses.length
+            ? !step.expected_statuses.includes(response.status)
+            : !response.ok
+        )
+          throw new Error(`Workflow success criterion failed: HTTP ${response.status}`);
+        result.outputs = Object.fromEntries(
+          Object.entries(step.outputs).map(([name, value]) => [
+            name,
+            evaluate(value, inputs, execution, result),
+          ]),
+        );
       }
       stepId = undefined;
-      execution.outputs = Object.fromEntries(Object.entries(definition.outputs).map(([name, value]) => [name, evaluate(value, inputs, execution)]));
-      finished.set(id, execution); return execution;
-    } catch (cause) { throw new WorkflowExecutionError(`Workflow ${id}${stepId ? ` step ${stepId}` : ''} failed`, execution, stepId, {cause}); }
-    finally { active.delete(id); }
+      execution.outputs = Object.fromEntries(
+        Object.entries(definition.outputs).map(([name, value]) => [
+          name,
+          evaluate(value, inputs, execution),
+        ]),
+      );
+      finished.set(id, execution);
+      return execution;
+    } catch (cause) {
+      throw new WorkflowExecutionError(
+        `Workflow ${id}${stepId ? ` step ${stepId}` : ""} failed`,
+        execution,
+        stepId,
+        { cause },
+      );
+    } finally {
+      active.delete(id);
+    }
   }
   return execute(workflowId, supplied);
 }

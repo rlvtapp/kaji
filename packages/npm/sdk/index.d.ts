@@ -81,8 +81,17 @@ export interface JsPlugin {
 
 export type SdkLanguage = 'typescript' | 'rust' | 'go' | 'python' | 'php' | 'symfony' | 'java' | 'csharp' | 'elixir' | 'ruby' | 'swift' | 'postman' | 'rust-cli' | 'typescript-cli';
 
+/** Explicit generated-source formatting policy; commands run from trusted configuration. */
+export type SourceQuality =
+  | { mode: 'unformatted'; reason: string }
+  | { mode: 'formatted'; maxFileBytes?: number; formatter: {
+      program: string; arguments: string[]; versionArguments: string[];
+      expectedVersion: string; extensions: string[]; timeoutSeconds?: number;
+    } };
+
 export interface SdkPackageOptions {
   language: SdkLanguage;
+  sourceQuality?: SourceQuality;
   /** GraphQL collection/CLI endpoint; CLI command binary name. */
   endpoint?: string;
   commandName?: string;

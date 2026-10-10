@@ -1,0 +1,124 @@
+/** GraphQL SSE distinct connections mode. No reconnect/replay or multiplexing. */
+import { GraphqlHttpError, GraphqlProtocolError, parseGraphqlResult } from "./graphql-runtime.js";
+import type { GraphqlResult, SubscriptionTransport, RequestOptions } from "./graphql-runtime.js";
+import type { ScalarCodecMap } from "./graphql-scalar-runtime.js";
+export interface GraphqlSseOptions {
+  fetch?: typeof globalThis.fetch;
+  headers?: HeadersInit;
+  scalarCodecs?: ScalarCodecMap;
+  maxEventBytes?: number;
+}
+export function createGraphqlSseTransport(
+  endpoint: string,
+  config: GraphqlSseOptions = {},
+): SubscriptionTransport {
+  const limit = config.maxEventBytes ?? 1024 * 1024;
+  if (!Number.isSafeInteger(limit) || limit <= 0)
+    throw new RangeError("maxEventBytes must be a positive integer");
+  const fetcher = config.fetch ?? globalThis.fetch;
+  return {
+    scalarCodecs: config.scalarCodecs,
+    async *subscribe<T>(
+      document: string,
+      operationName: string,
+      variables: object,
+      options?: RequestOptions,
+    ): AsyncGenerator<GraphqlResult<T>> {
+      const controller = new AbortController();
+      const abort = () => controller.abort(options?.signal?.reason);
+      if (options?.signal?.aborted) abort();
+      options?.signal?.addEventListener("abort", abort, { once: true });
+      let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+      try {
+        const headers = new Headers(config.headers);
+        new Headers(options?.headers).forEach((value, key) => headers.set(key, value));
+        headers.set("content-type", "application/json");
+        headers.set("accept", "text/event-stream");
+        const response = await fetcher(endpoint, {
+          method: "POST",
+          headers,
+          signal: controller.signal,
+          body: JSON.stringify({ query: document, operationName, variables }),
+        });
+        if (!response.ok) throw new GraphqlHttpError(response.status, await response.text());
+        if (
+          response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() !==
+          "text/event-stream"
+        )
+          throw new GraphqlProtocolError("GraphQL subscription requires text/event-stream");
+        if (!response.body) throw new GraphqlProtocolError("GraphQL SSE response has no body");
+        reader = response.body.getReader();
+        const decoder = new TextDecoder("utf-8", { fatal: true });
+        const encoder = new TextEncoder();
+        let buffer = "",
+          event = "",
+          data: string[] = [],
+          size = 0;
+        while (true) {
+          const chunk = await reader.read();
+          buffer += chunk.done ? decoder.decode() : decoder.decode(chunk.value, { stream: true });
+          while (true) {
+            const index = buffer.search(/[\r\n]/);
+            if (
+              index === -1 ||
+              (!chunk.done && index === buffer.length - 1 && buffer[index] === "\r")
+            )
+              break;
+            const line = buffer.slice(0, index);
+            buffer = buffer.slice(
+              index + (buffer[index] === "\r" && buffer[index + 1] === "\n" ? 2 : 1),
+            );
+            if (line === "") {
+              if (event === "complete") return;
+              if (event === "next") {
+                let payload: unknown;
+                try {
+                  payload = JSON.parse(data.join("\n"));
+                } catch {
+                  throw new GraphqlProtocolError("GraphQL SSE event is not JSON");
+                }
+                if (
+                  payload &&
+                  typeof payload === "object" &&
+                  ("hasNext" in payload || "incremental" in payload)
+                )
+                  throw new GraphqlProtocolError(
+                    "Incremental results require a separate incremental transport",
+                  );
+                yield parseGraphqlResult<T>(payload);
+              } else if (event !== "")
+                throw new GraphqlProtocolError(`Unsupported GraphQL SSE event: ${event}`);
+              event = "";
+              data = [];
+              size = 0;
+              continue;
+            }
+            if (line.startsWith(":")) continue;
+            size += encoder.encode(line).byteLength;
+            if (size > limit)
+              throw new GraphqlProtocolError("GraphQL SSE event exceeds maxEventBytes");
+            const colon = line.indexOf(":");
+            const field = colon < 0 ? line : line.slice(0, colon);
+            let value = colon < 0 ? "" : line.slice(colon + 1);
+            if (value.startsWith(" ")) value = value.slice(1);
+            if (field === "event") event = value;
+            else if (field === "data") data.push(value);
+          }
+          if (encoder.encode(buffer).byteLength + size > limit)
+            throw new GraphqlProtocolError("GraphQL SSE event exceeds maxEventBytes");
+          if (chunk.done)
+            throw new GraphqlProtocolError("GraphQL SSE connection closed before complete");
+        }
+      } finally {
+        controller.abort();
+        options?.signal?.removeEventListener("abort", abort);
+        try {
+          await reader?.cancel();
+        } catch {
+          /* Abort already closed the stream. */
+        }
+        reader?.releaseLock();
+      }
+    },
+  };
+}

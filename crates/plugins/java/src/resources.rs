@@ -103,7 +103,7 @@ pub(super) fn render_resource_chunk(
         )
     };
     let mut output = format!(
-        "package {package}.internal.resources;\n\nimport com.fasterxml.jackson.databind.JsonNode;\nimport java.util.List;\nimport java.util.Map;\nimport {package}.*;\nimport {package}.model.*;\n\n{NOTICE}\n/** Bounded operations for the {resource} resource. */\npublic class {resource}ResourcePart{index:03}{parent} {{\n{field}\n{constructor}\n\n",
+        "package {package}.internal.resources;\n\n\nimport com.fasterxml.jackson.databind.JsonNode;\n\nimport java.util.List;\n\nimport java.util.Map;\n\nimport {package}.*;\n\nimport {package}.model.*;\n\n\n{NOTICE}\n/** Bounded operations for the {resource} resource. */\npublic class {resource}ResourcePart{index:03}{parent} {{\n  {field}\n{constructor}\n\n",
         field = if index == 0 {
             "    protected final Client client;\n"
         } else {
@@ -127,7 +127,7 @@ pub(super) fn render_resource_chunk(
         let invocation = if has_input { "input" } else { "" };
         let _ = writeln!(
             output,
-            "    public {return_type} {facade_method}({input}) {{"
+            "    public {return_type} {facade_method}({input}) {{\n  "
         );
         if return_type == "void" {
             let _ = writeln!(
@@ -150,7 +150,7 @@ pub(super) fn render_resource_chunk(
             };
             let _ = writeln!(
                 output,
-                "    /** Lazily fetches pages through the normal generated operation. */\n    public java.lang.Iterable<{pages_return_type}> {facade_method}Pages({input}) {{\n        return client.{}Pages({invocation});\n    }}\n",
+                "    /** Lazily fetches pages through the normal generated operation. */\n    public java.lang.Iterable<{pages_return_type}> {facade_method}Pages({input}) {{\n  return client.{}Pages({invocation});\n  \n\n}}\n\n",
                 method_name(&operation.id)
             );
         }
@@ -162,6 +162,6 @@ pub(super) fn render_resource_chunk(
 pub(super) fn render_resource_facade(resource: &str, package: &str, chunks: usize) -> String {
     let last = chunks.saturating_sub(1);
     format!(
-        "package {package};\n\nimport {package}.internal.resources.{resource}ResourcePart{last:03};\n\n{NOTICE}\n/** Typed namespace for {resource} operations. */\npublic final class {resource}Resource extends {resource}ResourcePart{last:03} {{\n    {resource}Resource(Client client) {{ super(client); }}\n}}\n"
+        "package {package};\n\n\nimport {package}.internal.resources.{resource}ResourcePart{last:03};\n\n\n{NOTICE}\n/** Typed namespace for {resource} operations. */\npublic final class {resource}Resource extends {resource}ResourcePart{last:03} {{\n  {resource}Resource(Client client) {{\n    super(client);\n\n  }}\n  \n}}\n\n"
     )
 }

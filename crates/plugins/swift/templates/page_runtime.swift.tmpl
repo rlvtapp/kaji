@@ -1,148 +1,202 @@
 import Foundation
 
-public enum PoolsterPaginationError: Error, Sendable { case invalidOffset, unsafeURL, invalidURL, repeatedURL, invalidPage, invalidLimit, invalidResults, pageOverflow, pageLimit }
+public enum PoolsterPaginationError: Error, Sendable {
+  case invalidOffset, unsafeURL, invalidURL, repeatedURL, invalidPage, invalidLimit, invalidResults,
+    pageOverflow, pageLimit
+}
 public struct PoolsterPageSequence<Element: Sendable>: AsyncSequence, Sendable {
-    public typealias AsyncIterator = Iterator
-    let page: Int
+  public typealias AsyncIterator = Iterator
+  let page: Int
+  let limit: Int?
+  let offset: Bool
+  let fetch: @Sendable (Int) async throws -> (Element, Int)
+  init(
+    page: Int, limit: Int?, offset: Bool = false,
+    fetch: @escaping @Sendable (Int) async throws -> (Element, Int)
+  ) {
+    self.page = page
+    self.limit = limit
+    self.offset = offset
+    self.fetch = fetch
+  }
+  public func makeAsyncIterator() -> Iterator {
+    Iterator(page: page, limit: limit, offset: offset, fetch: fetch)
+  }
+  public struct Iterator: AsyncIteratorProtocol {
+    var page: Int
     let limit: Int?
     let offset: Bool
     let fetch: @Sendable (Int) async throws -> (Element, Int)
-    init(page: Int, limit: Int?, offset: Bool = false, fetch: @escaping @Sendable (Int) async throws -> (Element, Int)) { self.page=page; self.limit=limit; self.offset=offset; self.fetch=fetch }
-    public func makeAsyncIterator() -> Iterator { Iterator(page: page, limit: limit, offset: offset, fetch: fetch) }
-    public struct Iterator: AsyncIteratorProtocol {
-        var page: Int
-        let limit: Int?
-        let offset: Bool
-        let fetch: @Sendable (Int) async throws -> (Element, Int)
-        var count = 0
-        var done = false
-        var overflow = false
-        public mutating func next() async throws -> Element? {
-            try Task.checkCancellation()
-            if done { return nil }
-            if overflow { throw PoolsterPaginationError.pageOverflow }
-            if page < 0 { throw offset ? PoolsterPaginationError.invalidOffset : PoolsterPaginationError.invalidPage }
-            if count >= 10000 { throw PoolsterPaginationError.pageLimit }
-            if let limit, limit <= 0 { throw PoolsterPaginationError.invalidLimit }
-            let (response, size) = try await fetch(page)
-            if size < 0 { throw PoolsterPaginationError.invalidResults }
-            count += 1
-            if size == 0 || (limit != nil && size < limit!) { done = true }
-            else {
-                let (next, failed) = page.addingReportingOverflow(offset ? size : 1)
-                if failed { overflow = true } else { page = next }
-            }
-            return response
-        }
+    var count = 0
+    var done = false
+    var overflow = false
+    public mutating func next() async throws -> Element? {
+      try Task.checkCancellation()
+      if done { return nil }
+      if overflow { throw PoolsterPaginationError.pageOverflow }
+      if page < 0 {
+        throw offset ? PoolsterPaginationError.invalidOffset : PoolsterPaginationError.invalidPage
+      }
+      if count >= 10000 { throw PoolsterPaginationError.pageLimit }
+      if let limit, limit <= 0 { throw PoolsterPaginationError.invalidLimit }
+      let (response, size) = try await fetch(page)
+      if size < 0 { throw PoolsterPaginationError.invalidResults }
+      count += 1
+      if size == 0 || (limit != nil && size < limit!) {
+        done = true
+      } else {
+        let (next, failed) = page.addingReportingOverflow(offset ? size : 1)
+        if failed { overflow = true } else { page = next }
+      }
+      return response
     }
+  }
 }
-internal enum PoolsterSelectorSegment: Sendable { case field(String), index(Int) }
-internal func poolsterPageCount<T: Encodable>(_ response: T, _ segments: [PoolsterSelectorSegment]) throws -> Int {
-    var value: Any = try JSONSerialization.jsonObject(with: JSONEncoder().encode(response), options: [.fragmentsAllowed])
-    for segment in segments {
-        switch segment {
-        case .field(let key):
-            if let map = value as? [String: Any], let next = map[key] { value = next }
-            else if let array = value as? [Any], let index = Int(key), index >= 0, String(index) == key, index < array.count { value = array[index] }
-            else { throw PoolsterPaginationError.invalidResults }
-        case .index(let index):
-            guard let array = value as? [Any] else { throw PoolsterPaginationError.invalidResults }
-            let actual = index < 0 ? array.count + index : index
-            guard actual >= 0, actual < array.count else { throw PoolsterPaginationError.invalidResults }
-            value = array[actual]
-        }
+internal enum PoolsterSelectorSegment: Sendable {
+  case field(String)
+  case index(Int)
+}
+internal func poolsterPageCount<T: Encodable>(_ response: T, _ segments: [PoolsterSelectorSegment])
+  throws -> Int
+{
+  var value: Any = try JSONSerialization.jsonObject(
+    with: JSONEncoder().encode(response), options: [.fragmentsAllowed])
+  for segment in segments {
+    switch segment {
+    case .field(let key):
+      if let map = value as? [String: Any], let next = map[key] {
+        value = next
+      } else if let array = value as? [Any], let index = Int(key), index >= 0, String(index) == key,
+        index < array.count
+      {
+        value = array[index]
+      } else {
+        throw PoolsterPaginationError.invalidResults
+      }
+    case .index(let index):
+      guard let array = value as? [Any] else { throw PoolsterPaginationError.invalidResults }
+      let actual = index < 0 ? array.count + index : index
+      guard actual >= 0, actual < array.count else { throw PoolsterPaginationError.invalidResults }
+      value = array[actual]
     }
-    guard let results = value as? [Any] else { throw PoolsterPaginationError.invalidResults }
-    return results.count
+  }
+  guard let results = value as? [Any] else { throw PoolsterPaginationError.invalidResults }
+  return results.count
 }
 
 /// Lazy string cursor pagination; a repeated token terminates the sequence.
 public struct PoolsterCursorSequence<Element: Sendable>: AsyncSequence, Sendable {
-    public typealias AsyncIterator = Iterator
-    let cursor: String?
+  public typealias AsyncIterator = Iterator
+  let cursor: String?
+  let fetch: @Sendable (String?) async throws -> (Element, String?)
+  public func makeAsyncIterator() -> Iterator {
+    Iterator(cursor: cursor, fetch: fetch, seen: cursor.map { [$0] } ?? [])
+  }
+  public struct Iterator: AsyncIteratorProtocol {
+    var cursor: String?
     let fetch: @Sendable (String?) async throws -> (Element, String?)
-    public func makeAsyncIterator() -> Iterator { Iterator(cursor: cursor, fetch: fetch, seen: cursor.map { [$0] } ?? []) }
-    public struct Iterator: AsyncIteratorProtocol {
-        var cursor: String?
-        let fetch: @Sendable (String?) async throws -> (Element, String?)
-        var seen: Set<String>
-        var count = 0
-        var done = false
-        public mutating func next() async throws -> Element? {
-            try Task.checkCancellation()
-            if done { return nil }
-            if count >= 10000 { throw PoolsterPaginationError.pageLimit }
-            let (response, continuation) = try await fetch(cursor)
-            count += 1
-            if let continuation, !continuation.isEmpty, seen.insert(continuation).inserted { cursor = continuation }
-            else { done = true }
-            return response
-        }
+    var seen: Set<String>
+    var count = 0
+    var done = false
+    public mutating func next() async throws -> Element? {
+      try Task.checkCancellation()
+      if done { return nil }
+      if count >= 10000 { throw PoolsterPaginationError.pageLimit }
+      let (response, continuation) = try await fetch(cursor)
+      count += 1
+      if let continuation, !continuation.isEmpty, seen.insert(continuation).inserted {
+        cursor = continuation
+      } else {
+        done = true
+      }
+      return response
     }
+  }
 }
-internal func poolsterNextCursor<T: Encodable>(_ response: T, _ segments: [PoolsterSelectorSegment]) throws -> String? {
-    var value: Any = try JSONSerialization.jsonObject(with: JSONEncoder().encode(response), options: [.fragmentsAllowed])
-    for segment in segments {
-        switch segment {
-        case .field(let key):
-            if let map = value as? [String: Any] { guard let next = map[key] else { return nil }; value = next }
-            else if let array = value as? [Any], let index = Int(key), index >= 0, String(index) == key, index < array.count { value = array[index] }
-            else { throw PoolsterPaginationError.invalidResults }
-        case .index(let index):
-            guard let array = value as? [Any] else { throw PoolsterPaginationError.invalidResults }
-            let actual = index < 0 ? array.count + index : index
-            guard actual >= 0, actual < array.count else { return nil }
-            value = array[actual]
-        }
+internal func poolsterNextCursor<T: Encodable>(_ response: T, _ segments: [PoolsterSelectorSegment])
+  throws -> String?
+{
+  var value: Any = try JSONSerialization.jsonObject(
+    with: JSONEncoder().encode(response), options: [.fragmentsAllowed])
+  for segment in segments {
+    switch segment {
+    case .field(let key):
+      if let map = value as? [String: Any] {
+        guard let next = map[key] else { return nil }
+        value = next
+      } else if let array = value as? [Any], let index = Int(key), index >= 0, String(index) == key,
+        index < array.count
+      {
+        value = array[index]
+      } else {
+        throw PoolsterPaginationError.invalidResults
+      }
+    case .index(let index):
+      guard let array = value as? [Any] else { throw PoolsterPaginationError.invalidResults }
+      let actual = index < 0 ? array.count + index : index
+      guard actual >= 0, actual < array.count else { return nil }
+      value = array[actual]
     }
-    if value is NSNull { return nil }
-    guard let cursor = value as? String else { throw PoolsterPaginationError.invalidResults }
-    return cursor.isEmpty ? nil : cursor
+  }
+  if value is NSNull { return nil }
+  guard let cursor = value as? String else { throw PoolsterPaginationError.invalidResults }
+  return cursor.isEmpty ? nil : cursor
 }
 public struct PoolsterURLSequence<Element: Sendable>: AsyncSequence, Sendable {
+  let fetch: @Sendable (URL?) async throws -> (Element, String?)
+  init(fetch: @escaping @Sendable (URL?) async throws -> (Element, String?)) { self.fetch = fetch }
+  public func makeAsyncIterator() -> Iterator { Iterator(fetch: fetch) }
+  public struct Iterator: AsyncIteratorProtocol {
     let fetch: @Sendable (URL?) async throws -> (Element, String?)
-    init(fetch: @escaping @Sendable (URL?) async throws -> (Element, String?)) { self.fetch=fetch }
-    public func makeAsyncIterator() -> Iterator { Iterator(fetch: fetch) }
-    public struct Iterator: AsyncIteratorProtocol {
-        let fetch: @Sendable (URL?) async throws -> (Element, String?)
-        var nextURL: String?
-        var seen: Set<String> = []
-        var count = 0
-        var done = false
-        public mutating func next() async throws -> Element? {
-            try Task.checkCancellation()
-            if done { return nil }
-            if count >= 10000 { throw PoolsterPaginationError.pageLimit }
-            var url: URL?
-            if let nextURL {
-                guard !seen.contains(nextURL) else { throw PoolsterPaginationError.repeatedURL }
-                guard let parsed=URL(string: nextURL) else { throw PoolsterPaginationError.invalidURL }
-                seen.insert(nextURL); url=parsed
-            }
-            let (response, next) = try await fetch(url)
-            count += 1
-            nextURL = next
-            done = next == nil || next == ""
-            return response
-        }
+    var nextURL: String?
+    var seen: Set<String> = []
+    var count = 0
+    var done = false
+    public mutating func next() async throws -> Element? {
+      try Task.checkCancellation()
+      if done { return nil }
+      if count >= 10000 { throw PoolsterPaginationError.pageLimit }
+      var url: URL?
+      if let nextURL {
+        guard !seen.contains(nextURL) else { throw PoolsterPaginationError.repeatedURL }
+        guard let parsed = URL(string: nextURL) else { throw PoolsterPaginationError.invalidURL }
+        seen.insert(nextURL)
+        url = parsed
+      }
+      let (response, next) = try await fetch(url)
+      count += 1
+      nextURL = next
+      done = next == nil || next == ""
+      return response
     }
+  }
 }
-internal func poolsterNextURL<T: Encodable>(_ response: T, _ segments: [PoolsterSelectorSegment]) throws -> String? {
-    var value: Any = try JSONSerialization.jsonObject(with: JSONEncoder().encode(response), options: [.fragmentsAllowed])
-    for segment in segments {
-        switch segment {
-        case .field(let key):
-            if let map=value as? [String: Any] { guard let next=map[key] else {return nil}; value=next }
-            else if let array=value as? [Any], let index=Int(key), index>=0, String(index)==key, index<array.count {value=array[index]}
-            else {throw PoolsterPaginationError.invalidURL}
-        case .index(let index):
-            guard let array=value as? [Any] else {throw PoolsterPaginationError.invalidURL}
-            let actual=index<0 ? array.count+index : index
-            guard actual>=0,actual<array.count else {throw PoolsterPaginationError.invalidURL}
-            value=array[actual]
-        }
+internal func poolsterNextURL<T: Encodable>(_ response: T, _ segments: [PoolsterSelectorSegment])
+  throws -> String?
+{
+  var value: Any = try JSONSerialization.jsonObject(
+    with: JSONEncoder().encode(response), options: [.fragmentsAllowed])
+  for segment in segments {
+    switch segment {
+    case .field(let key):
+      if let map = value as? [String: Any] {
+        guard let next = map[key] else { return nil }
+        value = next
+      } else if let array = value as? [Any], let index = Int(key), index >= 0, String(index) == key,
+        index < array.count
+      {
+        value = array[index]
+      } else {
+        throw PoolsterPaginationError.invalidURL
+      }
+    case .index(let index):
+      guard let array = value as? [Any] else { throw PoolsterPaginationError.invalidURL }
+      let actual = index < 0 ? array.count + index : index
+      guard actual >= 0, actual < array.count else { throw PoolsterPaginationError.invalidURL }
+      value = array[actual]
     }
-    if value is NSNull {return nil}
-    guard let next=value as? String else {throw PoolsterPaginationError.invalidURL}
-    return next.isEmpty ? nil : next
+  }
+  if value is NSNull { return nil }
+  guard let next = value as? String else { throw PoolsterPaginationError.invalidURL }
+  return next.isEmpty ? nil : next
 }

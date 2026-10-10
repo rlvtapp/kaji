@@ -92,7 +92,8 @@ src/
     operations.rs           fixed-document operation wrappers
     client.rs               raw/flat/idiomatic surface wrappers
     scalars.rs              direction-specific scalar mapping/codec plans
-    runtime/                HTTP execution, envelopes, SSE, incremental helpers
+    runtime/                HTTP execution, envelopes, SSE and incremental templates
+    incremental/            GraphQL incremental plans and emission, if supported
   rpc/                      only if this language supports native RPC output
   events/                   only if this language supports event output
   workflows/                only if this language supports workflow output
@@ -100,6 +101,15 @@ src/
   templates/                source templates organized by protocol/role
   tests/                    focused unit tests close to implementation
 ```
+
+Keep a protocol's implementation together: GraphQL models, operations, client
+styles, scalar helpers, SSE subscriptions and incremental delivery belong under
+`graphql/`, including their runtime templates. Incremental execution may use its
+own typed capability contract without becoming an unrelated language backend.
+The public crate root can re-export compatible factories and artifact contracts.
+General target naming/imports/package policy stay outside the protocol directory;
+protocol-specific companion code belongs under its owning integration's GraphQL
+module.
 
 Native integration probes, pinned fixtures and consumer packages belong under
 crate-level `tests/`. Keep generated runtime code in templates or structured

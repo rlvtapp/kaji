@@ -1,208 +1,543 @@
-import { Faker, en } from '@faker-js/faker';
+import { Faker, en } from "@faker-js/faker";
 
 export type FixtureLiteral = { kind: string; value?: unknown };
 export interface FixtureSchema {
-  kind: { kind: string; reference?: string; items?: FixtureSchema; fields?: { name: string; required: boolean; value: FixtureSchema }[]; additional_properties?: { kind: string; value?: FixtureSchema }; variants?: FixtureSchema[]; schema?: FixtureSchema };
-  nullable?: boolean; optional?: boolean; nullish?: boolean; format?: string;
-  enum_values?: FixtureLiteral[]; const_value?: FixtureLiteral; default?: FixtureLiteral;
+  kind: {
+    kind: string;
+    reference?: string;
+    items?: FixtureSchema;
+    fields?: { name: string; required: boolean; value: FixtureSchema }[];
+    additional_properties?: { kind: string; value?: FixtureSchema };
+    variants?: FixtureSchema[];
+    schema?: FixtureSchema;
+  };
+  nullable?: boolean;
+  optional?: boolean;
+  nullish?: boolean;
+  format?: string;
+  enum_values?: FixtureLiteral[];
+  const_value?: FixtureLiteral;
+  default?: FixtureLiteral;
   constraints?: Record<string, string | number | boolean>;
   extensions?: Record<string, unknown>;
   discriminator?: { property_name: string; mapping: Record<string, string> };
 }
-export interface FixtureRuntimeOptions { seed?: number; max_depth: number; max_attempts: number; overrides: Record<string, FixtureLiteral> }
+export interface FixtureRuntimeOptions {
+  seed?: number;
+  max_depth: number;
+  max_attempts: number;
+  overrides: Record<string, FixtureLiteral>;
+}
 
 const canonical = (value: unknown): string => {
-  if (typeof value === 'bigint') return `integer:${value}`;
-  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
-  if (value && typeof value === 'object') return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`).join(',')}}`;
-  return JSON.stringify(value) ?? 'undefined';
+  if (typeof value === "bigint") return `integer:${value}`;
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (value && typeof value === "object")
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`)
+      .join(",")}}`;
+  return JSON.stringify(value) ?? "undefined";
 };
 const formats: Record<string, RegExp> = {
   uuid: /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
   email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-  date: /^\d{4}-\d{2}-\d{2}$/, 'date-time': /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/,
+  date: /^\d{4}-\d{2}-\d{2}$/,
+  "date-time": /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/,
   byte: /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/,
 };
-const supported = new Set(['minimum','maximum','exclusiveMinimum','exclusiveMaximum','multipleOf','minLength','maxLength','pattern','minItems','maxItems','uniqueItems','minProperties','maxProperties']);
+const supported = new Set([
+  "minimum",
+  "maximum",
+  "exclusiveMinimum",
+  "exclusiveMaximum",
+  "multipleOf",
+  "minLength",
+  "maxLength",
+  "pattern",
+  "minItems",
+  "maxItems",
+  "uniqueItems",
+  "minProperties",
+  "maxProperties",
+]);
 
-export function createFixtureRuntime(schemas: Record<string, FixtureSchema>, options: FixtureRuntimeOptions) {
+export function createFixtureRuntime(
+  schemas: Record<string, FixtureSchema>,
+  options: FixtureRuntimeOptions,
+) {
   const random = new Faker({ locale: [en] });
   if (options.seed !== undefined) random.seed(options.seed);
   const resolve = (schema: FixtureSchema): FixtureSchema => {
-    if (schema.kind.kind !== 'reference') return schema;
-    const name = schema.kind.reference!.split('/').pop()!.replace(/~1/g, '/').replace(/~0/g, '~');
+    if (schema.kind.kind !== "reference") return schema;
+    const name = schema.kind.reference!.split("/").pop()!.replace(/~1/g, "/").replace(/~0/g, "~");
     const target = schemas[name];
     if (!target) throw new Error(`Fixture schema not found: ${name}`);
     return target;
   };
   const concrete = (schema: FixtureSchema): FixtureSchema => {
     const seen = new Set<FixtureSchema>();
-    while (schema.kind.kind === 'reference') { if (seen.has(schema)) throw new Error('Required recursive fixture alias'); seen.add(schema); schema = resolve(schema); }
+    while (schema.kind.kind === "reference") {
+      if (seen.has(schema)) throw new Error("Required recursive fixture alias");
+      seen.add(schema);
+      schema = resolve(schema);
+    }
     return schema;
   };
   const fieldSchema = (schema: FixtureSchema, name: string): FixtureSchema => {
     schema = concrete(schema);
-    const field = schema.kind.fields?.find(field => field.name === name);
+    const field = schema.kind.fields?.find((field) => field.name === name);
     if (field) return field.value;
     if (schema.kind.additional_properties?.value) return schema.kind.additional_properties.value;
-    for (const variant of schema.kind.variants ?? []) { const result = fieldSchema(variant, name); if (result.kind.kind !== 'any') return result; }
-    return {kind:{kind:'any'}};
+    for (const variant of schema.kind.variants ?? []) {
+      const result = fieldSchema(variant, name);
+      if (result.kind.kind !== "any") return result;
+    }
+    return { kind: { kind: "any" } };
   };
   const literal = (input: FixtureLiteral, schema: FixtureSchema): unknown => {
     schema = concrete(schema);
     switch (input.kind) {
-      case 'number': { const text = String(input.value); const representation = schema.extensions?.['x-poolster-integer']; return schema.kind.kind === 'integer' && representation === 'bigint' ? BigInt(text) : schema.kind.kind === 'integer' && representation === 'string' ? text : Number(text); }
-      case 'array': return (input.value as FixtureLiteral[]).map(value => literal(value, schema.kind.items ?? {kind:{kind:'any'}}));
-      case 'object': return Object.fromEntries(Object.entries(input.value as Record<string, FixtureLiteral>).map(([key, value]) => [key, literal(value, fieldSchema(schema, key))]));
-      default: return input.value;
+      case "number": {
+        const text = String(input.value);
+        const representation = schema.extensions?.["x-poolster-integer"];
+        return schema.kind.kind === "integer" && representation === "bigint"
+          ? BigInt(text)
+          : schema.kind.kind === "integer" && representation === "string"
+            ? text
+            : Number(text);
+      }
+      case "array":
+        return (input.value as FixtureLiteral[]).map((value) =>
+          literal(value, schema.kind.items ?? { kind: { kind: "any" } }),
+        );
+      case "object":
+        return Object.fromEntries(
+          Object.entries(input.value as Record<string, FixtureLiteral>).map(([key, value]) => [
+            key,
+            literal(value, fieldSchema(schema, key)),
+          ]),
+        );
+      default:
+        return input.value;
     }
   };
   const constraints = (value: unknown, schema: FixtureSchema): boolean => {
     for (const [keyword, bound] of Object.entries(schema.constraints ?? {})) {
-      if (!supported.has(keyword)) throw new Error(`Fixture constraint requires a custom generator: ${keyword}`);
+      if (!supported.has(keyword))
+        throw new Error(`Fixture constraint requires a custom generator: ${keyword}`);
       let numeric: number | bigint | undefined;
-      if (typeof value === 'number' || typeof value === 'bigint') numeric = value;
-      else if (schema.kind.kind === 'integer' && typeof value === 'string' && /^-?\d+$/.test(value)) numeric = BigInt(value);
+      if (typeof value === "number" || typeof value === "bigint") numeric = value;
+      else if (schema.kind.kind === "integer" && typeof value === "string" && /^-?\d+$/.test(value))
+        numeric = BigInt(value);
       const compare = (operator: string): boolean => {
         if (numeric === undefined) return true;
-        if (typeof numeric === 'bigint') {
-          if (!/^-?\d+$/.test(String(bound))) throw new Error('Fractional constraints on bigint fixtures need a custom generator');
+        if (typeof numeric === "bigint") {
+          if (!/^-?\d+$/.test(String(bound)))
+            throw new Error("Fractional constraints on bigint fixtures need a custom generator");
           const limit = BigInt(String(bound));
-          return operator === 'min' ? numeric >= limit : operator === 'max' ? numeric <= limit : operator === 'gt' ? numeric > limit : numeric < limit;
+          return operator === "min"
+            ? numeric >= limit
+            : operator === "max"
+              ? numeric <= limit
+              : operator === "gt"
+                ? numeric > limit
+                : numeric < limit;
         }
-        return operator === 'min' ? numeric >= Number(bound) : operator === 'max' ? numeric <= Number(bound) : operator === 'gt' ? numeric > Number(bound) : numeric < Number(bound);
+        return operator === "min"
+          ? numeric >= Number(bound)
+          : operator === "max"
+            ? numeric <= Number(bound)
+            : operator === "gt"
+              ? numeric > Number(bound)
+              : numeric < Number(bound);
       };
-      if (keyword === 'minimum' && !compare('min') || keyword === 'maximum' && !compare('max') || keyword === 'exclusiveMinimum' && !compare('gt') || keyword === 'exclusiveMaximum' && !compare('lt')) return false;
-      if (keyword === 'multipleOf' && numeric !== undefined) {
-        if (typeof numeric === 'bigint') { const divisor = BigInt(String(bound)); if (divisor <= 0n || numeric % divisor !== 0n) return false; }
-        else { const divisor = Number(bound); const quotient = numeric / divisor; if (!(divisor > 0) || Math.abs(quotient - Math.round(quotient)) > 1e-9) return false; }
+      if (
+        (keyword === "minimum" && !compare("min")) ||
+        (keyword === "maximum" && !compare("max")) ||
+        (keyword === "exclusiveMinimum" && !compare("gt")) ||
+        (keyword === "exclusiveMaximum" && !compare("lt"))
+      )
+        return false;
+      if (keyword === "multipleOf" && numeric !== undefined) {
+        if (typeof numeric === "bigint") {
+          const divisor = BigInt(String(bound));
+          if (divisor <= 0n || numeric % divisor !== 0n) return false;
+        } else {
+          const divisor = Number(bound);
+          const quotient = numeric / divisor;
+          if (!(divisor > 0) || Math.abs(quotient - Math.round(quotient)) > 1e-9) return false;
+        }
       }
-      if (typeof value === 'string') {
+      if (typeof value === "string") {
         const length = Array.from(value).length;
-        if (keyword === 'minLength' && length < Number(bound) || keyword === 'maxLength' && length > Number(bound) || keyword === 'pattern' && !new RegExp(String(bound)).test(value)) return false;
+        if (
+          (keyword === "minLength" && length < Number(bound)) ||
+          (keyword === "maxLength" && length > Number(bound)) ||
+          (keyword === "pattern" && !new RegExp(String(bound)).test(value))
+        )
+          return false;
       }
       if (Array.isArray(value)) {
-        if (keyword === 'minItems' && value.length < Number(bound) || keyword === 'maxItems' && value.length > Number(bound)) return false;
-        if (keyword === 'uniqueItems' && bound === true && new Set(value.map(canonical)).size !== value.length) return false;
+        if (
+          (keyword === "minItems" && value.length < Number(bound)) ||
+          (keyword === "maxItems" && value.length > Number(bound))
+        )
+          return false;
+        if (
+          keyword === "uniqueItems" &&
+          bound === true &&
+          new Set(value.map(canonical)).size !== value.length
+        )
+          return false;
       }
-      if (value && typeof value === 'object' && !Array.isArray(value)) {
+      if (value && typeof value === "object" && !Array.isArray(value)) {
         const length = Object.keys(value).length;
-        if (keyword === 'minProperties' && length < Number(bound) || keyword === 'maxProperties' && length > Number(bound)) return false;
+        if (
+          (keyword === "minProperties" && length < Number(bound)) ||
+          (keyword === "maxProperties" && length > Number(bound))
+        )
+          return false;
       }
     }
-    if (typeof value === 'string' && schema.format) {
+    if (typeof value === "string" && schema.format) {
       const expression = formats[schema.format];
       if (expression && !expression.test(value)) return false;
-      if (schema.format === 'url' || schema.format === 'uri') { try { new URL(value); } catch { return false; } }
+      if (schema.format === "url" || schema.format === "uri") {
+        try {
+          new URL(value);
+        } catch {
+          return false;
+        }
+      }
     }
     return true;
   };
   const matches = (value: unknown, schema: FixtureSchema, depth = 0): boolean => {
     if (depth > options.max_depth * 4 + 32) return false;
-    if (value === null && (schema.nullable || schema.nullish || schema.kind.kind === 'null' || schema.kind.kind === 'any')) return true;
-    if (value === undefined) return schema.optional === true || schema.nullish === true || schema.kind.kind === 'any';
-    if (schema.const_value && canonical(value) !== canonical(literal(schema.const_value, schema))) return false;
-    if (schema.enum_values?.length && !schema.enum_values.some(item => canonical(value) === canonical(literal(item, schema)))) return false;
+    if (
+      value === null &&
+      (schema.nullable ||
+        schema.nullish ||
+        schema.kind.kind === "null" ||
+        schema.kind.kind === "any")
+    )
+      return true;
+    if (value === undefined)
+      return schema.optional === true || schema.nullish === true || schema.kind.kind === "any";
+    if (schema.const_value && canonical(value) !== canonical(literal(schema.const_value, schema)))
+      return false;
+    if (
+      schema.enum_values?.length &&
+      !schema.enum_values.some((item) => canonical(value) === canonical(literal(item, schema)))
+    )
+      return false;
     let valid = true;
     switch (schema.kind.kind) {
-      case 'reference': valid = matches(value, resolve(schema), depth + 1); break;
-      case 'null': valid = false; break;
-      case 'boolean': valid = typeof value === 'boolean'; break;
-      case 'integer': { const representation = schema.extensions?.['x-poolster-integer']; valid = representation === 'bigint' ? typeof value === 'bigint' : representation === 'string' ? typeof value === 'string' && /^-?(?:0|[1-9]\d*)$/.test(value) : typeof value === 'number' && Number.isSafeInteger(value); break; }
-      case 'number': valid = typeof value === 'number' && Number.isFinite(value); break;
-      case 'string': valid = typeof value === 'string'; break;
-      case 'array': valid = Array.isArray(value) && value.every(item => matches(item, schema.kind.items!, depth + 1)); break;
-      case 'object': {
-        valid = !!value && typeof value === 'object' && !Array.isArray(value);
-        if (!valid) break;
-        const record = value as Record<string, unknown>; const fields = schema.kind.fields ?? [];
-        valid = fields.every(field => field.name in record ? matches(record[field.name], field.value, depth + 1) : !field.required);
-        const extras = Object.keys(record).filter(key => !fields.some(field => field.name === key));
-        if (schema.kind.additional_properties?.kind === 'forbidden' && extras.length) valid = false;
-        if (schema.kind.additional_properties?.kind === 'schema') valid &&= extras.every(key => matches(record[key], schema.kind.additional_properties!.value!, depth + 1));
+      case "reference":
+        valid = matches(value, resolve(schema), depth + 1);
+        break;
+      case "null":
+        valid = false;
+        break;
+      case "boolean":
+        valid = typeof value === "boolean";
+        break;
+      case "integer": {
+        const representation = schema.extensions?.["x-poolster-integer"];
+        valid =
+          representation === "bigint"
+            ? typeof value === "bigint"
+            : representation === "string"
+              ? typeof value === "string" && /^-?(?:0|[1-9]\d*)$/.test(value)
+              : typeof value === "number" && Number.isSafeInteger(value);
         break;
       }
-      case 'one_of': valid = schema.kind.variants!.filter(variant => matches(value, variant, depth + 1)).length === 1; break;
-      case 'any_of': valid = schema.kind.variants!.some(variant => matches(value, variant, depth + 1)); break;
-      case 'all_of': valid = schema.kind.variants!.every(variant => matches(value, variant, depth + 1)); break;
-      case 'not': valid = !matches(value, schema.kind.schema!, depth + 1); break;
+      case "number":
+        valid = typeof value === "number" && Number.isFinite(value);
+        break;
+      case "string":
+        valid = typeof value === "string";
+        break;
+      case "array":
+        valid =
+          Array.isArray(value) &&
+          value.every((item) => matches(item, schema.kind.items!, depth + 1));
+        break;
+      case "object": {
+        valid = !!value && typeof value === "object" && !Array.isArray(value);
+        if (!valid) break;
+        const record = value as Record<string, unknown>;
+        const fields = schema.kind.fields ?? [];
+        valid = fields.every((field) =>
+          field.name in record
+            ? matches(record[field.name], field.value, depth + 1)
+            : !field.required,
+        );
+        const extras = Object.keys(record).filter(
+          (key) => !fields.some((field) => field.name === key),
+        );
+        if (schema.kind.additional_properties?.kind === "forbidden" && extras.length) valid = false;
+        if (schema.kind.additional_properties?.kind === "schema")
+          valid &&= extras.every((key) =>
+            matches(record[key], schema.kind.additional_properties!.value!, depth + 1),
+          );
+        break;
+      }
+      case "one_of":
+        valid =
+          schema.kind.variants!.filter((variant) => matches(value, variant, depth + 1)).length ===
+          1;
+        break;
+      case "any_of":
+        valid = schema.kind.variants!.some((variant) => matches(value, variant, depth + 1));
+        break;
+      case "all_of":
+        valid = schema.kind.variants!.every((variant) => matches(value, variant, depth + 1));
+        break;
+      case "not":
+        valid = !matches(value, schema.kind.schema!, depth + 1);
+        break;
     }
     return valid && constraints(value, schema);
   };
-  const count = (schema: FixtureSchema, minimum: string, maximum: string, fallback: number): number => {
-    const min = Number(schema.constraints?.[minimum] ?? 0); const max = Math.min(Number(schema.constraints?.[maximum] ?? Math.max(min, fallback)), 4096);
-    if (!Number.isSafeInteger(min) || !Number.isSafeInteger(max) || min < 0 || min > max) throw new Error('Fixture bounds are invalid or exceed the 4096-item budget');
-    return random.number.int({min,max});
+  const count = (
+    schema: FixtureSchema,
+    minimum: string,
+    maximum: string,
+    fallback: number,
+  ): number => {
+    const min = Number(schema.constraints?.[minimum] ?? 0);
+    const max = Math.min(Number(schema.constraints?.[maximum] ?? Math.max(min, fallback)), 4096);
+    if (!Number.isSafeInteger(min) || !Number.isSafeInteger(max) || min < 0 || min > max)
+      throw new Error("Fixture bounds are invalid or exceed the 4096-item budget");
+    return random.number.int({ min, max });
   };
   const build = (schema: FixtureSchema, depth: number): unknown => {
     if (schema.const_value) return literal(schema.const_value, schema);
-    if (schema.enum_values?.length) return literal(random.helpers.arrayElement(schema.enum_values), schema);
-    if (schema.default) { const value = literal(schema.default, schema); if (matches(value, schema)) return value; }
+    if (schema.enum_values?.length)
+      return literal(random.helpers.arrayElement(schema.enum_values), schema);
+    if (schema.default) {
+      const value = literal(schema.default, schema);
+      if (matches(value, schema)) return value;
+    }
     if (depth >= options.max_depth && (schema.nullable || schema.nullish)) return null;
-    if (depth > options.max_depth) throw new Error('Cannot construct a finite required recursive fixture');
+    if (depth > options.max_depth)
+      throw new Error("Cannot construct a finite required recursive fixture");
     switch (schema.kind.kind) {
-      case 'reference': return build(resolve(schema), depth + 1);
-      case 'any': return {example:random.string.alpha({length:8})};
-      case 'null': return null;
-      case 'boolean': return random.datatype.boolean();
-      case 'integer': case 'number': {
-        const bounds = schema.constraints ?? {}; const representation = schema.extensions?.['x-poolster-integer'];
-        if (representation === 'bigint' || representation === 'string') {
-          const read = (key: string, fallback: bigint) => bounds[key] === undefined ? fallback : BigInt(String(bounds[key]));
-          const min = bounds.exclusiveMinimum !== undefined ? read('exclusiveMinimum',0n) + 1n : read('minimum',bounds.maximum !== undefined ? read('maximum',0n) - 1000n : bounds.exclusiveMaximum !== undefined ? read('exclusiveMaximum',0n) - 1000n : -1000n);
-          const max = bounds.exclusiveMaximum !== undefined ? read('exclusiveMaximum',0n) - 1n : read('maximum',min > 1000n ? min + 1000n : 1000n);
-          const multiple = read('multipleOf',1n); if (multiple <= 0n || max < min) throw new Error('Unsatisfiable integer fixture constraints');
-          const low = min / multiple + (min % multiple > 0n ? 1n : 0n); const high = max / multiple - (max % multiple < 0n ? 1n : 0n);
-          if (high < low) throw new Error('No integer fixture fits multipleOf and bounds');
-          const value = random.number.bigInt({min:low,max:high}) * multiple; return representation === 'string' ? value.toString() : value;
+      case "reference":
+        return build(resolve(schema), depth + 1);
+      case "any":
+        return { example: random.string.alpha({ length: 8 }) };
+      case "null":
+        return null;
+      case "boolean":
+        return random.datatype.boolean();
+      case "integer":
+      case "number": {
+        const bounds = schema.constraints ?? {};
+        const representation = schema.extensions?.["x-poolster-integer"];
+        if (representation === "bigint" || representation === "string") {
+          const read = (key: string, fallback: bigint) =>
+            bounds[key] === undefined ? fallback : BigInt(String(bounds[key]));
+          const min =
+            bounds.exclusiveMinimum !== undefined
+              ? read("exclusiveMinimum", 0n) + 1n
+              : read(
+                  "minimum",
+                  bounds.maximum !== undefined
+                    ? read("maximum", 0n) - 1000n
+                    : bounds.exclusiveMaximum !== undefined
+                      ? read("exclusiveMaximum", 0n) - 1000n
+                      : -1000n,
+                );
+          const max =
+            bounds.exclusiveMaximum !== undefined
+              ? read("exclusiveMaximum", 0n) - 1n
+              : read("maximum", min > 1000n ? min + 1000n : 1000n);
+          const multiple = read("multipleOf", 1n);
+          if (multiple <= 0n || max < min)
+            throw new Error("Unsatisfiable integer fixture constraints");
+          const low = min / multiple + (min % multiple > 0n ? 1n : 0n);
+          const high = max / multiple - (max % multiple < 0n ? 1n : 0n);
+          if (high < low) throw new Error("No integer fixture fits multipleOf and bounds");
+          const value = random.number.bigInt({ min: low, max: high }) * multiple;
+          return representation === "string" ? value.toString() : value;
         }
-        const integer = schema.kind.kind === 'integer'; const multiple = Number(bounds.multipleOf ?? (integer ? 1 : 0));
-        let min = Number(bounds.minimum ?? (bounds.maximum !== undefined ? Number(bounds.maximum) - 1000 : bounds.exclusiveMaximum !== undefined ? Number(bounds.exclusiveMaximum) - 1000 : -1000)); let max = Number(bounds.maximum ?? Math.max(1000,min + 1000));
-        if (bounds.exclusiveMinimum !== undefined) min = Number(bounds.exclusiveMinimum) + (integer ? 1 : Math.max(1e-6,Math.abs(Number(bounds.exclusiveMinimum))*Number.EPSILON));
-        if (bounds.exclusiveMaximum !== undefined) max = Number(bounds.exclusiveMaximum) - (integer ? 1 : Math.max(1e-6,Math.abs(Number(bounds.exclusiveMaximum))*Number.EPSILON));
-        if (!Number.isFinite(min) || !Number.isFinite(max) || max < min || integer && (min < Number.MIN_SAFE_INTEGER || max > Number.MAX_SAFE_INTEGER)) throw new Error('Numeric fixture bounds require a lossless integer representation or a custom generator');
-        if (multiple > 0) { const low = Math.ceil(min/multiple);const high = Math.floor(max/multiple);if (high<low) throw new Error('No fixture fits multipleOf');return random.number.int({min:low,max:high})*multiple; }
-        return integer ? random.number.int({min:Math.ceil(min),max:Math.floor(max)}) : random.number.float({min,max});
+        const integer = schema.kind.kind === "integer";
+        const multiple = Number(bounds.multipleOf ?? (integer ? 1 : 0));
+        let min = Number(
+          bounds.minimum ??
+            (bounds.maximum !== undefined
+              ? Number(bounds.maximum) - 1000
+              : bounds.exclusiveMaximum !== undefined
+                ? Number(bounds.exclusiveMaximum) - 1000
+                : -1000),
+        );
+        let max = Number(bounds.maximum ?? Math.max(1000, min + 1000));
+        if (bounds.exclusiveMinimum !== undefined)
+          min =
+            Number(bounds.exclusiveMinimum) +
+            (integer
+              ? 1
+              : Math.max(1e-6, Math.abs(Number(bounds.exclusiveMinimum)) * Number.EPSILON));
+        if (bounds.exclusiveMaximum !== undefined)
+          max =
+            Number(bounds.exclusiveMaximum) -
+            (integer
+              ? 1
+              : Math.max(1e-6, Math.abs(Number(bounds.exclusiveMaximum)) * Number.EPSILON));
+        if (
+          !Number.isFinite(min) ||
+          !Number.isFinite(max) ||
+          max < min ||
+          (integer && (min < Number.MIN_SAFE_INTEGER || max > Number.MAX_SAFE_INTEGER))
+        )
+          throw new Error(
+            "Numeric fixture bounds require a lossless integer representation or a custom generator",
+          );
+        if (multiple > 0) {
+          const low = Math.ceil(min / multiple);
+          const high = Math.floor(max / multiple);
+          if (high < low) throw new Error("No fixture fits multipleOf");
+          return random.number.int({ min: low, max: high }) * multiple;
+        }
+        return integer
+          ? random.number.int({ min: Math.ceil(min), max: Math.floor(max) })
+          : random.number.float({ min, max });
       }
-      case 'string': {
-        if (schema.constraints?.pattern) return random.helpers.fromRegExp(String(schema.constraints.pattern).replace(/^\^/, '').replace(/(?<!\\)\$$/, ''));
-        const date = () => random.date.between({from:'2020-01-01T00:00:00Z',to:'2030-01-01T00:00:00Z'}).toISOString();
+      case "string": {
+        if (schema.constraints?.pattern)
+          return random.helpers.fromRegExp(
+            String(schema.constraints.pattern)
+              .replace(/^\^/, "")
+              .replace(/(?<!\\)\$$/, ""),
+          );
+        const date = () =>
+          random.date
+            .between({ from: "2020-01-01T00:00:00Z", to: "2030-01-01T00:00:00Z" })
+            .toISOString();
         switch (schema.format) {
-          case 'uuid': return random.string.uuid(); case 'email': return random.internet.email(); case 'url': case 'uri': return random.internet.url();
-          case 'date': return date().slice(0,10); case 'date-time': return date(); case 'byte': return 'aGVsbG8=';
-          default: return random.string.alpha({length:count(schema,'minLength','maxLength',12)});
+          case "uuid":
+            return random.string.uuid();
+          case "email":
+            return random.internet.email();
+          case "url":
+          case "uri":
+            return random.internet.url();
+          case "date":
+            return date().slice(0, 10);
+          case "date-time":
+            return date();
+          case "byte":
+            return "aGVsbG8=";
+          default:
+            return random.string.alpha({ length: count(schema, "minLength", "maxLength", 12) });
         }
       }
-      case 'array': {
-        const min = Number(schema.constraints?.minItems ?? 0); const length = depth >= options.max_depth && min === 0 ? 0 : count(schema,'minItems','maxItems',3);
+      case "array": {
+        const min = Number(schema.constraints?.minItems ?? 0);
+        const length =
+          depth >= options.max_depth && min === 0 ? 0 : count(schema, "minItems", "maxItems", 3);
         const result: unknown[] = [];
-        for (let i=0;i<length;i++) { let item: unknown; let accepted=false; for(let attempt=0;attempt<options.max_attempts;attempt++){item=build(schema.kind.items!,depth+1); if (!schema.constraints?.uniqueItems || !result.some(other=>canonical(other)===canonical(item))){accepted=true;break;}} if(!accepted)throw new Error('Cannot construct enough distinct array fixtures');result.push(item); }
+        for (let i = 0; i < length; i++) {
+          let item: unknown;
+          let accepted = false;
+          for (let attempt = 0; attempt < options.max_attempts; attempt++) {
+            item = build(schema.kind.items!, depth + 1);
+            if (
+              !schema.constraints?.uniqueItems ||
+              !result.some((other) => canonical(other) === canonical(item))
+            ) {
+              accepted = true;
+              break;
+            }
+          }
+          if (!accepted) throw new Error("Cannot construct enough distinct array fixtures");
+          result.push(item);
+        }
         return result;
       }
-      case 'object': {
-        const result: Record<string,unknown>={};const fields=schema.kind.fields??[];const min=Number(schema.constraints?.minProperties??0);const max=Number(schema.constraints?.maxProperties??4096);
-        for(const field of fields){if(field.required||depth<options.max_depth&&(Object.keys(result).length<min||random.datatype.boolean())){if(Object.keys(result).length>=max&&!field.required)continue;result[field.name]=build(field.value,depth+1);}}
-        const extra=schema.kind.additional_properties;if(Object.keys(result).length<min&&extra?.kind==='forbidden')throw new Error('Object fixture requires unavailable properties');
-        for(let index=0;Object.keys(result).length<min;index++){if(index>=4096)throw new Error('Object fixture exceeds property budget');const key=`extra_${index}`;if(!(key in result))result[key]=extra?.value?build(extra.value,depth+1):'sample';}
+      case "object": {
+        const result: Record<string, unknown> = {};
+        const fields = schema.kind.fields ?? [];
+        const min = Number(schema.constraints?.minProperties ?? 0);
+        const max = Number(schema.constraints?.maxProperties ?? 4096);
+        for (const field of fields) {
+          if (
+            field.required ||
+            (depth < options.max_depth &&
+              (Object.keys(result).length < min || random.datatype.boolean()))
+          ) {
+            if (Object.keys(result).length >= max && !field.required) continue;
+            result[field.name] = build(field.value, depth + 1);
+          }
+        }
+        const extra = schema.kind.additional_properties;
+        if (Object.keys(result).length < min && extra?.kind === "forbidden")
+          throw new Error("Object fixture requires unavailable properties");
+        for (let index = 0; Object.keys(result).length < min; index++) {
+          if (index >= 4096) throw new Error("Object fixture exceeds property budget");
+          const key = `extra_${index}`;
+          if (!(key in result))
+            result[key] = extra?.value ? build(extra.value, depth + 1) : "sample";
+        }
         return result;
       }
-      case 'one_of': case 'any_of': {
-        const selected=random.helpers.arrayElement(schema.kind.variants!);const result=build(selected,depth+1);
-        if(schema.discriminator&&result&&typeof result==='object'&&!Array.isArray(result)){const entry=Object.entries(schema.discriminator.mapping).find(([,reference])=>reference===selected.kind.reference);if(entry)(result as Record<string,unknown>)[schema.discriminator.property_name]=entry[0];}
+      case "one_of":
+      case "any_of": {
+        const selected = random.helpers.arrayElement(schema.kind.variants!);
+        const result = build(selected, depth + 1);
+        if (
+          schema.discriminator &&
+          result &&
+          typeof result === "object" &&
+          !Array.isArray(result)
+        ) {
+          const entry = Object.entries(schema.discriminator.mapping).find(
+            ([, reference]) => reference === selected.kind.reference,
+          );
+          if (entry)
+            (result as Record<string, unknown>)[schema.discriminator.property_name] = entry[0];
+        }
         return result;
       }
-      case 'all_of': { const values=schema.kind.variants!.map(value=>build(value,depth+1));if(values.every(value=>value&&typeof value==='object'&&!Array.isArray(value)))return Object.assign({},...values);return values[0]; }
-      case 'not': return random.helpers.arrayElement([null,true,false,0,1,'sample',[],{}]);
-      default: throw new Error(`Unsupported fixture kind: ${schema.kind.kind}`);
+      case "all_of": {
+        const values = schema.kind.variants!.map((value) => build(value, depth + 1));
+        if (values.every((value) => value && typeof value === "object" && !Array.isArray(value)))
+          return Object.assign({}, ...values);
+        return values[0];
+      }
+      case "not":
+        return random.helpers.arrayElement([null, true, false, 0, 1, "sample", [], {}]);
+      default:
+        throw new Error(`Unsupported fixture kind: ${schema.kind.kind}`);
     }
   };
   return {
-    seed(seed:number|number[]){random.seed(seed);},
-    create(name:string,depth=0):unknown {
-      const schema=schemas[name];if(!schema)throw new Error(`Fixture schema not found: ${name}`);
-      if(options.overrides[name]){const value=literal(options.overrides[name],schema);if(!matches(value,schema))throw new Error(`Fixture override does not satisfy ${name}`);return value;}
-      let last:unknown;for(let attempt=0;attempt<options.max_attempts;attempt++){try{const value=build(schema,depth);if(matches(value,schema))return value;}catch(error){last=error;}}
-      throw new Error(`Unable to construct a valid fixture for ${name}: ${last instanceof Error?last.message:'schema constraints have no supported candidate'}`);
-    }
+    seed(seed: number | number[]) {
+      random.seed(seed);
+    },
+    create(name: string, depth = 0): unknown {
+      const schema = schemas[name];
+      if (!schema) throw new Error(`Fixture schema not found: ${name}`);
+      if (options.overrides[name]) {
+        const value = literal(options.overrides[name], schema);
+        if (!matches(value, schema)) throw new Error(`Fixture override does not satisfy ${name}`);
+        return value;
+      }
+      let last: unknown;
+      for (let attempt = 0; attempt < options.max_attempts; attempt++) {
+        try {
+          const value = build(schema, depth);
+          if (matches(value, schema)) return value;
+        } catch (error) {
+          last = error;
+        }
+      }
+      throw new Error(
+        `Unable to construct a valid fixture for ${name}: ${last instanceof Error ? last.message : "schema constraints have no supported candidate"}`,
+      );
+    },
   };
 }

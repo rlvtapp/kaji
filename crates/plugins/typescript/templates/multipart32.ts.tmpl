@@ -1,42 +1,92 @@
-export type MultipartPlan = { content_type: string; encoding?: Record<string, FormEncoding>; prefix_encoding?: FormEncoding[]; item_encoding?: FormEncoding }
-const mimeValue = (value: string): string => { if (!value || /[\r\n\x00-\x1f\x7f]/.test(value)) throw new TypeError('Invalid multipart header value'); return value }
-const mimeName = (value: string): string => { mimeValue(value); if (/["\\]/.test(value)) throw new TypeError('Invalid multipart field name'); return value }
-const encodePlannedMultipart = (body: unknown, plan: MultipartPlan, values?: FormPartHeaders, depth = 0): Blob => {
-  if (depth > 16) throw new TypeError('Multipart nesting exceeds 16 levels')
-  if (!plan.content_type.startsWith('multipart/')) throw new TypeError('Multipart plan requires a multipart media type')
-  const ordered = Array.isArray(body)
-  if (!ordered && !isRecord(body)) throw new TypeError('Multipart input must be an object or ordered array')
-  const fields: Array<[string, unknown]> = ordered ? body.map((item, index) => [String(index), item]) : Object.entries(body as Record<string, unknown>)
-  if (fields.length > 1024) throw new TypeError('Multipart body exceeds 1024 parts')
-  const boundary = `poolster-${globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`}`
-  const chunks: BlobPart[] = []
+export type MultipartPlan = {
+  content_type: string;
+  encoding?: Record<string, FormEncoding>;
+  prefix_encoding?: FormEncoding[];
+  item_encoding?: FormEncoding;
+};
+const mimeValue = (value: string): string => {
+  if (!value || /[\r\n\x00-\x1f\x7f]/.test(value))
+    throw new TypeError("Invalid multipart header value");
+  return value;
+};
+const mimeName = (value: string): string => {
+  mimeValue(value);
+  if (/["\\]/.test(value)) throw new TypeError("Invalid multipart field name");
+  return value;
+};
+const encodePlannedMultipart = (
+  body: unknown,
+  plan: MultipartPlan,
+  values?: FormPartHeaders,
+  depth = 0,
+): Blob => {
+  if (depth > 16) throw new TypeError("Multipart nesting exceeds 16 levels");
+  if (!plan.content_type.startsWith("multipart/"))
+    throw new TypeError("Multipart plan requires a multipart media type");
+  const ordered = Array.isArray(body);
+  if (!ordered && !isRecord(body))
+    throw new TypeError("Multipart input must be an object or ordered array");
+  const fields: Array<[string, unknown]> = ordered
+    ? body.map((item, index) => [String(index), item])
+    : Object.entries(body as Record<string, unknown>);
+  if (fields.length > 1024) throw new TypeError("Multipart body exceeds 1024 parts");
+  const boundary = `poolster-${globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`}`;
+  const chunks: BlobPart[] = [];
   for (let index = 0; index < fields.length; index++) {
-    const [name, value] = fields[index]
-    if (value === undefined) continue
-    const encoding = ordered ? plan.prefix_encoding?.[index] ?? plan.item_encoding ?? {} : plan.encoding?.[name] ?? {}
-    const supplied = formPartHeaders(plan.content_type, name, encoding, values) ?? {}
-    let mediaType = encoding.contentType ?? (value instanceof Blob ? value.type || 'application/octet-stream' : typeof value === 'string' ? 'text/plain' : 'application/json')
-    let payload: string | Blob
+    const [name, value] = fields[index];
+    if (value === undefined) continue;
+    const encoding = ordered
+      ? (plan.prefix_encoding?.[index] ?? plan.item_encoding ?? {})
+      : (plan.encoding?.[name] ?? {});
+    const supplied = formPartHeaders(plan.content_type, name, encoding, values) ?? {};
+    let mediaType =
+      encoding.contentType ??
+      (value instanceof Blob
+        ? value.type || "application/octet-stream"
+        : typeof value === "string"
+          ? "text/plain"
+          : "application/json");
+    let payload: string | Blob;
     if (encoding.encoding || encoding.prefixEncoding || encoding.itemEncoding) {
-      mediaType = encoding.contentType ?? 'multipart/mixed'
-      payload = encodePlannedMultipart(value, { content_type: mediaType, encoding: encoding.encoding, prefix_encoding: encoding.prefixEncoding, item_encoding: encoding.itemEncoding }, values, depth + 1)
-      mediaType = payload.type
-    } else if (value instanceof Blob) payload = value
-    else if (mediaType.split(';')[0].trim().includes('json')) { const encoded = JSON.stringify(value); if (encoded === undefined) throw new TypeError('Multipart value must be serializable'); payload = encoded }
-    else payload = String(value)
-    const headers = [`Content-Type: ${mimeValue(mediaType)}`]
-    if (plan.content_type.split(';')[0].trim() === 'multipart/form-data') {
-      const filename = value instanceof Blob && 'name' in value && typeof value.name === 'string' ? `; filename="${mimeName(value.name)}"` : ''
-      headers.unshift(`Content-Disposition: form-data; name="${mimeName(name)}"${filename}`)
+      mediaType = encoding.contentType ?? "multipart/mixed";
+      payload = encodePlannedMultipart(
+        value,
+        {
+          content_type: mediaType,
+          encoding: encoding.encoding,
+          prefix_encoding: encoding.prefixEncoding,
+          item_encoding: encoding.itemEncoding,
+        },
+        values,
+        depth + 1,
+      );
+      mediaType = payload.type;
+    } else if (value instanceof Blob) payload = value;
+    else if (mediaType.split(";")[0].trim().includes("json")) {
+      const encoded = JSON.stringify(value);
+      if (encoded === undefined) throw new TypeError("Multipart value must be serializable");
+      payload = encoded;
+    } else payload = String(value);
+    const headers = [`Content-Type: ${mimeValue(mediaType)}`];
+    if (plan.content_type.split(";")[0].trim() === "multipart/form-data") {
+      const filename =
+        value instanceof Blob && "name" in value && typeof value.name === "string"
+          ? `; filename="${mimeName(value.name)}"`
+          : "";
+      headers.unshift(`Content-Disposition: form-data; name="${mimeName(name)}"${filename}`);
     }
     for (const [header, headerValue] of Object.entries(supplied)) {
-      if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(header)) throw new TypeError('Invalid multipart header name')
-      if (header.toLowerCase() !== 'content-type') headers.push(`${header}: ${mimeValue(headerValue)}`)
+      if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(header))
+        throw new TypeError("Invalid multipart header name");
+      if (header.toLowerCase() !== "content-type")
+        headers.push(`${header}: ${mimeValue(headerValue)}`);
     }
-    chunks.push(`--${boundary}\r\n${headers.join('\r\n')}\r\n\r\n`, payload, '\r\n')
+    chunks.push(`--${boundary}\r\n${headers.join("\r\n")}\r\n\r\n`, payload, "\r\n");
   }
-  chunks.push(`--${boundary}--\r\n`)
-  const encoded = new Blob(chunks, { type: `${plan.content_type.split(';')[0].trim()}; boundary=${boundary}` })
-  if (encoded.size > 64 * 1024 * 1024) throw new TypeError('Multipart body exceeds 64 MiB')
-  return encoded
-}
+  chunks.push(`--${boundary}--\r\n`);
+  const encoded = new Blob(chunks, {
+    type: `${plan.content_type.split(";")[0].trim()}; boundary=${boundary}`,
+  });
+  if (encoded.size > 64 * 1024 * 1024) throw new TypeError("Multipart body exceeds 64 MiB");
+  return encoded;
+};

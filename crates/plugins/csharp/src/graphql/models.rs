@@ -40,7 +40,7 @@ impl Models {
             "GraphQL type naming collision {name}"
         );
         let inheritance = parent.map(|p| format!(" : {p}")).unwrap_or_default();
-        let mut body = format!("public sealed record {name}{inheritance}\n{{\n");
+        let mut body = format!("public sealed record {name}{inheritance}\n{{\n  ");
         let mut names = BTreeSet::new();
         let mut properties = Vec::new();
         for field in fields {
@@ -69,7 +69,7 @@ impl Models {
             let required = if field.optional { "" } else { "required " };
             writeln!(
                 property_source,
-                "public {required}{target} {property} {{ get; init; }}"
+                "public {required}{target} {property} {{\n  get;\n  init;\n\n}}"
             )
             .unwrap();
             body.push_str(&property_source);
@@ -77,7 +77,7 @@ impl Models {
         }
         body.push_str("}\n");
         self.source.push_str(&body);
-        let header = format!("public sealed partial record {name}{inheritance}\n{{\n");
+        let header = format!("public sealed partial record {name}{inheritance}\n{{\n  ");
         let units = properties
             .iter()
             .map(|p| poolster_core::source_layout::SourceUnit {
@@ -124,7 +124,7 @@ impl Models {
             writeln!(write,"case {variant} variant when variant.{} == {}: JsonSerializer.Serialize(writer,variant,options); return;",ident(key),serde_json::to_string(label)?).unwrap();
         }
         let body = format!(
-            "[JsonConverter(typeof({name}Converter))]\npublic abstract record {name};\npublic sealed class {name}Converter : JsonConverter<{name}> {{\npublic override {name} Read(ref Utf8JsonReader reader,Type type,JsonSerializerOptions options) {{ using var document=JsonDocument.ParseValue(ref reader); if(document.RootElement.ValueKind != JsonValueKind.Object || !document.RootElement.TryGetProperty({key:?},out var tag) || tag.ValueKind != JsonValueKind.String) throw new JsonException(\"Missing or invalid GraphQL typename\"); switch(tag.GetString()) {{\n{read}default: throw new JsonException(\"Unknown GraphQL typename\");\n}} }}\npublic override void Write(Utf8JsonWriter writer,{name} value,JsonSerializerOptions options) {{ switch(value) {{\n{write}default: throw new JsonException(\"Invalid GraphQL typename or alternative\");\n}} }}\n}}\n"
+            "[JsonConverter(typeof({name}Converter))]\npublic abstract record {name};\n\npublic sealed class {name}Converter : JsonConverter<{name}> {{\n  public override {name} Read(ref Utf8JsonReader reader,Type type,JsonSerializerOptions options) {{\n    using var document=JsonDocument.ParseValue(ref reader);\n    if(document.RootElement.ValueKind != JsonValueKind.Object || !document.RootElement.TryGetProperty({key:?},out var tag) || tag.ValueKind != JsonValueKind.String) throw new JsonException(\"Missing or invalid GraphQL typename\");\n    switch(tag.GetString()) {{\n      {read}default: throw new JsonException(\"Unknown GraphQL typename\");\n      \n}}\n\n  }}\n  \npublic override void Write(Utf8JsonWriter writer,{name} value,JsonSerializerOptions options) {{\n    switch(value) {{\n      {write}default: throw new JsonException(\"Invalid GraphQL typename or alternative\");\n      \n}}\n\n  }}\n  \n}}\n\n"
         );
         self.source.push_str(&body);
         self.files.insert(

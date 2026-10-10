@@ -35,7 +35,7 @@ pub(crate) fn render(
                 for field in fields.iter().filter(|f| !f.required) {
                     let ty = csharp_type(&field.value, true);
                     let property = names[&field.name].clone();
-                    source = source.replace(&format!("    public {ty} {property} {{ get; init; }}"), &format!("    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]\n    public Presence<{ty}> {property} {{ get; init; }}"));
+                    source = source.replace(&format!("    public {ty} {property} "), &format!("    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]\n    public Presence<{ty}> {property} "));
                 }
                 tree.replace(GeneratedFile::new(
                     output_path(&root, &format!("./Models/{filename}")),

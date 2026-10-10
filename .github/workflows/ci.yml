@@ -61,6 +61,18 @@ jobs:
           cargo test -p poolster-cli eject::tests::rebuilt_ejected_renderer_consumes_custom_source -- --ignored
           cargo test -p poolster-cli --test local_references -- --ignored
           cargo test -p poolster-cli --test migration -- --ignored
+      - name: Verify language output structure and regeneration
+        run: |
+          python scripts/test-layout-audit.py
+          python scripts/test-language-output-audit.py
+          cargo build -p poolster-cli --locked
+          python scripts/language-output-audit.py --binary target/debug/poolster --output "$RUNNER_TEMP/poolster-language-output" --openapi crates/cli/tests/fixtures/pets.yaml --graphql-schema scripts/fixtures/language-output/schema.graphql --graphql-operations scripts/fixtures/language-output/operations.graphql
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: language-output-audit
+          path: ${{ runner.temp }}/poolster-language-output/report.json
+          if-no-files-found: ignore
       - name: Verify generated TypeScript middleware, GraphQL and response decoding
         run: |
           npm install --prefix "$RUNNER_TEMP/poolster-ts-runtime" --no-audit --no-fund typescript@5.9.3 axios@1.20.0 graphql@16.14.2

@@ -52,8 +52,9 @@ impl Models {
             "GraphQL type naming collision {name}"
         );
         let mut body = format!("type {name} struct {{\n");
-        let mut marshal =
-            format!("func (v {name}) MarshalJSON() ([]byte,error) {{ fields:=map[string]any{{}}\n");
+        let mut marshal = format!(
+            "func (v {name}) MarshalJSON() ([]byte, error) {{\n\tfields := map[string]any{{}}\n"
+        );
         let mut names = BTreeSet::new();
         for field in fields {
             let field_name = ident(&field.name);
@@ -72,21 +73,21 @@ impl Models {
                 target
             };
             let json = serde_json::to_string(&field.name)?;
-            writeln!(body, "{field_name} {target} `json:{json}`").unwrap();
+            writeln!(body, "\t{field_name} {target} `json:{json}`").unwrap();
             if field.optional {
                 writeln!(
                     marshal,
-                    "if v.{field_name}.Set {{ fields[{json}]=v.{field_name}.Value }}"
+                    "\tif v.{field_name}.Set {{\n\t\tfields[{json}] = v.{field_name}.Value\n\t}}"
                 )
                 .unwrap()
             } else {
-                writeln!(marshal, "fields[{json}]=v.{field_name}").unwrap()
+                writeln!(marshal, "\tfields[{json}] = v.{field_name}").unwrap()
             }
         }
         body.push_str("}\n");
         self.source.push_str(&body);
         if input {
-            marshal.push_str("return json.Marshal(fields)\n}\n");
+            marshal.push_str("\treturn json.Marshal(fields)\n}\n");
             self.source.push_str(&marshal);
             body.push_str(&marshal);
         }
@@ -101,16 +102,16 @@ impl Models {
         let variants = union_variants(alternatives)?;
         let key = variants[0].0.clone();
         let mut body = format!(
-            "type {name}Variant interface {{ is{name}() }}\ntype {name} struct {{ Value {name}Variant }}\nfunc (v *{name}) UnmarshalJSON(data []byte) error {{ var tag map[string]json.RawMessage; if err:=json.Unmarshal(data,&tag); err!=nil {{return err}}; var kind string; if err:=json.Unmarshal(tag[{key:?}],&kind); err!=nil {{return fmt.Errorf(\"missing or invalid GraphQL typename: %w\",err)}}; switch kind {{\n"
+            "type {name}Variant interface {{ is{name}() }}\ntype {name} struct {{\n\tValue {name}Variant\n}}\n\nfunc (v *{name}) UnmarshalJSON(data []byte) error {{\n\tvar tag map[string]json.RawMessage\n\tif err := json.Unmarshal(data, &tag); err != nil {{\n\t\treturn err\n\t}}\n\tvar kind string\n\tif err := json.Unmarshal(tag[{key:?}], &kind); err != nil {{\n\t\treturn fmt.Errorf(\"missing or invalid GraphQL typename: %w\", err)\n\t}}\n\tswitch kind {{\n"
         );
         let mut marshal = format!(
-            "func (v {name}) MarshalJSON() ([]byte,error) {{ switch value:=v.Value.(type) {{\n"
+            "func (v {name}) MarshalJSON() ([]byte, error) {{\n\tswitch value := v.Value.(type) {{\n"
         );
         for (_, label, fields) in variants {
             let variant = format!("{name}{}", ident(&label));
             self.object(&variant, &fields, false)?;
-            writeln!(body,"case {label:?}: var value {variant}; if err:=json.Unmarshal(data,&value); err!=nil {{return err}}; v.Value=&value; return nil").unwrap();
-            writeln!(marshal,"case *{variant}: if value == nil || value.{} != {label:?} {{return nil,fmt.Errorf(\"invalid GraphQL typename for {variant}\")}}; return json.Marshal(value)",ident(&key)).unwrap();
+            writeln!(body,"\tcase {label:?}:\n\t\tvar value {variant}\n\t\tif err := json.Unmarshal(data, &value); err != nil {{\n\t\t\treturn err\n\t\t}}\n\t\tv.Value = &value\n\t\treturn nil").unwrap();
+            writeln!(marshal,"\tcase *{variant}:\n\t\tif value == nil || value.{} != {label:?} {{\n\t\t\treturn nil, fmt.Errorf(\"invalid GraphQL typename for {variant}\")\n\t\t}}\n\t\treturn json.Marshal(value)",ident(&key)).unwrap();
             let marker = format!("func (*{variant}) is{name}() {{}}\n");
             self.source.push_str(&marker);
             self.files
@@ -118,9 +119,11 @@ impl Models {
                 .unwrap()
                 .push_str(&marker);
         }
-        body.push_str("default: return fmt.Errorf(\"unknown GraphQL typename %q\",kind)\n}\n}\n");
+        body.push_str(
+            "\tdefault:\n\t\treturn fmt.Errorf(\"unknown GraphQL typename %q\", kind)\n\t}\n}\n",
+        );
         marshal.push_str(
-            "default: return nil,fmt.Errorf(\"missing GraphQL union alternative\")\n}\n}\n",
+            "\tdefault:\n\t\treturn nil, fmt.Errorf(\"missing GraphQL union alternative\")\n\t}\n}\n",
         );
         body.push_str(&marshal);
         self.source.push_str(&body);

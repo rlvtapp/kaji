@@ -35,6 +35,7 @@ pub(super) fn append(
             });
     let common = Common {
         package_version: package.version.clone(),
+        source_quality: package.source_quality.clone(),
         ..Default::default()
     };
     match package.language.as_str() {
@@ -201,30 +202,6 @@ pub(super) fn append(
                 generator.idiomatic()
             };
             let mut target = csharp::package(package.path)
-                .common(common)
-                .with(input)
-                .with(generator);
-            if let Some(name) = package.name {
-                target = target.name(name);
-            }
-            profiles = profiles.package(target);
-        }
-        "dotnet" => {
-            let generator =
-                dotnet::graphql_incremental(Some(input.handle())).groups(package.groups.clone());
-            if !package.scalars.is_empty() {
-                bail!(
-                    "This GraphQL output uses runtime scalar callbacks, not source type mappings"
-                );
-            }
-            let generator = if package.raw == Some(true) || style == "raw" {
-                generator.raw()
-            } else if style == "flat" {
-                generator.flat()
-            } else {
-                generator.idiomatic()
-            };
-            let mut target = dotnet::package(package.path)
                 .common(common)
                 .with(input)
                 .with(generator);

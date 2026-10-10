@@ -67,12 +67,12 @@ pub(super) fn render_declared_error_types(output: &mut String, api: &Api) {
                 let body = operation_response_type(schema);
                 let _ = writeln!(
                     output,
-                    "    public static final class {error} extends ApiException {{\n        private final {body} body;\n        private {error}(ApiException source, {body} body) {{ super(source.statusCode(), source.responseBody(), source.retryAfter(), source.retryAfterMillis()); this.body = body; }}\n        public {body} body() {{ return body; }}\n    }}\n"
+                    "    public static final class {error} extends ApiException {{\n  private final {body} body;\n  \n        private {error}(ApiException source, {body} body) {{\n    super(source.statusCode(), source.responseBody(), source.retryAfter(), source.retryAfterMillis());\n    this.body = body;\n\n  }}\n  \n        public {body} body() {{\n    return body;\n\n  }}\n  \n\n}}\n\n"
                 );
             } else {
                 let _ = writeln!(
                     output,
-                    "    public static final class {error} extends ApiException {{\n        private {error}(ApiException source) {{ super(source.statusCode(), source.responseBody(), source.retryAfter(), source.retryAfterMillis()); }}\n    }}\n"
+                    "    public static final class {error} extends ApiException {{\n  private {error}(ApiException source) {{\n    super(source.statusCode(), source.responseBody(), source.retryAfter(), source.retryAfterMillis());\n\n  }}\n  \n\n}}\n\n"
                 );
             }
         }

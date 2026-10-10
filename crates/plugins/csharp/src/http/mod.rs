@@ -1,0 +1,23 @@
+//! HTTP-specific backend implementation; public factories remain at crate root.
+mod assembly;
+pub(crate) use assembly::*;
+mod models;
+pub(crate) use models::*;
+mod facade;
+pub(crate) use facade::*;
+mod errors;
+pub(crate) use errors::*;
+mod runtime;
+pub(crate) use runtime::*;
+mod operations;
+pub(crate) use operations::*;
+mod cursor;
+pub(crate) use cursor::*;
+mod types;
+pub(crate) use types::*;
+mod names;
+pub(crate) use names::*;
+mod docs;
+pub(crate) use docs::*;
+mod planning;
+pub(crate) use planning::*;

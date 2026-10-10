@@ -45,7 +45,6 @@ macro_rules! implementation {
     };
 }
 implementation!(CSharp);
-implementation!(crate::DotNet);
 
 #[cfg(test)]
 mod tests {

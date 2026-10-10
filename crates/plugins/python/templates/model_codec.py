@@ -6,12 +6,12 @@ def decode_model_value(value, shape):
     if value is None or shape is None:
         return value
     kind, inner = shape
-    if kind == 'ref':
+    if kind == "ref":
         model = getattr(import_module(__package__), inner, None)
-        decoder = getattr(model, 'from_dict', None)
+        decoder = getattr(model, "from_dict", None)
         return decoder(value) if decoder is not None and isinstance(value, dict) else value
-    if kind == 'array' and isinstance(value, list):
+    if kind == "array" and isinstance(value, list):
         return [decode_model_value(item, inner) for item in value]
-    if kind == 'object' and isinstance(value, dict):
+    if kind == "object" and isinstance(value, dict):
         return {name: decode_model_value(item, inner.get(name)) for name, item in value.items()}
     return value

@@ -25,52 +25,11 @@ use std::{
 use anyhow::{Context, Result, bail};
 
 use crate::{
-    Api, GeneratedFile, GeneratedTree, SdkClientStyle, SdkSemantics, SecuritySchemeCatalog,
-    analyze_sdk_semantics,
+    Api, GeneratedFile, GeneratedTree, SdkSemantics, SecuritySchemeCatalog, analyze_sdk_semantics,
 };
 
-/// Optional shared settings. Unset values remain unset until a plugin applies
-/// its defaults; false/flat/empty explicit values are never treated as absent.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Common {
-    pub client_name: Option<String>,
-    pub client_style: Option<SdkClientStyle>,
-    pub package_version: Option<String>,
-    pub layout: Option<crate::SourceLayout>,
-}
-
-impl Common {
-    pub fn client_name(mut self, name: impl Into<String>) -> Self {
-        self.client_name = Some(name.into());
-        self
-    }
-    pub fn client_style(mut self, style: SdkClientStyle) -> Self {
-        self.client_style = Some(style);
-        self
-    }
-    pub fn package_version(mut self, version: impl Into<String>) -> Self {
-        self.package_version = Some(version.into());
-        self
-    }
-    pub fn layout(mut self, layout: crate::SourceLayout) -> Self {
-        self.layout = Some(layout);
-        self
-    }
-    pub fn overlay(&self, local: &Self) -> Self {
-        Self {
-            client_name: local
-                .client_name
-                .clone()
-                .or_else(|| self.client_name.clone()),
-            client_style: local.client_style.or(self.client_style),
-            layout: local.layout.clone().or_else(|| self.layout.clone()),
-            package_version: local
-                .package_version
-                .clone()
-                .or_else(|| self.package_version.clone()),
-        }
-    }
-}
+mod common;
+pub use common::Common;
 
 /// Process-local identity. Never used in paths, output bytes, or ordering.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -598,6 +557,9 @@ impl<L: Language> Package<L> {
         }
         L::finalize_files(&mut tree)?;
         crate::customization::apply_code_customizations(&mut tree, &self.customizations)?;
+        if let Some(quality) = &common.source_quality {
+            quality.apply(&mut tree, L::NAME)?;
+        }
         let mut output = GeneratedTree::default();
         let dir = checked_path(Path::new(&self.dir))?;
         for (file, custom, owner) in tree.into_owned_files() {

@@ -181,39 +181,25 @@ impl<L: poolster_core::engine::Language> Plugin<L> for Source {
     }
 }
 #[test]
-fn csharp_and_dotnet_provider_substitution_and_regeneration() {
+fn csharp_provider_substitution_and_regeneration() {
     for name in ["ReadUser", "Renamed"] {
-        for dotnet in [false, true] {
-            let input = Source {
-                meta: Meta::new(),
-                name,
-            };
-            let other = Source {
-                meta: Meta::new(),
-                name: "Ignored",
-            };
-            let plugin = graphql(Some(input.meta.handle()));
-            let packages = poolster_core::engine::Packages::new();
-            let tree = if dotnet {
-                packages
-                    .package(
-                        crate::dotnet_package("sdk")
-                            .with(other)
-                            .with(plugin)
-                            .with(input),
-                    )
-                    .generate_native()
-                    .unwrap()
-            } else {
-                packages
-                    .package(crate::package("sdk").with(other).with(plugin).with(input))
-                    .generate_native()
-                    .unwrap()
-            };
-            let source = tree.iter().map(|(_, s)| s).collect::<Vec<_>>().join("\n");
-            assert!(source.contains(&format!("{name}Async")));
-            assert!(!source.contains("IgnoredAsync"));
-        }
+        let input = Source {
+            meta: Meta::new(),
+            name,
+        };
+        let other = Source {
+            meta: Meta::new(),
+            name: "Ignored",
+        };
+        let plugin = graphql(Some(input.meta.handle()));
+        let packages = poolster_core::engine::Packages::new();
+        let tree = packages
+            .package(crate::package("sdk").with(other).with(plugin).with(input))
+            .generate_native()
+            .unwrap();
+        let source = tree.iter().map(|(_, s)| s).collect::<Vec<_>>().join("\n");
+        assert!(source.contains(&format!("{name}Async")));
+        assert!(!source.contains("IgnoredAsync"));
     }
 }
 #[test]

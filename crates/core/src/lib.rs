@@ -25,6 +25,7 @@ pub mod samples;
 pub mod schema_json;
 pub mod semantics;
 pub mod source_layout;
+pub mod source_quality;
 pub mod style;
 pub mod symbols;
 pub mod vendor;
@@ -54,4 +55,5 @@ pub use semantics::{
     analyze_sdk_semantics,
 };
 pub use source_layout::{SourceLayout, SourceUnit};
+pub use source_quality::{SourceFormatter, SourceQuality};
 pub use style::SdkClientStyle;

@@ -295,7 +295,7 @@ fn graphql_bound_styles_have_snake_case_methods_and_zero_argument_queries() -> R
         );
         ensure!(source.contains("pub async fn read(&self, variables: &ReadVariables)"));
         ensure!(
-            source.contains("pub async fn fatal(transport:"),
+            source.contains("pub async fn fatal(\n    transport:"),
             "raw transport functions remain available"
         );
     }

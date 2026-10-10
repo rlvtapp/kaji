@@ -1,5 +1,6 @@
 //! Bind existing TypeScript addon packages to the selected native GraphQL client.
 use super::*;
+use crate::sdk_package::NativePlugin;
 use poolster_core::engine::{Handle, Package};
 pub(super) fn attach(
     mut target: Package<ts::TypeScript>,

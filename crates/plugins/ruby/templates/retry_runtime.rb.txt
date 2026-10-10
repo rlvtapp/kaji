@@ -1,14 +1,16 @@
     def retry_delay(response, attempt)
-      fallback = [@retry_max_delay, @retry_base_delay * (2.0 ** [attempt - 1, 20].min)].min
+      fallback = [@retry_max_delay, @retry_base_delay * (2.0**[attempt - 1, 20].min)].min
       value = response['retry-after-ms'] if response.respond_to?(:[])
       if value && value.match?(/\A\d+(?:\.\d+)?\z/)
         return [@retry_max_delay, value.to_f / 1000.0].min
       end
+
       value = response['Retry-After'] if response.respond_to?(:[])
       return fallback unless value
       if value.match?(/\A\d+(?:\.\d+)?\z/)
         return [@retry_max_delay, value.to_f].min
       end
+
       begin
         require 'time'
         [[Time.httpdate(value) - Time.now, 0].max, @retry_max_delay].min
@@ -16,22 +18,27 @@
         fallback
       end
     end
+
     def check_cancellation(cancelled = @cancelled)
       raise PoolsterCancellationError, 'request cancelled' if cancelled && cancelled.call
     end
+
     def retry_pause(delay, cancelled = @cancelled)
       deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + delay
       loop do
         check_cancellation(cancelled)
         remaining = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
         break if remaining <= 0
+
         sleep [remaining, 0.05].min
       end
     end
+
     def execute_with_retry(handler, request, idempotency_header, cancelled: @cancelled)
       method = request.method.upcase
       key = request[idempotency_header || 'Idempotency-Key']
-      replay_safe = %w[GET HEAD OPTIONS TRACE QUERY PUT DELETE].include?(method) || (%w[POST PATCH].include?(method) && key && !key.strip.empty?)
+      replay_safe = %w[GET HEAD OPTIONS TRACE QUERY PUT
+                       DELETE].include?(method) || (%w[POST PATCH].include?(method) && key && !key.strip.empty?)
       provider = request["Authorization"] ? nil : @token_provider
       token = provider && provider.token(cancelled: cancelled)
       request["Authorization"] = "Bearer #{token}" if token
@@ -46,7 +53,8 @@
           raise
         rescue IOError, EOFError, SystemCallError, Timeout::Error
           raise unless replay_safe && attempt < @max_attempts
-          retry_pause([@retry_max_delay, @retry_base_delay * (2.0 ** [attempt - 1, 20].min)].min, cancelled)
+
+          retry_pause([@retry_max_delay, @retry_base_delay * (2.0**[attempt - 1, 20].min)].min, cancelled)
           next
         end
         if response.code.to_i == 401 && provider && replay_safe && !refreshed
@@ -56,7 +64,9 @@
           attempt -= 1
           next
         end
-        return response unless replay_safe && attempt < @max_attempts && [408, 429, 500, 502, 503, 504].include?(response.code.to_i)
+        return response unless replay_safe && attempt < @max_attempts && [408, 429, 500, 502, 503,
+                                                                          504].include?(response.code.to_i)
+
         retry_pause(retry_delay(response, attempt), cancelled)
       end
     end

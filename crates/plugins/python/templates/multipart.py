@@ -14,164 +14,242 @@ _DEFAULT_MAX_BYTES = 64 * 1024 * 1024
 
 
 def _metadata(value: str, label: str) -> str:
-    if not isinstance(value, str) or not value or len(value.encode('utf-8')) > 1024 or any(ord(char) < 32 or ord(char) == 127 or char in '\\"' for char in value):
-        raise ValueError(f'invalid multipart {label}')
+    if (
+        not isinstance(value, str)
+        or not value
+        or len(value.encode("utf-8")) > 1024
+        or any(ord(char) < 32 or ord(char) == 127 or char in '\\"' for char in value)
+    ):
+        raise ValueError(f"invalid multipart {label}")
     return value
 
 
 @dataclass(frozen=True)
 class FilePart:
     """Buffered file bytes; the input buffer is copied for safe replay."""
+
     data: bytes
-    filename: str = 'blob'
-    content_type: str = 'application/octet-stream'
+    filename: str = "blob"
+    content_type: str = "application/octet-stream"
     max_bytes: int = _DEFAULT_MAX_BYTES
 
     def __post_init__(self) -> None:
         if not isinstance(self.data, (bytes, bytearray, memoryview)):
-            raise TypeError('file data must be bytes-like')
-        if isinstance(self.max_bytes, bool) or not isinstance(self.max_bytes, int) or self.max_bytes <= 0 or (self.data.nbytes if isinstance(self.data, memoryview) else len(self.data)) > self.max_bytes:
-            raise ValueError('file part exceeds buffering limit')
-        object.__setattr__(self, 'data', bytes(self.data))
-        _metadata(self.filename, 'filename')
+            raise TypeError("file data must be bytes-like")
+        if (
+            isinstance(self.max_bytes, bool)
+            or not isinstance(self.max_bytes, int)
+            or self.max_bytes <= 0
+            or (self.data.nbytes if isinstance(self.data, memoryview) else len(self.data))
+            > self.max_bytes
+        ):
+            raise ValueError("file part exceeds buffering limit")
+        object.__setattr__(self, "data", bytes(self.data))
+        _metadata(self.filename, "filename")
         if not isinstance(self.content_type, str) or not _MEDIA_TYPE.fullmatch(self.content_type):
-            raise ValueError('invalid multipart content type')
+            raise ValueError("invalid multipart content type")
 
 
 @dataclass(frozen=True)
 class JsonPart:
     """A JSON part. None explicitly sends JSON null rather than omitting it."""
+
     value: Any
 
 
 @dataclass(frozen=True)
 class RawJsonPart:
     """Validated UTF-8 JSON bytes preserved exactly on the wire."""
+
     data: bytes
 
     def __post_init__(self) -> None:
         if not isinstance(self.data, (bytes, bytearray, memoryview)):
-            raise TypeError('raw JSON data must be bytes-like')
+            raise TypeError("raw JSON data must be bytes-like")
         raw = bytes(self.data)
         if len(raw) > _DEFAULT_MAX_BYTES:
-            raise ValueError('raw JSON part exceeds buffering limit')
-        json.loads(raw.decode('utf-8'), parse_constant=lambda _: (_ for _ in ()).throw(ValueError('nonfinite JSON number')))
-        object.__setattr__(self, 'data', raw)
+            raise ValueError("raw JSON part exceeds buffering limit")
+        json.loads(
+            raw.decode("utf-8"),
+            parse_constant=lambda _: (_ for _ in ()).throw(ValueError("nonfinite JSON number")),
+        )
+        object.__setattr__(self, "data", raw)
 
 
 class MultipartBody:
     """An ordered mapping or sequence of (name, value) pairs; pairs permit repeated parts."""
-    def __init__(self, fields: Mapping[str, Any] | Sequence[tuple[str, Any]], *, max_bytes: int = _DEFAULT_MAX_BYTES) -> None:
+
+    def __init__(
+        self,
+        fields: Mapping[str, Any] | Sequence[tuple[str, Any]],
+        *,
+        max_bytes: int = _DEFAULT_MAX_BYTES,
+    ) -> None:
         if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes <= 0:
-            raise ValueError('max_bytes must be a positive integer')
+            raise ValueError("max_bytes must be a positive integer")
         if isinstance(fields, Mapping):
             fields = tuple(fields.items())
         elif isinstance(fields, Sequence) and not isinstance(fields, (str, bytes, bytearray)):
             fields = tuple(fields)
         else:
-            raise TypeError('multipart body must be a mapping or sequence of pairs')
+            raise TypeError("multipart body must be a mapping or sequence of pairs")
         if len(fields) > 1024:
-            raise ValueError('multipart body exceeds 1024 parts')
+            raise ValueError("multipart body exceeds 1024 parts")
         for part in fields:
             if not isinstance(part, (tuple, list)) or len(part) != 2:
-                raise TypeError('multipart fields must be pairs')
-            _metadata(part[0], 'field name')
-            if isinstance(part[1], (bytes, bytearray, memoryview)) and (part[1].nbytes if isinstance(part[1], memoryview) else len(part[1])) > max_bytes:
-                raise ValueError('multipart part exceeds buffering limit')
-        self._fields = tuple((name, bytes(value) if isinstance(value, (bytes, bytearray, memoryview)) else value) for name, value in fields)
+                raise TypeError("multipart fields must be pairs")
+            _metadata(part[0], "field name")
+            if (
+                isinstance(part[1], (bytes, bytearray, memoryview))
+                and (part[1].nbytes if isinstance(part[1], memoryview) else len(part[1]))
+                > max_bytes
+            ):
+                raise ValueError("multipart part exceeds buffering limit")
+        self._fields = tuple(
+            (name, bytes(value) if isinstance(value, (bytes, bytearray, memoryview)) else value)
+            for name, value in fields
+        )
         self.max_bytes = max_bytes
 
     @classmethod
-    def positional(cls, values: Sequence[Any], *, max_bytes: int = _DEFAULT_MAX_BYTES) -> MultipartBody:
-        return cls([(str(index), JsonPart(None) if value is None else value) for index, value in enumerate(values)], max_bytes=max_bytes)
+    def positional(
+        cls, values: Sequence[Any], *, max_bytes: int = _DEFAULT_MAX_BYTES
+    ) -> MultipartBody:
+        return cls(
+            [
+                (str(index), JsonPart(None) if value is None else value)
+                for index, value in enumerate(values)
+            ],
+            max_bytes=max_bytes,
+        )
 
     def with_encoding(self, plan: dict[str, Any]) -> MultipartBody:
         copied = MultipartBody(self._fields, max_bytes=self.max_bytes)
         copied._encoding_plan = plan
-        copied._part_headers = getattr(self, '_part_headers', {})
+        copied._part_headers = getattr(self, "_part_headers", {})
         return copied
 
     def with_headers(self, part: str | int, headers: Mapping[str, str]) -> MultipartBody:
-        copied = self.with_encoding(getattr(self, '_encoding_plan', {}))
-        copied._part_headers = {**getattr(self, '_part_headers', {}), str(part): dict(headers)}
+        copied = self.with_encoding(getattr(self, "_encoding_plan", {}))
+        copied._part_headers = {**getattr(self, "_part_headers", {}), str(part): dict(headers)}
         return copied
 
     def encode(self, _depth: int = 0) -> tuple[bytes, str]:
         if _depth > 16:
-            raise ValueError('multipart nesting exceeds 16 levels')
-        plan = getattr(self, '_encoding_plan', {})
-        content_type = plan.get('content_type', 'multipart/form-data')
-        if not isinstance(content_type, str) or not _MEDIA_TYPE.fullmatch(content_type) or not content_type.startswith('multipart/'):
-            raise ValueError('invalid multipart media type')
-        boundary = 'poolster-' + secrets.token_hex(24)
+            raise ValueError("multipart nesting exceeds 16 levels")
+        plan = getattr(self, "_encoding_plan", {})
+        content_type = plan.get("content_type", "multipart/form-data")
+        if (
+            not isinstance(content_type, str)
+            or not _MEDIA_TYPE.fullmatch(content_type)
+            or not content_type.startswith("multipart/")
+        ):
+            raise ValueError("invalid multipart media type")
+        boundary = "poolster-" + secrets.token_hex(24)
         chunks: list[bytes] = []
         size = 0
         for index, (name, value) in enumerate(self._fields):
-            prefix = plan.get('prefix_encoding', [])
-            positional = bool(prefix) or plan.get('item_encoding') is not None
-            encoding = (prefix[index] if index < len(prefix) else plan.get('item_encoding') or {}) if positional else plan.get('encoding', {}).get(name, {})
+            prefix = plan.get("prefix_encoding", [])
+            positional = bool(prefix) or plan.get("item_encoding") is not None
+            encoding = (
+                (prefix[index] if index < len(prefix) else plan.get("item_encoding") or {})
+                if positional
+                else plan.get("encoding", {}).get(name, {})
+            )
             if value is None:
                 continue
             disposition = f'Content-Disposition: form-data; name="{name}"'
-            media_type = 'text/plain; charset=utf-8'
+            media_type = "text/plain; charset=utf-8"
             if isinstance(value, (bytes, bytearray, memoryview)):
                 value = FilePart(bytes(value))
             if isinstance(value, MultipartBody):
-                nested_plan = {'content_type': encoding.get('contentType', 'multipart/mixed'), 'encoding': encoding.get('encoding', {}), 'prefix_encoding': encoding.get('prefixEncoding', []), 'item_encoding': encoding.get('itemEncoding')}
+                nested_plan = {
+                    "content_type": encoding.get("contentType", "multipart/mixed"),
+                    "encoding": encoding.get("encoding", {}),
+                    "prefix_encoding": encoding.get("prefixEncoding", []),
+                    "item_encoding": encoding.get("itemEncoding"),
+                }
                 data, media_type = value.with_encoding(nested_plan).encode(_depth + 1)
             elif isinstance(value, FilePart):
                 filename = value.filename
                 disposition += f'; filename="{filename}"'
                 data, media_type = value.data, value.content_type
             elif isinstance(value, RawJsonPart):
-                data, media_type = value.data, 'application/json'
+                data, media_type = value.data, "application/json"
             elif isinstance(value, JsonPart) or isinstance(value, (dict, list, tuple)):
-                data = json.dumps(value.value if isinstance(value, JsonPart) else value, ensure_ascii=False, allow_nan=False, separators=(',', ':')).encode('utf-8')
-                media_type = 'application/json'
+                data = json.dumps(
+                    value.value if isinstance(value, JsonPart) else value,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+                media_type = "application/json"
             elif isinstance(value, bool):
-                data = ('true' if value else 'false').encode('ascii')
+                data = ("true" if value else "false").encode("ascii")
             elif isinstance(value, (str, int, float)):
                 if isinstance(value, float) and not math.isfinite(value):
-                    raise ValueError('multipart numbers must be finite')
-                data = str(value).encode('utf-8')
+                    raise ValueError("multipart numbers must be finite")
+                data = str(value).encode("utf-8")
             else:
-                raise TypeError('unsupported multipart field value; use FilePart or JsonPart')
+                raise TypeError("unsupported multipart field value; use FilePart or JsonPart")
             if not isinstance(value, MultipartBody):
-                media_type = encoding.get('contentType') or media_type
-            _metadata(media_type, 'content type')
-            supplied = {**encoding.get('header_values', {}), **getattr(self, '_part_headers', {}).get(name, {})}
+                media_type = encoding.get("contentType") or media_type
+            _metadata(media_type, "content type")
+            supplied = {
+                **encoding.get("header_values", {}),
+                **getattr(self, "_part_headers", {}).get(name, {}),
+            }
             header_lines = []
-            for header_name, declaration in encoding.get('headers', {}).items():
-                if header_name.lower() == 'content-type':
+            for header_name, declaration in encoding.get("headers", {}).items():
+                if header_name.lower() == "content-type":
                     continue
-                header_value = next((value for key, value in supplied.items() if key.lower() == header_name.lower()), None)
-                if header_value is None and declaration.get('example_json'):
-                    header_value = json.loads(declaration['example_json'])
-                if header_value is None and declaration.get('required'):
-                    raise ValueError(f'missing required multipart header {header_name}')
+                header_value = next(
+                    (
+                        value
+                        for key, value in supplied.items()
+                        if key.lower() == header_name.lower()
+                    ),
+                    None,
+                )
+                if header_value is None and declaration.get("example_json"):
+                    header_value = json.loads(declaration["example_json"])
+                if header_value is None and declaration.get("required"):
+                    raise ValueError(f"missing required multipart header {header_name}")
                 if header_value is not None:
                     if not re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", header_name):
-                        raise ValueError('invalid multipart header name')
-                    header_lines.append(f'{header_name}: {_metadata(str(header_value), "header value")}')
+                        raise ValueError("invalid multipart header name")
+                    header_lines.append(
+                        f"{header_name}: {_metadata(str(header_value), 'header value')}"
+                    )
             for header_name, header_value in supplied.items():
-                if header_name.lower() == 'content-type' or header_name.lower() in {key.lower() for key in encoding.get('headers', {})}:
+                if header_name.lower() == "content-type" or header_name.lower() in {
+                    key.lower() for key in encoding.get("headers", {})
+                }:
                     continue
                 if not re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", header_name):
-                    raise ValueError('invalid multipart header name')
-                header_lines.append(f'{header_name}: {_metadata(str(header_value), "header value")}')
-            headers = ([disposition] if content_type == 'multipart/form-data' else []) + [f'Content-Type: {media_type}'] + header_lines
-            prefix = (f'--{boundary}\r\n' + '\r\n'.join(headers) + '\r\n\r\n').encode('utf-8')
+                    raise ValueError("invalid multipart header name")
+                header_lines.append(
+                    f"{header_name}: {_metadata(str(header_value), 'header value')}"
+                )
+            headers = (
+                ([disposition] if content_type == "multipart/form-data" else [])
+                + [f"Content-Type: {media_type}"]
+                + header_lines
+            )
+            prefix = (f"--{boundary}\r\n" + "\r\n".join(headers) + "\r\n\r\n").encode("utf-8")
             size += len(prefix) + len(data) + 2
             if size + len(boundary) + 6 > self.max_bytes:
-                raise ValueError('multipart body exceeds buffering limit')
-            chunks.extend((prefix, data, b'\r\n'))
-        chunks.append(f'--{boundary}--\r\n'.encode('ascii'))
+                raise ValueError("multipart body exceeds buffering limit")
+            chunks.extend((prefix, data, b"\r\n"))
+        chunks.append(f"--{boundary}--\r\n".encode("ascii"))
         if sum(map(len, chunks)) > self.max_bytes:
-            raise ValueError('multipart body exceeds buffering limit')
-        return b''.join(chunks), f'{content_type}; boundary={boundary}'
+            raise ValueError("multipart body exceeds buffering limit")
+        return b"".join(chunks), f"{content_type}; boundary={boundary}"
 
 
-def encode_multipart(body: Any, wire_encoder: Callable[[Any], Any] | None = None) -> tuple[bytes, str]:
+def encode_multipart(
+    body: Any, wire_encoder: Callable[[Any], Any] | None = None
+) -> tuple[bytes, str]:
     if not isinstance(body, (MultipartBody, Mapping)) and wire_encoder is not None:
         body = wire_encoder(body)
     return (body if isinstance(body, MultipartBody) else MultipartBody(body)).encode()

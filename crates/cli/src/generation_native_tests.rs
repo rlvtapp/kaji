@@ -226,7 +226,7 @@ fn graphql_go_python_packages_generate_and_regenerate_through_recipe() {
 #[test]
 fn graphql_other_language_packages_generate_and_regenerate_through_recipe() {
     let directory = tempfile::tempdir().unwrap();
-    let languages = ["php", "java", "csharp", "dotnet", "ruby", "swift", "elixir"];
+    let languages = ["php", "java", "csharp", "ruby", "swift", "elixir"];
     let packages: Vec<_> = languages.iter().map(|language| serde_json::json!({
         "language":language,"path":language,"plugins":[{"name":"sdk","contracts":{"graphql":{"style":"grouped","groups":{"users":{"read":"Hello"}}}}}]
     })).collect();

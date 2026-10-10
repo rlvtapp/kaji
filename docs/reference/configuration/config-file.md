@@ -1,10 +1,10 @@
 # `poolster.json` reference
 
-## Native inputs on alpha.2
+## Native inputs
 
-The unreleased `alpha-2` branch adds native `input` recipes for GraphQL →
-TypeScript, Protobuf → Go gRPC, AsyncAPI → TypeScript/Kafka and Arazzo →
-TypeScript workflow runners. Choose exactly one of `input` or `openapi`.
+The current source supports native `input` recipes for GraphQL SDKs, Protobuf →
+Go gRPC, AsyncAPI → TypeScript/Kafka and Arazzo → TypeScript workflow runners.
+See the [support matrix](../../plugin-support-matrix.md) for language and transport limits. Choose exactly one of `input` or `openapi`.
 Provider selection, supported plugin names and protocol options are documented
 in [native recipes and remaining work](../inputs/native-pipelines.md#cli-and-recipe-selection).
 The existing OpenAPI recipe guide below remains applicable.
@@ -423,3 +423,47 @@ This excerpt belongs inside a config with `openapi` and `output`. Configurable
 layouts in JSON are consumed by TypeScript query helpers, Zod, Faker,
 MSW and Cypress. Other generators retain their native automatic file splitting.
 A shared default does not imply that every generator supports every layout mode.
+
+## Final source quality
+
+Set `source_quality` on a package or under `defaults` to format the final source
+and check its byte budget. This runs after language finalization and source
+customizations. The formatter is a trusted local executable supplied by the SDK
+author; Poolster passes arguments directly without a shell. It verifies the exact
+version response and applies the formatted tree only after every file succeeds.
+
+```json
+{
+  "source_quality": {
+    "mode": "formatted",
+    "formatter": {
+      "program": "rustfmt",
+      "arguments": ["--edition", "2024", "{file}"],
+      "versionArguments": ["--version"],
+      "expectedVersion": "rustfmt 1.8.0-stable (4a4ef493e3 2026-03-02)",
+      "extensions": ["rs"],
+      "timeoutSeconds": 120
+    },
+    "maxFileBytes": 131072
+  }
+}
+```
+
+Pin the version actually used by your project; the example is not a universal
+Rust toolchain requirement. Executable names use PATH. Relative executable paths
+such as `./tools/format-source` resolve from the recipe directory. Configuration
+files or other paths in arguments should be absolute because formatting runs in
+an isolated temporary directory. The executable must edit `{file}` in place.
+
+The report is written to `.poolster/source-quality.json` inside the package.
+Oversized files fail unless the generator already emitted an atomic-declaration
+exception in its source-layout diagnostics. A report with `status: formatted`
+confirms this pass, not every capability in the SDK specification.
+
+To record a deliberate unformatted build, use
+`{ "mode": "unformatted", "reason": "Formatter unavailable in this environment" }`.
+This produces an explicit report and does not count as formatting conformance.
+Omitting the setting preserves the language generator's default behavior.
+
+Rust composition uses `Common::source_quality(...)`; npm language plugin options
+use `sourceQuality` with the same tagged policy object.

@@ -104,11 +104,11 @@ pub(super) fn files(
     files.push(GeneratedFile::new("graphql-codecs.ts", source)?);
     files.push(GeneratedFile::new(
         "graphql-scalar-runtime.ts",
-        include_str!("../../templates/graphql_scalar_runtime.ts.tmpl"),
+        include_str!("runtime/scalar_runtime.ts.tmpl"),
     )?);
     files.push(GeneratedFile::new(
         "graphql-sse.ts",
-        include_str!("../../templates/graphql_sse.ts.tmpl"),
+        include_str!("runtime/sse.ts.tmpl"),
     )?);
     Ok(files)
 }

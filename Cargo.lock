@@ -1116,7 +1116,6 @@ dependencies = [
  "poolster-core",
  "poolster-input-openapi",
  "poolster-plugin-csharp",
- "poolster-plugin-dotnet",
  "poolster-plugin-elixir",
  "poolster-plugin-go",
  "poolster-plugin-java",
@@ -1269,14 +1268,6 @@ dependencies = [
  "poolster-core",
  "serde_json",
  "tempfile",
-]
-
-[[package]]
-name = "poolster-plugin-dotnet"
-version = "0.5.0-alpha.1"
-dependencies = [
- "poolster-core",
- "poolster-plugin-csharp",
 ]
 
 [[package]]

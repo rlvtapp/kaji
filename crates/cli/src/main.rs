@@ -29,8 +29,8 @@ use poolster::ts::artifacts::{
     TypeScriptReactQuery, TypeScriptSwr, TypeScriptVueQuery, TypeScriptZod,
 };
 use poolster::{
-    SdkClientStyle, csharp, dotnet, elixir, go, java, mock, php, postman, prelude::*, python, ruby,
-    rust, rust_cli, swift, symfony, terraform, ts, ts_cli,
+    SdkClientStyle, csharp, elixir, go, java, mock, php, postman, prelude::*, python, ruby, rust,
+    rust_cli, swift, symfony, terraform, ts, ts_cli,
 };
 use poolster_core::{Api, GeneratedFile, GeneratedTree};
 use profile_config::*;
@@ -146,7 +146,7 @@ Generate options (both modes):
       --exclude-path <pattern>        Omit matching OpenAPI paths; repeatable
   -h, --help                          Show help
 
-Targets: postman, terraform, rust, rust-cli, typescript, typescript-cli, go, python, php, symfony, java, csharp, dotnet (legacy alias), elixir, ruby, swift
+Targets: postman, terraform, rust, rust-cli, typescript, typescript-cli, go, python, php, symfony, java, csharp, elixir, ruby, swift
 
 MCP commands:
   mcp                                   Serve an OpenAPI document as MCP tools over stdio
@@ -208,7 +208,6 @@ const LANGUAGES: &[&str] = &[
     "symfony",
     "java",
     "csharp",
-    "dotnet",
     "elixir",
     "ruby",
     "swift",

@@ -32,6 +32,20 @@ class LayoutAuditTests(unittest.TestCase):
             self.assertEqual({item['path'] for item in report['violations']},
                              {'crates/example/src/legacy.rs', 'crates/example/src/new.rs'})
 
+    def test_test_modules_are_not_authored_renderer_budgets(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / 'crates/example/src'
+            source.mkdir(parents=True)
+            (source / 'tests.rs').write_text('x\n' * 1000)
+            (source / 'native_tests.rs').write_text('x\n' * 1000)
+            (source / 'renderer.rs').write_text('x\n' * 401)
+            baseline = root / 'baseline.json'
+            baseline.write_text(json.dumps({'legacy_line_budgets': {}}))
+            report = audit.source_size_audit(root, baseline)
+            self.assertEqual(report['checked'], 1)
+            self.assertEqual(report['violations'][0]['path'], 'crates/example/src/renderer.rs')
+
     def fake_generation(self, mutate=False, remove_authored=False):
         generations = []
         def run(command, environment, log, timeout):

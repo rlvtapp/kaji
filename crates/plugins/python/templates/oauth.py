@@ -18,9 +18,18 @@ class OAuthClientCredentials:
     provider to refresh only if that token is still current, preventing concurrent
     401 responses from causing duplicate refresh requests.
     """
-    def __init__(self, token_url: str, client_id: str, client_secret: str, *,
-                 scopes: list[str] | None = None, timeout: float = 30.0,
-                 refresh_leeway: float = 30.0, opener: Callable[..., Any] = urlopen) -> None:
+
+    def __init__(
+        self,
+        token_url: str,
+        client_id: str,
+        client_secret: str,
+        *,
+        scopes: list[str] | None = None,
+        timeout: float = 30.0,
+        refresh_leeway: float = 30.0,
+        opener: Callable[..., Any] = urlopen,
+    ) -> None:
         self.token_url = token_url
         self.client_id = client_id
         self.client_secret = client_secret
@@ -35,39 +44,64 @@ class OAuthClientCredentials:
     def __call__(self, rejected_token: str | None = None) -> str:
         with self._lock:
             now = time.monotonic()
-            if self._token is not None and now < self._expires_at and (rejected_token is None or rejected_token != self._token):
+            if (
+                self._token is not None
+                and now < self._expires_at
+                and (rejected_token is None or rejected_token != self._token)
+            ):
                 return self._token
-            fields = {'grant_type': 'client_credentials'}
+            fields = {"grant_type": "client_credentials"}
             if self.scopes:
-                fields['scope'] = ' '.join(self.scopes)
+                fields["scope"] = " ".join(self.scopes)
             # OAuth Basic credentials are individually form-encoded before joining.
             from urllib.parse import quote_plus
-            credentials = f'{quote_plus(self.client_id)}:{quote_plus(self.client_secret)}'
-            authorization = base64.b64encode(credentials.encode('utf-8')).decode('ascii')
-            request = Request(self.token_url, data=urlencode(fields).encode('utf-8'), method='POST',
-                              headers={'Authorization': f'Basic {authorization}', 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json'})
+
+            credentials = f"{quote_plus(self.client_id)}:{quote_plus(self.client_secret)}"
+            authorization = base64.b64encode(credentials.encode("utf-8")).decode("ascii")
+            request = Request(
+                self.token_url,
+                data=urlencode(fields).encode("utf-8"),
+                method="POST",
+                headers={
+                    "Authorization": f"Basic {authorization}",
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Accept": "application/json",
+                },
+            )
             with self._opener(request, timeout=self.timeout) as response:
                 payload = json.loads(response.read())
-            token = payload.get('access_token')
+            token = payload.get("access_token")
             if not isinstance(token, str) or not token:
-                raise ValueError('OAuth token response requires a nonempty access_token')
-            if str(payload.get('token_type', 'Bearer')).lower() != 'bearer':
-                raise ValueError('OAuth token response must use Bearer token_type')
-            lifetime = float(payload.get('expires_in', 0))
+                raise ValueError("OAuth token response requires a nonempty access_token")
+            if str(payload.get("token_type", "Bearer")).lower() != "bearer":
+                raise ValueError("OAuth token response must use Bearer token_type")
+            lifetime = float(payload.get("expires_in", 0))
             if not math.isfinite(lifetime) or lifetime < 0:
-                raise ValueError('OAuth expires_in must be finite and nonnegative')
+                raise ValueError("OAuth expires_in must be finite and nonnegative")
             self._token = token
             # Scale leeway for short-lived tokens to avoid immediate refresh loops.
-            self._expires_at = time.monotonic() + max(0.0, lifetime - min(self.refresh_leeway, lifetime / 2))
+            self._expires_at = time.monotonic() + max(
+                0.0, lifetime - min(self.refresh_leeway, lifetime / 2)
+            )
             return token
 
 
 class AsyncOAuthClientCredentials:
     """Async token provider sharing cached tokens across concurrent callers."""
-    def __init__(self, token_url: str, client_id: str, client_secret: str, *,
-                 scopes: list[str] | None = None, timeout: float = 30.0,
-                 refresh_leeway: float = 30.0, http_client: Any = None) -> None:
+
+    def __init__(
+        self,
+        token_url: str,
+        client_id: str,
+        client_secret: str,
+        *,
+        scopes: list[str] | None = None,
+        timeout: float = 30.0,
+        refresh_leeway: float = 30.0,
+        http_client: Any = None,
+    ) -> None:
         import asyncio
+
         self.token_url = token_url
         self.client_id = client_id
         self.client_secret = client_secret
@@ -87,32 +121,44 @@ class AsyncOAuthClientCredentials:
     async def __call__(self, rejected_token: str | None = None) -> str:
         async with self._lock:
             now = time.monotonic()
-            if self._token is not None and now < self._expires_at and (rejected_token is None or rejected_token != self._token):
+            if (
+                self._token is not None
+                and now < self._expires_at
+                and (rejected_token is None or rejected_token != self._token)
+            ):
                 return self._token
             if self._http_client is None:
                 import httpx
+
                 self._http_client = httpx.AsyncClient(timeout=self.timeout)
-            fields = {'grant_type': 'client_credentials'}
+            fields = {"grant_type": "client_credentials"}
             if self.scopes:
-                fields['scope'] = ' '.join(self.scopes)
+                fields["scope"] = " ".join(self.scopes)
             from urllib.parse import quote_plus
-            credentials = f'{quote_plus(self.client_id)}:{quote_plus(self.client_secret)}'
-            authorization = base64.b64encode(credentials.encode('utf-8')).decode('ascii')
-            response = await self._http_client.post(self.token_url, data=fields, timeout=self.timeout,
-                                                   headers={'Authorization': f'Basic {authorization}', 'Accept': 'application/json'})
+
+            credentials = f"{quote_plus(self.client_id)}:{quote_plus(self.client_secret)}"
+            authorization = base64.b64encode(credentials.encode("utf-8")).decode("ascii")
+            response = await self._http_client.post(
+                self.token_url,
+                data=fields,
+                timeout=self.timeout,
+                headers={"Authorization": f"Basic {authorization}", "Accept": "application/json"},
+            )
             try:
                 response.raise_for_status()
                 payload = response.json()
             finally:
                 await response.aclose()
-            token = payload.get('access_token')
+            token = payload.get("access_token")
             if not isinstance(token, str) or not token:
-                raise ValueError('OAuth token response requires a nonempty access_token')
-            if str(payload.get('token_type', 'Bearer')).lower() != 'bearer':
-                raise ValueError('OAuth token response must use Bearer token_type')
-            lifetime = float(payload.get('expires_in', 0))
+                raise ValueError("OAuth token response requires a nonempty access_token")
+            if str(payload.get("token_type", "Bearer")).lower() != "bearer":
+                raise ValueError("OAuth token response must use Bearer token_type")
+            lifetime = float(payload.get("expires_in", 0))
             if not math.isfinite(lifetime) or lifetime < 0:
-                raise ValueError('OAuth expires_in must be finite and nonnegative')
+                raise ValueError("OAuth expires_in must be finite and nonnegative")
             self._token = token
-            self._expires_at = time.monotonic() + max(0.0, lifetime - min(self.refresh_leeway, lifetime / 2))
+            self._expires_at = time.monotonic() + max(
+                0.0, lifetime - min(self.refresh_leeway, lifetime / 2)
+            )
             return token

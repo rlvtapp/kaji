@@ -441,3 +441,76 @@ fn abstract_selections_require_a_stable_typename_discriminator() {
             .contains("__typename")
     );
 }
+
+#[test]
+fn many_named_inputs_keep_registry_bounded_and_all_shapes_available() {
+    let mut contract = fixture();
+    for index in 0..400 {
+        contract.input_objects.insert(
+            format!("Input{index:04}"),
+            (0..20)
+                .map(|field| ModelField {
+                    name: format!("field{field}"),
+                    ty: string(false),
+                    optional: false,
+                    default_value: None,
+                })
+                .collect(),
+        );
+    }
+    let (files, _) = render(
+        &contract,
+        "graphqlclient",
+        GraphqlStyle::Raw,
+        &BTreeMap::new(),
+    )
+    .unwrap();
+    assert!(files["graphql_shapes.go"].len() < 1024);
+    assert_eq!(
+        files
+            .keys()
+            .filter(|path| path.starts_with("graphql_input_shape_"))
+            .count(),
+        400
+    );
+    assert!(
+        files
+            .iter()
+            .filter(|(path, _)| path.ends_with(".go"))
+            .all(|(_, source)| source.len() <= 128 * 1024)
+    );
+    assert!(!files.contains_key(".poolster/source-layout-diagnostics.json"));
+    let directory = tempfile::tempdir().unwrap();
+    write_files(directory.path(), files);
+    fs::write(
+        directory.path().join("go.mod"),
+        "module graphqlclient\n\ngo 1.22\n",
+    )
+    .unwrap();
+    fs::write(directory.path().join("shapes_test.go"), r#"package graphqlclient
+import "testing"
+func TestShapeRegistry(t *testing.T) {
+    if len(graphqlInputShapes) != 400 { t.Fatalf("missing input shapes: %d", len(graphqlInputShapes)) }
+    for name, shape := range graphqlInputShapes {
+        if shape == nil || len(shape.Fields) != 20 { t.Fatalf("incomplete shape %s", name) }
+    }
+}
+"#).unwrap();
+    let output = Command::new("go")
+        .args(["test", "./..."])
+        .current_dir(directory.path())
+        .env("GOWORK", "off")
+        .env(
+            "GOCACHE",
+            std::env::var_os("GOCACHE")
+                .unwrap_or_else(|| directory.path().join("cache").into_os_string()),
+        )
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}

@@ -1,0 +1,191 @@
+
+export type JsonShape = { kind?: string; nullable?: boolean; writeOnly?: boolean; literals?: unknown[]; required?: string[]; integer?: 'string' | 'bigint'; ref?: string; fields?: Record<string, JsonShape | null>; additional?: JsonShape | null; items?: JsonShape | null; variants?: (JsonShape | null)[] }
+export type JsonPlan = { lossless?: boolean; refs: Record<string, JsonShape | null>; requests: Record<string, JsonShape | null>; responses: Record<string, Record<string, JsonShape | null>> }
+class JsonNumber { constructor(readonly text: string) {} }
+// Parse tokens before converting numbers. JSON.parse validates the complete
+// document first; the second pass preserves integer digits exactly.
+const rawJson = (text: string): unknown => {
+  JSON.parse(text)
+  let i = 0
+  const whitespace = () => { while (/\s/.test(text[i] ?? '') && i < text.length) i++ }
+  const string = (): string => {
+    const start = i++
+    while (i < text.length) { const c = text[i++]; if (c === '\\') i++; else if (c === '"') break }
+    return JSON.parse(text.slice(start, i)) as string
+  }
+  const value = (): unknown => {
+    whitespace()
+    if (text[i] === '"') return string()
+    if (text[i] === '[') { i++; const result: unknown[] = []; whitespace(); if (text[i] === ']') { i++; return result }; while (true) { result.push(value()); whitespace(); if (text[i++] === ']') return result } }
+    if (text[i] === '{') { i++; const result: Record<string, unknown> = {}; whitespace(); if (text[i] === '}') { i++; return result }; while (true) { whitespace(); const key = string(); whitespace(); i++; const item = value(); Object.defineProperty(result, key, { value: item, enumerable: true, configurable: true, writable: true }); whitespace(); if (text[i++] === '}') return result } }
+    for (const [literal, result] of [['true', true], ['false', false], ['null', null]] as const) { if (text.startsWith(literal, i)) { i += literal.length; return result } }
+    const number = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/.exec(text.slice(i))!
+    i += number[0].length
+    return new JsonNumber(number[0])
+  }
+  return value()
+}
+const resolvedShape = (shape: JsonShape | null | undefined, refs: JsonPlan['refs'], seen = new Set<string>()): JsonShape | null => {
+  if (!shape) return null
+  if (shape.ref) { if (seen.has(shape.ref)) return null; seen.add(shape.ref); const target = resolvedShape(refs[shape.ref], refs, seen); return target ? { ...target, nullable: shape.nullable || target.nullable, writeOnly: shape.writeOnly || target.writeOnly } : null }
+  return shape
+}
+const integerDigits = (token: string): string => {
+  const match = /^(-?)(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/.exec(token)
+  if (!match) throw new TypeError('Invalid integer JSON token')
+  const fraction = match[3] ?? ''
+  const exponent = Number(match[4] ?? 0)
+  if (!Number.isSafeInteger(exponent) || Math.abs(exponent) > 10000) throw new TypeError('Integer JSON exponent exceeds the supported bound')
+  let digits = match[2] + fraction
+  if (/^0+$/.test(digits)) return '0'
+  const shift = exponent - fraction.length
+  if (shift >= 0) digits += '0'.repeat(shift)
+  else {
+    const cut = digits.length + shift
+    if (cut < 0 || !/^0*$/.test(digits.slice(Math.max(0,cut)))) throw new TypeError('Fractional value for an integer JSON schema')
+    digits = digits.slice(0,cut) || '0'
+  }
+  digits = digits.replace(/^0+(?=\d)/,'')
+  return (match[1] && digits !== '0' ? '-' : '') + digits
+}
+const matchesJsonShape = (value: unknown, shape: JsonShape | null | undefined, refs: JsonPlan['refs'], depth = 0): boolean => {
+  if (depth > 64) return true
+  const resolved = resolvedShape(shape, refs)
+  if (!resolved) return true
+  if (value === null) return !!resolved.nullable || resolved.kind === 'null'
+  if (resolved.literals) { const scalar = value instanceof JsonNumber ? value.text : String(value); if (!resolved.literals.some((literal) => String(literal) === scalar)) return false }
+  if (resolved.variants) return resolved.variants.some((variant) => matchesJsonShape(value,variant,refs,depth+1))
+  if (resolved.kind === 'integer') { if (value instanceof JsonNumber) { try { integerDigits(value.text); return true } catch { return false } }; return typeof value === 'bigint' || (typeof value === 'number' && Number.isInteger(value)) || (typeof value === 'string' && resolved.integer === 'string' && /^-?(?:0|[1-9]\d*)$/.test(value)) }
+  if (resolved.kind === 'number') return value instanceof JsonNumber || typeof value === 'number'
+  if (resolved.kind === 'string' || resolved.kind === 'boolean') return typeof value === resolved.kind
+  if (resolved.kind === 'array') return Array.isArray(value)
+  if (resolved.kind === 'object') {
+    if (!value || typeof value !== 'object' || Array.isArray(value) || value instanceof JsonNumber) return false
+    const object = value as Record<string, unknown>
+    return (resolved.required ?? []).every((key) => Object.hasOwn(object,key)) && Object.entries(resolved.fields ?? {}).every(([key,child]) => !Object.hasOwn(object,key) || matchesJsonShape(object[key],child,refs,depth+1))
+  }
+  return true
+}
+const selectedShape = (value: unknown, shape: JsonShape | null | undefined, refs: JsonPlan['refs']): JsonShape | null => {
+  const resolved = resolvedShape(shape,refs)
+  if (!resolved?.variants) return resolved
+  // A union selects a matching branch; an intersection combines its fields.
+  if (resolved.kind !== 'allOf') return selectedShape(value,resolved.variants.find((variant) => matchesJsonShape(value,variant,refs)),refs)
+  const members = resolved.variants.map((variant) => selectedShape(value,variant,refs)).filter((variant): variant is JsonShape => !!variant)
+  return { integer: members.find((member) => member.integer)?.integer, fields: Object.assign({},...members.map((member) => member.fields ?? {})), items: members.find((member) => member.items)?.items, additional: members.find((member) => member.additional)?.additional }
+}
+const fieldJsonShape = (shape: JsonShape | null, key: string): JsonShape | null | undefined => shape?.fields && Object.hasOwn(shape.fields,key) ? shape.fields[key] : shape?.additional
+const decodeJsonValue = (value: unknown, shape: JsonShape | null | undefined, refs: JsonPlan['refs']): unknown => {
+  const resolved = selectedShape(value, shape, refs)
+  if (value instanceof JsonNumber) {
+    if (resolved?.integer) { const digits = integerDigits(value.text); return resolved.integer === 'bigint' ? BigInt(digits) : digits }
+    return Number(value.text)
+  }
+  if (typeof value === 'string' && resolved?.integer && /^-?(?:0|[1-9]\d*)$/.test(value)) return resolved.integer === 'bigint' ? BigInt(value) : value
+  if (Array.isArray(value)) return value.map((item) => decodeJsonValue(item, resolved?.items, refs))
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, decodeJsonValue(item, fieldJsonShape(resolved,key), refs)]))
+  return value
+}
+/** Structural response checks; enum values and unknown object fields remain forward compatible. */
+export class ResponseDecodeError extends TypeError {
+  constructor(public readonly path: string, public readonly expected: string) {
+    super(`Poolster response decoding failed at ${path}: expected ${expected}`)
+    this.name = 'ResponseDecodeError'
+  }
+}
+export const assertResponseShape = (value: unknown, shape: JsonShape | null | undefined, refs: JsonPlan['refs'] = {}, path = '$', depth = 0): void => {
+  const schema = resolvedShape(shape, refs)
+  if (!schema) return
+  if (depth > 128) throw new ResponseDecodeError(path, 'a bounded response structure')
+  if (value === null && (schema.nullable || schema.kind === 'null')) return
+  if (schema.variants) {
+    if (schema.kind === 'allOf') {
+      for (const variant of schema.variants) assertResponseShape(value, variant, refs, path, depth + 1)
+      return
+    }
+    for (const variant of schema.variants) {
+      try { assertResponseShape(value, variant, refs, path, depth + 1); return }
+      catch (error) { if (!(error instanceof ResponseDecodeError)) throw error }
+    }
+    throw new ResponseDecodeError(path, 'a declared union shape')
+  }
+  if (value === null) throw new ResponseDecodeError(path, schema.kind ?? 'a non-null value')
+  const fail = (expected: string): never => { throw new ResponseDecodeError(path, expected) }
+  switch (schema.kind) {
+    case 'string': if (typeof value !== 'string') fail('string'); break
+    case 'boolean': if (typeof value !== 'boolean') fail('boolean'); break
+    case 'number': if (typeof value !== 'number' || !Number.isFinite(value)) fail('finite number'); break
+    case 'integer':
+      if (schema.integer === 'bigint') { if (typeof value !== 'bigint') fail('bigint') }
+      else if (schema.integer === 'string') { if (typeof value !== 'string' || !/^-?(?:0|[1-9]\d*)$/.test(value)) fail('integer string') }
+      else if (typeof value !== 'number' || !Number.isInteger(value)) fail('integer')
+      break
+    case 'null': fail('null'); break
+    case 'array':
+      if (!Array.isArray(value)) fail('array')
+      for (const [index, item] of (value as unknown[]).entries()) assertResponseShape(item, schema.items, refs, `${path}[${index}]`, depth + 1)
+      break
+    case 'object': {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) fail('object')
+      const object = value as Record<string, unknown>
+      for (const key of schema.required ?? []) {
+        if (!resolvedShape(schema.fields?.[key], refs)?.writeOnly && !Object.hasOwn(object, key)) throw new ResponseDecodeError(`${path}[${JSON.stringify(key)}]`, 'required property')
+      }
+      for (const [key, child] of Object.entries(schema.fields ?? {})) {
+        if (Object.hasOwn(object, key)) assertResponseShape(object[key], child, refs, `${path}[${JSON.stringify(key)}]`, depth + 1)
+      }
+      if (schema.additional) for (const [key, item] of Object.entries(object)) {
+        if (!Object.hasOwn(schema.fields ?? {}, key)) assertResponseShape(item, schema.additional, refs, `${path}[${JSON.stringify(key)}]`, depth + 1)
+      }
+      break
+    }
+  }
+}
+const checkResponseEnvelope = (response: unknown, plan: JsonPlan | undefined): unknown => {
+  if (!plan) return response
+  if (!response || typeof response !== 'object' || !('status' in response)) throw new ResponseDecodeError('$', 'response envelope')
+  const envelope = response as { status: number; data?: unknown; contentType?: string }
+  if (!Number.isInteger(envelope.status) || envelope.status < 100 || envelope.status > 599) throw new ResponseDecodeError('$.status', 'HTTP status')
+  if (envelope.status >= 200 && envelope.status < 300 && envelope.status !== 204) {
+    assertResponseShape(envelope.data, responseJsonShape(plan, envelope.status, envelope.contentType ?? ''), plan.refs)
+  }
+  return response
+}
+export const parseJson = (text: string, shape?: JsonShape | null, refs: JsonPlan['refs'] = {}): unknown => decodeJsonValue(rawJson(text), shape, refs)
+export const stringifyJson = (value: unknown, shape?: JsonShape | null, refs: JsonPlan['refs'] = {}): string => {
+  const encode = (item: unknown, current?: JsonShape | null): string | undefined => {
+    const resolved = selectedShape(item, current, refs)
+    if (resolved?.integer && item !== null && item !== undefined) {
+      if (typeof item === 'number' && !Number.isSafeInteger(item)) throw new TypeError('Integer JSON values must be supplied as an exact string or bigint')
+      const text = String(item)
+      if (!/^-?(?:0|[1-9]\d*)$/.test(text)) throw new TypeError('Invalid integer JSON value')
+      return text
+    }
+    if (typeof item === 'bigint') throw new TypeError('BigInt requires a declared integer schema')
+    if (Array.isArray(item)) return '[' + item.map((v) => encode(v, resolved?.items) ?? 'null').join(',') + ']'
+    if (item && typeof item === 'object') {
+      if (typeof (item as { toJSON?: unknown }).toJSON === 'function') return JSON.stringify(item)
+      return '{' + Object.entries(item).flatMap(([key, v]) => { const encoded = encode(v, fieldJsonShape(resolved,key)); return encoded === undefined ? [] : [JSON.stringify(key) + ':' + encoded] }).join(',') + '}'
+    }
+    return JSON.stringify(item)
+  }
+  return encode(value, shape) ?? 'null'
+}
+const eventStreamStatus = (value: unknown): number => value instanceof Response ? value.status : value && typeof value === 'object' && 'status' in value ? Number(value.status) : 200
+const mediaJsonShape = (schemas: Record<string, JsonShape | null> | undefined, contentType: string): JsonShape | null | undefined => {
+  if (!schemas) return undefined
+  const value = contentType.trim().toLowerCase()
+  const exact = Object.entries(schemas).find(([key]) => key.trim().toLowerCase() === value)
+  if (exact) return exact[1]
+  const media = value.split(';')[0].trim()
+  const matches = Object.entries(schemas).filter(([key]) => key.split(';')[0].trim().toLowerCase() === media).map(([, shape]) => shape)
+  if (matches.length === 1) return matches[0]
+  if (matches.length > 1) return { kind: 'union', variants: matches }
+  return schemas[`${media.split('/')[0]}/*`] ?? schemas['*/*']
+}
+const requestJsonShape = (plan: JsonPlan | undefined, contentType: string | undefined) => mediaJsonShape(plan?.requests, contentType ?? 'application/json')
+const responseJsonShape = (plan: JsonPlan | undefined, status: number, contentType: string) => {
+  const statusSchemas = plan?.responses[String(status)] ?? plan?.responses[`${Math.floor(status / 100)}XX`] ?? plan?.responses.default
+  return mediaJsonShape(statusSchemas, contentType)
+}
+

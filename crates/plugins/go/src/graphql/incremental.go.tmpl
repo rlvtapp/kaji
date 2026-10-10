@@ -1,42 +1,454 @@
-import("context";"encoding/json";"fmt";"io";"mime";"mime/multipart";"net/http")
-// Snapshot.Data is recursively partial JSON. Complete validates the final selected result.
-type GraphQLIncrementalSnapshot struct{Data json.RawMessage;Errors GraphQLErrors;Patches []json.RawMessage;Extensions map[string]any;HasNext bool}
-type GraphQLIncrementalEvent[T any]struct{Snapshot *GraphQLIncrementalSnapshot;Complete *GraphQLResponse[T]}
-type graphqlIncrementalSelection struct{Kind string;Path []string;Label *string;Condition json.RawMessage}
-type IncrementalStream[T any]struct{response *http.Response;reader *multipart.Reader;cancel context.CancelFunc;client *Client;shape *graphqlScalarShape;selections []graphqlIncrementalSelection;variables map[string]any;plain,started,hasNext,done bool;data any;errors GraphQLErrors;extensions map[string]any}
-func incrementalExecute[T any](ctx context.Context,c *Client,name,document string,variables any,input,result *graphqlScalarShape,selections string)(*IncrementalStream[T],error){
- ctx,cancel:=context.WithCancel(ctx);response,err:=graphqlRequest(ctx,c,name,document,variables,"multipart/mixed; deferSpec=20220824, application/graphql-response+json, application/json",input);if err!=nil{cancel();return nil,err};if response.StatusCode<200||response.StatusCode>=300{defer response.Body.Close();body,_:=io.ReadAll(io.LimitReader(response.Body,1024*1024));cancel();return nil,&HTTPError{response.StatusCode,string(body)}}
- media,parameters,err:=mime.ParseMediaType(response.Header.Get("Content-Type"));if err!=nil{response.Body.Close();cancel();return nil,err};plain:=media=="application/json"||media=="application/graphql-response+json"
- if !plain&&(media!="multipart/mixed"||parameters["boundary"]==""||(parameters["deferspec"]!=""&&parameters["deferspec"]!="20220824")){response.Body.Close();cancel();return nil,fmt.Errorf("incremental response requires multipart/mixed deferSpec20220824")}
- stream:=&IncrementalStream[T]{response:response,cancel:cancel,client:c,shape:result,plain:plain,hasNext:true};if !plain{stream.reader=multipart.NewReader(response.Body,parameters["boundary"])}
- if err:=json.Unmarshal([]byte(selections),&stream.selections);err!=nil{stream.Close();return nil,err};raw,err:=json.Marshal(variables);if err!=nil{stream.Close();return nil,err};value,err:=decodeScalarJSON(raw);if err!=nil{stream.Close();return nil,err};stream.variables,_=value.(map[string]any);return stream,nil
-}
-func(s *IncrementalStream[T])Close()error{if s.done{return nil};s.done=true;s.cancel();return s.response.Body.Close()}
-func(s *IncrementalStream[T])Next()(*GraphQLIncrementalEvent[T],error){value,err:=s.next();if err!=nil&&value==nil{s.Close()};return value,err}
-func(s *IncrementalStream[T])next()(*GraphQLIncrementalEvent[T],error){
- if s.done{return nil,io.EOF};var raw []byte;var end bool
- if s.plain{if s.started{end=true}else{var err error;raw,err=io.ReadAll(io.LimitReader(s.response.Body,1024*1024+1));if err!=nil{return nil,err}}}else{part,err:=s.reader.NextPart();if err==io.EOF{end=true}else if err!=nil{return nil,fmt.Errorf("premature multipart EOF: %w",err)}else{media,_,err:=mime.ParseMediaType(part.Header.Get("Content-Type"));if err!=nil||media!="application/json"{part.Close();return nil,fmt.Errorf("multipart part must be application/json")};raw,err=io.ReadAll(io.LimitReader(part,1024*1024+1));part.Close();if err!=nil{return nil,err}}}
- if end{if !s.started||s.hasNext{return nil,fmt.Errorf("incremental stream ended before hasNext=false")};s.Close();envelope:=map[string]any{"data":s.data};if len(s.errors)>0{envelope["errors"]=s.errors};if s.extensions!=nil{envelope["extensions"]=s.extensions};raw,err:=json.Marshal(envelope);if err!=nil{return nil,err};result,err:=decodeGraphqlResponse[T](raw,s.client,s.shape);if result==nil{return nil,err};return &GraphQLIncrementalEvent[T]{Complete:result},err}
- if len(raw)>1024*1024{return nil,fmt.Errorf("incremental frame exceeds 1 MiB")};if s.started&&!s.hasNext{return nil,fmt.Errorf("frame follows hasNext=false")}
- decoded,err:=decodeScalarJSON(raw);if err!=nil{return nil,fmt.Errorf("invalid incremental JSON: %w",err)};frame,ok:=decoded.(map[string]any);if !ok{return nil,fmt.Errorf("incremental envelope must be object")};for _,key:=range []string{"pending","completed","id","subPath"}{if _,ok:=frame[key];ok{return nil,fmt.Errorf("unsupported incremental dialect")}}
- if hasNext,ok:=frame["hasNext"].(bool);ok{s.hasNext=hasNext}else if s.plain{s.hasNext=false}else{return nil,fmt.Errorf("incremental hasNext must be boolean")}
- if !s.started{value,present:=frame["data"];if value!=nil{if _,ok:=value.(map[string]any);!ok{return nil,fmt.Errorf("initial data must be object or null")}};if !present&&frame["errors"]==nil{return nil,fmt.Errorf("initial envelope requires data or errors")};s.data=value}else if _,ok:=frame["data"];ok{return nil,fmt.Errorf("subsequent frames require patches")}
- if err:=s.appendErrors(frame["errors"]);err!=nil{return nil,err};if value,present:=frame["extensions"];present{object,ok:=value.(map[string]any);if !ok{return nil,fmt.Errorf("extensions must be object")};if s.extensions==nil{s.extensions=map[string]any{}};for key,value:=range object{s.extensions[key]=value}}
- var patches []json.RawMessage;if value,present:=frame["incremental"];present{items,ok:=value.([]any);if !ok{return nil,fmt.Errorf("incremental patches must be array")};for _,item:=range items{if err:=s.patch(item);err!=nil{return nil,err};raw,_:=json.Marshal(item);patches=append(patches,raw)}}
- s.started=true;rawData,err:=json.Marshal(s.data);if err!=nil{return nil,err};rawData,err=s.client.scalarJSON(rawData,s.shape,false);if err!=nil{return nil,err};return &GraphQLIncrementalEvent[T]{Snapshot:&GraphQLIncrementalSnapshot{Data:rawData,Errors:append(GraphQLErrors(nil),s.errors...),Patches:patches,Extensions:graphqlCopyExtensions(s.extensions),HasNext:s.hasNext}},nil
-}
-func(s *IncrementalStream[T])appendErrors(value any)error{if value==nil{return nil};raw,err:=json.Marshal(value);if err!=nil{return err};var errors GraphQLErrors;if err:=json.Unmarshal(raw,&errors);err!=nil||len(errors)==0{return fmt.Errorf("errors must be nonempty array")};var entries []map[string]any;if err:=json.Unmarshal(raw,&entries);err!=nil{return err};for _,entry:=range entries{if _,ok:=entry["message"].(string);!ok{return fmt.Errorf("error requires message")}};s.errors=append(s.errors,errors...);return nil}
-func(s *IncrementalStream[T])patch(value any)error{
- patch,ok:=value.(map[string]any);if !ok{return fmt.Errorf("incremental patch must be object")};for _,key:=range []string{"pending","completed","id","subPath"}{if _,ok:=patch[key];ok{return fmt.Errorf("unsupported patch dialect")}}
- path,ok:=patch["path"].([]any);if !ok{return fmt.Errorf("patch requires path")};for _,part:=range path{if _,ok:=part.(string);!ok{if _,err:=graphqlPathIndex(part);err!=nil{return err}}}
- data,deferPatch:=patch["data"];items,streamPatch:=patch["items"];if deferPatch==streamPatch{return fmt.Errorf("patch requires exactly data or items")};matched:=false
- for _,selection:=range s.selections{stream:=selection.Kind=="Stream";extra:=0;if stream{extra=1};if stream!=streamPatch||len(path)!=len(selection.Path)+extra{continue};matches:=true;for i,want:=range selection.Path{if want=="*"{if _,err:=graphqlPathIndex(path[i]);err!=nil{matches=false}}else if got,ok:=path[i].(string);!ok||want!=got{matches=false}};if selection.Label!=nil&&patch["label"]!=*selection.Label{matches=false};if string(selection.Condition)==`"Never"`{matches=false};var condition map[string]string;json.Unmarshal(selection.Condition,&condition);if name:=condition["Variable"];name!=""&&s.variables[name]==false{matches=false};if matches{matched=true;break}}
- if !matched{return fmt.Errorf("patch does not match declared selection")};if err:=s.appendErrors(patch["errors"]);err!=nil{return err}
- if deferPatch{if data==nil{return graphqlSetPath(&s.data,path,nil)};object,ok:=data.(map[string]any);if !ok{return fmt.Errorf("defer data must be object or null")};target,err:=graphqlAtPath(s.data,path);if err!=nil{return err};values,ok:=target.(map[string]any);if !ok{return fmt.Errorf("defer target must be object")};for key,value:=range object{values[key]=value};return nil}
- values,ok:=items.([]any);if !ok{return fmt.Errorf("stream items must be array")};if len(path)==0{return fmt.Errorf("stream path requires index")};index,err:=graphqlPathIndex(path[len(path)-1]);if err!=nil{return err};parent:=path[:len(path)-1];target,err:=graphqlAtPath(s.data,parent);if err!=nil{return err};array,ok:=target.([]any);if !ok||index!=len(array){return fmt.Errorf("stream patches must append contiguously")};return graphqlSetPath(&s.data,parent,append(array,values...))
-}
-func graphqlPathIndex(value any)(int,error){number,ok:=value.(json.Number);if !ok{return 0,fmt.Errorf("invalid patch path index")};index,err:=number.Int64();if err!=nil||index<0||int64(int(index))!=index{return 0,fmt.Errorf("invalid patch path index")};return int(index),nil}
-func graphqlAtPath(value any,path []any)(any,error){for _,part:=range path{if key,ok:=part.(string);ok{object,ok:=value.(map[string]any);if !ok{return nil,fmt.Errorf("patch path must traverse object")};var present bool;value,present=object[key];if !present{return nil,fmt.Errorf("patch path does not exist")}}else{index,err:=graphqlPathIndex(part);if err!=nil{return nil,err};array,ok:=value.([]any);if !ok||index>=len(array){return nil,fmt.Errorf("patch path does not exist")};value=array[index]}};return value,nil}
-func graphqlSetPath(root *any,path []any,value any)error{if len(path)==0{*root=value;return nil};parent,err:=graphqlAtPath(*root,path[:len(path)-1]);if err!=nil{return err};if key,ok:=path[len(path)-1].(string);ok{object,ok:=parent.(map[string]any);if !ok{return fmt.Errorf("patch target must be object")};if _,ok:=object[key];!ok{return fmt.Errorf("patch path does not exist")};object[key]=value;return nil};index,err:=graphqlPathIndex(path[len(path)-1]);if err!=nil{return err};array,ok:=parent.([]any);if !ok||index>=len(array){return fmt.Errorf("patch path does not exist")};array[index]=value;return nil}
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"mime"
+	"mime/multipart"
+	"net/http"
+)
 
-func graphqlCopyExtensions(source map[string]any)map[string]any{if source==nil{return nil};copy:=make(map[string]any,len(source));for key,value:=range source{copy[key]=value};return copy}
+// Snapshot.Data is recursively partial JSON. Complete validates the final selected result.
+type GraphQLIncrementalSnapshot struct {
+	Data       json.RawMessage
+	Errors     GraphQLErrors
+	Patches    []json.RawMessage
+	Extensions map[string]any
+	HasNext    bool
+}
+type GraphQLIncrementalEvent[T any] struct {
+	Snapshot *GraphQLIncrementalSnapshot
+	Complete *GraphQLResponse[T]
+}
+type graphqlIncrementalSelection struct {
+	Kind      string
+	Path      []string
+	Label     *string
+	Condition json.RawMessage
+}
+type IncrementalStream[T any] struct {
+	response                      *http.Response
+	reader                        *multipart.Reader
+	cancel                        context.CancelFunc
+	client                        *Client
+	shape                         *graphqlScalarShape
+	selections                    []graphqlIncrementalSelection
+	variables                     map[string]any
+	plain, started, hasNext, done bool
+	data                          any
+	errors                        GraphQLErrors
+	extensions                    map[string]any
+}
+
+func incrementalExecute[T any](ctx context.Context, c *Client, name, document string, variables any, input, result *graphqlScalarShape, selections string) (*IncrementalStream[T], error) {
+	ctx, cancel := context.WithCancel(ctx)
+	response, err := graphqlRequest(ctx, c, name, document, variables, "multipart/mixed; deferSpec=20220824, application/graphql-response+json, application/json", input)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		defer response.Body.Close()
+		body, _ := io.ReadAll(io.LimitReader(response.Body, 1024*1024))
+		cancel()
+		return nil, &HTTPError{response.StatusCode, string(body)}
+	}
+	media, parameters, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
+	if err != nil {
+		response.Body.Close()
+		cancel()
+		return nil, err
+	}
+	plain := media == "application/json" || media == "application/graphql-response+json"
+	if !plain && (media != "multipart/mixed" || parameters["boundary"] == "" || (parameters["deferspec"] != "" && parameters["deferspec"] != "20220824")) {
+		response.Body.Close()
+		cancel()
+		return nil, fmt.Errorf("incremental response requires multipart/mixed deferSpec20220824")
+	}
+	stream := &IncrementalStream[T]{response: response, cancel: cancel, client: c, shape: result, plain: plain, hasNext: true}
+	if !plain {
+		stream.reader = multipart.NewReader(response.Body, parameters["boundary"])
+	}
+	if err := json.Unmarshal([]byte(selections), &stream.selections); err != nil {
+		stream.Close()
+		return nil, err
+	}
+	raw, err := json.Marshal(variables)
+	if err != nil {
+		stream.Close()
+		return nil, err
+	}
+	value, err := decodeScalarJSON(raw)
+	if err != nil {
+		stream.Close()
+		return nil, err
+	}
+	stream.variables, _ = value.(map[string]any)
+	return stream, nil
+}
+func (s *IncrementalStream[T]) Close() error {
+	if s.done {
+		return nil
+	}
+	s.done = true
+	s.cancel()
+	return s.response.Body.Close()
+}
+func (s *IncrementalStream[T]) Next() (*GraphQLIncrementalEvent[T], error) {
+	value, err := s.next()
+	if err != nil && value == nil {
+		s.Close()
+	}
+	return value, err
+}
+func (s *IncrementalStream[T]) next() (*GraphQLIncrementalEvent[T], error) {
+	if s.done {
+		return nil, io.EOF
+	}
+	var raw []byte
+	var end bool
+	if s.plain {
+		if s.started {
+			end = true
+		} else {
+			var err error
+			raw, err = io.ReadAll(io.LimitReader(s.response.Body, 1024*1024+1))
+			if err != nil {
+				return nil, err
+			}
+		}
+	} else {
+		part, err := s.reader.NextPart()
+		if err == io.EOF {
+			end = true
+		} else if err != nil {
+			return nil, fmt.Errorf("premature multipart EOF: %w", err)
+		} else {
+			media, _, err := mime.ParseMediaType(part.Header.Get("Content-Type"))
+			if err != nil || media != "application/json" {
+				part.Close()
+				return nil, fmt.Errorf("multipart part must be application/json")
+			}
+			raw, err = io.ReadAll(io.LimitReader(part, 1024*1024+1))
+			part.Close()
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	if end {
+		if !s.started || s.hasNext {
+			return nil, fmt.Errorf("incremental stream ended before hasNext=false")
+		}
+		s.Close()
+		envelope := map[string]any{"data": s.data}
+		if len(s.errors) > 0 {
+			envelope["errors"] = s.errors
+		}
+		if s.extensions != nil {
+			envelope["extensions"] = s.extensions
+		}
+		raw, err := json.Marshal(envelope)
+		if err != nil {
+			return nil, err
+		}
+		result, err := decodeGraphqlResponse[T](raw, s.client, s.shape)
+		if result == nil {
+			return nil, err
+		}
+		return &GraphQLIncrementalEvent[T]{Complete: result}, err
+	}
+	if len(raw) > 1024*1024 {
+		return nil, fmt.Errorf("incremental frame exceeds 1 MiB")
+	}
+	if s.started && !s.hasNext {
+		return nil, fmt.Errorf("frame follows hasNext=false")
+	}
+	decoded, err := decodeScalarJSON(raw)
+	if err != nil {
+		return nil, fmt.Errorf("invalid incremental JSON: %w", err)
+	}
+	frame, ok := decoded.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("incremental envelope must be object")
+	}
+	for _, key := range []string{"pending", "completed", "id", "subPath"} {
+		if _, ok := frame[key]; ok {
+			return nil, fmt.Errorf("unsupported incremental dialect")
+		}
+	}
+	if hasNext, ok := frame["hasNext"].(bool); ok {
+		s.hasNext = hasNext
+	} else if s.plain {
+		s.hasNext = false
+	} else {
+		return nil, fmt.Errorf("incremental hasNext must be boolean")
+	}
+	if !s.started {
+		value, present := frame["data"]
+		if value != nil {
+			if _, ok := value.(map[string]any); !ok {
+				return nil, fmt.Errorf("initial data must be object or null")
+			}
+		}
+		if !present && frame["errors"] == nil {
+			return nil, fmt.Errorf("initial envelope requires data or errors")
+		}
+		s.data = value
+	} else if _, ok := frame["data"]; ok {
+		return nil, fmt.Errorf("subsequent frames require patches")
+	}
+	if err := s.appendErrors(frame["errors"]); err != nil {
+		return nil, err
+	}
+	if value, present := frame["extensions"]; present {
+		object, ok := value.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("extensions must be object")
+		}
+		if s.extensions == nil {
+			s.extensions = map[string]any{}
+		}
+		for key, value := range object {
+			s.extensions[key] = value
+		}
+	}
+	var patches []json.RawMessage
+	if value, present := frame["incremental"]; present {
+		items, ok := value.([]any)
+		if !ok {
+			return nil, fmt.Errorf("incremental patches must be array")
+		}
+		for _, item := range items {
+			if err := s.patch(item); err != nil {
+				return nil, err
+			}
+			raw, _ := json.Marshal(item)
+			patches = append(patches, raw)
+		}
+	}
+	s.started = true
+	rawData, err := json.Marshal(s.data)
+	if err != nil {
+		return nil, err
+	}
+	rawData, err = s.client.scalarJSON(rawData, s.shape, false)
+	if err != nil {
+		return nil, err
+	}
+	return &GraphQLIncrementalEvent[T]{Snapshot: &GraphQLIncrementalSnapshot{Data: rawData, Errors: append(GraphQLErrors(nil), s.errors...), Patches: patches, Extensions: graphqlCopyExtensions(s.extensions), HasNext: s.hasNext}}, nil
+}
+func (s *IncrementalStream[T]) appendErrors(value any) error {
+	if value == nil {
+		return nil
+	}
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	var errors GraphQLErrors
+	if err := json.Unmarshal(raw, &errors); err != nil || len(errors) == 0 {
+		return fmt.Errorf("errors must be nonempty array")
+	}
+	var entries []map[string]any
+	if err := json.Unmarshal(raw, &entries); err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if _, ok := entry["message"].(string); !ok {
+			return fmt.Errorf("error requires message")
+		}
+	}
+	s.errors = append(s.errors, errors...)
+	return nil
+}
+func (s *IncrementalStream[T]) patch(value any) error {
+	patch, ok := value.(map[string]any)
+	if !ok {
+		return fmt.Errorf("incremental patch must be object")
+	}
+	for _, key := range []string{"pending", "completed", "id", "subPath"} {
+		if _, ok := patch[key]; ok {
+			return fmt.Errorf("unsupported patch dialect")
+		}
+	}
+	path, ok := patch["path"].([]any)
+	if !ok {
+		return fmt.Errorf("patch requires path")
+	}
+	for _, part := range path {
+		if _, ok := part.(string); !ok {
+			if _, err := graphqlPathIndex(part); err != nil {
+				return err
+			}
+		}
+	}
+	data, deferPatch := patch["data"]
+	items, streamPatch := patch["items"]
+	if deferPatch == streamPatch {
+		return fmt.Errorf("patch requires exactly data or items")
+	}
+	matched := false
+	for _, selection := range s.selections {
+		stream := selection.Kind == "Stream"
+		extra := 0
+		if stream {
+			extra = 1
+		}
+		if stream != streamPatch || len(path) != len(selection.Path)+extra {
+			continue
+		}
+		matches := true
+		for i, want := range selection.Path {
+			if want == "*" {
+				if _, err := graphqlPathIndex(path[i]); err != nil {
+					matches = false
+				}
+			} else if got, ok := path[i].(string); !ok || want != got {
+				matches = false
+			}
+		}
+		if selection.Label != nil && patch["label"] != *selection.Label {
+			matches = false
+		}
+		if string(selection.Condition) == `"Never"` {
+			matches = false
+		}
+		var condition map[string]string
+		json.Unmarshal(selection.Condition, &condition)
+		if name := condition["Variable"]; name != "" && s.variables[name] == false {
+			matches = false
+		}
+		if matches {
+			matched = true
+			break
+		}
+	}
+	if !matched {
+		return fmt.Errorf("patch does not match declared selection")
+	}
+	if err := s.appendErrors(patch["errors"]); err != nil {
+		return err
+	}
+	if deferPatch {
+		if data == nil {
+			return graphqlSetPath(&s.data, path, nil)
+		}
+		object, ok := data.(map[string]any)
+		if !ok {
+			return fmt.Errorf("defer data must be object or null")
+		}
+		target, err := graphqlAtPath(s.data, path)
+		if err != nil {
+			return err
+		}
+		values, ok := target.(map[string]any)
+		if !ok {
+			return fmt.Errorf("defer target must be object")
+		}
+		for key, value := range object {
+			values[key] = value
+		}
+		return nil
+	}
+	values, ok := items.([]any)
+	if !ok {
+		return fmt.Errorf("stream items must be array")
+	}
+	if len(path) == 0 {
+		return fmt.Errorf("stream path requires index")
+	}
+	index, err := graphqlPathIndex(path[len(path)-1])
+	if err != nil {
+		return err
+	}
+	parent := path[:len(path)-1]
+	target, err := graphqlAtPath(s.data, parent)
+	if err != nil {
+		return err
+	}
+	array, ok := target.([]any)
+	if !ok || index != len(array) {
+		return fmt.Errorf("stream patches must append contiguously")
+	}
+	return graphqlSetPath(&s.data, parent, append(array, values...))
+}
+func graphqlPathIndex(value any) (int, error) {
+	number, ok := value.(json.Number)
+	if !ok {
+		return 0, fmt.Errorf("invalid patch path index")
+	}
+	index, err := number.Int64()
+	if err != nil || index < 0 || int64(int(index)) != index {
+		return 0, fmt.Errorf("invalid patch path index")
+	}
+	return int(index), nil
+}
+func graphqlAtPath(value any, path []any) (any, error) {
+	for _, part := range path {
+		if key, ok := part.(string); ok {
+			object, ok := value.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("patch path must traverse object")
+			}
+			var present bool
+			value, present = object[key]
+			if !present {
+				return nil, fmt.Errorf("patch path does not exist")
+			}
+		} else {
+			index, err := graphqlPathIndex(part)
+			if err != nil {
+				return nil, err
+			}
+			array, ok := value.([]any)
+			if !ok || index >= len(array) {
+				return nil, fmt.Errorf("patch path does not exist")
+			}
+			value = array[index]
+		}
+	}
+	return value, nil
+}
+func graphqlSetPath(root *any, path []any, value any) error {
+	if len(path) == 0 {
+		*root = value
+		return nil
+	}
+	parent, err := graphqlAtPath(*root, path[:len(path)-1])
+	if err != nil {
+		return err
+	}
+	if key, ok := path[len(path)-1].(string); ok {
+		object, ok := parent.(map[string]any)
+		if !ok {
+			return fmt.Errorf("patch target must be object")
+		}
+		if _, ok := object[key]; !ok {
+			return fmt.Errorf("patch path does not exist")
+		}
+		object[key] = value
+		return nil
+	}
+	index, err := graphqlPathIndex(path[len(path)-1])
+	if err != nil {
+		return err
+	}
+	array, ok := parent.([]any)
+	if !ok || index >= len(array) {
+		return fmt.Errorf("patch path does not exist")
+	}
+	array[index] = value
+	return nil
+}
+
+func graphqlCopyExtensions(source map[string]any) map[string]any {
+	if source == nil {
+		return nil
+	}
+	copy := make(map[string]any, len(source))
+	for key, value := range source {
+		copy[key] = value
+	}
+	return copy
+}

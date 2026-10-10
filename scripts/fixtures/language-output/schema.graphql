@@ -1,0 +1,8 @@
+enum Role { MEMBER ADMIN }
+input PersonFilter { role: Role, active: Boolean = true }
+type Person { id: ID!, name: String!, nickname: String, role: Role! }
+type Query {
+  person(id: ID!): Person
+  people(filter: PersonFilter): [Person!]!
+}
+type Mutation { rename(id: ID!, name: String!): Person! }

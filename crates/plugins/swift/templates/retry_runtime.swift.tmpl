@@ -1,38 +1,71 @@
-    private func retryDelay(_ response: HTTPURLResponse?, attempt: Int) -> Double {
-        let fallback = min(options.retryMaxDelay, options.retryBaseDelay * pow(2, Double(min(attempt - 1, 20))))
-        if let value=response?.value(forHTTPHeaderField:"retry-after-ms"), let number=Double(value), number.isFinite,number>=0 {return min(options.retryMaxDelay,number/1000)}
-        if let value=response?.value(forHTTPHeaderField:"Retry-After") {
-            if let number=Double(value),number.isFinite,number>=0 {return min(options.retryMaxDelay,number)}
-            let formatter=DateFormatter();formatter.locale=Locale(identifier:"en_US_POSIX");formatter.timeZone=TimeZone(secondsFromGMT:0);formatter.dateFormat="EEE, dd MMM yyyy HH:mm:ss 'GMT'"
-            if let date=formatter.date(from:value){return min(options.retryMaxDelay,max(0,date.timeIntervalSinceNow))}
-        }
-        return fallback
+private func retryDelay(_ response: HTTPURLResponse?, attempt: Int) -> Double {
+  let fallback = min(
+    options.retryMaxDelay, options.retryBaseDelay * pow(2, Double(min(attempt - 1, 20))))
+  if let value = response?.value(forHTTPHeaderField: "retry-after-ms"), let number = Double(value),
+    number.isFinite, number >= 0
+  {
+    return min(options.retryMaxDelay, number / 1000)
+  }
+  if let value = response?.value(forHTTPHeaderField: "Retry-After") {
+    if let number = Double(value), number.isFinite, number >= 0 {
+      return min(options.retryMaxDelay, number)
     }
-    private func executeWithRetry(_ request: URLRequest, idempotencyHeader: String?) async throws -> (Data,URLResponse) {
-        let method=request.httpMethod?.uppercased() ?? "GET"
-        let key=request.value(forHTTPHeaderField:idempotencyHeader ?? "Idempotency-Key")?.trimmingCharacters(in:.whitespacesAndNewlines) ?? ""
-        let safe=["GET","HEAD","OPTIONS","TRACE","QUERY","PUT","DELETE"].contains(method) || (["POST","PATCH"].contains(method) && !key.isEmpty)
-        var attempt=0
-        while true {
-            try Task.checkCancellation();attempt+=1;hooks.forEach{$0.willSend(request)}
-            let result:(Data,URLResponse)
-            do { result=try await transport.execute(request) }
-            catch {
-                try Task.checkCancellation()
-                guard safe,attempt<options.maxAttempts,let error=error as? URLError,[.timedOut,.networkConnectionLost,.cannotConnectToHost,.notConnectedToInternet].contains(error.code) else {throw error}
-                try await Task.sleep(nanoseconds:UInt64(retryDelay(nil,attempt:attempt)*1_000_000_000));continue
-            }
-            if let response=result.1 as? HTTPURLResponse {
-                hooks.forEach{$0.didReceive(response,body:result.0)}
-                if safe,attempt<options.maxAttempts,[408,429,500,502,503,504].contains(response.statusCode){try await Task.sleep(nanoseconds:UInt64(retryDelay(response,attempt:attempt)*1_000_000_000));continue}
-            }
-            return result
-        }
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = TimeZone(secondsFromGMT: 0)
+    formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss 'GMT'"
+    if let date = formatter.date(from: value) {
+      return min(options.retryMaxDelay, max(0, date.timeIntervalSinceNow))
     }
+  }
+  return fallback
+}
+private func executeWithRetry(_ request: URLRequest, idempotencyHeader: String?) async throws -> (
+  Data, URLResponse
+) {
+  let method = request.httpMethod?.uppercased() ?? "GET"
+  let key =
+    request.value(forHTTPHeaderField: idempotencyHeader ?? "Idempotency-Key")?.trimmingCharacters(
+      in: .whitespacesAndNewlines) ?? ""
+  let safe =
+    ["GET", "HEAD", "OPTIONS", "TRACE", "QUERY", "PUT", "DELETE"].contains(method)
+    || (["POST", "PATCH"].contains(method) && !key.isEmpty)
+  var attempt = 0
+  while true {
+    try Task.checkCancellation()
+    attempt += 1
+    hooks.forEach { $0.willSend(request) }
+    let result: (Data, URLResponse)
+    do { result = try await transport.execute(request) } catch {
+      try Task.checkCancellation()
+      guard safe, attempt < options.maxAttempts, let error = error as? URLError,
+        [.timedOut, .networkConnectionLost, .cannotConnectToHost, .notConnectedToInternet].contains(
+          error.code)
+      else { throw error }
+      try await Task.sleep(nanoseconds: UInt64(retryDelay(nil, attempt: attempt) * 1_000_000_000))
+      continue
+    }
+    if let response = result.1 as? HTTPURLResponse {
+      hooks.forEach { $0.didReceive(response, body: result.0) }
+      if safe, attempt < options.maxAttempts,
+        [408, 429, 500, 502, 503, 504].contains(response.statusCode)
+      {
+        try await Task.sleep(
+          nanoseconds: UInt64(retryDelay(response, attempt: attempt) * 1_000_000_000))
+        continue
+      }
+    }
+    return result
+  }
+}
 
-    internal func sendBytes(_ request: URLRequest, idempotencyHeader: String? = nil) async throws -> Data {
-        let (data,response) = try await executeWithRetry(request,idempotencyHeader:idempotencyHeader)
-        guard let http = response as? HTTPURLResponse else {throw PoolsterAPIError.invalidResponse}
-        guard (200..<300).contains(http.statusCode) else {throw PoolsterAPIError.status(code:http.statusCode,body:data)}
-        return data
-    }
+internal func sendBytes(_ request: URLRequest, idempotencyHeader: String? = nil) async throws
+  -> Data
+{
+  let (data, response) = try await executeWithRetry(request, idempotencyHeader: idempotencyHeader)
+  guard let http = response as? HTTPURLResponse else { throw PoolsterAPIError.invalidResponse }
+  guard (200..<300).contains(http.statusCode) else {
+    throw PoolsterAPIError.status(code: http.statusCode, body: data)
+  }
+  return data
+}

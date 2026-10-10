@@ -1,0 +1,738 @@
+defmodule __POOLSTER_MODULE__.Client do
+  @moduledoc "Configurable Finch transport with safe retries and lifecycle hooks."
+
+  alias __POOLSTER_MODULE__.{ApiError, JSON}
+
+  @enforce_keys [:base_url]
+  defstruct base_url: nil,
+            api_key: nil,
+            api_key_header: "authorization",
+            api_key_prefix: "Bearer",
+            headers: [],
+            finch: __POOLSTER_MODULE__.Finch,
+            timeout: 30_000,
+            max_retries: 2,
+            retry_initial_delay_ms: 250,
+            retry_max_delay_ms: 8_000,
+            before_request: nil,
+            after_response: nil,
+            on_error: nil,
+            transport: nil,
+            middleware: [],
+            stream_transport: nil
+
+  @type t :: %__MODULE__{
+          base_url: String.t(),
+          api_key: String.t() | nil,
+          api_key_header: String.t(),
+          api_key_prefix: String.t() | nil,
+          headers: [{String.t(), String.t()}],
+          finch: atom(),
+          timeout: timeout(),
+          max_retries: non_neg_integer(),
+          retry_initial_delay_ms: non_neg_integer(),
+          retry_max_delay_ms: non_neg_integer(),
+          before_request: (map() -> any()) | nil,
+          after_response: (map() -> any()) | nil,
+          on_error: (term() -> any()) | nil,
+          transport: (Finch.Request.t(), keyword() -> term()) | nil,
+          middleware: [function()],
+          stream_transport: function() | nil
+        }
+
+  @doc "Creates a reusable client. max_retries: 2 yields Poolster's safe three-attempt policy."
+  @spec new(keyword()) :: {:ok, t()} | {:error, :base_url_required}
+  def new(options \\ []) do
+    case Keyword.get(options, :base_url) do
+      value when is_binary(value) and value != "" ->
+        hooks = Keyword.get(options, :hooks, %{})
+
+        {:ok,
+         %__MODULE__{
+           base_url: String.trim_trailing(value, "/"),
+           api_key: Keyword.get(options, :api_key),
+           api_key_header: Keyword.get(options, :api_key_header, "authorization"),
+           api_key_prefix: Keyword.get(options, :api_key_prefix, "Bearer"),
+           headers: Keyword.get(options, :headers, []),
+           finch: Keyword.get(options, :finch, __POOLSTER_MODULE__.Finch),
+           timeout: non_negative(Keyword.get(options, :timeout, 30_000), 30_000),
+           max_retries: non_negative(Keyword.get(options, :max_retries, 2), 2),
+           retry_initial_delay_ms:
+             non_negative(Keyword.get(options, :retry_initial_delay_ms, 250), 250),
+           retry_max_delay_ms:
+             non_negative(Keyword.get(options, :retry_max_delay_ms, 8_000), 8_000),
+           before_request: Map.get(hooks, :before_request, Keyword.get(options, :before_request)),
+           after_response: Map.get(hooks, :after_response, Keyword.get(options, :after_response)),
+           on_error: Map.get(hooks, :on_error, Keyword.get(options, :on_error)),
+           transport: Keyword.get(options, :transport),
+           middleware: Keyword.get(options, :middleware, []),
+           stream_transport: Keyword.get(options, :stream_transport)
+         }}
+
+      _ ->
+        {:error, :base_url_required}
+    end
+  end
+
+  @doc "Returns an independent client for one call or traversal; timeout is per HTTP attempt."
+  def for_call(%__MODULE__{} = client, options) do
+    headers = Keyword.get(options, :headers, [])
+    timeout = Keyword.get(options, :timeout, client.timeout)
+
+    if not is_integer(timeout) or timeout <= 0 or not is_list(headers) or
+         not Enum.all?(headers, fn
+           {name, value} ->
+             is_binary(name) and is_binary(value) and
+               not String.contains?(name <> value, ["\r", "\n"])
+
+           _ ->
+             false
+         end) do
+      raise ArgumentError, "invalid call options"
+    end
+
+    names = Enum.map(headers, fn {name, _} -> String.downcase(name) end)
+
+    %{
+      client
+      | timeout: timeout,
+        headers:
+          Enum.reject(client.headers, fn {name, _} -> String.downcase(name) in names end) ++
+            headers
+    }
+  end
+
+  @spec required(keyword(), atom()) ::
+          {:ok, term()} | {:error, {:missing_required_option, atom()}}
+  def required(options, key) do
+    case Keyword.fetch(options, key) do
+      {:ok, value} when not is_nil(value) -> {:ok, value}
+      _ -> {:error, {:missing_required_option, key}}
+    end
+  end
+
+  @doc false
+  def required_present(options, key) do
+    case Keyword.fetch(options, key) do
+      {:ok, value} -> {:ok, value}
+      :error -> {:error, {:missing_required_option, key}}
+    end
+  end
+
+  @doc false
+  def idempotency_key do
+    <<a::32, b::16, _version::4, c::12, _variant::2, d::14, e::48>> =
+      :crypto.strong_rand_bytes(16)
+
+    # Replace the random version/variant bits with UUID v4's fixed bits.
+    bytes = <<a::32, b::16, 4::4, c::12, 2::2, d::14, e::48>>
+    hex = Base.encode16(bytes, case: :lower)
+
+    Enum.map_join([{0, 8}, {8, 4}, {12, 4}, {16, 4}, {20, 12}], "-", fn {start, length} ->
+      binary_part(hex, start, length)
+    end)
+  end
+
+  @doc "Only idempotent methods, or POST requests with Idempotency-Key, retry automatically."
+  @spec request(
+          t(),
+          atom(),
+          String.t(),
+          list(),
+          list(),
+          term(),
+          atom(),
+          atom(),
+          map(),
+          String.t() | nil
+        ) :: {:ok, term()} | {:error, term()}
+  def request(
+        client,
+        method,
+        path,
+        query \\ [],
+        headers \\ [],
+        body \\ nil,
+        body_kind \\ :json,
+        response_kind \\ :json,
+        error_types \\ %{},
+        idempotency_header \\ nil
+      ) do
+    with {:ok, url} <- request_url(client, path, query) do
+      {body, body_kind} = prepare_body(body, body_kind)
+      headers = default_headers(client, headers, body, body_kind, response_kind)
+
+      context = %{
+        method: method,
+        url: url,
+        query: query,
+        headers: headers,
+        body: body,
+        idempotency_header: idempotency_header
+      }
+
+      notify(client.before_request, context)
+
+      do_request(
+        client,
+        method,
+        url,
+        headers,
+        body,
+        body_kind,
+        response_kind,
+        error_types,
+        context,
+        0
+      )
+    end
+  end
+
+  @doc "Returns a lazy stream of decoded server-sent event data values."
+  @spec event_stream(t(), atom(), String.t(), list(), list(), term(), atom()) ::
+          {:ok, Enumerable.t()}
+  def event_stream(
+        client,
+        method,
+        path,
+        query \\ [],
+        headers \\ [],
+        body \\ nil,
+        body_kind \\ :json
+      ) do
+    url = client.base_url <> path <> encode_query(query)
+    {body, body_kind} = prepare_body(body, body_kind)
+    headers = default_headers(client, headers, body, body_kind, :stream)
+    request = Finch.build(method, url, headers, encode_body(body, body_kind))
+
+    notify(client.before_request, %{
+      method: method,
+      url: url,
+      query: query,
+      headers: headers,
+      body: body
+    })
+
+    stream =
+      Stream.resource(
+        fn -> start_sse_request(client, request, self(), make_ref()) end,
+        &next_sse_event/1,
+        &close_sse_stream/1
+      )
+
+    {:ok, stream}
+  end
+
+  @doc false
+  @spec json_path(term(), String.t() | list()) :: term() | nil
+  def json_path(value, path) when is_binary(path) do
+    value
+    |> JSON.to_wire()
+    |> do_json_path(String.trim_leading(path, "$."))
+  end
+
+  def json_path(value, segments) when is_list(segments),
+    do: selector_path(JSON.to_wire(value), segments)
+
+  defp selector_path(value, []), do: value
+
+  defp selector_path(value, [{:field, key} | rest]) when is_map(value),
+    do: selector_path(Map.get(value, key), rest)
+
+  defp selector_path(value, [{:field, key} | rest]) when is_list(value) do
+    case Integer.parse(key) do
+      {index, ""} when index >= 0 ->
+        if Integer.to_string(index) == key,
+          do: selector_path(Enum.at(value, index), rest),
+          else: nil
+
+      _ ->
+        nil
+    end
+  end
+
+  defp selector_path(value, [{:index, index} | rest]) when is_list(value),
+    do: selector_path(Enum.at(value, index), rest)
+
+  defp selector_path(_, _), do: nil
+  defp do_json_path(value, ""), do: value
+
+  defp do_json_path(value, path) when is_map(value) do
+    [segment | rest] = String.split(path, ".", parts: 2)
+
+    case Map.fetch(value, segment) do
+      {:ok, next} -> do_json_path(next, List.first(rest) || "")
+      :error -> nil
+    end
+  end
+
+  defp do_json_path(_value, _path), do: nil
+
+  defp start_sse_request(client, request, parent, ref) do
+    {:ok, task} =
+      Task.start(fn ->
+        callback = fn
+          {:status, status}, acc ->
+            send(parent, {ref, :status, status})
+            acc
+
+          {:headers, headers}, acc ->
+            send(parent, {ref, :headers, headers})
+            acc
+
+          {:data, data}, acc ->
+            send(parent, {ref, :data, data})
+            acc
+        end
+
+        result =
+          if is_function(client.stream_transport, 4),
+            do:
+              client.stream_transport.(request, [receive_timeout: client.timeout], nil, callback),
+            else:
+              Finch.stream(request, client.finch, nil, callback, receive_timeout: client.timeout)
+
+        send(parent, {ref, :done, result})
+      end)
+
+    %{ref: ref, task: task, client: client, status: nil, headers: [], buffer: "", done: false}
+  end
+
+  defp next_sse_event(%{done: true} = state), do: {:halt, state}
+
+  defp next_sse_event(state) do
+    receive do
+      {ref, :status, status} when ref == state.ref and status in 200..299 ->
+        next_sse_event(%{state | status: status})
+
+      {ref, :status, status} when ref == state.ref ->
+        error = %ApiError{status: status, body: nil, headers: state.headers}
+        notify(state.client.on_error, error)
+        {[{:error, error}], %{state | done: true}}
+
+      {ref, :headers, headers} when ref == state.ref ->
+        next_sse_event(%{state | headers: headers})
+
+      {ref, :data, data} when ref == state.ref ->
+        {events, buffer} = decode_sse_data(state.buffer, data)
+
+        if events == [],
+          do: next_sse_event(%{state | buffer: buffer}),
+          else: {events, %{state | buffer: buffer}}
+
+      {ref, :done, {:error, reason}} when ref == state.ref ->
+        notify(state.client.on_error, reason)
+        {[{:error, reason}], %{state | done: true}}
+
+      {ref, :done, _result} when ref == state.ref ->
+        {events, _buffer} = decode_sse_data(state.buffer, "\n\n")
+        if events == [], do: {:halt, %{state | done: true}}, else: {events, %{state | done: true}}
+    after
+      state.client.timeout + 1_000 ->
+        close_sse_stream(state)
+        error = :sse_timeout
+        notify(state.client.on_error, error)
+        {[{:error, error}], %{state | done: true}}
+    end
+  end
+
+  defp close_sse_stream(state) do
+    if Process.alive?(state.task), do: Process.exit(state.task, :kill)
+    :ok
+  end
+
+  defp decode_sse_data(buffer, data) do
+    frames = String.split(String.replace(buffer <> data, "\r\n", "\n"), "\n\n")
+    {complete, [remainder]} = Enum.split(frames, -1)
+    events = complete |> Enum.map(&decode_sse_frame/1) |> Enum.reject(&is_nil/1)
+    {events, remainder}
+  end
+
+  defp decode_sse_frame(frame) do
+    payload =
+      frame
+      |> String.split("\n")
+      |> Enum.filter(&String.starts_with?(&1, "data:"))
+      |> Enum.map(&String.trim_leading(&1, "data:"))
+      |> Enum.join("\n")
+      |> String.trim_leading()
+
+    if payload == "",
+      do: nil,
+      else:
+        {:ok,
+         case JSON.decode(payload) do
+           {:ok, value} -> value
+           _ -> payload
+         end}
+  end
+
+  # Each middleware receives a fully encoded Finch request and a continuation.
+  # First configured layer is outermost; it may transform, recover, or short-circuit.
+  # This runs once per retry attempt. Streaming uses stream_transport separately.
+  defp execute_transport(client, request) do
+    options = [receive_timeout: client.timeout]
+
+    terminal = fn request ->
+      if is_function(client.transport, 2),
+        do: client.transport.(request, options),
+        else: Finch.request(request, client.finch, options)
+    end
+
+    chain =
+      Enum.reduce(Enum.reverse(client.middleware), terminal, fn layer, next ->
+        fn request -> layer.(request, next) end
+      end)
+
+    chain.(request)
+  end
+
+  defp do_request(
+         client,
+         method,
+         url,
+         headers,
+         body,
+         body_kind,
+         response_kind,
+         error_types,
+         context,
+         attempt
+       ) do
+    request = Finch.build(method, url, headers, encode_body(body, body_kind))
+
+    case execute_transport(client, request) do
+      {:ok, %Finch.Response{status: status, headers: response_headers} = response} ->
+        if retryable?(method, headers, context.idempotency_header) and transient_status?(status) and
+             attempt < client.max_retries do
+          retry_delay(client, attempt, response_headers)
+
+          do_request(
+            client,
+            method,
+            url,
+            headers,
+            body,
+            body_kind,
+            response_kind,
+            error_types,
+            context,
+            attempt + 1
+          )
+        else
+          notify(client.after_response, %{
+            request: context,
+            status: status,
+            headers: response_headers,
+            body: response.body
+          })
+
+          case status do
+            value when value in 200..299 ->
+              decode_response(response.body, response_kind)
+
+            _ ->
+              error = error_for(status, response.body, response_headers, error_types)
+              notify(client.on_error, error)
+              {:error, error}
+          end
+        end
+
+      {:error, reason} ->
+        if retryable?(method, headers, context.idempotency_header) and
+             attempt < client.max_retries do
+          retry_delay(client, attempt, [])
+
+          do_request(
+            client,
+            method,
+            url,
+            headers,
+            body,
+            body_kind,
+            response_kind,
+            error_types,
+            context,
+            attempt + 1
+          )
+        else
+          notify(client.on_error, reason)
+          {:error, reason}
+        end
+    end
+  end
+
+  defp error_for(status, response, headers, error_types) do
+    body =
+      case JSON.decode(response) do
+        {:ok, value} -> value
+        _ -> response
+      end
+
+    module = Map.get(error_types, status, Map.get(error_types, :default, ApiError))
+    module.exception(status: status, body: body, headers: headers)
+  end
+
+  defp decode_response(_response, :void), do: {:ok, nil}
+  defp decode_response(response, :binary), do: {:ok, response}
+  defp decode_response(response, :text), do: {:ok, response}
+  defp decode_response(response, :json), do: JSON.decode(response)
+
+  defp decode_response(response, kind) when kind in [:ndjson, :json_seq] do
+    if byte_size(response) > 64 * 1024 * 1024 do
+      {:error, :sequential_response_too_large}
+    else
+      records =
+        if kind == :json_seq do
+          [prefix | records] = String.split(response, <<30>>)
+
+          if String.trim(prefix) != "" or (String.trim(response) != "" and records == []),
+            do: raise(ArgumentError, "JSON sequence requires record separators")
+
+          records
+        else
+          response |> String.split("\n") |> Enum.reject(&(String.trim(&1) == ""))
+        end
+
+      Enum.reduce_while(records, {:ok, []}, fn record, {:ok, values} ->
+        case if(String.trim(record) == "",
+               do: {:error, :empty_sequential_record},
+               else: JSON.decode(record)
+             ) do
+          {:ok, item} -> {:cont, {:ok, [item | values]}}
+          {:error, reason} -> {:halt, {:error, reason}}
+        end
+      end)
+      |> case do
+        {:ok, values} -> {:ok, Enum.reverse(values)}
+        error -> error
+      end
+    end
+  rescue
+    error -> {:error, error}
+  end
+
+  defp retryable?(method, _headers, _idempotency_header)
+       when method in [:get, :head, :options, :trace, "QUERY", :put, :delete],
+       do: true
+
+  defp retryable?(method, headers, idempotency_header) when method in [:post, :patch],
+    do:
+      Enum.any?(headers, fn {name, value} ->
+        (String.downcase(name) == "idempotency-key" or
+           (is_binary(idempotency_header) and
+              String.downcase(name) == String.downcase(idempotency_header))) and
+          String.trim(to_string(value)) != ""
+      end)
+
+  defp retryable?(_, _headers, _idempotency_header), do: false
+  defp transient_status?(status), do: status in [408, 429, 500, 502, 503, 504]
+
+  defp retry_delay(client, attempt, headers) do
+    server_delay =
+      parse_retry_after_ms(header(headers, "retry-after-ms")) ||
+        headers |> header("retry-after") |> parse_retry_after()
+
+    exponential = client.retry_initial_delay_ms * Integer.pow(2, attempt)
+    milliseconds = min(server_delay || exponential, client.retry_max_delay_ms)
+    if milliseconds > 0, do: Process.sleep(milliseconds)
+  end
+
+  defp parse_retry_after_ms(nil), do: nil
+
+  defp parse_retry_after_ms(value) do
+    case Float.parse(value) do
+      {milliseconds, ""} when milliseconds >= 0 -> round(milliseconds)
+      _ -> nil
+    end
+  end
+
+  defp parse_retry_after(nil), do: nil
+
+  defp parse_retry_after(value) do
+    case Integer.parse(value) do
+      {seconds, ""} when seconds >= 0 ->
+        seconds * 1_000
+
+      _ ->
+        case Float.parse(value) do
+          {seconds, ""} when seconds >= 0 -> round(seconds * 1_000)
+          _ -> parse_retry_after_http_date(value)
+        end
+    end
+  end
+
+  # RFC 7231 also permits Retry-After as an IMF-fixdate. The generated Mix app
+  # includes OTP's :inets application for this parser.
+  defp parse_retry_after_http_date(value) do
+    case :httpd_util.convert_request_date(String.to_charlist(value)) do
+      {{year, month, day}, {hour, minute, second}} ->
+        with {:ok, date} <- Date.new(year, month, day),
+             {:ok, time} <- Time.new(hour, minute, second),
+             {:ok, datetime} <- NaiveDateTime.new(date, time) do
+          max(
+            DateTime.to_unix(DateTime.from_naive!(datetime, "Etc/UTC")) - System.os_time(:second),
+            0
+          ) * 1_000
+        else
+          _ -> nil
+        end
+
+      _ ->
+        nil
+    end
+  rescue
+    _ -> nil
+  end
+
+  defp header(headers, name),
+    do:
+      Enum.find_value(headers, fn {key, value} -> if String.downcase(key) == name, do: value end)
+
+  defp notify(callback, value) when is_function(callback, 1), do: callback.(value)
+  defp notify(_, _), do: :ok
+  defp non_negative(value, _default) when is_integer(value) and value >= 0, do: value
+  defp non_negative(_value, default), do: default
+
+  # Continuations are validated before authorization headers or middleware are applied.
+  defp request_url(client, {:poolster_url, url}, _query) when is_binary(url) do
+    try do
+      base = URI.parse(client.base_url)
+      next = URI.parse(url)
+
+      if next.scheme in ["http", "https"] and next.scheme == base.scheme and next.host != nil and
+           String.downcase(next.host) == String.downcase(base.host || "") and
+           next.port == base.port and
+           next.userinfo == nil and next.fragment == nil and
+           not String.contains?(url, ["\r", "\n"]) do
+        {:ok, url}
+      else
+        {:error, :unsafe_pagination_url}
+      end
+    rescue
+      _ -> {:error, :unsafe_pagination_url}
+    end
+  end
+
+  defp request_url(_client, {:poolster_url, _}, _query), do: {:error, :unsafe_pagination_url}
+  defp request_url(client, path, query), do: {:ok, client.base_url <> path <> encode_query(query)}
+
+  @doc false
+  def parameter_content(value, content_type, allow_null \\ false)
+  def parameter_content(nil, _content_type, false), do: nil
+
+  def parameter_content(value, content_type, _allow_null) do
+    cond do
+      content_type == "application/json" or String.ends_with?(content_type, "+json") ->
+        value |> JSON.to_wire() |> Jason.encode!()
+
+      content_type == "application/x-www-form-urlencoded" and is_map(value) ->
+        value |> Map.to_list() |> flatten_query() |> URI.encode_query()
+
+      is_binary(value) ->
+        value
+
+      true ->
+        raise ArgumentError, "parameter content must be a serialized string"
+    end
+  end
+
+  @doc false
+  def whole_query(value, content_type, allow_null \\ false)
+  def whole_query(nil, _content_type, false), do: {:poolster_query, ""}
+
+  def whole_query(value, content_type, _allow_null) do
+    encoded =
+      cond do
+        content_type == "application/json" or String.ends_with?(content_type, "+json") ->
+          value |> JSON.to_wire() |> Jason.encode!() |> URI.encode_www_form()
+
+        content_type == "application/x-www-form-urlencoded" and is_map(value) ->
+          value |> Map.to_list() |> flatten_query() |> URI.encode_query()
+
+        is_binary(value) ->
+          raw =
+            case value do
+              <<"?", rest::binary>> -> rest
+              other -> other
+            end
+
+          if String.contains?(raw, ["?", <<35>>, "\r", "\n"]),
+            do: raise(ArgumentError, "unsafe whole query")
+
+          raw
+
+        true ->
+          raise ArgumentError, "whole query must be a serialized string"
+      end
+
+    {:poolster_query, encoded}
+  end
+
+  defp encode_query({:poolster_query, ""}), do: ""
+  defp encode_query({:poolster_query, query}), do: "?" <> query
+  defp encode_query([]), do: ""
+  defp encode_query(query), do: "?" <> URI.encode_query(flatten_query(query))
+
+  defp flatten_query(query),
+    do:
+      Enum.flat_map(query, fn
+        {_name, nil} -> []
+        {name, values} when is_list(values) -> Enum.map(values, &{name, scalar(&1)})
+        {name, value} -> [{name, scalar(value)}]
+      end)
+
+  defp scalar(value) when is_binary(value), do: value
+  defp scalar(value), do: to_string(value)
+
+  defp default_headers(client, headers, body, body_kind, response_kind) do
+    accept =
+      case response_kind do
+        :json -> "application/json"
+        :stream -> "text/event-stream"
+        _ -> "*/*"
+      end
+
+    base = [{"accept", accept} | client.headers] ++ headers
+    base = if is_nil(body), do: base, else: [{"content-type", content_type(body_kind)} | base]
+
+    case client.api_key do
+      nil -> base
+      "" -> base
+      key -> [{client.api_key_header, credential(client.api_key_prefix, key)} | base]
+    end
+  end
+
+  defp prepare_body(%__POOLSTER_MODULE__.MultipartBody{} = body, kind)
+       when kind in [:multipart, :multipart_json] do
+    {content_type, bytes} = __POOLSTER_MODULE__.MultipartBody.encode(body)
+    {bytes, {:multipart, content_type}}
+  end
+
+  defp prepare_body(%__POOLSTER_MODULE__.MultipartBody{}, _),
+    do: raise(ArgumentError, "operation does not accept multipart/form-data")
+
+  defp prepare_body(nil, :multipart), do: {nil, :json}
+
+  defp prepare_body(_body, :multipart),
+    do: raise(ArgumentError, "multipart request body must be MultipartBody")
+
+  defp prepare_body(body, :multipart_json), do: {body, :json}
+  defp prepare_body(body, kind), do: {body, kind}
+  defp content_type({:multipart, content_type}), do: content_type
+  defp content_type(:form), do: "application/x-www-form-urlencoded"
+  defp content_type(:binary), do: "application/octet-stream"
+  defp content_type(_), do: "application/json"
+  defp credential(nil, key), do: key
+  defp credential("", key), do: key
+  defp credential(prefix, key), do: prefix <> " " <> key
+  defp encode_body(nil, _), do: nil
+  defp encode_body(body, {:multipart, _}), do: body
+  defp encode_body(body, :binary) when is_binary(body), do: body
+
+  defp encode_body(_body, :binary),
+    do: raise(ArgumentError, "binary request bodies must be binaries")
+
+  defp encode_body(body, :form), do: body |> JSON.to_wire() |> URI.encode_query()
+  defp encode_body(body, _), do: Jason.encode!(JSON.to_wire(body))
+end

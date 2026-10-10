@@ -12,13 +12,13 @@ fn selects_multiple_targets_without_duplicates() {
 }
 
 #[test]
-fn accepts_csharp_and_the_legacy_dotnet_selector() {
-    let Action::Generate(options) =
-        parse(arguments("generate api.yaml -o sdk -l csharp,dotnet")).unwrap()
+fn accepts_csharp_and_rejects_removed_dotnet_selector() {
+    let Action::Generate(options) = parse(arguments("generate api.yaml -o sdk -l csharp")).unwrap()
     else {
         panic!()
     };
-    assert_eq!(options.languages, ["csharp", "dotnet"]);
+    assert_eq!(options.languages, ["csharp"]);
+    assert!(parse(arguments("generate api.yaml -o sdk -l dotnet")).is_err());
 }
 
 #[test]

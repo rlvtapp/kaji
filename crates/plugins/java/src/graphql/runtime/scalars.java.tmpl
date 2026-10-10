@@ -1,0 +1,72 @@
+  public record ScalarCodec(
+      java.util.function.Function<JsonNode, JsonNode> encode,
+      java.util.function.Function<JsonNode, JsonNode> decode) {
+    public ScalarCodec {
+      Objects.requireNonNull(encode);
+      Objects.requireNonNull(decode);
+    }
+  }
+
+  public static JsonNode shape(String json) {
+    try {
+      return JSON.readTree(json);
+    } catch (java.io.IOException error) {
+      throw new IllegalArgumentException(error);
+    }
+  }
+
+  public static JsonNode scalarTransform(
+      JsonNode value,
+      JsonNode shape,
+      JsonNode inputs,
+      Map<String, ScalarCodec> codecs,
+      boolean input) {
+    if (value == null || value.isNull() || shape == null || shape.isNull()) return value;
+    if (shape.has("scalar")) {
+      ScalarCodec codec = codecs.get(shape.get("scalar").asText());
+      if (codec == null) return value;
+      JsonNode transformed = (input ? codec.encode() : codec.decode()).apply(value.deepCopy());
+      if (transformed == null || transformed.isNull())
+        throw new IllegalArgumentException("Scalar codec returned null");
+      return transformed;
+    }
+    if (shape.has("named"))
+      return scalarTransform(value, inputs.get(shape.get("named").asText()), inputs, codecs, input);
+    if (shape.has("list")) {
+      if (!value.isArray()) throw new IllegalArgumentException("Expected scalar codec list");
+      ArrayNode out = JSON.createArrayNode();
+      for (JsonNode child : value)
+        out.add(scalarTransform(child, shape.get("list"), inputs, codecs, input));
+      return out;
+    }
+    if (shape.has("union")) {
+      for (JsonNode candidate : shape.get("union"))
+        if (scalarMatches(value, candidate))
+          return scalarTransform(value, candidate, inputs, codecs, input);
+      throw new IllegalArgumentException("Unknown scalar codec union discriminator");
+    }
+    if (shape.has("fields")) {
+      if (!value.isObject()) throw new IllegalArgumentException("Expected scalar codec object");
+      ObjectNode out = value.deepCopy();
+      for (JsonNode pair : shape.get("fields")) {
+        String key = pair.get(0).asText();
+        if (out.has(key))
+          out.set(key, scalarTransform(out.get(key), pair.get(1), inputs, codecs, input));
+      }
+      return out;
+    }
+    return value;
+  }
+
+  private static boolean scalarMatches(JsonNode value, JsonNode shape) {
+    if (shape.has("literal"))
+      return value != null
+          && value.isTextual()
+          && value.asText().equals(shape.get("literal").asText());
+    if (shape.has("fields")) {
+      for (JsonNode pair : shape.get("fields"))
+        if (pair.get(1).has("literal")
+            && !scalarMatches(value.get(pair.get(0).asText()), pair.get(1))) return false;
+    }
+    return true;
+  }

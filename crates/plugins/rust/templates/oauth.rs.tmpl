@@ -1,50 +1,175 @@
-use crate::{BearerTokenProvider, TokenProviderError, TokenProviderFuture};
 use crate::transport::Transport;
-use std::{sync::{Arc, Mutex}, time::{Duration, Instant}};
+use crate::{BearerTokenProvider, TokenProviderError, TokenProviderFuture};
 use base64::Engine as _;
+use std::{
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 /// Client credentials only. Token issuer redirects are always disabled.
 pub struct OAuthClientCredentials {
-    url: reqwest::Url, basic: String, scope: String, leeway: Duration, timeout: Duration,
-    http: reqwest::Client, transport: Option<Arc<dyn Transport>>,
-    cached: Mutex<Option<(String, Instant)>>, refresh: tokio::sync::Mutex<()>,
+    url: reqwest::Url,
+    basic: String,
+    scope: String,
+    leeway: Duration,
+    timeout: Duration,
+    http: reqwest::Client,
+    transport: Option<Arc<dyn Transport>>,
+    cached: Mutex<Option<(String, Instant)>>,
+    refresh: tokio::sync::Mutex<()>,
 }
-impl std::fmt::Debug for OAuthClientCredentials { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str("OAuthClientCredentials") } }
-impl OAuthClientCredentials {
-    pub fn new(token_url: &str, client_id: &str, client_secret: &str) -> Result<Self, TokenProviderError> {
-        let url = reqwest::Url::parse(token_url).map_err(|_| TokenProviderError)?;
-        if !matches!(url.scheme(), "http" | "https") || !url.username().is_empty() || url.password().is_some() || url.fragment().is_some() || client_id.is_empty() || client_secret.is_empty() { return Err(TokenProviderError); }
-        let encode = |value: &str| reqwest::Url::parse_with_params("https://encode.invalid", &[("x", value)]).unwrap().query().unwrap()[2..].to_owned();
-        let basic = base64::engine::general_purpose::STANDARD.encode(format!("{}:{}", encode(client_id), encode(client_secret)));
-        Ok(Self { url, basic, scope: String::new(), leeway: Duration::from_secs(30), timeout: Duration::from_secs(30), http: reqwest::Client::builder().redirect(reqwest::redirect::Policy::none()).build().map_err(|_|TokenProviderError)?, transport: None, cached: Mutex::new(None), refresh: tokio::sync::Mutex::new(()) })
+impl std::fmt::Debug for OAuthClientCredentials {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("OAuthClientCredentials")
     }
-    pub fn with_scopes(mut self, scopes: &[&str]) -> Self { self.scope = scopes.join(" "); self }
-    pub fn with_refresh_leeway(mut self, value: Duration) -> Self { self.leeway = value; self }
-    pub fn with_timeout(mut self, value: Duration) -> Result<Self, TokenProviderError> { if value.is_zero() {return Err(TokenProviderError)} self.timeout = value; Ok(self) }
+}
+impl OAuthClientCredentials {
+    pub fn new(
+        token_url: &str,
+        client_id: &str,
+        client_secret: &str,
+    ) -> Result<Self, TokenProviderError> {
+        let url = reqwest::Url::parse(token_url).map_err(|_| TokenProviderError)?;
+        if !matches!(url.scheme(), "http" | "https")
+            || !url.username().is_empty()
+            || url.password().is_some()
+            || url.fragment().is_some()
+            || client_id.is_empty()
+            || client_secret.is_empty()
+        {
+            return Err(TokenProviderError);
+        }
+        let encode = |value: &str| {
+            reqwest::Url::parse_with_params("https://encode.invalid", &[("x", value)])
+                .unwrap()
+                .query()
+                .unwrap()[2..]
+                .to_owned()
+        };
+        let basic = base64::engine::general_purpose::STANDARD.encode(format!(
+            "{}:{}",
+            encode(client_id),
+            encode(client_secret)
+        ));
+        Ok(Self {
+            url,
+            basic,
+            scope: String::new(),
+            leeway: Duration::from_secs(30),
+            timeout: Duration::from_secs(30),
+            http: reqwest::Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .map_err(|_| TokenProviderError)?,
+            transport: None,
+            cached: Mutex::new(None),
+            refresh: tokio::sync::Mutex::new(()),
+        })
+    }
+    pub fn with_scopes(mut self, scopes: &[&str]) -> Self {
+        self.scope = scopes.join(" ");
+        self
+    }
+    pub fn with_refresh_leeway(mut self, value: Duration) -> Self {
+        self.leeway = value;
+        self
+    }
+    pub fn with_timeout(mut self, value: Duration) -> Result<Self, TokenProviderError> {
+        if value.is_zero() {
+            return Err(TokenProviderError);
+        }
+        self.timeout = value;
+        Ok(self)
+    }
     /// Inject the issuer executor for tests or middleware; it must refuse redirects.
-    pub fn with_transport(mut self, transport: Arc<dyn Transport>) -> Self { self.transport = Some(transport); self }
-    fn cached_token(&self) -> Option<String> { self.cached.lock().ok()?.as_ref().filter(|(_, expires)| Instant::now() < *expires).map(|(value,_)|value.clone()) }
+    pub fn with_transport(mut self, transport: Arc<dyn Transport>) -> Self {
+        self.transport = Some(transport);
+        self
+    }
+    fn cached_token(&self) -> Option<String> {
+        self.cached
+            .lock()
+            .ok()?
+            .as_ref()
+            .filter(|(_, expires)| Instant::now() < *expires)
+            .map(|(value, _)| value.clone())
+    }
     async fn acquire(&self) -> Result<String, TokenProviderError> {
-        if let Some(value) = self.cached_token() { return Ok(value); }
+        if let Some(value) = self.cached_token() {
+            return Ok(value);
+        }
         let _refresh = self.refresh.lock().await;
-        if let Some(value) = self.cached_token() { return Ok(value); }
+        if let Some(value) = self.cached_token() {
+            return Ok(value);
+        }
         let result = tokio::time::timeout(self.timeout, async {
-            let mut form = vec![("grant_type", "client_credentials")]; if !self.scope.is_empty() { form.push(("scope", self.scope.as_str())); }
-            let request = self.http.post(self.url.clone()).header("authorization", format!("Basic {}", self.basic)).form(&form).build().map_err(|_|TokenProviderError)?;
-            let mut response = match &self.transport { Some(transport) => transport.execute(request).await, None => self.http.execute(request).await }.map_err(|_|TokenProviderError)?;
-            if !response.status().is_success() { return Err(TokenProviderError); }
-            let mut bytes = Vec::new(); while let Some(chunk) = response.chunk().await.map_err(|_|TokenProviderError)? { if bytes.len()+chunk.len()>65536 {return Err(TokenProviderError)} bytes.extend_from_slice(&chunk); }
-            let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|_|TokenProviderError)?;
-            let token = value["access_token"].as_str().filter(|x|!x.is_empty()&&x.bytes().all(|c|c.is_ascii_alphanumeric()||b"._~+/-=".contains(&c))).ok_or(TokenProviderError)?;
-            if !value["token_type"].as_str().is_some_and(|x|x.eq_ignore_ascii_case("Bearer")) {return Err(TokenProviderError)}
-            let seconds = value["expires_in"].as_f64().filter(|x|x.is_finite()&&*x>=0.0).ok_or(TokenProviderError)?;
-            let duration = Duration::from_secs_f64(seconds.min(365.0*24.0*3600.0)).saturating_sub(self.leeway);
-            if !duration.is_zero() { *self.cached.lock().map_err(|_|TokenProviderError)? = Some((token.to_owned(), Instant::now()+duration)); }
+            let mut form = vec![("grant_type", "client_credentials")];
+            if !self.scope.is_empty() {
+                form.push(("scope", self.scope.as_str()));
+            }
+            let request = self
+                .http
+                .post(self.url.clone())
+                .header("authorization", format!("Basic {}", self.basic))
+                .form(&form)
+                .build()
+                .map_err(|_| TokenProviderError)?;
+            let mut response = match &self.transport {
+                Some(transport) => transport.execute(request).await,
+                None => self.http.execute(request).await,
+            }
+            .map_err(|_| TokenProviderError)?;
+            if !response.status().is_success() {
+                return Err(TokenProviderError);
+            }
+            let mut bytes = Vec::new();
+            while let Some(chunk) = response.chunk().await.map_err(|_| TokenProviderError)? {
+                if bytes.len() + chunk.len() > 65536 {
+                    return Err(TokenProviderError);
+                }
+                bytes.extend_from_slice(&chunk);
+            }
+            let value: serde_json::Value =
+                serde_json::from_slice(&bytes).map_err(|_| TokenProviderError)?;
+            let token = value["access_token"]
+                .as_str()
+                .filter(|x| {
+                    !x.is_empty()
+                        && x.bytes()
+                            .all(|c| c.is_ascii_alphanumeric() || b"._~+/-=".contains(&c))
+                })
+                .ok_or(TokenProviderError)?;
+            if !value["token_type"]
+                .as_str()
+                .is_some_and(|x| x.eq_ignore_ascii_case("Bearer"))
+            {
+                return Err(TokenProviderError);
+            }
+            let seconds = value["expires_in"]
+                .as_f64()
+                .filter(|x| x.is_finite() && *x >= 0.0)
+                .ok_or(TokenProviderError)?;
+            let duration = Duration::from_secs_f64(seconds.min(365.0 * 24.0 * 3600.0))
+                .saturating_sub(self.leeway);
+            if !duration.is_zero() {
+                *self.cached.lock().map_err(|_| TokenProviderError)? =
+                    Some((token.to_owned(), Instant::now() + duration));
+            }
             Ok(token.to_owned())
-        }).await.map_err(|_|TokenProviderError)?;
+        })
+        .await
+        .map_err(|_| TokenProviderError)?;
         result
     }
 }
 impl BearerTokenProvider for OAuthClientCredentials {
-    fn token(&self) -> TokenProviderFuture<'_> { Box::pin(self.acquire()) }
-    fn invalidate(&self, rejected: &str) { if let Ok(mut value) = self.cached.lock() { if value.as_ref().is_some_and(|(value,_)| value==rejected) { *value = None; } } }
+    fn token(&self) -> TokenProviderFuture<'_> {
+        Box::pin(self.acquire())
+    }
+    fn invalidate(&self, rejected: &str) {
+        if let Ok(mut value) = self.cached.lock() {
+            if value.as_ref().is_some_and(|(value, _)| value == rejected) {
+                *value = None;
+            }
+        }
+    }
 }

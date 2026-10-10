@@ -13,12 +13,11 @@ default = []
 # Compatibility surface for the CLI, Node addon, and existing examples.
 # New Rust consumers can depend on individual plugin crates directly.
 all-plugins = [
-    "csharp", "dotnet", "elixir", "go", "java", "php", "postman", "python",
+    "csharp", "elixir", "go", "java", "php", "postman", "python",
     "ruby", "rust", "rust-cli", "swift", "symfony", "terraform",
     "typescript", "typescript-cli",
 ]
 csharp = ["dep:poolster-plugin-csharp"]
-dotnet = ["dep:poolster-plugin-dotnet"]
 elixir = ["dep:poolster-plugin-elixir"]
 go = ["dep:poolster-plugin-go"]
 java = ["dep:poolster-plugin-java"]
@@ -49,7 +48,6 @@ poolster-plugin-php = { version = "0.5.0-alpha.1", path = "../plugins/php", opti
 poolster-plugin-symfony = { version = "0.5.0-alpha.1", path = "../plugins/symfony", optional = true }
 poolster-plugin-java = { version = "0.5.0-alpha.1", path = "../plugins/java", optional = true }
 poolster-plugin-csharp = { version = "0.5.0-alpha.1", path = "../plugins/csharp", optional = true }
-poolster-plugin-dotnet = { version = "0.5.0-alpha.1", path = "../plugins/dotnet", optional = true }
 poolster-plugin-elixir = { version = "0.5.0-alpha.1", path = "../plugins/elixir", optional = true }
 poolster-plugin-ruby = { version = "0.5.0-alpha.1", path = "../plugins/ruby", optional = true }
 poolster-plugin-swift = { version = "0.5.0-alpha.1", path = "../plugins/swift", optional = true }

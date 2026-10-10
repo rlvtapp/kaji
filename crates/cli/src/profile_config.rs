@@ -16,6 +16,7 @@ pub(super) fn configured_common(style: SdkClientStyle, package: &PackageConfig) 
     let mut common = package_common(style);
     common.package_version = package.version.clone();
     common.layout = package.layout.clone();
+    common.source_quality = package.source_quality.clone();
     common
 }
 
@@ -35,9 +36,6 @@ pub(super) fn profiles(options: &Generate) -> Result<ProfileSet> {
             "symfony" => profiles.package(symfony::package("symfony").with(symfony::sdk())),
             "java" => profiles.package(java::package("java").with(java::sdk())),
             "csharp" => profiles.package(csharp::package("csharp").with(csharp::sdk())),
-            // Keep the established selector for existing scripts. New
-            // configuration and direct commands should use `csharp`.
-            "dotnet" => profiles.package(dotnet::package("dotnet").with(dotnet::sdk())),
             "elixir" => profiles.package(elixir::package("elixir").with(elixir::sdk())),
             "ruby" => profiles.package(ruby::package("ruby").with(ruby::sdk())),
             "swift" => profiles.package(swift::package("swift").with(swift::sdk())),
@@ -162,7 +160,7 @@ pub(super) fn config_profiles(
                     || (package.language == "rust" && plugin.name == "sdk")),
             "open_unions is only supported by the Rust SDK plugin"
         );
-        if !matches!(package.language.as_str(), "java" | "csharp" | "dotnet") {
+        if !matches!(package.language.as_str(), "java" | "csharp") {
             ensure!(
                 package
                     .plugins
@@ -183,7 +181,7 @@ pub(super) fn config_profiles(
         }
         if matches!(
             package.language.as_str(),
-            "php" | "java" | "csharp" | "dotnet" | "elixir" | "ruby" | "swift"
+            "php" | "java" | "csharp" | "elixir" | "ruby" | "swift"
         ) {
             for consumer in &package.plugins {
                 if consumer.name == "operation-tests" {
@@ -217,7 +215,7 @@ pub(super) fn config_profiles(
             "php" => config_profile_sdk::apply_php(profiles, package, style)?,
             "symfony" => config_profile_sdk::apply_symfony(profiles, package, style)?,
             "java" => config_profile_sdk::apply_java(profiles, package, style)?,
-            "csharp" | "dotnet" => config_profile_sdk::apply_csharp(profiles, package, style)?,
+            "csharp" => config_profile_sdk::apply_csharp(profiles, package, style)?,
             "elixir" => config_profile_other::apply_elixir(profiles, package, style)?,
             "ruby" => config_profile_other::apply_ruby(profiles, package, style)?,
             "swift" => config_profile_other::apply_swift(profiles, package, style)?,
@@ -226,7 +224,7 @@ pub(super) fn config_profiles(
             "mock" => config_profile_other::apply_mock(profiles, package, style)?,
             "artifacts" => config_profile_other::apply_artifacts(profiles, package, style)?,
             other => bail!(
-                "unknown config language {other:?}; use typescript, typescript-cli, rust, rust-cli, go, python, php, symfony, java, csharp, dotnet (legacy alias), elixir, ruby, swift, postman, terraform, mock, or artifacts"
+                "unknown config language {other:?}; use typescript, typescript-cli, rust, rust-cli, go, python, php, symfony, java, csharp, elixir, ruby, swift, postman, terraform, mock, or artifacts"
             ),
         };
     }

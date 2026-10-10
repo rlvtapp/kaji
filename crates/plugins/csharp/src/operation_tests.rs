@@ -115,7 +115,6 @@ macro_rules! plugin {
     }
 }
 plugin!(CSharp);
-plugin!(DotNet);
 pub(crate) fn finalize(tree: &mut GeneratedTree) -> Result<()> {
     if tree.get("tests/OperationTests/Program.cs").is_none() {
         return Ok(());

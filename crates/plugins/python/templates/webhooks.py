@@ -10,56 +10,62 @@ import re
 import time
 from typing import Any, Mapping, TypeVar
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class WebhookVerificationError(ValueError):
     pass
 
 
-def verify_webhook(raw_body: bytes, headers: Mapping[str, str], secrets: list[str], *,
-                   now: float | None = None, tolerance: float = 300.0) -> Any:
+def verify_webhook(
+    raw_body: bytes,
+    headers: Mapping[str, str],
+    secrets: list[str],
+    *,
+    now: float | None = None,
+    tolerance: float = 300.0,
+) -> Any:
     """Verify Standard Webhooks HMAC v1 over original bytes, then decode JSON.
 
     Persist webhook-id in your application's idempotency store after verification.
     Ed25519 v1a signatures require a separate verifier and are not accepted here.
     """
     if not isinstance(raw_body, bytes):
-        raise TypeError('webhook body must be original bytes')
+        raise TypeError("webhook body must be original bytes")
     if not math.isfinite(tolerance) or tolerance < 0:
-        raise ValueError('webhook tolerance must be finite and nonnegative')
+        raise ValueError("webhook tolerance must be finite and nonnegative")
     normalized: dict[str, str] = {}
     for key, value in headers.items():
         name = key.lower()
-        if name in normalized and name.startswith('webhook-'):
-            raise WebhookVerificationError('duplicate webhook metadata header')
+        if name in normalized and name.startswith("webhook-"):
+            raise WebhookVerificationError("duplicate webhook metadata header")
         normalized[name] = value
-    message_id = normalized.get('webhook-id', '')
-    timestamp = normalized.get('webhook-timestamp', '')
-    signatures = normalized.get('webhook-signature', '')
-    if not message_id or '.' in message_id or not re.fullmatch(r'[0-9]+', timestamp):
-        raise WebhookVerificationError('invalid webhook metadata')
+    message_id = normalized.get("webhook-id", "")
+    timestamp = normalized.get("webhook-timestamp", "")
+    signatures = normalized.get("webhook-signature", "")
+    if not message_id or "." in message_id or not re.fullmatch(r"[0-9]+", timestamp):
+        raise WebhookVerificationError("invalid webhook metadata")
     current_time = time.time() if now is None else now
     if not math.isfinite(current_time) or abs(current_time - int(timestamp)) > tolerance:
-        raise WebhookVerificationError('webhook timestamp outside tolerance')
+        raise WebhookVerificationError("webhook timestamp outside tolerance")
     keys = []
     for secret in secrets:
-        if not secret.startswith('whsec_'):
-            raise ValueError('HMAC webhook secrets must use whsec_ prefix')
+        if not secret.startswith("whsec_"):
+            raise ValueError("HMAC webhook secrets must use whsec_ prefix")
         try:
             key = base64.b64decode(secret[6:], validate=True)
         except (ValueError, base64.binascii.Error) as error:
-            raise ValueError('invalid webhook signing secret') from error
+            raise ValueError("invalid webhook signing secret") from error
         if not 24 <= len(key) <= 64:
-            raise ValueError('HMAC webhook secrets must contain 24 to 64 bytes')
+            raise ValueError("HMAC webhook secrets must contain 24 to 64 bytes")
         keys.append(key)
     if not keys:
-        raise ValueError('at least one trusted webhook signing secret is required')
-    signed = message_id.encode('utf-8') + b'.' + timestamp.encode('ascii') + b'.' + raw_body
+        raise ValueError("at least one trusted webhook signing secret is required")
+    signed = message_id.encode("utf-8") + b"." + timestamp.encode("ascii") + b"." + raw_body
     valid = False
     for entry in signatures.split():
-        version, separator, encoded = entry.partition(',')
-        if version != 'v1' or not separator:
+        version, separator, encoded = entry.partition(",")
+        if version != "v1" or not separator:
             continue
         try:
             signature = base64.b64decode(encoded, validate=True)
@@ -68,14 +74,15 @@ def verify_webhook(raw_body: bytes, headers: Mapping[str, str], secrets: list[st
         for key in keys:
             valid |= hmac.compare_digest(hmac.new(key, signed, hashlib.sha256).digest(), signature)
     if not valid:
-        raise WebhookVerificationError('webhook signature does not match a trusted key')
+        raise WebhookVerificationError("webhook signature does not match a trusted key")
     return json.loads(raw_body)
 
 
-def verify_and_decode(raw_body: bytes, headers: Mapping[str, str], secrets: list[str],
-                      model: type[T], **options: Any) -> T:
+def verify_and_decode(
+    raw_body: bytes, headers: Mapping[str, str], secrets: list[str], model: type[T], **options: Any
+) -> T:
     """Decode a verified object through a generated model's from_dict method."""
     payload = verify_webhook(raw_body, headers, secrets, **options)
     if not isinstance(payload, dict):
-        raise ValueError('typed webhook model requires an object payload')
+        raise ValueError("typed webhook model requires an object payload")
     return model.from_dict(payload)  # type: ignore[attr-defined]

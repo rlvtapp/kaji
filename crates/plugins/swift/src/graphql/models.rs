@@ -32,7 +32,7 @@ impl Models {
             self.names.insert(name.into()),
             "GraphQL type naming collision {name}"
         );
-        let mut body = format!("public final class {name}: Codable {{\n");
+        let mut body = format!("public final class {name}: Codable {{\n  ");
         let mut keys = String::new();
         let mut parameters = Vec::new();
         let mut init = String::new();
@@ -77,8 +77,8 @@ impl Models {
                         "throw EncodingError.invalidValue(self.{property},.init(codingPath:encoder.codingPath + [CodingKeys.{property}],debugDescription: \"Non-null GraphQL field cannot be null\"))"
                     )
                 };
-                writeln!(decode,"if !c.contains(.{property}) {{ self.{property} = .omitted }} else if try c.decodeNil(forKey:.{property}) {{ {decode_null} }} else {{ self.{property} = .value(try c.decode({target}.self,forKey:.{property})) }}").unwrap();
-                writeln!(encode,"switch self.{property} {{ case .omitted: break; case .null: {encode_null}; case .value(let value): try c.encode(value,forKey:.{property}) }}").unwrap();
+                writeln!(decode,"if !c.contains(.{property}) {{\n  self.{property} = .omitted\n}}else if try c.decodeNil(forKey:.{property}) {{\n  {decode_null}\n}}else {{\n  self.{property} = .value(try c.decode({target}.self,forKey:.{property}))\n}}").unwrap();
+                writeln!(encode,"switch self.{property} {{\n  case .omitted: break;\n  case .null: {encode_null};\n  case .value(let value): try c.encode(value,forKey:.{property})\n}}").unwrap();
             } else {
                 writeln!(
                     decode,
@@ -88,11 +88,16 @@ impl Models {
                 writeln!(encode, "try c.encode(self.{property},forKey:.{property})").unwrap();
             }
         }
-        writeln!(body, "public init({}) {{\n{init}}}", parameters.join(", ")).unwrap();
+        writeln!(
+            body,
+            "public init({}) {{\n  {init}\n}}",
+            parameters.join(", ")
+        )
+        .unwrap();
         if fields.is_empty() {
             body.push_str("public init(from decoder: Decoder) throws {}\npublic func encode(to encoder: Encoder) throws { _ = encoder.container(keyedBy: EmptyCodingKeys.self) }\nprivate enum EmptyCodingKeys: String, CodingKey { case unused }\n");
         } else {
-            writeln!(body,"enum CodingKeys: String, CodingKey {{\n{keys}}}\npublic init(from decoder: Decoder) throws {{ let c = try decoder.container(keyedBy:CodingKeys.self)\n{decode}}}\npublic func encode(to encoder: Encoder) throws {{ var c = encoder.container(keyedBy:CodingKeys.self)\n{encode}}}").unwrap();
+            writeln!(body,"enum CodingKeys: String, CodingKey {{\n  {keys}\n}}\npublic init(from decoder: Decoder) throws {{\n  let c = try decoder.container(keyedBy:CodingKeys.self)\n{decode}\n}}\npublic func encode(to encoder: Encoder) throws {{\n  var c = encoder.container(keyedBy:CodingKeys.self)\n{encode}\n}}").unwrap();
         }
         body.push_str("}\n");
         self.source.push_str(&body);
@@ -109,7 +114,7 @@ impl Models {
         );
         let variants = union_variants(alternatives)?;
         let key = &variants[0].0;
-        let mut body = format!("public enum {name}: Codable {{\n");
+        let mut body = format!("public enum {name}: Codable {{\n  ");
         let mut decode = String::new();
         let mut encode = String::new();
         for (_, label, fields) in &variants {
@@ -125,7 +130,7 @@ impl Models {
             .unwrap();
             writeln!(encode,"case .{case}(let value): guard value.{} == {} else {{ throw EncodingError.invalidValue(value,.init(codingPath:encoder.codingPath,debugDescription: \"Invalid GraphQL typename\")) }}; try value.encode(to:encoder)",member(key),literal(label)).unwrap();
         }
-        writeln!(body,"private enum CodingKeys: String, CodingKey {{ case typename = {} }}\npublic init(from decoder: Decoder) throws {{ let c = try decoder.container(keyedBy:CodingKeys.self); let typename = try c.decode(String.self,forKey:.typename); switch typename {{\n{decode}default: throw DecodingError.dataCorruptedError(forKey:.typename,in:c,debugDescription: \"Unknown GraphQL typename\")\n}} }}\npublic func encode(to encoder: Encoder) throws {{ switch self {{\n{encode}}} }}\n}}",literal(key)).unwrap();
+        writeln!(body,"private enum CodingKeys: String, CodingKey {{\n  case typename = {}\n}}\n\npublic init(from decoder: Decoder) throws {{\n  let c = try decoder.container(keyedBy:CodingKeys.self);\n  let typename = try c.decode(String.self,forKey:.typename);\n  switch typename {{\n    {decode}default: throw DecodingError.dataCorruptedError(forKey:.typename,in:c,debugDescription: \"Unknown GraphQL typename\")\n}}\n\n}}\n\npublic func encode(to encoder: Encoder) throws {{\n  switch self {{\n    {encode\n  }}}\n}}\n\n}}",literal(key)).unwrap();
         self.source.push_str(&body);
         self.files.insert(
             format!("Models/{}", super::filename(&format!("Model{name}"))),

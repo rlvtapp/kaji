@@ -4,24 +4,105 @@ use hmac::{Hmac, Mac};
 use sha2::Sha256;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WebhookVerificationError;
-impl std::fmt::Display for WebhookVerificationError { fn fmt(&self,f:&mut std::fmt::Formatter<'_>)->std::fmt::Result { f.write_str("Webhook verification failed") } }
+impl std::fmt::Display for WebhookVerificationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Webhook verification failed")
+    }
+}
 impl std::error::Error for WebhookVerificationError {}
 #[derive(Debug, Clone, Copy)]
-pub struct WebhookVerificationOptions { pub now: u64, pub tolerance: u64 }
-impl Default for WebhookVerificationOptions { fn default()->Self { Self { now: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(), tolerance:300 } } }
+pub struct WebhookVerificationOptions {
+    pub now: u64,
+    pub tolerance: u64,
+}
+impl Default for WebhookVerificationOptions {
+    fn default() -> Self {
+        Self {
+            now: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            tolerance: 300,
+        }
+    }
+}
 /// Verify raw bytes before decoding. Persist webhook-id separately for replay deduplication.
 /// Header pairs preserve duplicate metadata detection. Rotated keys are all trusted.
-pub fn verify_webhook(raw_body:&[u8],headers:&[(&str,&str)],secrets:&[&str],options:WebhookVerificationOptions)->Result<serde_json::Value,WebhookVerificationError> {
- let fail=WebhookVerificationError;
- let mut metadata=std::collections::BTreeMap::new();
- for &(name,value) in headers { let name=name.to_ascii_lowercase(); if !["webhook-id","webhook-timestamp","webhook-signature"].contains(&name.as_str()){continue} if metadata.insert(name,value).is_some(){return Err(fail)} }
- let id=*metadata.get("webhook-id").ok_or(fail)?;let stamp=*metadata.get("webhook-timestamp").ok_or(fail)?;
- if id.is_empty()||id.contains('.')||stamp.is_empty()||!stamp.bytes().all(|b|b.is_ascii_digit()){return Err(fail)}
- let timestamp=stamp.parse::<u64>().map_err(|_|fail)?;if options.now.abs_diff(timestamp)>options.tolerance||secrets.is_empty(){return Err(fail)}
- let mut keys=Vec::new();for secret in secrets { let encoded=secret.strip_prefix("whsec_").ok_or(fail)?;let key=STANDARD.decode(encoded).map_err(|_|fail)?;if !(24..=64).contains(&key.len())||STANDARD.encode(&key)!=encoded{return Err(fail)} keys.push(key); }
- let mut signed=format!("{id}.{stamp}.").into_bytes();signed.extend_from_slice(raw_body);let mut valid=false;
- for entry in metadata.get("webhook-signature").ok_or(fail)?.split_whitespace(){let Some(encoded)=entry.strip_prefix("v1,")else{continue};let Ok(signature)=STANDARD.decode(encoded)else{continue};if signature.len()!=32||STANDARD.encode(&signature)!=encoded{continue}for key in &keys {let mut mac=Hmac::<Sha256>::new_from_slice(key).map_err(|_|fail)?;mac.update(&signed);let matched=mac.verify_slice(&signature).is_ok();valid=matched||valid;}}
- if !valid{return Err(fail)} serde_json::from_slice(raw_body).map_err(|_|fail)
+pub fn verify_webhook(
+    raw_body: &[u8],
+    headers: &[(&str, &str)],
+    secrets: &[&str],
+    options: WebhookVerificationOptions,
+) -> Result<serde_json::Value, WebhookVerificationError> {
+    let fail = WebhookVerificationError;
+    let mut metadata = std::collections::BTreeMap::new();
+    for &(name, value) in headers {
+        let name = name.to_ascii_lowercase();
+        if !["webhook-id", "webhook-timestamp", "webhook-signature"].contains(&name.as_str()) {
+            continue;
+        }
+        if metadata.insert(name, value).is_some() {
+            return Err(fail);
+        }
+    }
+    let id = *metadata.get("webhook-id").ok_or(fail)?;
+    let stamp = *metadata.get("webhook-timestamp").ok_or(fail)?;
+    if id.is_empty()
+        || id.contains('.')
+        || stamp.is_empty()
+        || !stamp.bytes().all(|b| b.is_ascii_digit())
+    {
+        return Err(fail);
+    }
+    let timestamp = stamp.parse::<u64>().map_err(|_| fail)?;
+    if options.now.abs_diff(timestamp) > options.tolerance || secrets.is_empty() {
+        return Err(fail);
+    }
+    let mut keys = Vec::new();
+    for secret in secrets {
+        let encoded = secret.strip_prefix("whsec_").ok_or(fail)?;
+        let key = STANDARD.decode(encoded).map_err(|_| fail)?;
+        if !(24..=64).contains(&key.len()) || STANDARD.encode(&key) != encoded {
+            return Err(fail);
+        }
+        keys.push(key);
+    }
+    let mut signed = format!("{id}.{stamp}.").into_bytes();
+    signed.extend_from_slice(raw_body);
+    let mut valid = false;
+    for entry in metadata
+        .get("webhook-signature")
+        .ok_or(fail)?
+        .split_whitespace()
+    {
+        let Some(encoded) = entry.strip_prefix("v1,") else {
+            continue;
+        };
+        let Ok(signature) = STANDARD.decode(encoded) else {
+            continue;
+        };
+        if signature.len() != 32 || STANDARD.encode(&signature) != encoded {
+            continue;
+        }
+        for key in &keys {
+            let mut mac = Hmac::<Sha256>::new_from_slice(key).map_err(|_| fail)?;
+            mac.update(&signed);
+            let matched = mac.verify_slice(&signature).is_ok();
+            valid = matched || valid;
+        }
+    }
+    if !valid {
+        return Err(fail);
+    }
+    serde_json::from_slice(raw_body).map_err(|_| fail)
 }
 /// Decode into a generated model after authentication; errors contain no payload details.
-pub fn verify_webhook_and_decode<T:serde::de::DeserializeOwned>(raw_body:&[u8],headers:&[(&str,&str)],secrets:&[&str],options:WebhookVerificationOptions)->Result<T,WebhookVerificationError>{let value=verify_webhook(raw_body,headers,secrets,options)?;serde_json::from_value(value).map_err(|_|WebhookVerificationError)}
+pub fn verify_webhook_and_decode<T: serde::de::DeserializeOwned>(
+    raw_body: &[u8],
+    headers: &[(&str, &str)],
+    secrets: &[&str],
+    options: WebhookVerificationOptions,
+) -> Result<T, WebhookVerificationError> {
+    let value = verify_webhook(raw_body, headers, secrets, options)?;
+    serde_json::from_value(value).map_err(|_| WebhookVerificationError)
+}

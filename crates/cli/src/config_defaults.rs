@@ -6,7 +6,16 @@ pub(super) fn apply(config: &mut ProjectConfig) -> Result<()> {
     if let Some(layout) = &config.defaults.layout {
         layout.groups(&[], 0)?;
     }
+    if let Some(quality) = &config.defaults.source_quality {
+        quality.validate()?;
+    }
     for package in &mut config.packages {
+        if package.source_quality.is_none() {
+            package.source_quality = config.defaults.source_quality.clone();
+        }
+        if let Some(quality) = &package.source_quality {
+            quality.validate()?;
+        }
         if package.layout.is_none() {
             package.layout = config.defaults.layout.clone();
         }
@@ -21,6 +30,37 @@ pub(super) fn apply(config: &mut ProjectConfig) -> Result<()> {
 mod tests {
     use super::*;
     use poolster_core::SourceLayout;
+
+    #[test]
+    fn source_quality_defaults_inherit_and_explicit_overrides_survive() {
+        let mut config: ProjectConfig = serde_json::from_value(serde_json::json!({
+            "openapi":{"input":"api.yaml"}, "output":{"path":"generated"},
+            "defaults":{"source_quality":{"mode":"unformatted","reason":"shared"}},
+            "packages":[
+                {"language":"typescript","path":"one","plugins":[{"name":"sdk"}]},
+                {"language":"go","path":"two","source_quality":{"mode":"unformatted","reason":"local"},"plugins":[{"name":"sdk"}]}
+            ]
+        })).unwrap();
+        apply(&mut config).unwrap();
+        assert_eq!(
+            config.packages[0].source_quality,
+            config.defaults.source_quality
+        );
+        assert_eq!(
+            config.packages[1].source_quality,
+            Some(poolster_core::SourceQuality::Unformatted {
+                reason: "local".into()
+            })
+        );
+        apply(&mut config).unwrap();
+        assert_eq!(
+            config.packages[0].source_quality,
+            config.defaults.source_quality
+        );
+        config.defaults.source_quality =
+            Some(poolster_core::SourceQuality::Unformatted { reason: "".into() });
+        assert!(apply(&mut config).is_err());
+    }
 
     #[test]
     fn layout_defaults_inherit_and_explicit_overrides_survive() {

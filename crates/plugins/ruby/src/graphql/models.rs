@@ -100,7 +100,7 @@ impl Models {
             let ty = self.ty(&format!("{name}{}", pascal_case(field)), ty, input)?;
             writeln!(
                 getters,
-                "    def {getter}; @value[{}]; end",
+                "    def {getter}\n      @value[{}]\n    end",
                 ruby_string(field)
             )?;
             writeln!(
@@ -111,10 +111,14 @@ impl Models {
         }
         let mut source = String::new();
         let mut signatures = String::new();
+        let descriptor = serde_json::to_string_pretty(&descriptor(name, ty))?
+            .lines()
+            .map(|line| format!("      {line}"))
+            .collect::<Vec<_>>()
+            .join("\n");
         writeln!(
             source,
-            "  class {name} < Model\n    TYPE = JSON.parse({}).freeze\n    def initialize(value = {{}})\n      super(self.class::TYPE, value, {input})\n    end\n{getters}  end\n  Model.register({name}::TYPE, {name})",
-            ruby_string(&serde_json::to_string(&descriptor(name, ty))?)
+            "  class {name} < Model\n    TYPE = JSON.parse(<<~'POOLSTER_MODEL').freeze\n{descriptor}\n    POOLSTER_MODEL\n\n    def initialize(value = {{}})\n      super(self.class::TYPE, value, {input})\n    end\n{getters}  end\n  Model.register({name}::TYPE, {name})",
         )?;
         writeln!(
             signatures,

@@ -32,7 +32,7 @@ fn snapshot() -> String {
             .package(poolster::python::package("python").with(poolster::python::sdk()))
             .package(poolster::php::package("php").with(poolster::php::sdk()))
             .package(poolster::java::package("java").with(poolster::java::sdk()))
-            .package(poolster::dotnet::package("dotnet").with(poolster::dotnet::sdk()))
+            .package(poolster::csharp::package("csharp").with(poolster::csharp::sdk()))
             .package(poolster::elixir::package("elixir").with(poolster::elixir::sdk()))
             .package(poolster::mock::package("mock-server").with(poolster::mock::server())),
     )

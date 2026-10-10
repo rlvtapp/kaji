@@ -18,13 +18,8 @@ pub use poolster_core::idempotency::{IdempotencyConfig, IdempotencyRule};
 pub use poolster_core::input;
 pub use poolster_core::release;
 /// First-party C# SDK generator.
-///
-/// This is the preferred name for the .NET/C# target. [`dotnet`] remains an
-/// alias so existing embedded generation profiles continue to compile.
 #[cfg(feature = "csharp")]
 pub use poolster_plugin_csharp as csharp;
-#[cfg(feature = "dotnet")]
-pub use poolster_plugin_dotnet as dotnet;
 #[cfg(feature = "elixir")]
 pub use poolster_plugin_elixir as elixir;
 #[cfg(feature = "go")]

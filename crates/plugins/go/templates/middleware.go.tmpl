@@ -1,4 +1,3 @@
-
 // PoolsterMiddleware wraps the native HTTP execution boundary. Request context and
 // response-body ownership follow net/http conventions. Wrappers may rewrite
 // requests/responses, recover errors, or return a response without calling next.
@@ -7,6 +6,7 @@ type PoolsterMiddleware func(PoolsterHTTPClient) PoolsterHTTPClient
 
 // PoolsterHTTPClientFunc adapts a function into an injectable transport.
 type PoolsterHTTPClientFunc func(*http.Request) (*http.Response, error)
+
 func (handler PoolsterHTTPClientFunc) Do(request *http.Request) (*http.Response, error) {
-    return handler(request)
+	return handler(request)
 }

@@ -8,10 +8,7 @@ pub(super) fn emit(
     let json = serde_json::to_string(value)?;
     let mut source = String::new();
     if json.len() < 7000 {
-        source = format!(
-            "import json\nVALUE=json.loads({})\n",
-            serde_json::to_string(&json)?
-        );
+        source = literal(value)?;
     } else {
         let mut expression = Vec::new();
         match value {
@@ -20,27 +17,39 @@ pub(super) fn emit(
                     let child = format!("{name}_{index}");
                     emit(&serde_json::Value::Array(chunk.to_vec()), &child, files)?;
                     writeln!(source, "from .{child} import VALUE as _part{index}")?;
-                    expression.push(format!("*_part{index}"));
+                    expression.push(format!("    *_part{index},"));
                 }
-                writeln!(source, "VALUE=[{}]", expression.join(","))?;
+                writeln!(source, "\nVALUE = [\n{}\n]", expression.join("\n"))?;
             }
             serde_json::Value::Object(values) => {
                 for (index, (key, value)) in values.iter().enumerate() {
                     let child = format!("{name}_{index}");
                     emit(value, &child, files)?;
                     writeln!(source, "from .{child} import VALUE as _part{index}")?;
-                    expression.push(format!("{}:_part{index}", serde_json::to_string(key)?));
+                    expression.push(format!(
+                        "    {}: _part{index},",
+                        serde_json::to_string(key)?
+                    ));
                 }
-                writeln!(source, "VALUE={{{}}}", expression.join(","))?;
+                writeln!(source, "\nVALUE = {{\n{}\n}}", expression.join("\n"))?;
             }
-            _ => {
-                source = format!(
-                    "import json\nVALUE=json.loads({})\n",
-                    serde_json::to_string(&json)?
-                )
-            }
+            _ => source = literal(value)?,
         }
     }
     files.insert(format!("_codec_inputs/{name}.py"), source);
     Ok(())
+}
+
+// Adjacent quoted lines preserve JSON exactly without an opaque 7,000-column literal.
+fn literal(value: &serde_json::Value) -> Result<String> {
+    let mut source = "import json\n\nVALUE = json.loads(\n".to_owned();
+    for line in serde_json::to_string_pretty(value)?.lines() {
+        writeln!(
+            source,
+            "    {}",
+            serde_json::to_string(&format!("{line}\n"))?
+        )?;
+    }
+    source.push_str(")\n");
+    Ok(source)
 }

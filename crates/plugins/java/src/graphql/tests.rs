@@ -401,6 +401,20 @@ fn many_operations_have_individual_bounded_sources() {
         })
         .collect();
     let (tree, _) = render(&c, "io.test", GraphqlStyle::Idiomatic, &BTreeMap::new()).unwrap();
+    c.operations.reverse();
+    let (reordered, _) = render(&c, "io.test", GraphqlStyle::Idiomatic, &BTreeMap::new()).unwrap();
+    let original = tree
+        .iter()
+        .map(|(p, s)| (p.to_owned(), s.to_owned()))
+        .collect::<BTreeMap<_, _>>();
+    let reversed = reordered
+        .iter()
+        .map(|(p, s)| (p.to_owned(), s.to_owned()))
+        .collect::<BTreeMap<_, _>>();
+    assert_eq!(
+        original, reversed,
+        "operation order must not affect facade parts"
+    );
     assert_eq!(
         tree.iter()
             .filter(|(p, _)| p.to_string_lossy().contains("/operations/"))
@@ -563,5 +577,59 @@ fn advanced_transports_compile_and_execute() {
                 String::from_utf8_lossy(&output.stderr)
             );
         }
+    }
+}
+
+fn large_fixture() -> GraphqlOperations {
+    let mut c = fixture();
+    let op = c.operations[0].clone();
+    c.operations = (0..300)
+        .map(|i| {
+            let mut op = op.clone();
+            op.name = format!("Read{i}");
+            op.document =
+                format!("query Read{i}($id: ID!) {{readUser(id:$id) {{ name nickname }} }}");
+            op
+        })
+        .collect();
+    c
+}
+#[test]
+#[ignore = "requires JDK 17+ and pinned Jackson 2.18.3 jars in Maven cache"]
+fn bounded_facade_parts_compile_and_execute_all_styles() {
+    for style in [
+        GraphqlStyle::Raw,
+        GraphqlStyle::Flat,
+        GraphqlStyle::Idiomatic,
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        let (tree, _) = render(&large_fixture(), "io.test", style, &BTreeMap::new()).unwrap();
+        for (p, s) in tree.iter() {
+            let p = dir.path().join(p);
+            fs::create_dir_all(p.parent().unwrap()).unwrap();
+            fs::write(p, s).unwrap();
+        }
+        let call = match style {
+            GraphqlStyle::Raw => "Client.read299(client,new Read299Variables(\"1\"))",
+            GraphqlStyle::Flat => "client.read299(new Read299Variables(\"1\"))",
+            GraphqlStyle::Idiomatic => "client.query().read299(new Read299Variables(\"1\"))",
+        };
+        fs::write(dir.path().join("Test.java"),format!(r#"import io.test.Client;import io.test.models.*;import com.fasterxml.jackson.databind.*;public class Test {{public static void main(String[] args)throws Exception {{Client client=new Client(new Client.Transport(){{public <T> Client.Envelope<T> execute(String doc,String op,com.fasterxml.jackson.databind.node.ObjectNode vars,Client.Decoder<T> decoder)throws java.io.IOException{{if(!vars.path("id").asText().equals("1"))throw new AssertionError();return new Client.Envelope<>(true,decoder.decode(new ObjectMapper().readTree("{{\"readUser\":{{\"name\":\"Ada\",\"nickname\":null}}}}")),java.util.List.of(),null,200);}}}});var response={call};if(!response.requireData().readUser().name().equals("Ada"))throw new AssertionError();if(!response.data().readUser().nickname().present()||response.data().readUser().nickname().value()!=null)throw new AssertionError();}}}}"#)).unwrap();
+        let output = compile(dir.path());
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let output = Command::new("java")
+            .args(["-cp", &format!("classes:{}", classpath()), "Test"])
+            .current_dir(dir.path())
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 }

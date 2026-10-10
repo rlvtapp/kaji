@@ -12,7 +12,7 @@ pub(super) fn render_operation_chunk(
         format!("Operations{:03}", index - 1)
     };
     let mut output = format!(
-        "package {package}.internal;\n\nimport com.fasterxml.jackson.core.JsonProcessingException;\nimport com.fasterxml.jackson.databind.JsonNode;\nimport java.util.*;\nimport {package}.*;\nimport {package}.model.*;\n\n{NOTICE}\n/** Bounded generated operation partition. */\npublic class Operations{index:03} extends {parent} {{\n    protected Operations{index:03}(ClientConfig config) {{ super(config); }}\n\n"
+        "package {package}.internal;\n\n\nimport com.fasterxml.jackson.core.JsonProcessingException;\n\nimport com.fasterxml.jackson.databind.JsonNode;\n\nimport java.util.*;\n\nimport {package}.*;\n\nimport {package}.model.*;\n\n\n{NOTICE}\n/** Bounded generated operation partition. */\npublic class Operations{index:03} extends {parent} {{\n  protected Operations{index:03}(ClientConfig config) {{\n    super(config);\n\n  }}\n  \n\n"
     );
     for operation in operations {
         render_operation(&mut output, operation);
@@ -39,7 +39,7 @@ pub(super) fn render_client_facade(
         format!("{package}.internal.Operations{:03}", chunks - 1)
     };
     let mut output = format!(
-        "package {package};\n\n{NOTICE}\n/** Public API facade. Operations are inherited from bounded internal partitions. */\npublic final class Client extends {parent} {{\n"
+        "package {package};\n\n\n{NOTICE}\n/** Public API facade. Operations are inherited from bounded internal partitions. */\npublic final class Client extends {parent} {{\n  "
     );
     if style == SdkClientStyle::Namespaced {
         for (resource, _) in resource_operations(api) {
@@ -67,7 +67,7 @@ pub(super) fn render_client_facade(
             let field = field_name(&resource);
             let _ = writeln!(
                 output,
-                "    public {resource}Resource {accessor}() {{ return {field}Resource; }}\n"
+                "    public {resource}Resource {accessor}() {{\n  return {field}Resource;\n\n}}\n\n"
             );
         }
     }
@@ -108,12 +108,15 @@ pub(super) fn render_operation(output: &mut String, operation: &Operation) {
             ));
         }
         if fields.len() > 200 {
-            let _ = writeln!(output, "    public static final class {request_name} {{");
+            let _ = writeln!(
+                output,
+                "    public static final class {request_name} {{\n  "
+            );
             for declaration in fields {
                 let (ty, name) = declaration.trim().rsplit_once(' ').expect("typed argument");
                 let _ = writeln!(
                     output,
-                    "        private {ty} {name};\n        public {ty} {name}() {{ return {name}; }}\n        public {request_name} {name}({ty} value) {{ this.{name} = value; return this; }}"
+                    "        private {ty} {name};\n\n        public {ty} {name}() {{\n  return {name};\n\n}}\n\n        public {request_name} {name}({ty} value) {{\n  this.{name} = value;\n  return this;\n\n}}"
                 );
             }
             output.push_str("    }\n\n");
@@ -143,7 +146,7 @@ pub(super) fn render_operation(output: &mut String, operation: &Operation) {
     );
     let _ = writeln!(
         output,
-        "    public {return_type} {method}({input}) {{",
+        "    public {return_type} {method}({input}) {{\n  ",
         method = method_name(&operation.id)
     );
     if has_input {

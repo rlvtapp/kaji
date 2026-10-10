@@ -1,0 +1,9 @@
+query ReadPerson($id: ID!) {
+  person(id: $id) { id name nickname role }
+}
+query ListPeople($filter: PersonFilter) {
+  people(filter: $filter) { id name }
+}
+mutation RenamePerson($id: ID!, $name: String!) {
+  rename(id: $id, name: $name) { id name }
+}

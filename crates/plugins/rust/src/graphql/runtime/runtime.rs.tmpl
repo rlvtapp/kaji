@@ -1,0 +1,294 @@
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_json::{Map, Value};
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum Presence<T> {
+    #[default]
+    Absent,
+    Null,
+    Value(T),
+}
+impl<T> Presence<T> {
+    pub fn is_absent(&self) -> bool {
+        matches!(self, Self::Absent)
+    }
+}
+impl<T: Serialize> Serialize for Presence<T> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Self::Absent => Err(serde::ser::Error::custom(
+                "absent values must be omitted by their containing field",
+            )),
+            Self::Null => serializer.serialize_none(),
+            Self::Value(value) => value.serialize(serializer),
+        }
+    }
+}
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for Presence<T> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(match Option::<T>::deserialize(deserializer)? {
+            Some(value) => Self::Value(value),
+            None => Self::Null,
+        })
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum Optional<T> {
+    #[default]
+    Absent,
+    Value(T),
+}
+impl<T> Optional<T> {
+    pub fn is_absent(&self) -> bool {
+        matches!(self, Self::Absent)
+    }
+}
+impl<T: Serialize> Serialize for Optional<T> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Self::Absent => Err(serde::ser::Error::custom(
+                "absent values must be omitted by their containing field",
+            )),
+            Self::Value(value) => value.serialize(serializer),
+        }
+    }
+}
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for Optional<T> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        T::deserialize(deserializer).map(Self::Value)
+    }
+}
+pub fn required_nullable<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
+    deserializer: D,
+) -> Result<Option<T>, D::Error> {
+    Option::<T>::deserialize(deserializer)
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GraphqlErrorLocation {
+    pub line: u64,
+    pub column: u64,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GraphqlError {
+    pub message: String,
+    pub locations: Option<Vec<GraphqlErrorLocation>>,
+    pub path: Option<Vec<Value>>,
+    pub extensions: Option<Map<String, Value>>,
+}
+#[derive(Debug, Clone, PartialEq)]
+pub enum GraphqlResponse<T> {
+    Success {
+        data: T,
+        extensions: Option<Map<String, Value>>,
+    },
+    Partial {
+        data: T,
+        errors: Vec<GraphqlError>,
+        extensions: Option<Map<String, Value>>,
+    },
+    Error {
+        errors: Vec<GraphqlError>,
+        extensions: Option<Map<String, Value>>,
+    },
+}
+#[derive(Debug)]
+pub enum GraphqlTransportError {
+    Network(reqwest::Error),
+    Http { status: u16, body: String },
+    Protocol(String),
+    Decode(serde_json::Error),
+    Encode(serde_json::Error),
+}
+impl std::fmt::Display for GraphqlTransportError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Network(error) => write!(f, "GraphQL network error: {error}"),
+            Self::Http { status, .. } => write!(f, "GraphQL HTTP error: {status}"),
+            Self::Protocol(message) => write!(f, "GraphQL protocol error: {message}"),
+            Self::Decode(error) => write!(f, "GraphQL result decoding error: {error}"),
+            Self::Encode(error) => write!(f, "GraphQL variables encoding error: {error}"),
+        }
+    }
+}
+impl std::error::Error for GraphqlTransportError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Network(error) => Some(error),
+            Self::Decode(error) | Self::Encode(error) => Some(error),
+            _ => None,
+        }
+    }
+}
+#[derive(Debug, Clone)]
+pub struct GraphqlHttpTransport {
+    pub(crate) endpoint: String,
+    pub(crate) client: reqwest::Client,
+    pub(crate) codecs: crate::graphql_codecs::GraphqlScalarCodecs,
+}
+impl GraphqlHttpTransport {
+    pub fn new(endpoint: impl Into<String>, client: reqwest::Client) -> Self {
+        Self {
+            endpoint: endpoint.into(),
+            client,
+            codecs: Default::default(),
+        }
+    }
+    pub fn with_codecs(mut self, codecs: crate::graphql_codecs::GraphqlScalarCodecs) -> Self {
+        self.codecs = codecs;
+        self
+    }
+    pub async fn execute<T: serde::de::DeserializeOwned, V: Serialize>(
+        &self,
+        document: &str,
+        operation_name: &str,
+        variables: &V,
+    ) -> Result<GraphqlResponse<T>, GraphqlTransportError> {
+        self.execute_shaped(document, operation_name, variables, None)
+            .await
+    }
+    pub async fn execute_with_shape<T: serde::de::DeserializeOwned, V: Serialize>(
+        &self,
+        document: &str,
+        operation_name: &str,
+        variables: &V,
+        shape: &str,
+    ) -> Result<GraphqlResponse<T>, GraphqlTransportError> {
+        self.execute_shaped(
+            document,
+            operation_name,
+            variables,
+            Some(crate::graphql_codecs::GraphqlShape::parse(shape)?),
+        )
+        .await
+    }
+    pub(crate) fn request<V: Serialize>(
+        &self,
+        document: &str,
+        operation_name: &str,
+        variables: &V,
+        accept: &str,
+        shape: Option<&crate::graphql_codecs::GraphqlShape>,
+    ) -> Result<reqwest::RequestBuilder, GraphqlTransportError> {
+        let mut variables =
+            serde_json::to_value(variables).map_err(GraphqlTransportError::Encode)?;
+        if let Some(shape) = shape {
+            self.codecs
+                .transform(&mut variables, &shape.input, &shape.objects, true)?;
+        }
+        Ok(self.client.post(&self.endpoint).header(reqwest::header::CONTENT_TYPE,"application/json").header(reqwest::header::ACCEPT,accept).json(&serde_json::json!({"query":document,"operationName":operation_name,"variables":variables})))
+    }
+    async fn execute_shaped<T: serde::de::DeserializeOwned, V: Serialize>(
+        &self,
+        document: &str,
+        operation_name: &str,
+        variables: &V,
+        shape: Option<crate::graphql_codecs::GraphqlShape>,
+    ) -> Result<GraphqlResponse<T>, GraphqlTransportError> {
+        let response = self
+            .request(
+                document,
+                operation_name,
+                variables,
+                "application/graphql-response+json, application/json",
+                shape.as_ref(),
+            )?
+            .send()
+            .await
+            .map_err(GraphqlTransportError::Network)?;
+        let status = response.status();
+        let body = response
+            .bytes()
+            .await
+            .map_err(GraphqlTransportError::Network)?;
+        if !status.is_success() {
+            return Err(GraphqlTransportError::Http {
+                status: status.as_u16(),
+                body: String::from_utf8_lossy(&body).into_owned(),
+            });
+        }
+        let envelope: Value = serde_json::from_slice(&body)
+            .map_err(|e| GraphqlTransportError::Protocol(format!("invalid JSON: {e}")))?;
+        if envelope.get("hasNext").is_some() || envelope.get("incremental").is_some() {
+            return Err(GraphqlTransportError::Protocol(
+                "incremental response requires an incremental operation transport".into(),
+            ));
+        }
+        self.decode_envelope(envelope, shape.as_ref())
+    }
+    pub(crate) fn decode_envelope<T: serde::de::DeserializeOwned>(
+        &self,
+        mut envelope: Value,
+        shape: Option<&crate::graphql_codecs::GraphqlShape>,
+    ) -> Result<GraphqlResponse<T>, GraphqlTransportError> {
+        if let (Some(shape), Some(data)) = (shape, envelope.get_mut("data")) {
+            self.codecs
+                .transform(data, &shape.result, &shape.objects, false)?;
+        }
+        let object = envelope
+            .as_object()
+            .ok_or_else(|| GraphqlTransportError::Protocol("response must be an object".into()))?;
+        let extensions = match object.get("extensions") {
+            None => None,
+            Some(Value::Object(value)) => Some(value.clone()),
+            Some(_) => {
+                return Err(GraphqlTransportError::Protocol(
+                    "extensions must be an object".into(),
+                ));
+            }
+        };
+        let errors: Vec<GraphqlError> = match object.get("errors") {
+            None => Vec::new(),
+            Some(Value::Array(values)) if !values.is_empty() => {
+                let errors: Vec<GraphqlError> =
+                    serde_json::from_value(Value::Array(values.clone())).map_err(|error| {
+                        GraphqlTransportError::Protocol(format!("invalid errors: {error}"))
+                    })?;
+                for error in &errors {
+                    if error.locations.as_ref().is_some_and(|locations| {
+                        locations
+                            .iter()
+                            .any(|location| location.line == 0 || location.column == 0)
+                    }) || error.path.as_ref().is_some_and(|path| {
+                        path.iter()
+                            .any(|part| !part.is_string() && part.as_u64().is_none())
+                    }) {
+                        return Err(GraphqlTransportError::Protocol(
+                            "invalid error location or path".into(),
+                        ));
+                    }
+                }
+                errors
+            }
+            Some(_) => {
+                return Err(GraphqlTransportError::Protocol(
+                    "errors must be a nonempty array".into(),
+                ));
+            }
+        };
+        match object.get("data") {
+            Some(data @ Value::Object(_)) => {
+                let data =
+                    serde_json::from_value(data.clone()).map_err(GraphqlTransportError::Decode)?;
+                if errors.is_empty() {
+                    Ok(GraphqlResponse::Success { data, extensions })
+                } else {
+                    Ok(GraphqlResponse::Partial {
+                        data,
+                        errors,
+                        extensions,
+                    })
+                }
+            }
+            None | Some(Value::Null) if !errors.is_empty() => {
+                Ok(GraphqlResponse::Error { errors, extensions })
+            }
+            None | Some(Value::Null) => Err(GraphqlTransportError::Protocol(
+                "response requires object data or errors".into(),
+            )),
+            Some(_) => Err(GraphqlTransportError::Protocol(
+                "data must be an object or null".into(),
+            )),
+        }
+    }
+}

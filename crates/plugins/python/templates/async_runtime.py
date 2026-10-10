@@ -14,18 +14,29 @@ from .response_validation import ResponseDecodeError
 class AsyncBaseClient(BaseClient):
     """Native httpx async transport. Install the SDK's ``async`` extra."""
 
-    def __init__(self, *args: Any, http_client: Any = None, async_middleware: tuple[Any, ...] = (), **kwargs: Any) -> None:
+    def __init__(
+        self,
+        *args: Any,
+        http_client: Any = None,
+        async_middleware: tuple[Any, ...] = (),
+        **kwargs: Any,
+    ) -> None:
         super().__init__(*args, **kwargs)
         if self.middleware:
-            raise TypeError("AsyncClient requires async_middleware instead of synchronous middleware")
+            raise TypeError(
+                "AsyncClient requires async_middleware instead of synchronous middleware"
+            )
         self.async_middleware = tuple(async_middleware)
-        if self.token_provider is not None and not (inspect.iscoroutinefunction(self.token_provider) or inspect.iscoroutinefunction(self.token_provider.__call__)):
-            raise TypeError('AsyncClient requires an async token_provider')
+        if self.token_provider is not None and not (
+            inspect.iscoroutinefunction(self.token_provider)
+            or inspect.iscoroutinefunction(self.token_provider.__call__)
+        ):
+            raise TypeError("AsyncClient requires an async token_provider")
         if http_client is None:
             try:
                 import httpx
             except ImportError as error:
-                raise ImportError('AsyncClient requires the SDK async extra (httpx)') from error
+                raise ImportError("AsyncClient requires the SDK async extra (httpx)") from error
             http_client = httpx.AsyncClient(timeout=self.timeout)
             self._owns_http_client = True
         else:
@@ -35,11 +46,16 @@ class AsyncBaseClient(BaseClient):
     async def _send_async(self, request: Any, *, stream: bool = False) -> Any:
         async def transport(request: Any) -> Any:
             return await self._http_client.send(request, stream=stream)
+
         handler = transport
         for middleware in reversed(self.async_middleware):
             following = handler
-            async def handler(request: Any, middleware: Any = middleware, following: Any = following) -> Any:
+
+            async def handler(
+                request: Any, middleware: Any = middleware, following: Any = following
+            ) -> Any:
                 return await middleware(request, following)
+
         return await handler(request)
 
     async def aclose(self) -> None:
@@ -52,8 +68,11 @@ class AsyncBaseClient(BaseClient):
     async def __aexit__(self, *args: Any) -> None:
         await self.aclose()
 
-    async def _retry_delay_async(self, attempt: int, retry_after: str | None = None, retry_after_ms: str | None = None) -> None:
+    async def _retry_delay_async(
+        self, attempt: int, retry_after: str | None = None, retry_after_ms: str | None = None
+    ) -> None:
         import math
+
         delay = None
         for value, divisor in ((retry_after_ms, 1000.0), (retry_after, 1.0)):
             try:
@@ -64,68 +83,139 @@ class AsyncBaseClient(BaseClient):
                 delay = candidate
                 break
         if delay is None:
-            delay = self.retry_initial_delay * (2 ** attempt)
+            delay = self.retry_initial_delay * (2**attempt)
         await asyncio.sleep(min(max(0.0, delay), max(0.0, self.retry_max_delay)))
 
-    async def _request(self, method: str, path: str, *, query: dict[str, Any] | None = None,
-                       headers: dict[str, str] | None = None, body: Any = None,
-                       body_kind: str = 'json', error_types: Any = None,
-                       retryable: bool = False, idempotency_header: str | None = None, pagination_url: str | None = None, response_operation: str | None = None,
-                       _stream: bool = False) -> Any:
-        url = f'{self.base_url}{path}'
+    async def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        query: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        body: Any = None,
+        body_kind: str = "json",
+        error_types: Any = None,
+        retryable: bool = False,
+        idempotency_header: str | None = None,
+        pagination_url: str | None = None,
+        response_operation: str | None = None,
+        _stream: bool = False,
+    ) -> Any:
+        url = f"{self.base_url}{path}"
         if pagination_url is not None:
             candidate = urlsplit(urljoin(url, pagination_url))
             expected = urlsplit(url)
             if candidate.scheme != expected.scheme or candidate.netloc != expected.netloc:
-                raise ValueError('pagination URL must remain on the configured API origin')
+                raise ValueError("pagination URL must remain on the configured API origin")
             url = candidate.geturl()
-        request_headers = {'Accept': 'text/event-stream' if _stream else 'application/json', **self.headers, **(headers or {})}
-        managed_auth = self.token_provider is not None and not self.bearer_token and not any(k.lower() == 'authorization' for k in request_headers)
+        request_headers = {
+            "Accept": "text/event-stream" if _stream else "application/json",
+            **self.headers,
+            **(headers or {}),
+        }
+        managed_auth = (
+            self.token_provider is not None
+            and not self.bearer_token
+            and not any(k.lower() == "authorization" for k in request_headers)
+        )
         auth_token = await self.token_provider(None) if managed_auth else None
         if auth_token:
-            request_headers['Authorization'] = f'Bearer {auth_token}'
-        elif (self.bearer_token or self.api_key) and not any(k.lower() == 'authorization' for k in request_headers):
-            request_headers.setdefault('Authorization', f'Bearer {self.bearer_token or self.api_key}')
-        options: dict[str, Any] = {'headers': request_headers, 'params': {k: v for k, v in (query or {}).items() if v is not None}, 'timeout': self.timeout}
+            request_headers["Authorization"] = f"Bearer {auth_token}"
+        elif (self.bearer_token or self.api_key) and not any(
+            k.lower() == "authorization" for k in request_headers
+        ):
+            request_headers.setdefault(
+                "Authorization", f"Bearer {self.bearer_token or self.api_key}"
+            )
+        options: dict[str, Any] = {
+            "headers": request_headers,
+            "params": {k: v for k, v in (query or {}).items() if v is not None},
+            "timeout": self.timeout,
+        }
         if body is not None:
             from .multipart import MultipartBody
+
             if isinstance(body, MultipartBody):
-                if body_kind != 'multipart' and not body_kind.endswith('_or_multipart'):
-                    raise TypeError('operation does not declare multipart/form-data')
-                body_kind = 'multipart'
-            elif body_kind.endswith('_or_multipart'):
-                body_kind = body_kind.removesuffix('_or_multipart')
-            if body_kind in ('json-seq', 'ndjson', 'application/json-seq', 'application/x-ndjson', 'application/ndjson', 'application/jsonl'):
+                if body_kind != "multipart" and not body_kind.endswith("_or_multipart"):
+                    raise TypeError("operation does not declare multipart/form-data")
+                body_kind = "multipart"
+            elif body_kind.endswith("_or_multipart"):
+                body_kind = body_kind.removesuffix("_or_multipart")
+            if body_kind in (
+                "json-seq",
+                "ndjson",
+                "application/json-seq",
+                "application/x-ndjson",
+                "application/ndjson",
+                "application/jsonl",
+            ):
                 import json
+
                 value = to_wire(body)
                 if not isinstance(value, list):
-                    raise TypeError('Sequential JSON request bodies must serialize to a list')
-                request_headers.setdefault('Content-Type', body_kind if body_kind.startswith('application/') else 'application/json-seq' if body_kind == 'json-seq' else 'application/x-ndjson')
-                options['content'] = ''.join(('\x1e' if body_kind in ('json-seq', 'application/json-seq') else '') + json.dumps(item, allow_nan=False) + '\n' for item in value).encode('utf-8')
-            elif body_kind == 'binary':
+                    raise TypeError("Sequential JSON request bodies must serialize to a list")
+                request_headers.setdefault(
+                    "Content-Type",
+                    body_kind
+                    if body_kind.startswith("application/")
+                    else "application/json-seq"
+                    if body_kind == "json-seq"
+                    else "application/x-ndjson",
+                )
+                options["content"] = "".join(
+                    ("\x1e" if body_kind in ("json-seq", "application/json-seq") else "")
+                    + json.dumps(item, allow_nan=False)
+                    + "\n"
+                    for item in value
+                ).encode("utf-8")
+            elif body_kind == "binary":
                 if not isinstance(body, (bytes, bytearray, memoryview)):
-                    raise TypeError('binary request bodies must be bytes-like')
-                options['content'] = bytes(body)
-                request_headers.setdefault('Content-Type', 'application/octet-stream')
-            elif body_kind == 'multipart':
-                options['content'], multipart_content_type = encode_multipart(body, to_wire)
+                    raise TypeError("binary request bodies must be bytes-like")
+                options["content"] = bytes(body)
+                request_headers.setdefault("Content-Type", "application/octet-stream")
+            elif body_kind == "multipart":
+                options["content"], multipart_content_type = encode_multipart(body, to_wire)
                 for key in list(request_headers):
-                    if key.lower() == 'content-type':
+                    if key.lower() == "content-type":
                         del request_headers[key]
-                request_headers['Content-Type'] = multipart_content_type
-            elif body_kind == 'form':
+                request_headers["Content-Type"] = multipart_content_type
+            elif body_kind == "form":
                 value = to_wire(body)
                 if not isinstance(value, dict):
-                    raise TypeError('form request bodies must serialize to a dictionary')
-                options['data'] = value
+                    raise TypeError("form request bodies must serialize to a dictionary")
+                options["data"] = value
             else:
-                options['json'] = to_wire(body)
-        context = {'method': method, 'url': url, 'query': query or {}, 'headers': request_headers, 'body': body}
-        can_retry = retryable and (method.upper() in {'GET', 'HEAD', 'OPTIONS', 'TRACE', 'QUERY', 'PUT', 'DELETE'} or (method.upper() in {'POST', 'PATCH'} and any((k.lower() == 'idempotency-key' or (idempotency_header is not None and k.lower() == idempotency_header.lower())) and value is not None and bool(str(value).strip()) for k, value in request_headers.items())))
+                options["json"] = to_wire(body)
+        context = {
+            "method": method,
+            "url": url,
+            "query": query or {},
+            "headers": request_headers,
+            "body": body,
+        }
+        can_retry = retryable and (
+            method.upper() in {"GET", "HEAD", "OPTIONS", "TRACE", "QUERY", "PUT", "DELETE"}
+            or (
+                method.upper() in {"POST", "PATCH"}
+                and any(
+                    (
+                        k.lower() == "idempotency-key"
+                        or (
+                            idempotency_header is not None
+                            and k.lower() == idempotency_header.lower()
+                        )
+                    )
+                    and value is not None
+                    and bool(str(value).strip())
+                    for k, value in request_headers.items()
+                )
+            )
+        )
         auth_refreshed = False
         for attempt in range(self.max_retries + (2 if managed_auth else 1)):
             if self.before_request is not None:
-                self.before_request({**context, 'attempt': attempt})
+                self.before_request({**context, "attempt": attempt})
             request = self._http_client.build_request(method, url, **options)
             try:
                 response = await self._send_async(request, stream=_stream)
@@ -133,6 +223,7 @@ class AsyncBaseClient(BaseClient):
                 # Cancellation is a BaseException and propagates immediately.
                 try:
                     import httpx
+
                     transport_error = isinstance(error, httpx.TransportError)
                 except ImportError:
                     transport_error = False
@@ -145,29 +236,61 @@ class AsyncBaseClient(BaseClient):
             if response.status_code == 401 and managed_auth and can_retry and not auth_refreshed:
                 await response.aclose()
                 auth_token = await self.token_provider(auth_token)
-                request_headers['Authorization'] = f'Bearer {auth_token}'
+                request_headers["Authorization"] = f"Bearer {auth_token}"
                 auth_refreshed = True
                 continue
-            if can_retry and response.status_code in {408, 429, 500, 502, 503, 504} and attempt < self.max_retries:
-                retry_after = response.headers.get('Retry-After')
+            if (
+                can_retry
+                and response.status_code in {408, 429, 500, 502, 503, 504}
+                and attempt < self.max_retries
+            ):
+                retry_after = response.headers.get("Retry-After")
                 await response.aclose()
-                await self._retry_delay_async(attempt, retry_after, response.headers.get('retry-after-ms'))
+                await self._retry_delay_async(
+                    attempt, retry_after, response.headers.get("retry-after-ms")
+                )
                 continue
             if _stream and response.status_code < 400:
                 try:
                     if self.after_response is not None:
-                        self.after_response({'request': context, 'status_code': response.status_code, 'headers': dict(response.headers), 'body': None})
+                        self.after_response(
+                            {
+                                "request": context,
+                                "status_code": response.status_code,
+                                "headers": dict(response.headers),
+                                "body": None,
+                            }
+                        )
                     return response
                 except BaseException:
                     await response.aclose()
                     raise
             try:
                 raw = await response.aread()
-                content_type = response.headers.get('content-type', '').split(';')[0].strip().lower()
+                content_type = (
+                    response.headers.get("content-type", "").split(";")[0].strip().lower()
+                )
                 from .response_validation import decode_json, decode_sequence
-                decoded = decode_sequence(raw, content_type, self.validate_responses) if raw and content_type in ('application/json-seq', 'application/x-ndjson', 'application/ndjson', 'application/jsonl') else decode_json(raw, self.validate_responses) if raw and (content_type == 'application/json' or content_type.endswith('+json')) else raw or None
+
+                decoded = (
+                    decode_sequence(raw, content_type, self.validate_responses)
+                    if raw
+                    and content_type
+                    in (
+                        "application/json-seq",
+                        "application/x-ndjson",
+                        "application/ndjson",
+                        "application/jsonl",
+                    )
+                    else decode_json(raw, self.validate_responses)
+                    if raw
+                    and (content_type == "application/json" or content_type.endswith("+json"))
+                    else raw or None
+                )
                 if response.status_code >= 400:
-                    error_type, body_type = (error_types or {}).get(response.status_code, (ApiError, None))
+                    error_type, body_type = (error_types or {}).get(
+                        response.status_code, (ApiError, None)
+                    )
                     if body_type is not None and isinstance(decoded, dict):
                         decoded = body_type.from_dict(decoded)
                     raised = error_type(response.status_code, dict(response.headers), decoded)
@@ -175,10 +298,28 @@ class AsyncBaseClient(BaseClient):
                         self.on_error(raised, context)
                     raise raised
                 if self.after_response is not None:
-                    self.after_response({'request': context, 'status_code': response.status_code, 'headers': dict(response.headers), 'body': raw})
-                if self.validate_responses and response_operation is not None and method.upper() != 'HEAD':
+                    self.after_response(
+                        {
+                            "request": context,
+                            "status_code": response.status_code,
+                            "headers": dict(response.headers),
+                            "body": raw,
+                        }
+                    )
+                if (
+                    self.validate_responses
+                    and response_operation is not None
+                    and method.upper() != "HEAD"
+                ):
                     from .response_validation import PLANS, check_response
-                    check_response(decoded, PLANS['operations'].get(response_operation, {}), PLANS['refs'], response.status_code, content_type)
+
+                    check_response(
+                        decoded,
+                        PLANS["operations"].get(response_operation, {}),
+                        PLANS["refs"],
+                        response.status_code,
+                        content_type,
+                    )
                 return decoded
             except ResponseDecodeError as error:
                 if self.on_error is not None:
@@ -186,7 +327,7 @@ class AsyncBaseClient(BaseClient):
                 raise
             finally:
                 await response.aclose()
-        raise RuntimeError('Poolster retry loop completed without a response')
+        raise RuntimeError("Poolster retry loop completed without a response")
 
     async def _event_stream(self, method: str, path: str, **kwargs: Any) -> AsyncIterator[Any]:
         # Lazily establish the connection when iteration starts; early close and cancellation release it.
@@ -197,20 +338,21 @@ class AsyncBaseClient(BaseClient):
                 async for line in response.aiter_lines():
                     if not line:
                         if lines:
-                            payload = '\n'.join(lines)
+                            payload = "\n".join(lines)
                             try:
                                 yield json.loads(payload)
                             except json.JSONDecodeError:
                                 yield payload
                             lines = []
-                    elif line.startswith('data:'):
-                        lines.append(line[5:].lstrip(' '))
+                    elif line.startswith("data:"):
+                        lines.append(line[5:].lstrip(" "))
                 if lines:
-                    payload = '\n'.join(lines)
+                    payload = "\n".join(lines)
                     try:
                         yield json.loads(payload)
                     except json.JSONDecodeError:
                         yield payload
             finally:
                 await response.aclose()
+
         return events()

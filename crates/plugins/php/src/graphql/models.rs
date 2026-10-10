@@ -1,20 +1,32 @@
 use super::*;
-fn php_value(value: &serde_json::Value) -> String {
+fn php_value(value: &serde_json::Value, indentation: usize) -> String {
+    let nested = " ".repeat(indentation + 4);
+    let closing = " ".repeat(indentation);
     match value {
         serde_json::Value::Null => "null".into(),
         serde_json::Value::Bool(v) => v.to_string(),
         serde_json::Value::String(v) => quote(v),
-        serde_json::Value::Array(v) => format!(
-            "[{}]",
-            v.iter().map(php_value).collect::<Vec<_>>().join(",")
-        ),
-        serde_json::Value::Object(v) => format!(
-            "[{}]",
-            v.iter()
-                .map(|(k, v)| format!("{}=>{}", quote(k), php_value(v)))
+        serde_json::Value::Array(values) if !values.is_empty() => format!(
+            "[\n{}\n{closing}]",
+            values
+                .iter()
+                .map(|value| format!("{nested}{},", php_value(value, indentation + 4)))
                 .collect::<Vec<_>>()
-                .join(",")
+                .join("\n")
         ),
+        serde_json::Value::Object(values) if !values.is_empty() => format!(
+            "[\n{}\n{closing}]",
+            values
+                .iter()
+                .map(|(key, value)| format!(
+                    "{nested}{} => {},",
+                    quote(key),
+                    php_value(value, indentation + 4)
+                ))
+                .collect::<Vec<_>>()
+                .join("\n")
+        ),
+        serde_json::Value::Array(_) | serde_json::Value::Object(_) => "[]".into(),
         v => v.to_string(),
     }
 }
@@ -174,9 +186,9 @@ impl Models {
             ensure!(used.insert(key.clone()), "duplicate field {key}");
             let (php, spec) = self.ty(&format!("{name}{}", upper(&key)), &field.ty, input)?;
             let doc = doc_type(&spec);
-            let spec = php_value(&spec);
             let q = quote(&key);
-            specs.push(format!("{q}=>{spec}"));
+            specs.push(format!("        {q} => {},", php_value(&spec, 8)));
+            let spec = format!("self::FIELD_TYPES[{q}]");
             props.push((field.optional, key.clone(), php, doc.clone()));
             docs.push(format!(
                 "@param {} ${key}",
@@ -187,12 +199,12 @@ impl Models {
                 }
             ));
             if field.optional {
-                decode.push(format!("{key}:array_key_exists({q},$data)?Presence::of(decodeValue($data[{q}],{spec})):Presence::missing()"));
-                encode.push(format!("if($this->{key}->present){{$out[{q}]=encodeValue($this->{key}->value);decodeValue($out[{q}],{spec});}}"));
+                decode.push(format!("            {key}: array_key_exists({q}, $data)\n                ? Presence::of(decodeValue($data[{q}], {spec}))\n                : Presence::missing(),"));
+                encode.push(format!("        if ($this->{key}->present) {{\n            $out[{q}] = encodeValue($this->{key}->value);\n            decodeValue($out[{q}], {spec});\n        }}"));
             } else {
-                decode.push(format!("{key}:decodeValue(array_key_exists({q},$data)?$data[{q}]:throw new \\UnexpectedValueException('Missing field {key}'),{spec})"));
+                decode.push(format!("            {key}: decodeValue(\n                array_key_exists({q}, $data)\n                    ? $data[{q}]\n                    : throw new \\UnexpectedValueException('Missing field {key}'),\n                {spec},\n            ),"));
                 encode.push(format!(
-                    "$out[{q}]=encodeValue($this->{key});decodeValue($out[{q}],{spec});"
+                    "        $out[{q}] = encodeValue($this->{key});\n        decodeValue($out[{q}], {spec});"
                 ));
             }
         }
@@ -205,24 +217,54 @@ impl Models {
             if optional {
                 writeln!(
                     declarations,
-                    "/** @var Presence<{doc}> */ public Presence ${key};"
+                    "    /** @var Presence<{doc}> */\n    public Presence ${key};"
                 )
                 .unwrap();
-                constructor.push(format!("?Presence ${key}=null"));
-                writeln!(init, "$this->{key}=${key}??Presence::missing();").unwrap();
+                constructor.push(format!("        ?Presence ${key} = null,"));
+                writeln!(
+                    init,
+                    "        $this->{key} = ${key} ?? Presence::missing();"
+                )
+                .unwrap();
             } else {
-                constructor.push(format!("public {php} ${key}"));
+                constructor.push(format!("        public {php} ${key},"));
             }
         }
-        writeln!(source,"final readonly class {name} {} {{\n{declarations}/** {} */ public function __construct({}){{{init}}}\npublic static function fromArray(array $data):self{{return new self({});}}",if input{"implements \\JsonSerializable"}else{""},docs.join("\n * "),constructor.join(","),decode.join(",")).unwrap();
-        writeln!(source, "public const FIELD_TYPES=[{}];", specs.join(","))?;
+        let implementation = if input {
+            " implements \\JsonSerializable"
+        } else {
+            ""
+        };
+        writeln!(source, "final readonly class {name}{implementation}\n{{")?;
+        source.push_str(&declarations);
+        if !docs.is_empty() {
+            writeln!(source, "    /**")?;
+            for doc in docs {
+                writeln!(source, "     * {doc}")?;
+            }
+            writeln!(source, "     */")?;
+        }
+        writeln!(
+            source,
+            "    public function __construct(\n{}\n    ) {{\n{init}    }}",
+            constructor.join("\n")
+        )?;
+        writeln!(
+            source,
+            "\n    public static function fromArray(array $data): self\n    {{\n        return new self(\n{}\n        );\n    }}",
+            decode.join("\n")
+        )?;
+        writeln!(
+            source,
+            "\n    public const FIELD_TYPES = [\n{}\n    ];",
+            specs.join("\n")
+        )?;
         if input {
             writeln!(
                 source,
-                "public function jsonSerialize():mixed{{$out=[];{}return (object)$out;}}",
+                "\n    public function jsonSerialize(): mixed\n    {{\n        $out = [];\n{}\n        return (object) $out;\n    }}",
                 encode.join("\n")
-            )
-            .unwrap();
+            )?;
         }
         source.push_str("}\n");
         self.files.insert(name.into(), source);

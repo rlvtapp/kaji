@@ -220,7 +220,7 @@ fn all_first_party_packages_preserve_the_public_sdk_contract() {
             .package(poolster::python::package("python").with(poolster::python::sdk()))
             .package(poolster::php::package("php").with(poolster::php::sdk()))
             .package(poolster::java::package("java").with(poolster::java::sdk()))
-            .package(poolster::dotnet::package("dotnet").with(poolster::dotnet::sdk()))
+            .package(poolster::csharp::package("csharp").with(poolster::csharp::sdk()))
             .package(poolster::elixir::package("elixir").with(poolster::elixir::sdk())),
         Some(&catalog),
     )
@@ -267,7 +267,7 @@ fn all_first_party_packages_preserve_the_public_sdk_contract() {
     assert!(python.contains("def stream_events"));
     assert!(python.contains("def download_export"));
 
-    for target in ["go", "php", "java", "dotnet", "elixir"] {
+    for target in ["go", "php", "java", "csharp", "elixir"] {
         assert!(tree.get(format!("sdks/{target}/STYLE_GUIDE.md")).is_some());
     }
 }

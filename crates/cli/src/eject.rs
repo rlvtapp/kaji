@@ -59,7 +59,6 @@ fn eject(language: &str, output: &Path) -> Result<()> {
         | "symfony" | "terraform" | "postman" | "java" | "csharp" | "elixir" | "ruby" | "swift" => {
             language
         }
-        "dotnet" => "csharp",
         _ => bail!("unsupported eject language: {language}"),
     };
     ensure!(

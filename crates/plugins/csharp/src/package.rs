@@ -7,11 +7,6 @@ use poolster_core::engine::{
 
 /// The canonical C#/.NET language target.
 pub struct CSharp;
-/// Legacy .NET target identity retained for Rust embedding compatibility.
-///
-/// Prefer [`CSharp`]. Both identities use the same renderer and settings; the
-/// separate type preserves the legacy `Language::NAME` for existing profiles.
-pub struct DotNet;
 #[derive(Default)]
 pub struct Settings {
     pub package_name: Option<String>,
@@ -30,27 +25,11 @@ impl Language for CSharp {
         crate::bundled_middleware::bundle(tree, middleware)
     }
 }
-impl Language for DotNet {
-    const NAME: &'static str = "dotnet";
-    type Settings = Settings;
-    type Workspace = ();
-    fn finalize_files(tree: &mut poolster_core::GeneratedTree) -> Result<()> {
-        crate::operation_tests::finalize(tree)
-    }
-    fn bundle_middleware(
-        tree: &mut poolster_core::GeneratedTree,
-        middleware: &[poolster_core::customization::BundledMiddleware],
-    ) -> Result<()> {
-        crate::bundled_middleware::bundle(tree, middleware)
-    }
-}
+
 pub fn package(dir: impl Into<String>) -> Package<CSharp> {
     Package::new(dir)
 }
-/// Creates a package using the legacy `dotnet` target identity.
-pub fn dotnet_package(dir: impl Into<String>) -> Package<DotNet> {
-    Package::new(dir)
-}
+
 pub trait PackageExt {
     fn name(self, name: impl Into<String>) -> Self;
 }
@@ -60,12 +39,7 @@ impl PackageExt for Package<CSharp> {
         self
     }
 }
-impl PackageExt for Package<DotNet> {
-    fn name(mut self, name: impl Into<String>) -> Self {
-        self.settings_mut().package_name = Some(name.into());
-        self
-    }
-}
+
 /// Native public SDK identity consumed by optional generated-operation tests.
 pub struct NativeSdk {
     pub namespace: String,
@@ -154,46 +128,6 @@ impl Plugin<CSharp> for Sdk {
         })
     }
 }
-impl Plugin<DotNet> for Sdk {
-    fn supports_native_input(&self) -> bool {
-        self.http_input.is_explicit()
-    }
-    fn requires(&self) -> Vec<poolster_core::engine::Requirement> {
-        self.http_input.requirements()
-    }
-
-    fn kind(&self) -> &'static str {
-        "dotnet-sdk"
-    }
-    fn meta(&self) -> &Meta {
-        &self.meta
-    }
-    fn provides(&self) -> Vec<Provision> {
-        vec![Provision::of::<NativeSdk>()]
-    }
-    fn generate(&self, cx: &mut PluginContext<'_, DotNet>) -> Result<()> {
-        self.http_input.with_context(cx, |cx| {
-            cx.files.append(crate::presence::render(
-                cx.api,
-                ".",
-                cx.settings.package_name.as_deref(),
-                self.client_style
-                    .or(cx.common.client_style)
-                    .unwrap_or(SdkClientStyle::Namespaced),
-                self.open_enums,
-                self.preserve_presence,
-            )?)?;
-            cx.publish(NativeSdk {
-                namespace: crate::dotnet_namespace(
-                    cx.settings
-                        .package_name
-                        .as_deref()
-                        .unwrap_or(&format!("{}-sdk", crate::kebab_case(&cx.api.name))),
-                ),
-            })
-        })
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -202,7 +136,6 @@ mod tests {
     #[test]
     fn exposes_csharp_as_the_canonical_language_name() {
         assert_eq!(CSharp::NAME, "csharp");
-        assert_eq!(DotNet::NAME, "dotnet");
     }
 }
 

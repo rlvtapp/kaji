@@ -176,7 +176,7 @@ function compile(input, artifacts, compiler) {
 }
 
 function graphqlOutputCompatible(input, p) {
-  const sdk = ['typescript','rust','go','python','php','java','csharp','dotnet','ruby','swift','elixir'];
+  const sdk = ['typescript','rust','go','python','php','java','csharp','ruby','swift','elixir'];
   return (input.incremental ? sdk : [...sdk,'symfony','postman','rust-cli','typescript-cli']).includes(p.language)
     && (!input.incremental || !p.plugins?.length);
 }

@@ -1,0 +1,285 @@
+import axios, { type AxiosInstance } from 'axios'
+export interface RetryConfig { maxAttempts?: number; initialDelayMs?: number; maxDelayMs?: number }
+export interface RequestHookContext { method: string; url: string; body?: unknown; path?: Record<string, unknown>; query: Record<string, unknown>; headers: Record<string, string> }
+export interface ResponseHookContext { request: RequestHookContext; status: number; headers: Record<string, unknown>; data: unknown }
+export interface ClientHooks { beforeRequest?: (request: RequestHookContext) => void | Promise<void>; afterResponse?: (response: ResponseHookContext) => void | Promise<void>; onError?: (error: unknown, request: RequestHookContext) => void | Promise<void> }
+export interface Codec { encode?: (value: unknown) => unknown; decode?: (value: unknown, contentType: string) => unknown | Promise<unknown> }
+export interface StandardSchema { readonly ['~standard']?: { readonly validate: (value: unknown) => { value?: unknown; issues?: readonly unknown[] } | Promise<{ value?: unknown; issues?: readonly unknown[] }> } }
+export type Validator = StandardSchema | ((value: unknown) => void | Promise<void>)
+export interface ClientValidation { request?: Validator; response?: Validator }
+export interface ClientConfig { timeoutMs?: number; baseUrl?: string; apiKey?: string; apiKeyHeader?: string; apiKeyPrefix?: string; auth?: SecurityCredentials; headers?: Record<string, string>; client?: AxiosInstance; retry?: RetryConfig | false; middleware?: readonly ClientMiddleware[]; validateResponses?: boolean; hooks?: ClientHooks; codecs?: Record<string, Codec>; validation?: ClientValidation; multipartEncoder?: MultipartEncoder }
+export type ParameterStyle = { contentType?: string; style?: 'simple' | 'label' | 'matrix' | 'form' | 'spaceDelimited' | 'pipeDelimited' | 'deepObject'; explode?: boolean }
+export type ParameterStyles = Partial<Record<'path' | 'query' | 'header' | 'cookie', Record<string, ParameterStyle>>>
+export type FormPartHeader = { required?: boolean; style?: ParameterStyle['style']; explode?: boolean; allowReserved?: boolean; schema_definition?: unknown; example_json?: string }
+export type FormEncoding = { contentType?: string; headers?: Record<string, FormPartHeader>; style?: 'form' | 'spaceDelimited' | 'pipeDelimited' | 'deepObject'; explode?: boolean; allowReserved?: boolean; encoding?: Record<string, FormEncoding>; prefixEncoding?: FormEncoding[]; itemEncoding?: FormEncoding }
+export type FormEncodings = Record<string, Record<string, FormEncoding>>
+export type FormPartHeaders = Record<string, Record<string, Record<string, unknown>>>
+export type MultipartPart = { name: string; value: unknown; contentType?: string; headers?: Record<string, string> }
+export interface MultipartEncoder { encode(parts: readonly MultipartPart[]): { body: unknown; contentType: string } }
+export type RequestConfig = { requestOptions?: RequestOptions; method: string; url: string; body?: unknown; path?: Record<string, unknown>; query?: Record<string, unknown>; querystring?: Record<string, unknown>; wholeQuery?: { name: string; contentType: string }; headers?: Record<string, unknown>; cookies?: Record<string, unknown>; throwOnError?: boolean; security?: SecurityDescriptor[][]; contentType?: { request?: string }; responseType?: 'stream' | 'arraybuffer'; styles?: ParameterStyles; formEncodings?: FormEncodings; formHeaders?: FormPartHeaders; multipartPlan?: MultipartPlan; validation?: ClientValidation; validateResponses?: boolean; paginationUrl?: string; idempotencyHeader?: string }
+export type ClientInstance = (request: RequestConfig) => Promise<unknown>
+export type Options<T, ThrowOnError extends boolean> = T & { requestOptions?: RequestOptions; client?: ClientInstance; throwOnError?: ThrowOnError; formHeaders?: FormPartHeaders; multipartPlan?: MultipartPlan; validation?: ClientValidation }
+export type SuccessOf<T> = T[Extract<keyof T, `2${string}`>]
+type StatusCode<S> = S extends `${infer Code extends number}` ? Code : number
+type MediaResult<S, T> = T extends { contentType: infer ContentType extends string; data: infer Data } ? { status: StatusCode<S>; contentType: ContentType; data: Data; headers: Record<string, unknown> } : { status: StatusCode<S>; contentType: string; data: T; headers: Record<string, unknown> }
+export type StatusResult<T> = { [S in keyof T]: MediaResult<S, T[S]> }[keyof T]
+export type SuccessResult<T> = { [S in Extract<keyof T, `2${string}`>]: MediaResult<S, T[S]> }[Extract<keyof T, `2${string}`>]
+export type RequestResult<T, ThrowOnError extends boolean> = ThrowOnError extends true ? SuccessResult<T> : StatusResult<T>
+export type ResponseResult<T extends { status: number; data: unknown }, ThrowOnError extends boolean> = ThrowOnError extends true ? T['data'] : T
+export type EventStreamResult<T> = AsyncIterable<T>
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
+const serializeWholeQuery = (value: unknown, contentType: string): string => {
+  if (value === undefined) return ''
+  const media = contentType.split(';')[0].trim().toLowerCase()
+  if (value === null && media !== 'application/json' && !media.endsWith('+json')) return ''
+  if (media === 'text/plain') { const raw = String(value).replace(/^\?/, ''); if (/[#\r\n]/.test(raw)) throw new TypeError('Whole-query value contains a fragment or line break'); return raw }
+  if (media === 'application/json' || media.endsWith('+json')) return encodeURIComponent(JSON.stringify(value))
+  if (media !== 'application/x-www-form-urlencoded') throw new TypeError(`Unsupported whole-query content type: ${contentType}`)
+  if (!isRecord(value)) throw new TypeError('Form whole-query value must be an object')
+  const params = new URLSearchParams()
+  for (const [name, item] of Object.entries(value)) {
+    if (item === undefined || item === null) continue
+    for (const part of Array.isArray(item) ? item : [item]) params.append(name, String(part))
+  }
+  return params.toString()
+}
+const appendWholeQuery = (url: string, querystring: Record<string, unknown> | undefined, metadata: { name: string; contentType: string } | undefined): string => {
+  if (!metadata) return url
+  const search = serializeWholeQuery(querystring?.[metadata.name], metadata.contentType)
+  return search ? `${url}${url.includes('?') ? '&' : '?'}${search}` : url
+}
+const decodeSequence = (text: string, contentType: string, jsonPlan?: JsonPlan, status = 200): unknown[] => {
+  if (new TextEncoder().encode(text).length > 64 * 1024 * 1024) throw new TypeError('Sequential response exceeds 64 MiB')
+  const media = contentType.split(';')[0].trim().toLowerCase()
+  if (media === 'application/json-seq' && text.split('\x1e')[0].trim()) throw new TypeError('JSON sequence must begin with a record separator')
+  const records = media === 'application/json-seq' ? text.split('\x1e') : text.split(/\r?\n/)
+  const values = records.map(record => record.trim()).filter(Boolean)
+  if (values.length > 100000) throw new TypeError('Sequential response exceeds 100000 records')
+  const itemShape = jsonPlan ? resolvedShape(responseJsonShape(jsonPlan, status, contentType), jsonPlan.refs)?.items : undefined
+  return values.map(record => jsonPlan?.lossless ? parseJson(record, itemShape, jsonPlan.refs) : JSON.parse(record) as unknown)
+}
+const isJsonSequence = (contentType: string): boolean => ['application/json-seq', 'application/x-ndjson', 'application/ndjson', 'application/jsonl'].includes(contentType.split(';')[0].trim().toLowerCase())
+const encodeSequence = (body: unknown, contentType: string, jsonPlan?: JsonPlan): string => {
+  if (!Array.isArray(body)) throw new TypeError('Sequential JSON request body must be an array')
+  return body.map(item => {
+    const itemShape = jsonPlan ? resolvedShape(requestJsonShape(jsonPlan, contentType), jsonPlan.refs)?.items : undefined
+    const encoded = jsonPlan?.lossless ? stringifyJson(item, itemShape, jsonPlan.refs) : JSON.stringify(item)
+    if (encoded === undefined) throw new TypeError('Sequential JSON item must be serializable')
+    return (contentType.split(';')[0].trim().toLowerCase() === 'application/json-seq' ? '\x1e' : '') + encoded + '\n'
+  }).join('')
+}
+const styleFor = (styles: ParameterStyles | undefined, location: keyof ParameterStyles, name: string): Required<Omit<ParameterStyle, 'contentType'>> & Pick<ParameterStyle, 'contentType'> => {
+  const configured = styles?.[location]?.[name] ?? {}
+  const style = configured.style ?? (location === 'path' || location === 'header' ? 'simple' : 'form')
+  return { style, explode: configured.explode ?? (style === 'form'), contentType: configured.contentType ?? '' }
+}
+const scalar = (value: unknown) => encodeURIComponent(String(value))
+const contentParameter = (value: unknown, contentType: string): string => contentType.split(';')[0].includes('json') ? JSON.stringify(value) : String(value)
+const pairs = (value: Record<string, unknown>, separator: string) => Object.entries(value).map(([key, item]) => `${scalar(key)}=${scalar(item)}`).join(separator)
+const serializePath = (name: string, value: unknown, parameter: Required<Omit<ParameterStyle, 'contentType'>> & Pick<ParameterStyle, 'contentType'>) => {
+  if (value === undefined || (value === null && !parameter.contentType)) return ''
+  if (parameter.contentType) return encodeURIComponent(contentParameter(value, parameter.contentType))
+  const values = Array.isArray(value) ? value : undefined
+  const object = isRecord(value) ? value : undefined
+  if (parameter.style === 'label') return `.${values ? values.map(scalar).join(parameter.explode ? '.' : ',') : object ? (parameter.explode ? pairs(object, '.') : Object.entries(object).flatMap(([key, item]) => [scalar(key), scalar(item)]).join(',')) : scalar(value)}`
+  if (parameter.style === 'matrix') { if (values) return parameter.explode ? values.map((item) => `;${name}=${scalar(item)}`).join('') : `;${name}=${values.map(scalar).join(',')}`; if (object) return parameter.explode ? `;${pairs(object, ';')}` : `;${name}=${Object.entries(object).flatMap(([key, item]) => [scalar(key), scalar(item)]).join(',')}`; return `;${name}=${scalar(value)}` }
+  if (values) return values.map(scalar).join(',')
+  if (object) return parameter.explode ? pairs(object, ',') : Object.entries(object).flatMap(([key, item]) => [scalar(key), scalar(item)]).join(',')
+  return scalar(value)
+}
+const serializeQuery = (query: Record<string, unknown>, styles?: ParameterStyles) => {
+  const output: Record<string, unknown> = {}
+  for (const [name, value] of Object.entries(query)) { const parameter = styleFor(styles, 'query', name); if (value === undefined || (value === null && !parameter.contentType)) continue; if (parameter.contentType) { output[name] = contentParameter(value, parameter.contentType); continue }; if (parameter.style === 'deepObject' && isRecord(value)) { for (const [key, item] of Object.entries(value)) output[`${name}[${key}]`] = item } else if (isRecord(value) && parameter.explode) Object.assign(output, value); else output[name] = Array.isArray(value) ? (parameter.explode && parameter.style === 'form' ? value : value.join(parameter.style === 'spaceDelimited' ? ' ' : parameter.style === 'pipeDelimited' ? '|' : ',')) : isRecord(value) ? Object.entries(value).flatMap(([key, item]) => [key, String(item)]).join(',') : value }
+  return output
+}
+const resolvePath = (template: string, path?: Record<string, unknown>, styles?: ParameterStyles) => template.replace(/\{([^}]+)\}/g, (_match, key) => serializePath(key, path?.[key], styleFor(styles, 'path', key)) || `{${key}}`)
+const codecFor = (codecs: Record<string, Codec> | undefined, contentType: string) => codecs?.[contentType.split(';')[0].trim()] ?? codecs?.['*/*']
+const validate = async (validator: Validator | undefined, value: unknown) => { if (!validator) return; if (typeof validator === 'function') return validator(value); const result = await validator['~standard']?.validate(value); if (result?.issues?.length) throw new TypeError(`Poolster validation failed: ${result.issues.map(String).join(', ')}`) }
+const formEntries = (name: string, value: unknown, encoding: FormEncoding = {}): Array<[string, unknown]> => {
+  if (value === undefined || value === null) return []
+  const style = encoding.style ?? 'form'; const explode = encoding.explode ?? true
+  if (style === 'deepObject' && isRecord(value)) return Object.entries(value).flatMap(([key, item]) => formEntries(`${name}[${key}]`, item, { ...encoding, explode: false }))
+  if (isRecord(value)) { if (explode) return Object.entries(value).flatMap(([key, item]) => formEntries(key, item, { ...encoding, explode: false })); const separator = style === 'spaceDelimited' ? ' ' : style === 'pipeDelimited' ? '|' : ','; return [[name, Object.entries(value).flatMap(([key, item]) => [key, String(item)]).join(separator)]] }
+  if (Array.isArray(value)) { const separator = style === 'spaceDelimited' ? ' ' : style === 'pipeDelimited' ? '|' : ','; return explode ? value.flatMap((item) => formEntries(name, item, { ...encoding, explode: false })) : [[name, value.map(String).join(separator)]] }
+  return [[name, value]]
+}
+const formPartHeaders = (contentType: string, property: string, encoding: FormEncoding | undefined, values: FormPartHeaders | undefined): Record<string, string> | undefined => {
+  const supplied = values?.[contentType]?.[property]
+  const declared = encoding?.headers ?? {}
+  for (const [name, header] of Object.entries(declared)) if (name.toLowerCase() !== 'content-type' && header.required && !Object.keys(supplied ?? {}).some((key) => key.toLowerCase() === name.toLowerCase())) throw new TypeError(`Missing required multipart header ${name} for ${property}`)
+  if (!supplied) return undefined
+  return Object.fromEntries(Object.entries(supplied).map(([name, value]) => {
+    const header = Object.entries(declared).find(([declaredName]) => declaredName.toLowerCase() === name.toLowerCase())?.[1]
+    return [name, serializePath(name, value, { style: header?.style ?? 'simple', explode: header?.explode ?? false })]
+  }))
+}
+const multipartParts = (body: Record<string, unknown>, encodings: FormEncodings | undefined, contentType: string, values?: FormPartHeaders): MultipartPart[] => Object.entries(body).flatMap(([property, value]) => {
+  const encoding = encodings?.[contentType]?.[property]
+  const headers = formPartHeaders(contentType, property, encoding, values)
+  return formEntries(property, value, encoding).map(([name, item]) => ({ name, value: item, contentType: encoding?.contentType, headers }))
+})
+const appendForm = (form: FormData, parts: readonly MultipartPart[]) => { for (const part of parts) { if (part.headers && Object.keys(part.headers).length) throw new TypeError('Native FormData cannot set per-part headers; configure client.multipartEncoder'); const item = part.value instanceof Blob && part.contentType ? new Blob([part.value], { type: part.contentType }) : part.value instanceof Blob ? part.value : String(part.value); form.append(part.name, item) } return form }
+const formComponent = (value: string, allowReserved?: boolean) => allowReserved ? encodeURI(value).replace(/[&=]/g, (char) => char === '&' ? '%26' : '%3D') : encodeURIComponent(value)
+const encodeForm = (body: Record<string, unknown>, encodings: FormEncodings | undefined, contentType: string) => Object.entries(body).flatMap(([key, value]) => { const encoding = encodings?.[contentType]?.[key]; return formEntries(key, value, encoding).map(([part, item]) => [part, item, encoding?.allowReserved] as const) }).map(([key, value, allowReserved]) => `${formComponent(key, allowReserved)}=${formComponent(String(value), allowReserved)}`).join('&')
+const encodeBody = (body: unknown, headers: Record<string, string>, contentType: string | undefined, codecs?: Record<string, Codec>, formEncodings?: FormEncodings, formHeaders?: FormPartHeaders, multipartEncoder?: MultipartEncoder, multipartPlan?: MultipartPlan) => {
+  if (body === undefined || body === null) return undefined
+  const mediaType = contentType ?? 'application/json'
+  if (multipartPlan) { const encoded = encodePlannedMultipart(body, multipartPlan, formHeaders); headers['content-type'] = encoded.type; return encoded }
+  if (mediaType.startsWith('multipart/form-data') && isRecord(body)) { const parts = multipartParts(body, formEncodings, mediaType, formHeaders); if (multipartEncoder) { const encoded = multipartEncoder.encode(parts); headers['content-type'] = encoded.contentType; return encoded.body }; delete headers['content-type']; return appendForm(new FormData(), parts) }
+  const codec = codecFor(codecs, mediaType)
+  if (codec?.encode) return codec.encode(body)
+  if (body instanceof FormData || body instanceof URLSearchParams || body instanceof Blob || typeof body === 'string') return body
+  if (isJsonSequence(mediaType)) { headers['content-type'] ??= mediaType; return encodeSequence(body, mediaType, jsonPlan) }
+  if (mediaType.startsWith('application/x-www-form-urlencoded') && isRecord(body)) return encodeForm(body, formEncodings, mediaType)
+  return body
+}
+const resolvePaginationUrl = (nextUrl: string, baseUrl?: string): string => {
+  // See the Fetch runtime: a response-supplied continuation must never be
+  // allowed to carry configured credentials to a different origin.
+  if (!baseUrl) {
+    if (!nextUrl.startsWith('/') || nextUrl.startsWith('//')) throw new TypeError('Pagination URL must be root-relative when baseUrl is not configured')
+    return nextUrl
+  }
+  const base = new URL(baseUrl)
+  const target = new URL(nextUrl, base)
+  if (target.origin !== base.origin) throw new TypeError('Pagination URL must use the configured API origin')
+  return target.toString()
+}
+const applySecurity = (headers: Record<string, string>, query: Record<string, unknown>, security: SecurityDescriptor[][] | undefined, credentials?: SecurityCredentials) => {
+  if (!security) return
+  const values: Record<string, string | undefined> = { ...credentials }
+  const selected = security.find((alternative) => alternative.every((scheme) => values[scheme.id]))
+  if (!selected) return
+  for (const scheme of selected) {
+    const value = values[scheme.id]
+    if (!value) continue
+    if (scheme.type === 'apiKey') {
+      const name = scheme.name
+      if (!name) continue
+      if (scheme.in === 'query') query[name] = value
+      else if (scheme.in === 'cookie') headers.cookie = [headers.cookie, `${name}=${encodeURIComponent(value)}`].filter(Boolean).join('; ')
+      else headers[name] = value
+    } else headers.authorization = `${scheme.scheme === 'basic' ? 'Basic' : 'Bearer'} ${value}`
+  }
+}
+const retryableStatus = (status: number) => status === 408 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504
+const retryAllowed = (method: string, headers: Record<string, string>, idempotencyHeader?: string) => ['GET', 'HEAD', 'OPTIONS', 'TRACE', 'QUERY', 'PUT', 'DELETE'].includes(method.toUpperCase()) || (['POST', 'PATCH'].includes(method.toUpperCase()) && Object.entries(headers).some(([key, value]) => !!value.trim() && (key.toLowerCase() === 'idempotency-key' || (!!idempotencyHeader && key.toLowerCase() === idempotencyHeader.toLowerCase()))))
+const retryHeaderDelay = (value: string | null | undefined, milliseconds: boolean): number | undefined => {
+  if (!value) return undefined
+  const trimmed = value.trim()
+  if (/^\d+(?:\.\d+)?$/.test(trimmed)) {
+    const delay = Number(trimmed) * (milliseconds ? 1 : 1000)
+    return Number.isFinite(delay) ? delay : undefined
+  }
+  if (milliseconds || !/^[A-Za-z]/.test(trimmed)) return undefined
+  const timestamp = Date.parse(trimmed)
+  return Number.isFinite(timestamp) ? Math.max(0, timestamp - Date.now()) : undefined
+}
+const retryDelay = async (attempt: number, retry: RetryConfig, retryAfter?: string | null, retryAfterMilliseconds?: string | null, signal?: AbortSignal) => {
+  const fromHeader = retryHeaderDelay(retryAfterMilliseconds, true) ?? retryHeaderDelay(retryAfter, false)
+  const exponential = (retry.initialDelayMs ?? 250) * 2 ** attempt
+  const delay = Math.max(0, Math.min(fromHeader ?? exponential, retry.maxDelayMs ?? 8_000))
+  await requestRetryPause(delay, signal)
+}
+const createTransport = (config: ClientConfig = {}): ClientInstance => {
+  const headers = { ...config.headers }
+  if (config.apiKey) headers[config.apiKeyHeader ?? 'authorization'] = `${config.apiKeyPrefix ?? 'Bearer '}${config.apiKey}`
+  const instance = config.client ?? axios.create({ baseURL: config.baseUrl, headers })
+  return async ({ method, url, body, path, query, querystring, wholeQuery, headers: requestHeaders, cookies, throwOnError: _throwOnError, security, contentType, responseType, styles, formEncodings, formHeaders, multipartPlan, validation, paginationUrl, idempotencyHeader, requestOptions }) => {
+    const signal = requestOptions?.signal
+    const resolvedHeaders: Record<string, string> = { ...headers, ...Object.fromEntries(Object.entries(requestHeaders ?? {}).map(([key, value]) => [key, String(value)])) }
+    new Headers(requestOptions?.headers).forEach((value, key) => { resolvedHeaders[key] = value })
+    const resolvedQuery = { ...(query ?? {}) }
+    applySecurity(resolvedHeaders, resolvedQuery, security, config.auth)
+    for (const [name, value] of Object.entries(requestHeaders ?? {})) if (styles?.header?.[name]) resolvedHeaders[name] = styles.header[name]?.contentType ? contentParameter(value, styles.header[name]!.contentType!) : serializePath(name, value, styleFor(styles, 'header', name))
+    new Headers(requestOptions?.headers).forEach((value, key) => { resolvedHeaders[key] = value })
+    if (contentType?.request && !contentType.request.startsWith('multipart/form-data')) resolvedHeaders['content-type'] ??= contentType.request
+    if (cookies) resolvedHeaders.cookie = [...(resolvedHeaders.cookie ? [resolvedHeaders.cookie] : []), ...Object.entries(cookies).filter(([name, value]) => value !== undefined && (value !== null || styles?.cookie?.[name]?.contentType)).map(([name, value]) => `${name}=${serializePath(name, value, styleFor(styles, 'cookie', name))}`)].join('; ')
+    const requestUrl = paginationUrl ? resolvePaginationUrl(paginationUrl, config.baseUrl) : appendWholeQuery(resolvePath(url, path, styles), querystring, wholeQuery)
+    const request = { method, url: requestUrl, body, path, query: resolvedQuery, headers: resolvedHeaders }
+    await validate(validation?.request ?? config.validation?.request, body)
+    await config.hooks?.beforeRequest?.(request)
+    const retry = config.retry === false ? undefined : config.retry ?? {}
+    const maxAttempts = retry && retryAllowed(method, resolvedHeaders, idempotencyHeader) ? Math.max(1, retry.maxAttempts ?? 3) : 1
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      signal?.throwIfAborted()
+      let response
+      try {
+        response = await instance.request({ method, url: requestUrl, data: encodeBody(body, resolvedHeaders, contentType?.request, config.codecs, formEncodings, formHeaders, config.multipartEncoder, multipartPlan), params: serializeQuery(resolvedQuery, styles), headers: resolvedHeaders, signal, responseType: responseType === 'stream' ? 'stream' : responseType === 'arraybuffer' ? 'arraybuffer' : undefined, validateStatus: () => true })
+      } catch (error) {
+        // validateStatus above keeps HTTP responses out of this branch. Only
+        // adapter/network failures retry; a hook, codec, or validator failure
+        // must remain a single terminal outcome.
+        if (signal?.aborted || axios.isCancel(error) || !axios.isAxiosError(error) || attempt + 1 >= maxAttempts) {
+          await config.hooks?.onError?.(error, request)
+          throw error
+        }
+        await retryDelay(attempt, retry ?? {}, undefined, undefined, signal)
+        continue
+      }
+      if (attempt + 1 < maxAttempts && retryableStatus(response.status)) {
+        await retryDelay(attempt, retry ?? {}, response.headers['retry-after'], response.headers['retry-after-ms'], signal)
+        continue
+      }
+      const mediaType = String(response.headers['content-type'] ?? '')
+      const data = await codecFor(config.codecs, mediaType)?.decode?.(response.data, mediaType) ?? (isJsonSequence(mediaType) ? decodeSequence(String(response.data), mediaType, jsonPlan, response.status) : (jsonPlan?.lossless && typeof response.data === 'string' && (mediaType.includes('json') || mediaType.includes('+json')) ? parseJson(response.data, responseJsonShape(jsonPlan, response.status, mediaType), jsonPlan.refs) : response.data))
+      try {
+        await config.hooks?.afterResponse?.({ request, status: response.status, headers: response.headers as Record<string, unknown>, data })
+        if (response.status >= 400 && _throwOnError !== false) throw new ApiError(response.status, data)
+        if (responseType !== 'stream') await validate(validation?.response ?? config.validation?.response, data)
+        return { status: response.status, contentType: mediaType.split(';')[0].trim(), data, headers: response.headers as Record<string, unknown> }
+      } catch (error) {
+        await config.hooks?.onError?.(error, request)
+        throw error
+      }
+    }
+    throw new Error('Poolster retry loop completed without a response')
+  }
+}
+export const toEventStream = async <T>(response: Promise<unknown>): Promise<EventStreamResult<T>> => {
+  const raw = await response
+  const stream = raw instanceof Response ? raw.body : raw as ReadableStream<Uint8Array> | null
+  if (!stream || typeof stream.getReader !== 'function') throw new TypeError('SSE requires an Axios stream-capable adapter')
+  const reader = stream.getReader()
+  const decoder = new TextDecoder()
+  return (async function* (): AsyncGenerator<T> {
+    let buffer = ''
+    while (true) {
+      const next = await reader.read()
+      if (next.done) break
+      buffer += decoder.decode(next.value, { stream: true })
+      const events = buffer.split(/\r?\n\r?\n/)
+      buffer = events.pop() ?? ''
+      for (const event of events) {
+        const data = event.split(/\r?\n/).filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trimStart()).join('\n')
+        if (!data) continue
+        try { yield JSON.parse(data) as T } catch { yield data as T }
+      }
+    }
+  })()
+}
+/** Middleware runs once per logical request, around transport retries and legacy hooks. */
+export type MiddlewareNext = (request: RequestConfig) => Promise<unknown>
+export type ClientMiddleware = (request: RequestConfig, next: MiddlewareNext) => Promise<unknown>
+/** Ordinary responses use this envelope; Fetch streaming requests return a native Response. */
+export interface MiddlewareResponse { status: number; contentType: string; data: unknown; headers: Headers | Record<string, unknown> }
+export const createClient = (config: ClientConfig = {}): ClientInstance => {
+  const transport = createTransport(config)
+  const middleware = [...(config.middleware ?? [])]
+  return (request) => withRequestControl(request.requestOptions, config.timeoutMs, async (requestOptions) => {
+    request = { ...request, requestOptions }
+    const dispatch = (index: number, current: RequestConfig): Promise<unknown> => {
+      const handler = middleware[index]
+      if (!handler) return transport(current)
+      let called = false
+      return Promise.resolve().then(() => handler(current, (updated) => {
+        if (called) return Promise.reject(new TypeError('Middleware next may only be called once'))
+        called = true
+        return dispatch(index + 1, updated)
+      }))
+    }
+    return dispatch(0, { ...request, path: request.path ? { ...request.path } : undefined, query: request.query ? { ...request.query } : undefined, headers: (request.headers instanceof Headers ? new Headers(request.headers) : Array.isArray(request.headers) ? request.headers.map(([name, value]) => [name, value]) : request.headers ? { ...request.headers } : undefined) as RequestConfig['headers'], cookies: request.cookies ? { ...request.cookies } : undefined }).then((response) => (request.validateResponses ?? config.validateResponses) && request.responseType !== 'stream' && request.method.toUpperCase() !== 'HEAD' ? checkResponseEnvelope(response, request.jsonPlan) : response)
+  })
+}
+export const client = createClient()
+export const resolveResponse = <T extends { status: number; data: unknown }, ThrowOnError extends boolean>(promise: Promise<T>, throwOnError: ThrowOnError): Promise<ResponseResult<T, ThrowOnError>> => (throwOnError ? promise.then((result) => result.data) : promise) as Promise<ResponseResult<T, ThrowOnError>>

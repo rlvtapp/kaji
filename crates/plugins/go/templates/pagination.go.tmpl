@@ -1,26 +1,90 @@
-
 // poolsterPaginationValue traverses a validated core selector (JSON pointer or simple JSONPath).
-func poolsterPaginationValue(value any,path string)(any,bool){
-    encoded,err:=json.Marshal(value);if err!=nil{return nil,false}
-    var current any;if err:=json.Unmarshal(encoded,&current);err!=nil{return nil,false}
-    field:=func(name string)bool{
-        switch object:=current.(type){
-        case map[string]any:var ok bool;current,ok=object[name];return ok
-        case []any:index,err:=strconv.Atoi(name);if err!=nil||index<0||index>=len(object){return false};current=object[index];return true
-        default:return false
-        }
-    }
-    if strings.HasPrefix(path,"/"){
-        for _,part:=range strings.Split(path[1:],"/"){part=strings.ReplaceAll(strings.ReplaceAll(part,"~1","/"),"~0","~");if !field(part){return nil,false}}
-        return current,true
-    }
-    path=strings.TrimPrefix(path,"$")
-    for len(path)>0{
-        if path[0]=='.'{path=path[1:];end:=strings.IndexAny(path,".[");if end<0{end=len(path)};if end==0||!field(path[:end]){return nil,false};path=path[end:];continue}
-        if path[0]=='['{end:=strings.IndexByte(path,']');if end<0{return nil,false};index,err:=strconv.Atoi(path[1:end]);array,ok:=current.([]any);if err!=nil||!ok{return nil,false};if index<0{index+=len(array)};if index<0||index>=len(array){return nil,false};current=array[index];path=path[end+1:];continue}
-        return nil,false
-    }
-    return current,true
+func poolsterPaginationValue(value any, path string) (any, bool) {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return nil, false
+	}
+	var current any
+	if err := json.Unmarshal(encoded, &current); err != nil {
+		return nil, false
+	}
+	field := func(name string) bool {
+		switch object := current.(type) {
+		case map[string]any:
+			var ok bool
+			current, ok = object[name]
+			return ok
+		case []any:
+			index, err := strconv.Atoi(name)
+			if err != nil || index < 0 || index >= len(object) {
+				return false
+			}
+			current = object[index]
+			return true
+		default:
+			return false
+		}
+	}
+	if strings.HasPrefix(path, "/") {
+		for _, part := range strings.Split(path[1:], "/") {
+			part = strings.ReplaceAll(strings.ReplaceAll(part, "~1", "/"), "~0", "~")
+			if !field(part) {
+				return nil, false
+			}
+		}
+		return current, true
+	}
+	path = strings.TrimPrefix(path, "$")
+	for len(path) > 0 {
+		if path[0] == '.' {
+			path = path[1:]
+			end := strings.IndexAny(path, ".[")
+			if end < 0 {
+				end = len(path)
+			}
+			if end == 0 || !field(path[:end]) {
+				return nil, false
+			}
+			path = path[end:]
+			continue
+		}
+		if path[0] == '[' {
+			end := strings.IndexByte(path, ']')
+			if end < 0 {
+				return nil, false
+			}
+			index, err := strconv.Atoi(path[1:end])
+			array, ok := current.([]any)
+			if err != nil || !ok {
+				return nil, false
+			}
+			if index < 0 {
+				index += len(array)
+			}
+			if index < 0 || index >= len(array) {
+				return nil, false
+			}
+			current = array[index]
+			path = path[end+1:]
+			continue
+		}
+		return nil, false
+	}
+	return current, true
 }
-func poolsterPaginationString(value any,path string)(string,bool){current,ok:=poolsterPaginationValue(value,path);if !ok{return "",false};text,ok:=current.(string);return text,ok&&text!=""}
-func poolsterPaginationArrayLen(value any,path string)(int,bool){current,ok:=poolsterPaginationValue(value,path);if !ok{return 0,false};array,ok:=current.([]any);return len(array),ok}
+func poolsterPaginationString(value any, path string) (string, bool) {
+	current, ok := poolsterPaginationValue(value, path)
+	if !ok {
+		return "", false
+	}
+	text, ok := current.(string)
+	return text, ok && text != ""
+}
+func poolsterPaginationArrayLen(value any, path string) (int, bool) {
+	current, ok := poolsterPaginationValue(value, path)
+	if !ok {
+		return 0, false
+	}
+	array, ok := current.([]any)
+	return len(array), ok
+}

@@ -55,16 +55,16 @@ function sdkPackage(options) {
   if (typeof options.language !== 'string' || !options.language) {
     throw new TypeError('sdk language is required');
   }
-  const allowed = new Set(['language', 'path', 'name', 'version', 'style', 'transport', 'clientName', 'raw', 'jobs', 'scalars', 'groups', 'contracts', 'endpoint', 'commandName', 'subscriptions']);
+  const allowed = new Set(['language', 'path', 'name', 'version', 'style', 'transport', 'clientName', 'raw', 'jobs', 'scalars', 'groups', 'contracts', 'endpoint', 'commandName', 'subscriptions', 'sourceQuality']);
   for (const key of Object.keys(options)) {
     if (!allowed.has(key)) throw new TypeError(`unknown sdk option ${key}`);
   }
   if (!['typescript', 'rust', 'go', 'python', 'php', 'symfony', 'java', 'csharp', 'elixir', 'ruby', 'swift', 'postman', 'rust-cli', 'typescript-cli'].includes(options.language)) {
     throw new TypeError(`unsupported SDK language ${options.language}`);
   }
-  const { language, path: outputPath = language, name, version, style, transport, clientName, raw, jobs, scalars, groups, contracts, endpoint, commandName, subscriptions } = options;
+  const { language, path: outputPath = language, name, version, style, transport, clientName, raw, jobs, scalars, groups, contracts, endpoint, commandName, subscriptions, sourceQuality } = options;
   if (typeof outputPath !== 'string' || !outputPath) throw new TypeError('sdk path must be a nonempty string');
-  return { language, path: outputPath, name, version, style, transport, clientName, raw, jobs, scalars, groups, contracts, endpoint, commandName, subscriptions };
+  return { language, path: outputPath, name, version, style, transport, clientName, raw, jobs, scalars, groups, contracts, endpoint, commandName, subscriptions, sourceQuality };
 }
 
 function normalizedPackagePath(value) {

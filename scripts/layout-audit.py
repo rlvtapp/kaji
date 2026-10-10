@@ -28,7 +28,8 @@ def source_files(project):
         for path in (project / root).rglob('*'):
             relative = path.relative_to(project)
             if (not path.is_file() or path.suffix not in SOURCE_SUFFIXES or
-                    SOURCE_EXCLUSIONS.intersection(relative.parts)):
+                    SOURCE_EXCLUSIONS.intersection(relative.parts) or
+                    path.name == 'tests.rs' or path.stem.endswith('_tests')):
                 continue
             if root == 'crates' and 'src' not in relative.parts:
                 continue

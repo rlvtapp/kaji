@@ -1,68 +1,255 @@
 // poolsterWholeQuery serializes an entire query string rather than adding a named parameter.
-func poolsterWholeQuery(value any, contentType string, metadata string) (string,error) {
-    if value == nil { return "",nil }
-    reflected:=reflect.ValueOf(value)
-    if reflected.Kind()==reflect.Pointer {if reflected.IsNil(){return "",nil};value=reflected.Elem().Interface()}
-    media:=strings.ToLower(strings.TrimSpace(strings.Split(contentType,";")[0]))
-    if media=="application/x-www-form-urlencoded" {
-        encoded,err:=json.Marshal(value);if err!=nil{return "",err}
-        var fields map[string]any;decoder:=json.NewDecoder(bytes.NewReader(encoded));decoder.UseNumber()
-        if err=decoder.Decode(&fields);err!=nil{return "",fmt.Errorf("poolster: whole-query form requires an object: %w",err)}
-        var definition struct {Encoding map[string]poolsterQueryEncoding `json:"encoding"`};if err=json.Unmarshal([]byte(metadata),&definition);err!=nil{return "",err}
-        keys:=make([]string,0,len(fields));for key:=range fields{keys=append(keys,key)};sort.Strings(keys)
-        pairs:=[]string{}
-        for _,key:=range keys {if err=poolsterFormQueryField(&pairs,key,fields[key],definition.Encoding[key]);err!=nil{return "",err}}
-        return strings.Join(pairs,"&"),nil
-    }
-    if media=="text/plain" {text,ok:=value.(string);if !ok{return "",fmt.Errorf("poolster: text querystring requires a string")};return url.QueryEscape(text),nil}
-    if media=="application/json"||strings.HasSuffix(media,"+json") {encoded,err:=json.Marshal(value);if err!=nil{return "",err};return url.QueryEscape(string(encoded)),nil}
-    if text,ok:=value.(string);ok{return url.QueryEscape(text),nil}
-    return "",fmt.Errorf("poolster: whole-query content type %s requires a serialized string",media)
+func poolsterWholeQuery(value any, contentType string, metadata string) (string, error) {
+	if value == nil {
+		return "", nil
+	}
+	reflected := reflect.ValueOf(value)
+	if reflected.Kind() == reflect.Pointer {
+		if reflected.IsNil() {
+			return "", nil
+		}
+		value = reflected.Elem().Interface()
+	}
+	media := strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
+	if media == "application/x-www-form-urlencoded" {
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			return "", err
+		}
+		var fields map[string]any
+		decoder := json.NewDecoder(bytes.NewReader(encoded))
+		decoder.UseNumber()
+		if err = decoder.Decode(&fields); err != nil {
+			return "", fmt.Errorf("poolster: whole-query form requires an object: %w", err)
+		}
+		var definition struct {
+			Encoding map[string]poolsterQueryEncoding `json:"encoding"`
+		}
+		if err = json.Unmarshal([]byte(metadata), &definition); err != nil {
+			return "", err
+		}
+		keys := make([]string, 0, len(fields))
+		for key := range fields {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		pairs := []string{}
+		for _, key := range keys {
+			if err = poolsterFormQueryField(&pairs, key, fields[key], definition.Encoding[key]); err != nil {
+				return "", err
+			}
+		}
+		return strings.Join(pairs, "&"), nil
+	}
+	if media == "text/plain" {
+		text, ok := value.(string)
+		if !ok {
+			return "", fmt.Errorf("poolster: text querystring requires a string")
+		}
+		return url.QueryEscape(text), nil
+	}
+	if media == "application/json" || strings.HasSuffix(media, "+json") {
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			return "", err
+		}
+		return url.QueryEscape(string(encoded)), nil
+	}
+	if text, ok := value.(string); ok {
+		return url.QueryEscape(text), nil
+	}
+	return "", fmt.Errorf("poolster: whole-query content type %s requires a serialized string", media)
 }
 func (client *Client) decodeSequentialResponse(body io.Reader, contentType string, destination any) error {
-    const maximum=10<<20
-    encoded,err:=io.ReadAll(io.LimitReader(body,maximum+1));if err!=nil{return err};if len(encoded)>maximum{return fmt.Errorf("poolster: sequential response exceeds 10 MiB")}
-    media:=strings.ToLower(strings.TrimSpace(strings.Split(contentType,";")[0]))
-    var records []string
-    if media=="application/json-seq"||strings.HasSuffix(media,"+json-seq") {
-        if len(bytes.TrimSpace(encoded))>0&&bytes.TrimSpace(encoded)[0]!=0x1e{return fmt.Errorf("poolster: JSON sequence missing record separator")}
-        records=strings.Split(string(encoded),"\x1e")
-    } else {records=strings.Split(string(encoded),"\n")}
-    values:=[]json.RawMessage{}
-    for _,record:=range records {record=strings.TrimSpace(record);if record==""{continue};if !json.Valid([]byte(record)){return fmt.Errorf("poolster: invalid sequential JSON record")};values=append(values,json.RawMessage(record))}
-    aggregate,err:=json.Marshal(values);if err!=nil{return err}
-    return client.decodeResponse(bytes.NewReader(aggregate),destination)
+	const maximum = 10 << 20
+	encoded, err := io.ReadAll(io.LimitReader(body, maximum+1))
+	if err != nil {
+		return err
+	}
+	if len(encoded) > maximum {
+		return fmt.Errorf("poolster: sequential response exceeds 10 MiB")
+	}
+	media := strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
+	var records []string
+	if media == "application/json-seq" || strings.HasSuffix(media, "+json-seq") {
+		if len(bytes.TrimSpace(encoded)) > 0 && bytes.TrimSpace(encoded)[0] != 0x1e {
+			return fmt.Errorf("poolster: JSON sequence missing record separator")
+		}
+		records = strings.Split(string(encoded), "\x1e")
+	} else {
+		records = strings.Split(string(encoded), "\n")
+	}
+	values := []json.RawMessage{}
+	for _, record := range records {
+		record = strings.TrimSpace(record)
+		if record == "" {
+			continue
+		}
+		if !json.Valid([]byte(record)) {
+			return fmt.Errorf("poolster: invalid sequential JSON record")
+		}
+		values = append(values, json.RawMessage(record))
+	}
+	aggregate, err := json.Marshal(values)
+	if err != nil {
+		return err
+	}
+	return client.decodeResponse(bytes.NewReader(aggregate), destination)
 }
 func poolsterSequentialMedia(contentType string) bool {
-    media:=strings.ToLower(strings.TrimSpace(strings.Split(contentType,";")[0]))
-    return media=="application/x-ndjson"||media=="application/ndjson"||media=="application/jsonl"||media=="application/json-seq"||strings.HasSuffix(media,"+json-seq")
+	media := strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
+	return media == "application/x-ndjson" || media == "application/ndjson" || media == "application/jsonl" || media == "application/json-seq" || strings.HasSuffix(media, "+json-seq")
 }
 
-type poolsterSequentialBody struct {ContentType string;Value any}
-func encodePoolsterSequential(body poolsterSequentialBody)([]byte,string,error){
- encoded,err:=json.Marshal(body.Value);if err!=nil{return nil,"",err}
- var records []json.RawMessage;if err=json.Unmarshal(encoded,&records);err!=nil{return nil,"",fmt.Errorf("poolster: sequential request requires an array: %w",err)}
- var output bytes.Buffer
- media:=strings.ToLower(strings.TrimSpace(strings.Split(body.ContentType,";")[0]))
- for _,record:=range records{if media=="application/json-seq"||strings.HasSuffix(media,"+json-seq"){output.WriteByte(0x1e)};output.Write(record);output.WriteByte('\n');if output.Len()>10<<20{return nil,"",fmt.Errorf("poolster: sequential request exceeds 10 MiB")}}
- return output.Bytes(),body.ContentType,nil
+type poolsterSequentialBody struct {
+	ContentType string
+	Value       any
 }
 
-type poolsterQueryEncoding struct {ContentType string `json:"contentType"`;Style string `json:"style"`;Explode *bool `json:"explode"`;AllowReserved bool `json:"allowReserved"`}
-func poolsterQueryEscape(value string,reserved bool) string {escaped:=url.QueryEscape(value);if reserved{for _,character:=range ":/?#[]@!$&'()*+,;="{escaped=strings.ReplaceAll(escaped,url.QueryEscape(string(character)),string(character))}};return escaped}
-func poolsterFormQueryField(pairs *[]string,name string,value any,encoding poolsterQueryEncoding) error {
- if value==nil{return nil};add:=func(key,value string){*pairs=append(*pairs,url.QueryEscape(key)+"="+poolsterQueryEscape(value,encoding.AllowReserved))}
- if array,ok:=value.([]any);ok {if encoding.ContentType!=""{for _,item:=range array{if err:=poolsterFormQueryField(pairs,name,item,encoding);err!=nil{return err}};return nil};explode:=encoding.Explode==nil||*encoding.Explode;if !explode||encoding.Style=="spaceDelimited"||encoding.Style=="pipeDelimited"{values:=[]string{};for _,item:=range array{values=append(values,fmt.Sprint(item))};separator:=",";if encoding.Style=="spaceDelimited"{separator=" "};if encoding.Style=="pipeDelimited"{separator="|"};add(name,strings.Join(values,separator));return nil};for _,item:=range array{if err:=poolsterFormQueryField(pairs,name,item,encoding);err!=nil{return err}};return nil}
- if encoding.ContentType!=""{if encoding.ContentType=="application/json"||strings.HasSuffix(encoding.ContentType,"+json"){encoded,err:=json.Marshal(value);if err!=nil{return err};add(name,string(encoded));return nil};if text,ok:=value.(string);ok{add(name,text);return nil};return fmt.Errorf("poolster: query content type %s requires a serialized string",encoding.ContentType)}
- if object,ok:=value.(map[string]any);ok{keys:=make([]string,0,len(object));for key:=range object{keys=append(keys,key)};sort.Strings(keys);if encoding.Style=="deepObject"{for _,key:=range keys{add(name+"["+key+"]",fmt.Sprint(object[key]))};return nil};if encoding.Explode==nil||*encoding.Explode{for _,key:=range keys{add(key,fmt.Sprint(object[key]))};return nil};items:=[]string{};for _,key:=range keys{items=append(items,key,fmt.Sprint(object[key]))};add(name,strings.Join(items,","));return nil}
- add(name,fmt.Sprint(value));return nil
+func encodePoolsterSequential(body poolsterSequentialBody) ([]byte, string, error) {
+	encoded, err := json.Marshal(body.Value)
+	if err != nil {
+		return nil, "", err
+	}
+	var records []json.RawMessage
+	if err = json.Unmarshal(encoded, &records); err != nil {
+		return nil, "", fmt.Errorf("poolster: sequential request requires an array: %w", err)
+	}
+	var output bytes.Buffer
+	media := strings.ToLower(strings.TrimSpace(strings.Split(body.ContentType, ";")[0]))
+	for _, record := range records {
+		if media == "application/json-seq" || strings.HasSuffix(media, "+json-seq") {
+			output.WriteByte(0x1e)
+		}
+		output.Write(record)
+		output.WriteByte('\n')
+		if output.Len() > 10<<20 {
+			return nil, "", fmt.Errorf("poolster: sequential request exceeds 10 MiB")
+		}
+	}
+	return output.Bytes(), body.ContentType, nil
 }
 
-func poolsterParameterContent(value any,contentType string)(string,bool,error){
- if value==nil{return "",false,nil};reflected:=reflect.ValueOf(value);if reflected.Kind()==reflect.Pointer{if reflected.IsNil(){return "",false,nil};value=reflected.Elem().Interface()}
- media:=strings.ToLower(strings.TrimSpace(strings.Split(contentType,";")[0]))
- if media=="application/json"||strings.HasSuffix(media,"+json"){encoded,err:=json.Marshal(value);return string(encoded),true,err}
- if text,ok:=value.(string);ok{return text,true,nil}
- if media=="text/plain"{return fmt.Sprint(value),true,nil}
- return "",false,fmt.Errorf("poolster: parameter content type %s requires a serialized string",media)
+type poolsterQueryEncoding struct {
+	ContentType   string `json:"contentType"`
+	Style         string `json:"style"`
+	Explode       *bool  `json:"explode"`
+	AllowReserved bool   `json:"allowReserved"`
+}
+
+func poolsterQueryEscape(value string, reserved bool) string {
+	escaped := url.QueryEscape(value)
+	if reserved {
+		for _, character := range ":/?#[]@!$&'()*+,;=" {
+			escaped = strings.ReplaceAll(escaped, url.QueryEscape(string(character)), string(character))
+		}
+	}
+	return escaped
+}
+func poolsterFormQueryField(pairs *[]string, name string, value any, encoding poolsterQueryEncoding) error {
+	if value == nil {
+		return nil
+	}
+	add := func(key, value string) {
+		*pairs = append(*pairs, url.QueryEscape(key)+"="+poolsterQueryEscape(value, encoding.AllowReserved))
+	}
+	if array, ok := value.([]any); ok {
+		if encoding.ContentType != "" {
+			for _, item := range array {
+				if err := poolsterFormQueryField(pairs, name, item, encoding); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		explode := encoding.Explode == nil || *encoding.Explode
+		if !explode || encoding.Style == "spaceDelimited" || encoding.Style == "pipeDelimited" {
+			values := []string{}
+			for _, item := range array {
+				values = append(values, fmt.Sprint(item))
+			}
+			separator := ","
+			if encoding.Style == "spaceDelimited" {
+				separator = " "
+			}
+			if encoding.Style == "pipeDelimited" {
+				separator = "|"
+			}
+			add(name, strings.Join(values, separator))
+			return nil
+		}
+		for _, item := range array {
+			if err := poolsterFormQueryField(pairs, name, item, encoding); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if encoding.ContentType != "" {
+		if encoding.ContentType == "application/json" || strings.HasSuffix(encoding.ContentType, "+json") {
+			encoded, err := json.Marshal(value)
+			if err != nil {
+				return err
+			}
+			add(name, string(encoded))
+			return nil
+		}
+		if text, ok := value.(string); ok {
+			add(name, text)
+			return nil
+		}
+		return fmt.Errorf("poolster: query content type %s requires a serialized string", encoding.ContentType)
+	}
+	if object, ok := value.(map[string]any); ok {
+		keys := make([]string, 0, len(object))
+		for key := range object {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		if encoding.Style == "deepObject" {
+			for _, key := range keys {
+				add(name+"["+key+"]", fmt.Sprint(object[key]))
+			}
+			return nil
+		}
+		if encoding.Explode == nil || *encoding.Explode {
+			for _, key := range keys {
+				add(key, fmt.Sprint(object[key]))
+			}
+			return nil
+		}
+		items := []string{}
+		for _, key := range keys {
+			items = append(items, key, fmt.Sprint(object[key]))
+		}
+		add(name, strings.Join(items, ","))
+		return nil
+	}
+	add(name, fmt.Sprint(value))
+	return nil
+}
+
+func poolsterParameterContent(value any, contentType string) (string, bool, error) {
+	if value == nil {
+		return "", false, nil
+	}
+	reflected := reflect.ValueOf(value)
+	if reflected.Kind() == reflect.Pointer {
+		if reflected.IsNil() {
+			return "", false, nil
+		}
+		value = reflected.Elem().Interface()
+	}
+	media := strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
+	if media == "application/json" || strings.HasSuffix(media, "+json") {
+		encoded, err := json.Marshal(value)
+		return string(encoded), true, err
+	}
+	if text, ok := value.(string); ok {
+		return text, true, nil
+	}
+	if media == "text/plain" {
+		return fmt.Sprint(value), true, nil
+	}
+	return "", false, fmt.Errorf("poolster: parameter content type %s requires a serialized string", media)
 }

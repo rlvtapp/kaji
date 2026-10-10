@@ -8,6 +8,7 @@ from typing import Any
 
 class ResponseDecodeError(TypeError):
     """Structural mismatch with a path-only diagnostic; never echoes values."""
+
     def __init__(self, path: str, expected: str) -> None:
         self.path, self.expected = path, expected
         super().__init__(f"Poolster response decoding failed at {path}: expected {expected}")
@@ -16,8 +17,10 @@ class ResponseDecodeError(TypeError):
 def decode_json(raw: bytes, strict: bool) -> Any:
     if strict and len(raw) > 10 * 1024 * 1024:
         raise ResponseDecodeError("$", "response at most 10 MiB")
+
     def invalid_constant(_: str) -> Any:
         raise ResponseDecodeError("$", "valid JSON number")
+
     try:
         return json.loads(raw, parse_constant=invalid_constant) if strict else json.loads(raw)
     except (ValueError, UnicodeDecodeError, RecursionError):
@@ -26,8 +29,9 @@ def decode_json(raw: bytes, strict: bool) -> Any:
         raise
 
 
-def assert_shape(value: Any, schema: dict[str, Any] | None,
-                 refs: dict[str, Any], path: str = "$", depth: int = 0) -> None:
+def assert_shape(
+    value: Any, schema: dict[str, Any] | None, refs: dict[str, Any], path: str = "$", depth: int = 0
+) -> None:
     if not schema:
         return
     if depth > 128:
@@ -50,10 +54,16 @@ def assert_shape(value: Any, schema: dict[str, Any] | None,
                 pass
         raise ResponseDecodeError(path, "declared union shape")
     kind = schema.get("kind", "any")
-    accepted = {"any": True, "null": value is None, "string": isinstance(value, str),
-                "boolean": isinstance(value, bool), "integer": type(value) is int,
-                "number": type(value) is int or (type(value) is float and math.isfinite(value)),
-                "object": isinstance(value, dict), "array": isinstance(value, list)}
+    accepted = {
+        "any": True,
+        "null": value is None,
+        "string": isinstance(value, str),
+        "boolean": isinstance(value, bool),
+        "integer": type(value) is int,
+        "number": type(value) is int or (type(value) is float and math.isfinite(value)),
+        "object": isinstance(value, dict),
+        "array": isinstance(value, list),
+    }
     if not accepted.get(kind, True):
         raise ResponseDecodeError(path, kind)
     if kind == "object":
@@ -62,21 +72,31 @@ def assert_shape(value: Any, schema: dict[str, Any] | None,
             if key not in value:
                 raise ResponseDecodeError(f"{path}[{json.dumps(key)}]", "required property")
         for key, item in value.items():
-            assert_shape(item, fields.get(key, schema.get("additional")), refs,
-                         f"{path}[{json.dumps(key)}]", depth + 1)
+            assert_shape(
+                item,
+                fields.get(key, schema.get("additional")),
+                refs,
+                f"{path}[{json.dumps(key)}]",
+                depth + 1,
+            )
     elif kind == "array":
         for index, item in enumerate(value):
             assert_shape(item, schema.get("items"), refs, f"{path}[{index}]", depth + 1)
 
 
-def check_response(value: Any, schemas: dict[str, Any], refs: dict[str, Any],
-                   status: int, content_type: str) -> Any:
+def check_response(
+    value: Any, schemas: dict[str, Any], refs: dict[str, Any], status: int, content_type: str
+) -> Any:
     if status < 200 or status >= 300 or status == 204:
         return value
-    candidates = schemas.get(str(status), schemas.get(f"{status // 100}XX", schemas.get("default", {})))
+    candidates = schemas.get(
+        str(status), schemas.get(f"{status // 100}XX", schemas.get("default", {}))
+    )
     media = content_type.split(";", 1)[0].strip().lower()
-    shape = next((shape for name, shape in candidates.items() if name.lower() == media),
-                 candidates.get(f"{media.split('/')[0]}/*", candidates.get("*/*")))
+    shape = next(
+        (shape for name, shape in candidates.items() if name.lower() == media),
+        candidates.get(f"{media.split('/')[0]}/*", candidates.get("*/*")),
+    )
     assert_shape(value, shape, refs)
     return value
 

@@ -9,11 +9,20 @@ defmodule __POOLSTER_MODULE__.OAuthClientCredentials do
   def token(provider), do: GenServer.call(provider, :token, 35_000)
   def invalidate(provider), do: GenServer.call(provider, :invalidate)
   def invalidate(provider, rejected), do: GenServer.call(provider, {:invalidate, rejected})
+
   def middleware(provider, origin) do
     expected = URI.parse(origin)
+
     fn request, next ->
-      actual = URI.parse(request.scheme |> Atom.to_string() |> Kernel.<>("://" <> request.host <> ":" <> Integer.to_string(request.port)))
-      if actual.scheme != expected.scheme or actual.host != expected.host or actual.port != expected.port do
+      actual =
+        URI.parse(
+          request.scheme
+          |> Atom.to_string()
+          |> Kernel.<>("://" <> request.host <> ":" <> Integer.to_string(request.port))
+        )
+
+      if actual.scheme != expected.scheme or actual.host != expected.host or
+           actual.port != expected.port do
         {:error, :oauth_origin_mismatch}
       else
         if Enum.any?(request.headers, fn {name, _} -> String.downcase(name) == "authorization" end) do
@@ -21,55 +30,132 @@ defmodule __POOLSTER_MODULE__.OAuthClientCredentials do
         else
           case token(provider) do
             {:ok, value} ->
-              authed = %{request | headers: [{"authorization", "Bearer " <> value} | request.headers]}
+              authed = %{
+                request
+                | headers: [{"authorization", "Bearer " <> value} | request.headers]
+              }
+
               result = next.(authed)
+
               case result do
-                {:ok, %{status: 401}} when request.method in ["GET", "HEAD", "OPTIONS", "QUERY", "TRACE", "PUT", "DELETE"] and (is_nil(request.body) or is_binary(request.body)) ->
+                {:ok, %{status: 401}}
+                when request.method in [
+                       "GET",
+                       "HEAD",
+                       "OPTIONS",
+                       "QUERY",
+                       "TRACE",
+                       "PUT",
+                       "DELETE"
+                     ] and (is_nil(request.body) or is_binary(request.body)) ->
                   invalidate(provider, value)
+
                   case token(provider) do
-                    {:ok, refreshed} -> next.(%{request | headers: [{"authorization", "Bearer " <> refreshed} | request.headers]})
-                    error -> error
+                    {:ok, refreshed} ->
+                      next.(%{
+                        request
+                        | headers: [{"authorization", "Bearer " <> refreshed} | request.headers]
+                      })
+
+                    error ->
+                      error
                   end
-                _ -> result
+
+                _ ->
+                  result
               end
-            error -> error
+
+            error ->
+              error
           end
         end
       end
     end
   end
+
   def init(options) do
     url = Keyword.fetch!(options, :token_url) |> URI.parse()
     id = Keyword.fetch!(options, :client_id)
     secret = Keyword.fetch!(options, :client_secret)
     fetch = Keyword.fetch!(options, :fetch)
-    if url.scheme != "https" or is_nil(url.host) or not is_nil(url.userinfo) or not is_nil(url.fragment) or id == "" or secret == "" or not is_function(fetch, 3) do
+
+    if url.scheme != "https" or is_nil(url.host) or not is_nil(url.userinfo) or
+         not is_nil(url.fragment) or id == "" or secret == "" or not is_function(fetch, 3) do
       {:stop, :invalid_oauth_configuration}
     else
       {:ok, %{options: options, token: nil, expires: 0}}
     end
   end
-  def format_status(_reason, [_pdict, _state]), do: [data: [{~c"State", :redacted_oauth_credentials}]]
+
+  def format_status(_reason, [_pdict, _state]),
+    do: [data: [{~c"State", :redacted_oauth_credentials}]]
+
   def handle_call(:invalidate, _, state), do: {:reply, :ok, %{state | token: nil, expires: 0}}
-  def handle_call({:invalidate, rejected}, _, state), do: {:reply, :ok, if(state.token == rejected, do: %{state | token: nil, expires: 0}, else: state)}
+
+  def handle_call({:invalidate, rejected}, _, state),
+    do:
+      {:reply, :ok,
+       if(state.token == rejected, do: %{state | token: nil, expires: 0}, else: state)}
+
   def handle_call(:token, _, state) do
     now = System.monotonic_time(:millisecond)
+
     if state.token != nil and state.expires > now do
       {:reply, {:ok, state.token}, state}
     else
       options = state.options
-      result = try do
-        fields = [{"grant_type", "client_credentials"}] ++ if(Keyword.has_key?(options, :scope), do: [{"scope", options[:scope]}], else: [])
-        basic = URI.encode_www_form(options[:client_id]) <> ":" <> URI.encode_www_form(options[:client_secret])
-        headers = [{"authorization", "Basic " <> Base.encode64(basic)}, {"content-type", "application/x-www-form-urlencoded"}]
-        task = Task.async(fn -> try do options[:fetch].(options[:token_url], headers, URI.encode_query(fields)) rescue _ -> :error catch _, _ -> :error end end)
-        fetched = case Task.yield(task, 30_000) || Task.shutdown(task, :brutal_kill) do {:ok, value} -> value; _ -> :error end
-        with {:ok, 200, bytes} when is_binary(bytes) and byte_size(bytes) <= 1_048_576 <- fetched,
-             {:ok, %{"access_token" => token, "token_type" => type, "expires_in" => seconds}} <- Jason.decode(bytes),
-             true <- is_binary(token) and byte_size(token) > 0 and byte_size(token) <= 16384 and Enum.all?(:binary.bin_to_list(token), &(&1 > 32 and &1 < 127)) and is_binary(type) and String.downcase(type) == "bearer" and is_number(seconds) and seconds > 0 do
-          {:ok, token, now + trunc(max(0, min(seconds, 86400) - min(30, seconds / 10)) * 1000)}
-        else _ -> :error end
-      rescue _ -> :error catch _, _ -> :error end
+
+      result =
+        try do
+          fields =
+            [{"grant_type", "client_credentials"}] ++
+              if(Keyword.has_key?(options, :scope), do: [{"scope", options[:scope]}], else: [])
+
+          basic =
+            URI.encode_www_form(options[:client_id]) <>
+              ":" <> URI.encode_www_form(options[:client_secret])
+
+          headers = [
+            {"authorization", "Basic " <> Base.encode64(basic)},
+            {"content-type", "application/x-www-form-urlencoded"}
+          ]
+
+          task =
+            Task.async(fn ->
+              try do
+                options[:fetch].(options[:token_url], headers, URI.encode_query(fields))
+              rescue
+                _ -> :error
+              catch
+                _, _ -> :error
+              end
+            end)
+
+          fetched =
+            case Task.yield(task, 30_000) || Task.shutdown(task, :brutal_kill) do
+              {:ok, value} -> value
+              _ -> :error
+            end
+
+          with {:ok, 200, bytes} when is_binary(bytes) and byte_size(bytes) <= 1_048_576 <-
+                 fetched,
+               {:ok, %{"access_token" => token, "token_type" => type, "expires_in" => seconds}} <-
+                 Jason.decode(bytes),
+               true <-
+                 is_binary(token) and byte_size(token) > 0 and byte_size(token) <= 16384 and
+                   Enum.all?(:binary.bin_to_list(token), &(&1 > 32 and &1 < 127)) and
+                   is_binary(type) and String.downcase(type) == "bearer" and is_number(seconds) and
+                   seconds > 0 do
+            {:ok, token, now + trunc(max(0, min(seconds, 86400) - min(30, seconds / 10)) * 1000)}
+          else
+            _ -> :error
+          end
+        rescue
+          _ -> :error
+        catch
+          _, _ -> :error
+        end
+
       case result do
         {:ok, token, expires} -> {:reply, {:ok, token}, %{state | token: token, expires: expires}}
         _ -> {:reply, {:error, :oauth_token_failed}, state}

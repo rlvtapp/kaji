@@ -176,7 +176,7 @@ impl Models {
         }
         writeln!(
             self.source,
-            "public record {name}({}) implements Input {{ public ObjectNode toJson() {{ObjectNode node=JSON.createObjectNode();{body}return node;}} }}",
+            "public record {name}({}) implements Input {{\n  public ObjectNode toJson() {{\n    ObjectNode node=JSON.createObjectNode();\n    {body}return node;\n\n  }}\n\n}}",
             args.join(", ")
         )?;
         Ok(())
@@ -261,7 +261,7 @@ impl Models {
                 }
                 writeln!(
                     self.source,
-                    "public record {name}({}) {{ public static {name} fromJson(JsonNode node) {{if(!node.isObject())throw new IllegalArgumentException(\"Expected GraphQL object\");return new {name}({});}} }}",
+                    "public record {name}({}) {{\n  public static {name} fromJson(JsonNode node) {{\n    if(!node.isObject())throw new IllegalArgumentException(\"Expected GraphQL object\");\n    return new {name}({});\n\n  }}\n\n}}",
                     args.join(", "),
                     decode.join(", ")
                 )?;
@@ -294,10 +294,10 @@ impl Models {
                             anyhow::anyhow!("Java abstract selections require selected __typename")
                         })?;
                     let n = self.ty(v, &variant)?;
-                    let search = format!(") {{ public static {n} fromJson");
+                    let search = format!(") {{\n  public static {n} fromJson");
                     self.source = self.source.replace(
                         &search,
-                        &format!(") implements {name} {{ public static {n} fromJson"),
+                        &format!(") implements {name} {{\n  public static {n} fromJson"),
                     );
                     writeln!(
                         dispatch,
@@ -308,7 +308,7 @@ impl Models {
                 }
                 writeln!(
                     self.source,
-                    "public sealed interface {name} permits {} {{ static {name} fromJson(JsonNode node) {{ switch(text(field(node,\"__typename\"))) {{{dispatch}default: throw new IllegalArgumentException(\"Unknown GraphQL typename\");}} }} }}",
+                    "public sealed interface {name} permits {} {{\n  static {name} fromJson(JsonNode node) {{\n    switch(text(field(node,\"__typename\"))) {{\n      {dispatch}default: throw new IllegalArgumentException(\"Unknown GraphQL typename\");\n\n    }}\n\n  }}\n\n}}",
                     names.join(", ")
                 )?;
                 Ok(name.into())

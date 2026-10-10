@@ -1,4 +1,3 @@
-
 /** Set an explicit cache scope for tenants/origins whose responses differ. */
 export type PoolsterQueryScope = string | readonly unknown[];
 const __poolsterInputs = (options: unknown) => {
@@ -6,18 +5,27 @@ const __poolsterInputs = (options: unknown) => {
   return { path: value.path, query: value.query, querystring: value.querystring, body: value.body };
 };
 
-const __poolsterQueryCall = async <T, R>(options: T, signal: AbortSignal, call: (options: T) => Promise<R>): Promise<R> => {
+const __poolsterQueryCall = async <T, R>(
+  options: T,
+  signal: AbortSignal,
+  call: (options: T) => Promise<R>,
+): Promise<R> => {
   const value = (options ?? {}) as Record<string, unknown>;
   const request = (value.requestOptions ?? {}) as { signal?: AbortSignal };
   const controller = new AbortController();
-  const signals = [signal, request.signal].filter((item): item is AbortSignal => item !== undefined);
+  const signals = [signal, request.signal].filter(
+    (item): item is AbortSignal => item !== undefined,
+  );
   const listeners = signals.map((item) => {
     const abort = () => controller.abort(item.reason);
-    if (item.aborted) abort(); else item.addEventListener('abort', abort, { once: true });
-    return () => item.removeEventListener('abort', abort);
+    if (item.aborted) abort();
+    else item.addEventListener("abort", abort, { once: true });
+    return () => item.removeEventListener("abort", abort);
   });
   try {
     controller.signal.throwIfAborted();
     return await call({ ...value, requestOptions: { ...request, signal: controller.signal } } as T);
-  } finally { for (const remove of listeners) remove(); }
+  } finally {
+    for (const remove of listeners) remove();
+  }
 };

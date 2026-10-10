@@ -1,0 +1,300 @@
+
+/** Distinct-connection SSE and path-based deferSpec=20220824 frames. */
+final readonly class IncrementalFrame
+{
+    public function __construct(public array $frame, public mixed $data, public ?GraphqlResponse $final)
+    {
+    }
+
+}
+
+function scalarWalk(mixed $value, array $type, array $codecs, string $direction, int $depth = 0): mixed
+{
+    if ($value === null || $codecs === []) {
+        return $value;
+
+    }
+
+    if ($depth > 256) {
+        throw new \UnexpectedValueException('Scalar codec depth exceeded');
+
+    }
+
+    if ($value instanceof \JsonSerializable) {
+        $value = (array)$value->jsonSerialize();
+
+    }
+
+    if ($value instanceof \stdClass) {
+        $value = (array)$value;
+
+    }
+
+    switch ($type['kind']) {
+        case 'scalar':$callback = $codecs[$type['name']][$direction] ?? null;
+
+            return $callback !== null ? $callback($value) : $value;
+
+        case 'list':
+            return array_map(
+                fn ($item) => scalarWalk($item, $type['item'], $codecs, $direction, $depth + 1),
+                $value,
+            );
+
+        case 'object':foreach (($type['class'])::FIELD_TYPES as $key => $field) {
+            if (array_key_exists($key, $value)) {
+                $value[$key] = scalarWalk($value[$key], $field, $codecs, $direction, $depth + 1);
+
+            }
+
+        }
+            return $value;
+
+        case 'union':foreach ($type['members'] as $member) {
+            try {
+                decodeValue($value, $member);
+
+                return scalarWalk($value, $member, $codecs, $direction, $depth + 1);
+
+            } catch (\UnexpectedValueException|\TypeError $error) {
+            }
+
+        }
+            throw new \UnexpectedValueException('Ambiguous scalar union selection');
+
+        default:return $value;
+
+    }
+
+}
+
+function sseFrames($stream, int $limit): \Generator
+{
+    $event = '';
+
+    $data = [];
+
+    $size = 0;
+
+    while (($line = fgets($stream, $limit + 1)) !== false) {
+        if (str_starts_with($line, ':')) {
+            continue;
+
+        }
+
+        $size += strlen($line);
+
+        if ($size > $limit) {
+            throw new \UnexpectedValueException('SSE event exceeds limit');
+
+        }
+
+        $line = rtrim($line, "\r\n");
+
+        if ($line === '') {
+            if ($event === 'complete') {
+                return;
+
+            }
+
+            if ($event === 'next') {
+                yield json_decode(implode("\n", $data), true, 512, JSON_THROW_ON_ERROR);
+
+            } elseif ($event !== '') {
+                throw new \UnexpectedValueException('Unsupported SSE event');
+
+            }
+
+            $event = '';
+
+            $data = [];
+
+            $size = 0;
+
+            continue;
+
+        }
+
+        $pair = explode(':', $line, 2);
+
+        $value = $pair[1] ?? '';
+
+        if (str_starts_with($value, ' ')) {
+            $value = substr($value, 1);
+
+        }
+
+        if ($pair[0] === 'event') {
+            $event = $value;
+
+        } elseif ($pair[0] === 'data') {
+            $data[] = $value;
+
+        }
+
+    }
+
+    throw new \UnexpectedValueException('SSE closed before complete');
+
+}
+
+function multipartFrames($stream, string $contentType, int $limit): \Generator
+{
+    if (
+        !preg_match('/^multipart\/mixed\b/i', $contentType)
+        || !preg_match('/deferSpec\s*=\s*"?20220824"?/i', $contentType)
+        || !preg_match('/boundary\s*=\s*(?:"([^"\r\n]+)"|([^;\s]+))/i', $contentType, $match)
+    ) {
+        throw new \UnexpectedValueException('Expected multipart/mixed; deferSpec=20220824');
+
+    }
+
+    $delimiter = '--'.($match[1] !== '' ? $match[1] : $match[2]);
+
+    while (($line = fgets($stream, $limit + 1)) !== false && rtrim($line, "\r\n") !== $delimiter) {
+    }
+
+    if ($line === false) {
+        throw new \UnexpectedValueException('Missing multipart boundary');
+
+    }
+
+    while (true) {
+        $size = 0;
+
+        $json = false;
+
+        while (($line = fgets($stream, $limit + 1)) !== false && trim($line) !== '') {
+            $size += strlen($line);
+
+            if ($size > $limit) {
+                throw new \UnexpectedValueException('Oversized multipart headers');
+
+            }
+            if (preg_match('/^Content-Type:\s*application\/json/i', $line)) {
+                $json = true;
+
+            }
+
+        }
+
+        if ($line === false || !$json) {
+            throw new \UnexpectedValueException('Malformed multipart headers');
+
+        }
+
+        $body = '';
+
+        while (($line = fgets($stream, $limit + 1)) !== false) {
+            if (in_array(rtrim($line, "\r\n"), [$delimiter,$delimiter.'--'], true)) {
+                break;
+
+            }
+            $body .= $line;
+
+            if (strlen($body) > $limit) {
+                throw new \UnexpectedValueException('Oversized multipart frame');
+
+            }
+
+        }
+
+        if ($line === false) {
+            throw new \UnexpectedValueException('Truncated multipart response');
+
+        }
+
+        $frame = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
+
+        if (
+            !is_array($frame)
+            || !is_bool($frame['hasNext'] ?? null)
+            || isset($frame['pending'])
+            || isset($frame['completed'])
+        ) {
+            throw new \UnexpectedValueException('Invalid incremental dialect/frame');
+
+        }
+
+        $closed = rtrim($line, "\r\n") === $delimiter.'--';
+
+        if ($closed && $frame['hasNext']) {
+            throw new \UnexpectedValueException('Closed with hasNext=true');
+
+        }
+
+        if (!$closed && !$frame['hasNext']) {
+            throw new \UnexpectedValueException('Frames follow hasNext=false');
+
+        }
+
+        yield $frame;
+
+        if ($closed) {
+            return;
+
+        }
+
+    }
+
+}
+
+function applyIncremental(mixed $snapshot, array $patch): mixed
+{
+    $path = $patch['path'] ?? null;
+
+    if (!is_array($path) || !array_is_list($path)) {
+        throw new \UnexpectedValueException('Patch requires path');
+
+    }
+
+    foreach ($path as $key) {
+        if (!is_string($key) && (!is_int($key) || $key < 0)) {
+            throw new \UnexpectedValueException('Invalid patch path');
+
+        }
+
+    }
+
+    $target = &$snapshot;
+
+    foreach ($path as $index => $key) {
+        if (array_key_exists('items', $patch) && $index === count($path) - 1) {
+            if (
+                !is_int($key)
+                || !is_array($target)
+                || !array_is_list($target)
+                || $key !== count($target)
+                || !is_array($patch['items'])
+            ) {
+                throw new \UnexpectedValueException('Stream patches must append next items');
+
+            }
+            array_push($target, ...$patch['items']);
+
+            return $snapshot;
+
+        }
+
+        if (!is_array($target) || !array_key_exists($key, $target)) {
+            throw new \UnexpectedValueException('Patch path not found');
+
+        }
+        $target = &$target[$key];
+
+    }
+
+    if (!array_key_exists('data', $patch)) {
+        if (!empty($patch['errors'])) {
+            return $snapshot;
+
+        }
+        throw new \UnexpectedValueException('Patch requires data, items or errors');
+
+    }
+
+    $target = is_array($target) && is_array($patch['data']) ? array_replace($target, $patch['data']) : $patch['data'];
+
+    return $snapshot;
+
+}

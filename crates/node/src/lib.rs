@@ -4,6 +4,8 @@ pub mod graphql;
 mod graphql_addons;
 pub mod materialize;
 mod output_options;
+mod sdk_package;
+use sdk_package::{SdkPackage, package_common, validate_options};
 
 use std::path::Path;
 
@@ -13,8 +15,8 @@ use napi::{Env, Error, Result, Status};
 use napi_derive::napi;
 use poolster::prelude::*;
 use poolster::{
-    csharp, dotnet, elixir, go, java, php, postman, python, ruby, rust, rust_cli, swift, symfony,
-    ts, ts_cli,
+    csharp, elixir, go, java, php, postman, python, ruby, rust, rust_cli, swift, symfony, ts,
+    ts_cli,
 };
 use poolster_core::{Api, GeneratedFile, GeneratedTree, SecuritySchemeCatalog};
 use poolster_input_openapi::OpenApiSidecar;
@@ -26,53 +28,6 @@ use serde::{Deserialize, Serialize};
 struct Contract {
     api: Api,
     security_schemes: SecuritySchemeCatalog,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct SdkPackage {
-    language: String,
-    #[serde(default)]
-    command_name: Option<String>,
-    #[serde(default)]
-    endpoint: Option<String>,
-    path: String,
-    #[serde(default)]
-    name: Option<String>,
-    #[serde(default)]
-    version: Option<String>,
-    #[serde(default)]
-    style: Option<String>,
-    #[serde(default)]
-    scalars: std::collections::BTreeMap<String, ts::GraphqlScalarMapping>,
-    #[serde(default)]
-    groups: std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>,
-    #[serde(default)]
-    contracts: std::collections::BTreeMap<String, output_options::ContractOptions>,
-    #[serde(default)]
-    transport: Option<String>,
-    #[serde(default)]
-    client_name: Option<String>,
-    #[serde(default)]
-    raw: Option<bool>,
-    #[serde(default)]
-    subscriptions: Option<bool>,
-    #[serde(default)]
-    jobs: Option<usize>,
-    #[serde(default)]
-    plugins: Vec<NativePlugin>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct NativePlugin {
-    name: String,
-    #[serde(default)]
-    fixture_options: Option<ts::FixtureOptions>,
-    #[serde(default)]
-    cypress_options: Option<ts::CypressOptions>,
-    #[serde(default)]
-    output: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -92,50 +47,6 @@ fn napi_error(error: impl std::fmt::Display) -> Error {
 
 fn napi_anyhow(error: anyhow::Error) -> Error {
     napi_error(format!("{error:#}"))
-}
-
-fn package_common(package: &SdkPackage) -> AnyResult<Common> {
-    let mut common = Common::default();
-    if let Some(style) = package.style.as_deref() {
-        common = common.client_style(match style {
-            "flat" => SdkClientStyle::Flat,
-            "namespaced" => SdkClientStyle::Namespaced,
-            _ => bail!("SDK style must be flat or namespaced"),
-        });
-    }
-    if let Some(version) = &package.version {
-        common = common.package_version(version);
-    }
-    Ok(common)
-}
-
-fn validate_options(package: &SdkPackage) -> AnyResult<()> {
-    if package.command_name.is_some() || package.endpoint.is_some() {
-        bail!("commandName and endpoint require GraphQL tool output");
-    }
-    if !package.scalars.is_empty() || !package.groups.is_empty() {
-        bail!("scalar mappings and groups require GraphQL input");
-    }
-    if package.path.is_empty() {
-        bail!("SDK package path must not be empty");
-    }
-    if package.language != "typescript"
-        && (package.transport.is_some()
-            || package.client_name.is_some()
-            || package.raw.unwrap_or(false))
-    {
-        bail!("transport, clientName and raw are TypeScript-only SDK options");
-    }
-    if package.language != "go" && package.jobs.is_some() {
-        bail!("jobs is a Go-only SDK option");
-    }
-    if package.jobs == Some(0) {
-        bail!("jobs must be at least 1");
-    }
-    if package.language != "typescript" && !package.plugins.is_empty() {
-        bail!("registered native auxiliaries currently require a TypeScript package");
-    }
-    Ok(())
 }
 
 fn profiles(packages: Vec<SdkPackage>) -> AnyResult<ProfileSet> {

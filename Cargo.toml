@@ -24,7 +24,6 @@ members = [
     "crates/plugins/postman",
     "crates/plugins/java",
     "crates/plugins/csharp",
-    "crates/plugins/dotnet",
     "crates/plugins/elixir",
     "crates/plugins/ruby",
     "crates/plugins/swift",

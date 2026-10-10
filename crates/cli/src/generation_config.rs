@@ -74,6 +74,14 @@ pub(super) fn load_config_options(
     let output = config_path(base, config.output.path.clone());
     for package in &mut config.packages {
         GeneratedFile::new(&package.path, "")?;
+        if let Some(poolster_core::SourceQuality::Formatted { formatter, .. }) =
+            &mut package.source_quality
+        {
+            let program = PathBuf::from(&formatter.program);
+            if program.is_relative() && program.components().count() > 1 {
+                formatter.program = config_path(base, program).to_string_lossy().into_owned();
+            }
+        }
         if config
             .input
             .as_ref()

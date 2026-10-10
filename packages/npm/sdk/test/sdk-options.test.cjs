@@ -66,6 +66,18 @@ test('language plugin packages select native SDK renderers', async (t) => {
     assert.notDeepEqual(regular.files, changed.files);
   });
 
+  await t.test('source quality reaches native package assembly', async () => {
+    const result = await generate(config({ artifacts: compiled }, path.join(dir, 'quality'), [
+      bundle.pluginTypeScript({ sourceQuality: { mode: 'unformatted', reason: 'Explicit test policy' } }),
+    ]), { write: false });
+    const report = result.files.find(file => file.path === 'typescript/.poolster/source-quality.json');
+    assert.equal(JSON.parse(report.contents).status, 'unformatted');
+    assert.equal(JSON.parse(report.contents).reason, 'Explicit test policy');
+    await assert.rejects(generate(config({ artifacts: compiled }, path.join(dir, 'bad-quality'), [
+      bundle.pluginTypeScript({ sourceQuality: { mode: 'unformatted', reason: '' } }),
+    ]), { write: false }), /requires a reason/);
+  });
+
   await t.test('unsupported combinations reject before writing', async () => {
     const cases = [
       [bundle.pluginTypeScript({ transport: 'bogus' }), /transport must be fetch or axios/],

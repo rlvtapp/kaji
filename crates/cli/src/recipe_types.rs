@@ -163,6 +163,7 @@ pub(super) struct OutputConfig {
 pub(super) struct DefaultsConfig {
     pub(super) client_style: Option<String>,
     pub(super) layout: Option<poolster_core::SourceLayout>,
+    pub(super) source_quality: Option<poolster_core::SourceQuality>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -177,6 +178,7 @@ pub(super) struct PackageConfig {
     #[serde(default)]
     pub(super) sdk_raw: bool,
     pub(super) layout: Option<poolster_core::SourceLayout>,
+    pub(super) source_quality: Option<poolster_core::SourceQuality>,
     #[serde(default)]
     pub(super) api_reference: bool,
     #[serde(default)]

@@ -201,9 +201,9 @@ fn export_runtime_contract_fixture() {
                     .with(poolster::java::sdk()),
             )
             .package(
-                poolster::dotnet::package("csharp")
+                poolster::csharp::package("csharp")
                     .name("ContractSdk")
-                    .with(poolster::dotnet::sdk()),
+                    .with(poolster::csharp::sdk()),
             )
             .package(
                 poolster::php::package("php")

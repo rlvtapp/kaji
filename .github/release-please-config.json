@@ -16,7 +16,7 @@
         {
           "type": "toml",
           "path": "Cargo.lock",
-          "jsonpath": "$.package[?(@.name.value == \"poolster-core\" || @.name.value == \"poolster\" || @.name.value == \"poolster-cli\" || @.name.value == \"poolster-node\" || @.name.value == \"poolster-plugin-rust\" || @.name.value == \"poolster-plugin-typescript\" || @.name.value == \"poolster-plugin-typescript-cli\" || @.name.value == \"poolster-plugin-rust-cli\" || @.name.value == \"poolster-plugin-go\" || @.name.value == \"poolster-plugin-python\" || @.name.value == \"poolster-plugin-php\" || @.name.value == \"poolster-plugin-symfony\" || @.name.value == \"poolster-plugin-terraform\" || @.name.value == \"poolster-plugin-postman\" || @.name.value == \"poolster-plugin-java\" || @.name.value == \"poolster-plugin-csharp\" || @.name.value == \"poolster-plugin-dotnet\" || @.name.value == \"poolster-plugin-elixir\" || @.name.value == \"poolster-plugin-ruby\" || @.name.value == \"poolster-plugin-swift\" || @.name.value == \"poolster-input-openapi\" || @.name.value == \"poolster-inputs\" || @.name.value == \"poolster-input-graphql\" || @.name.value == \"poolster-input-asyncapi\" || @.name.value == \"poolster-input-arazzo\" || @.name.value == \"poolster-input-protobuf\" || @.name.value == \"poolster-input-capnproto\")].version"
+          "jsonpath": "$.package[?(@.name.value == \"poolster-core\" || @.name.value == \"poolster\" || @.name.value == \"poolster-cli\" || @.name.value == \"poolster-node\" || @.name.value == \"poolster-plugin-rust\" || @.name.value == \"poolster-plugin-typescript\" || @.name.value == \"poolster-plugin-typescript-cli\" || @.name.value == \"poolster-plugin-rust-cli\" || @.name.value == \"poolster-plugin-go\" || @.name.value == \"poolster-plugin-python\" || @.name.value == \"poolster-plugin-php\" || @.name.value == \"poolster-plugin-symfony\" || @.name.value == \"poolster-plugin-terraform\" || @.name.value == \"poolster-plugin-postman\" || @.name.value == \"poolster-plugin-java\" || @.name.value == \"poolster-plugin-csharp\" || @.name.value == \"poolster-plugin-elixir\" || @.name.value == \"poolster-plugin-ruby\" || @.name.value == \"poolster-plugin-swift\" || @.name.value == \"poolster-input-openapi\" || @.name.value == \"poolster-inputs\" || @.name.value == \"poolster-input-graphql\" || @.name.value == \"poolster-input-asyncapi\" || @.name.value == \"poolster-input-arazzo\" || @.name.value == \"poolster-input-protobuf\" || @.name.value == \"poolster-input-capnproto\")].version"
         },
         {
           "type": "json",
@@ -375,11 +375,6 @@
         {
           "type": "toml",
           "path": "crates/facade/Cargo.toml",
-          "jsonpath": "$.dependencies[\"poolster-plugin-dotnet\"].version"
-        },
-        {
-          "type": "toml",
-          "path": "crates/facade/Cargo.toml",
           "jsonpath": "$.dependencies[\"poolster-plugin-elixir\"].version"
         },
         {
@@ -476,16 +471,6 @@
           "type": "toml",
           "path": "crates/plugins/csharp/Cargo.toml",
           "jsonpath": "$.dependencies[\"poolster-core\"].version"
-        },
-        {
-          "type": "toml",
-          "path": "crates/plugins/dotnet/Cargo.toml",
-          "jsonpath": "$.dependencies[\"poolster-core\"].version"
-        },
-        {
-          "type": "toml",
-          "path": "crates/plugins/dotnet/Cargo.toml",
-          "jsonpath": "$.dependencies[\"poolster-plugin-csharp\"].version"
         },
         {
           "type": "toml",

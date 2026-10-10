@@ -1,155 +1,248 @@
 import Foundation
+
 #if canImport(FoundationNetworking)
-import FoundationNetworking
+  import FoundationNetworking
 #endif
 
 public enum PoolsterStreamingError: Error, LocalizedError, Sendable {
-    case unsupportedTransport, customSessionDelegate, invalidResponse, invalidContentType, frameLimit, chunkLimit, bufferLimit
-    public var errorDescription:String? {
-        switch self {
-        case .unsupportedTransport: return "Selected transport/decorator does not implement PoolsterStreamingTransport. Supply a streaming-capable decorator; buffered middleware cannot be bypassed."
-        case .customSessionDelegate: return "Custom URLSession delegates require an explicit PoolsterStreamingTransport implementation."
-        default: return "Poolster event stream failed a response or bounded-memory check."
-        }
+  case unsupportedTransport, customSessionDelegate, invalidResponse, invalidContentType, frameLimit,
+    chunkLimit, bufferLimit
+  public var errorDescription: String? {
+    switch self {
+    case .unsupportedTransport:
+      return
+        "Selected transport/decorator does not implement PoolsterStreamingTransport. Supply a streaming-capable decorator; buffered middleware cannot be bypassed."
+    case .customSessionDelegate:
+      return
+        "Custom URLSession delegates require an explicit PoolsterStreamingTransport implementation."
+    default: return "Poolster event stream failed a response or bounded-memory check."
     }
+  }
 }
 public struct PoolsterByteStream: Sendable {
-    public let response: HTTPURLResponse
-    public let chunks: AsyncThrowingStream<Data, Error>
-    public let cancel: @Sendable () -> Void
-    public init(response: HTTPURLResponse, chunks: AsyncThrowingStream<Data, Error>, cancel: @escaping @Sendable () -> Void = {}) { self.response=response;self.chunks=chunks;self.cancel=cancel }
+  public let response: HTTPURLResponse
+  public let chunks: AsyncThrowingStream<Data, Error>
+  public let cancel: @Sendable () -> Void
+  public init(
+    response: HTTPURLResponse, chunks: AsyncThrowingStream<Data, Error>,
+    cancel: @escaping @Sendable () -> Void = {}
+  ) {
+    self.response = response
+    self.chunks = chunks
+    self.cancel = cancel
+  }
 }
 /// Buffered-only decorators fail with unsupportedTransport; implement this capability to preserve streaming policy.
 public protocol PoolsterStreamingTransport: PoolsterTransport {
-    func stream(_ request: URLRequest) async throws -> PoolsterByteStream
+  func stream(_ request: URLRequest) async throws -> PoolsterByteStream
 }
 public typealias PoolsterStreamingNext = @Sendable (URLRequest) async throws -> PoolsterByteStream
-public typealias PoolsterStreamingMiddleware = @Sendable (URLRequest, PoolsterStreamingNext) async throws -> PoolsterByteStream
+public typealias PoolsterStreamingMiddleware =
+  @Sendable (URLRequest, PoolsterStreamingNext) async throws -> PoolsterByteStream
 public struct PoolsterStreamingMiddlewareTransport: PoolsterStreamingTransport {
-    private let inner: any PoolsterStreamingTransport
-    private let middleware: PoolsterStreamingMiddleware
-    public init(inner: any PoolsterStreamingTransport, middleware: @escaping PoolsterStreamingMiddleware) { self.inner=inner;self.middleware=middleware }
-    public func execute(_ request: URLRequest) async throws -> (Data, URLResponse) { try await inner.execute(request) }
-    public func stream(_ request: URLRequest) async throws -> PoolsterByteStream { try await middleware(request, { try await inner.stream($0) }) }
+  private let inner: any PoolsterStreamingTransport
+  private let middleware: PoolsterStreamingMiddleware
+  public init(
+    inner: any PoolsterStreamingTransport, middleware: @escaping PoolsterStreamingMiddleware
+  ) {
+    self.inner = inner
+    self.middleware = middleware
+  }
+  public func execute(_ request: URLRequest) async throws -> (Data, URLResponse) {
+    try await inner.execute(request)
+  }
+  public func stream(_ request: URLRequest) async throws -> PoolsterByteStream {
+    try await middleware(request, { try await inner.stream($0) })
+  }
 }
 public struct PoolsterEventSequence: AsyncSequence, Sendable {
-    public typealias Element=String
+  public typealias Element = String
+  let fetch: @Sendable () async throws -> PoolsterByteStream
+  public func makeAsyncIterator() -> Iterator { Iterator(fetch: fetch) }
+  public final class Iterator: AsyncIteratorProtocol {
     let fetch: @Sendable () async throws -> PoolsterByteStream
-    public func makeAsyncIterator() -> Iterator { Iterator(fetch:fetch) }
-    public final class Iterator: AsyncIteratorProtocol {
-        let fetch: @Sendable () async throws -> PoolsterByteStream
-        var iterator: AsyncThrowingStream<Data,Error>.Iterator?
-        var cancel: (@Sendable () -> Void)?
-        private var parser=PoolsterSSEParser()
-        var events:[String]=[]
-        var done=false
-        init(fetch:@escaping @Sendable () async throws -> PoolsterByteStream) {self.fetch=fetch}
-        deinit {cancel?()}
-        public func next() async throws -> String? {
-            do {
-                try Task.checkCancellation()
-                if done {return nil}
-                if iterator == nil {let stream=try await fetch();cancel=stream.cancel;iterator=stream.chunks.makeAsyncIterator()}
-                while events.isEmpty {
-                    guard var current=iterator else {return nil}
-                    let packet=try await current.next();iterator=current
-                    try Task.checkCancellation()
-                    guard let packet else {done=true;cancel?();return nil} // Incomplete final events are discarded at EOF.
-                    guard packet.count<=65536 else {throw PoolsterStreamingError.chunkLimit}
-                    events=try parser.consume(packet)
-                }
-                return events.removeFirst()
-            } catch {done=true;cancel?();throw error}
+    var iterator: AsyncThrowingStream<Data, Error>.Iterator?
+    var cancel: (@Sendable () -> Void)?
+    private var parser = PoolsterSSEParser()
+    var events: [String] = []
+    var done = false
+    init(fetch: @escaping @Sendable () async throws -> PoolsterByteStream) { self.fetch = fetch }
+    deinit { cancel?() }
+    public func next() async throws -> String? {
+      do {
+        try Task.checkCancellation()
+        if done { return nil }
+        if iterator == nil {
+          let stream = try await fetch()
+          cancel = stream.cancel
+          iterator = stream.chunks.makeAsyncIterator()
         }
+        while events.isEmpty {
+          guard var current = iterator else { return nil }
+          let packet = try await current.next()
+          iterator = current
+          try Task.checkCancellation()
+          guard let packet else {
+            done = true
+            cancel?()
+            return nil
+          }  // Incomplete final events are discarded at EOF.
+          guard packet.count <= 65536 else { throw PoolsterStreamingError.chunkLimit }
+          events = try parser.consume(packet)
+        }
+        return events.removeFirst()
+      } catch {
+        done = true
+        cancel?()
+        throw error
+      }
     }
+  }
 }
 private struct PoolsterSSEParser {
-    var line:[UInt8]=[]
-    var data:[String]=[]
-    var dataBytes=0
-    var afterCR=false
-    var first=true
-    mutating func consume(_ packet:Data) throws -> [String] {
-        var events:[String]=[]
-        for byte in packet {
-            if byte==10 && afterCR {afterCR=false;continue}
-            if byte==10 || byte==13 {
-                var text=String(decoding:line,as:UTF8.self);line.removeAll(keepingCapacity:true)
-                if first {first=false;if text.first=="\u{feff}" {text.removeFirst()}}
-                if text.isEmpty {
-                    if !data.isEmpty {events.append(data.joined(separator:"\n"));data.removeAll(keepingCapacity:true);dataBytes=0}
-                } else if text.first != ":" {
-                    let parts=text.split(separator:":",maxSplits:1,omittingEmptySubsequences:false)
-                    if parts[0]=="data" {
-                        var value=parts.count==2 ? String(parts[1]) : ""
-                        if value.first==" " {value.removeFirst()}
-                        dataBytes+=value.utf8.count+1
-                        guard dataBytes<=1048576 && data.count<16384 else {throw PoolsterStreamingError.frameLimit}
-                        data.append(value)
-                    }
-                }
-                afterCR=byte==13
-            } else {
-                afterCR=false;line.append(byte)
-                guard line.count<=1048576 else {throw PoolsterStreamingError.frameLimit}
-            }
+  var line: [UInt8] = []
+  var data: [String] = []
+  var dataBytes = 0
+  var afterCR = false
+  var first = true
+  mutating func consume(_ packet: Data) throws -> [String] {
+    var events: [String] = []
+    for byte in packet {
+      if byte == 10 && afterCR {
+        afterCR = false
+        continue
+      }
+      if byte == 10 || byte == 13 {
+        var text = String(decoding: line, as: UTF8.self)
+        line.removeAll(keepingCapacity: true)
+        if first {
+          first = false
+          if text.first == "\u{feff}" { text.removeFirst() }
         }
-        return events
+        if text.isEmpty {
+          if !data.isEmpty {
+            events.append(data.joined(separator: "\n"))
+            data.removeAll(keepingCapacity: true)
+            dataBytes = 0
+          }
+        } else if text.first != ":" {
+          let parts = text.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+          if parts[0] == "data" {
+            var value = parts.count == 2 ? String(parts[1]) : ""
+            if value.first == " " { value.removeFirst() }
+            dataBytes += value.utf8.count + 1
+            guard dataBytes <= 1_048_576 && data.count < 16384 else {
+              throw PoolsterStreamingError.frameLimit
+            }
+            data.append(value)
+          }
+        }
+        afterCR = byte == 13
+      } else {
+        afterCR = false
+        line.append(byte)
+        guard line.count <= 1_048_576 else { throw PoolsterStreamingError.frameLimit }
+      }
     }
+    return events
+  }
 }
 
 /// Dedicated session preserves configuration/cookie storage. Custom session delegates need an explicit streaming transport.
-internal final class PoolsterURLSessionStream: NSObject, URLSessionDataDelegate, @unchecked Sendable {
-    let lock=NSLock()
-    let chunks:AsyncThrowingStream<Data,Error>
-    let continuation:AsyncThrowingStream<Data,Error>.Continuation
-    var session:URLSession?
-    var task:URLSessionDataTask?
-    var responseWaiter:CheckedContinuation<HTTPURLResponse,Error>?
-    var stopped=false
-    init(configuration:URLSessionConfiguration) {
-        let pair=AsyncThrowingStream<Data,Error>.makeStream(bufferingPolicy:.bufferingOldest(32))
-        chunks=pair.stream;continuation=pair.continuation
-        super.init()
-        session=URLSession(configuration:configuration,delegate:self,delegateQueue:nil)
-        continuation.onTermination={ [weak self] _ in self?.stop(CancellationError()) }
-    }
-    func open(_ request:URLRequest) async throws -> PoolsterByteStream {
-        let response:HTTPURLResponse=try await withTaskCancellationHandler(operation: {
-            try await withCheckedThrowingContinuation { (waiter:CheckedContinuation<HTTPURLResponse,Error>) in
-                lock.lock()
-                if stopped {lock.unlock();waiter.resume(throwing:CancellationError());return}
-                responseWaiter=waiter
-                let task=session!.dataTask(with:request);self.task=task
-                lock.unlock();task.resume()
-            }
-        }, onCancel:{self.stop(CancellationError())})
-        return PoolsterByteStream(response:response,chunks:chunks,cancel:{self.stop(CancellationError())})
-    }
-    func stop(_ error:Error?) {
-        lock.lock();if stopped {lock.unlock();return};stopped=true
-        let waiter=responseWaiter;responseWaiter=nil;let task=self.task;let session=self.session;lock.unlock()
-        waiter?.resume(throwing:error ?? PoolsterStreamingError.invalidResponse)
-        if let error {continuation.finish(throwing:error)} else {continuation.finish()}
-        task?.cancel();session?.invalidateAndCancel()
-    }
-    func urlSession(_ session:URLSession,dataTask:URLSessionDataTask,didReceive response:URLResponse,completionHandler:@escaping @Sendable (URLSession.ResponseDisposition)->Void) {
-        guard let response=response as? HTTPURLResponse else {completionHandler(.cancel);stop(PoolsterStreamingError.invalidResponse);return}
-        lock.lock();let waiter=responseWaiter;responseWaiter=nil;let active = !stopped;lock.unlock()
-        waiter?.resume(returning:response);completionHandler(active ? .allow : .cancel)
-    }
-    func urlSession(_ session:URLSession,dataTask:URLSessionDataTask,didReceive data:Data) {
-        for start in stride(from:0,to:data.count,by:32768) {
-            let packet=data.subdata(in:start..<min(data.count,start+32768))
-            switch continuation.yield(packet) {
-            case .enqueued: break
-            case .dropped: stop(PoolsterStreamingError.bufferLimit);return
-            case .terminated: return
-            @unknown default: stop(PoolsterStreamingError.bufferLimit);return
-            }
+internal final class PoolsterURLSessionStream: NSObject, URLSessionDataDelegate, @unchecked Sendable
+{
+  let lock = NSLock()
+  let chunks: AsyncThrowingStream<Data, Error>
+  let continuation: AsyncThrowingStream<Data, Error>.Continuation
+  var session: URLSession?
+  var task: URLSessionDataTask?
+  var responseWaiter: CheckedContinuation<HTTPURLResponse, Error>?
+  var stopped = false
+  init(configuration: URLSessionConfiguration) {
+    let pair = AsyncThrowingStream<Data, Error>.makeStream(bufferingPolicy: .bufferingOldest(32))
+    chunks = pair.stream
+    continuation = pair.continuation
+    super.init()
+    session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
+    continuation.onTermination = { [weak self] _ in self?.stop(CancellationError()) }
+  }
+  func open(_ request: URLRequest) async throws -> PoolsterByteStream {
+    let response: HTTPURLResponse = try await withTaskCancellationHandler(
+      operation: {
+        try await withCheckedThrowingContinuation {
+          (waiter: CheckedContinuation<HTTPURLResponse, Error>) in
+          lock.lock()
+          if stopped {
+            lock.unlock()
+            waiter.resume(throwing: CancellationError())
+            return
+          }
+          responseWaiter = waiter
+          let task = session!.dataTask(with: request)
+          self.task = task
+          lock.unlock()
+          task.resume()
         }
+      }, onCancel: { self.stop(CancellationError()) })
+    return PoolsterByteStream(
+      response: response, chunks: chunks, cancel: { self.stop(CancellationError()) })
+  }
+  func stop(_ error: Error?) {
+    lock.lock()
+    if stopped {
+      lock.unlock()
+      return
     }
-    func urlSession(_ session:URLSession,task:URLSessionTask,didCompleteWithError error:Error?) {stop(error)}
-    // Authorization must never follow a redirect to a different origin.
-    func urlSession(_ session:URLSession,task:URLSessionTask,willPerformHTTPRedirection response:HTTPURLResponse,newRequest request:URLRequest,completionHandler:@escaping @Sendable (URLRequest?)->Void) { completionHandler(nil) }
+    stopped = true
+    let waiter = responseWaiter
+    responseWaiter = nil
+    let task = self.task
+    let session = self.session
+    lock.unlock()
+    waiter?.resume(throwing: error ?? PoolsterStreamingError.invalidResponse)
+    if let error { continuation.finish(throwing: error) } else { continuation.finish() }
+    task?.cancel()
+    session?.invalidateAndCancel()
+  }
+  func urlSession(
+    _ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
+    completionHandler: @escaping @Sendable (URLSession.ResponseDisposition) -> Void
+  ) {
+    guard let response = response as? HTTPURLResponse else {
+      completionHandler(.cancel)
+      stop(PoolsterStreamingError.invalidResponse)
+      return
+    }
+    lock.lock()
+    let waiter = responseWaiter
+    responseWaiter = nil
+    let active = !stopped
+    lock.unlock()
+    waiter?.resume(returning: response)
+    completionHandler(active ? .allow : .cancel)
+  }
+  func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+    for start in stride(from: 0, to: data.count, by: 32768) {
+      let packet = data.subdata(in: start..<min(data.count, start + 32768))
+      switch continuation.yield(packet) {
+      case .enqueued: break
+      case .dropped:
+        stop(PoolsterStreamingError.bufferLimit)
+        return
+      case .terminated: return
+      @unknown default:
+        stop(PoolsterStreamingError.bufferLimit)
+        return
+      }
+    }
+  }
+  func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+    stop(error)
+  }
+  // Authorization must never follow a redirect to a different origin.
+  func urlSession(
+    _ session: URLSession, task: URLSessionTask,
+    willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest,
+    completionHandler: @escaping @Sendable (URLRequest?) -> Void
+  ) { completionHandler(nil) }
 }

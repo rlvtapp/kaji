@@ -104,7 +104,12 @@ fn namespaced_style_exports_resource_facades_and_a_style_guide() {
     let resource = tree
         .get("java/src/main/java/com/poolster/email/ContactsResource.java")
         .unwrap();
-    assert!(client.contains("public ContactsResource contacts() { return contactsResource; }"));
+    assert!(
+        client
+            .split_whitespace()
+            .collect::<String>()
+            .contains("publicContactsResourcecontacts(){returncontactsResource;}")
+    );
     assert!(resource.contains("extends ContactsResourcePart000"));
     assert!(client.contains("public Contact get(Client.GetContactRequest input)"));
     assert!(client.contains("return client.getContact(input);"));

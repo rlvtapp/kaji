@@ -10,7 +10,7 @@ fn profiles() -> ProfileSet {
         .package(poolster::php::package("php").with(poolster::php::sdk()))
         .package(poolster::ruby::package("ruby").with(poolster::ruby::sdk()))
         .package(poolster::java::package("java").with(poolster::java::sdk()))
-        .package(poolster::dotnet::package("dotnet").with(poolster::dotnet::sdk()))
+        .package(poolster::csharp::package("csharp").with(poolster::csharp::sdk()))
         .package(poolster::elixir::package("elixir").with(poolster::elixir::sdk()))
         .package(poolster::swift::package("swift").with(poolster::swift::sdk()))
 }
@@ -44,7 +44,7 @@ fn all_sdk_targets_emit_validated_custom_tokens() {
         "php",
         "ruby",
         "java",
-        "dotnet",
+        "csharp",
         "elixir",
         "swift",
     ] {

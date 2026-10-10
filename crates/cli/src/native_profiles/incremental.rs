@@ -183,30 +183,6 @@ pub(super) fn append(
             }
             profiles = profiles.package(target);
         }
-        "dotnet" => {
-            let generator =
-                dotnet::graphql_incremental(Some(input.handle())).groups(groups.clone());
-            if !scalars_config.is_empty() {
-                bail!(
-                    "This GraphQL output uses runtime scalar callbacks, not source type mappings"
-                );
-            }
-            let generator = if raw || style == "raw" {
-                generator.raw()
-            } else if style == "flat" {
-                generator.flat()
-            } else {
-                generator.idiomatic()
-            };
-            let mut target = dotnet::package(path)
-                .common(common)
-                .with(input)
-                .with(generator);
-            if let Some(name) = name {
-                target = target.name(name);
-            }
-            profiles = profiles.package(target);
-        }
         "ruby" => {
             let generator = ruby::graphql_incremental(Some(input.handle())).groups(groups.clone());
             if !scalars_config.is_empty() {

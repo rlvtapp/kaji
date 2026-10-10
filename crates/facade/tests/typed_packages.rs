@@ -1,5 +1,5 @@
 mod support;
-use poolster::{csharp, dotnet, prelude::*, ts};
+use poolster::{csharp, prelude::*, ts};
 
 struct CommunityConsumer {
     meta: Meta,
@@ -155,16 +155,4 @@ fn csharp_is_a_first_class_sdk_generator() {
             .unwrap()
             .contains("HttpClient")
     );
-}
-
-#[test]
-fn dotnet_remains_a_compatible_rust_target() {
-    let package: Package<dotnet::DotNet> = dotnet::package("dotnet");
-    let tree = poolster::generate(
-        &support::sdk_contract_api(),
-        ProfileSet::new("sdk").package(package.name("acme-email").with(dotnet::sdk().namespaced())),
-    )
-    .unwrap();
-
-    assert!(tree.get("sdk/dotnet/AcmeEmail.csproj").is_some());
 }

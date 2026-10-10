@@ -1,2 +1,5 @@
-    /// Provider failures are typed and redact issuer credentials and response bodies.
-    pub fn with_token_provider(mut self, provider: Arc<dyn BearerTokenProvider>) -> Self { self.token_provider = Some(provider); self }
+/// Provider failures are typed and redact issuer credentials and response bodies.
+pub fn with_token_provider(mut self, provider: Arc<dyn BearerTokenProvider>) -> Self {
+    self.token_provider = Some(provider);
+    self
+}
