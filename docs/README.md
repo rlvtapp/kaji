@@ -25,5 +25,6 @@ Generate packages from API contracts. Start with the interface you use.
 The docs describe this checkout. GraphQL additions are **unreleased**; published
 `0.5.0-alpha.1` packages do not contain every feature shown here.
 
+[Generated SDK specification](specifications/generated-sdk.md) ·
 [Support matrix](plugin-support-matrix.md) · [API and CLI reference](reference/README.md) ·
 [Examples](../examples/README.md) · [Verification](verification/verification.md)

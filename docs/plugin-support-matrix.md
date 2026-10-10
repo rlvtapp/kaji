@@ -3,6 +3,9 @@
 Audited **10 October 2026**, against the unreleased alpha.2 implementation in this checkout.
 Manifests still use `0.5.0-alpha.1`; the additions below are unreleased alpha.2
 work. This matrix describes implemented generation, not parser availability.
+The [generated SDK specification](specifications/generated-sdk.md) defines target
+requirements for capabilities, API styles, source layout, naming and formatting;
+it is separate from current implementation coverage.
 For remaining work, start with the [native pipeline backlog](reference/inputs/native-pipelines.md#remaining-work).
 
 GraphQL React Query, Vue Query, SWR, Zod, Faker, MSW and Cypress integrations now

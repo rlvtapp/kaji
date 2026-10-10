@@ -5,6 +5,10 @@ documents produce selection-specific models, query/mutation functions and transp
 code. Choose raw functions, flat client methods or grouped methods; the layout
 does not change which fields the supplied documents select.
 
+The [generated SDK specification](../../specifications/generated-sdk.md) defines
+target layout, formatting and style requirements for all languages. This page
+describes the implemented GraphQL layouts.
+
 ## Where generated code lives
 
 | Language | Layout | Guide |
@@ -14,6 +18,7 @@ does not change which fields the supplied documents select.
 | Go | Model, operation, group and transport files in one Go package | [Go](graphql-go.md) |
 | Python | Model and operation packages; client/group mixins; separate runtime | [Python](graphql-python.md) |
 | PHP | Composer loader; models, operations and method traits; separate runtime/client | [PHP](graphql-php.md) |
+| Symfony | PHP SDK layout plus separate bundle, HttpClient transport and DI files | [Symfony](graphql-symfony.md) |
 | Ruby | Model, operation and group Ruby/RBS files; loader and runtime | [Ruby](graphql-ruby.md) |
 | Java | Thin client; `models`, `operations`, `groups`; runtime | [Java](graphql-java.md) |
 | C# / DotNet | `Models/`, `Operations/`, `Groups/`, `Client/`, `Runtime/`; partial declarations | [C#](graphql-csharp.md) |

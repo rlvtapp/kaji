@@ -18,6 +18,16 @@ generation wiring and shared naming adoption. Forge overlays/migration and Capâ€
 Web remain separate unimplemented work. Follow the linked native checklist rather
 than treating parser availability as generated-output support.
 
+## Generated source quality specification
+
+The [generated SDK specification](../specifications/generated-sdk.md) defines
+requirements for all language outputs. These are adoption tasks, not completed claims:
+
+- [ ] Replace compact PHP GraphQL models, methods and runtime blocks with conventional formatted source, including Symfony output.
+- [ ] Audit and pin each target formatter/configuration; verify emitted source and clean consumer imports.
+- [ ] Measure final formatted file budgets and verify bounded facade/export splitting per target.
+- [ ] Record style, naming and package conformance against the specification, with executed evidence and explicit exceptions.
+
 ## 1. Get every SDK language green
 
 - [x] **GREEN-1:** Add small regressions for the corpus failure causes: normalized
