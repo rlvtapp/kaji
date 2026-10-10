@@ -1,0 +1,32 @@
+<?php
+
+declare(strict_types=1);
+
+namespace __NAMESPACE__;
+
+use Symfony\Contracts\HttpClient\HttpClientInterface;
+
+/** Callable transport used by the portable PHP GraphQL client. */
+final readonly class GraphqlTransport
+{
+    public function __construct(private HttpClientInterface $httpClient) {}
+
+    /** @param array<string,string> $headers @return array{int,string} */
+    public function __invoke(string $endpoint, string $body, array $headers, float $timeout): array
+    {
+        // Caller header casing must not accidentally create duplicate defaults.
+        $normalized = ['content-type' => 'application/json', 'accept' => 'application/graphql-response+json, application/json'];
+        foreach ($headers as $name => $value) {
+            $normalized[strtolower($name)] = $value;
+        }
+        $response = $this->httpClient->request('POST', $endpoint, [
+            'headers' => $normalized,
+            'body' => $body,
+            'timeout' => $timeout,
+            'max_duration' => $timeout,
+            'max_redirects' => 0,
+        ]);
+        // Preserve non-2xx bodies; the SDK owns status and GraphQL error handling.
+        return [$response->getStatusCode(), $response->getContent(false)];
+    }
+}

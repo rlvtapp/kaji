@@ -285,3 +285,19 @@ fn graphql_advanced_recipes_dispatch_all_sdk_languages_and_skip_unary_tools() {
         assert!(metadata.contains("types.graphql"));
     }
 }
+
+#[test]
+fn graphql_symfony_recipe_generates_bundle_and_preserves_regeneration() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = recipe(
+        directory.path(),
+        serde_json::json!([{"language":"symfony","path":"bundle","name":"acme/graphql","plugins":[{"name":"graphql","style":"flat"}]}]),
+    );
+    generate_from_config(&path, ColorChoice::Never, false, false).unwrap();
+    let root = directory.path().join("generated/bundle");
+    assert!(root.join("src/Client.php").exists());
+    assert!(root.join("src/Symfony/AcmeGraphqlBundle.php").exists());
+    let manifest = std::fs::read_to_string(root.join("composer.json")).unwrap();
+    assert!(manifest.contains("symfony/http-client"));
+    generate_from_config(&path, ColorChoice::Never, true, false).unwrap();
+}

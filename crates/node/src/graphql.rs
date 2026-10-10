@@ -52,6 +52,7 @@ fn generate(request: &str) -> AnyResult<String> {
             "go",
             "python",
             "php",
+            "symfony",
             "java",
             "csharp",
             "dotnet",
@@ -246,6 +247,36 @@ fn generate(request: &str) -> AnyResult<String> {
                 generator.idiomatic()
             };
             let mut target = php::package(package.path)
+                .common(common)
+                .with(generator)
+                .with(input);
+            if let Some(name) = package.name {
+                target = target.name(name);
+            }
+            profiles = profiles.package(target);
+            continue;
+        }
+        if package.language == "symfony" {
+            if package.transport.is_some() {
+                bail!("Symfony GraphQL does not support transport options");
+            }
+            if !package.scalars.is_empty() {
+                bail!("Symfony GraphQL custom scalar mappings are not supported");
+            }
+            let generator = symfony::graphql(Some(input.handle())).groups(package.groups.clone());
+            if subscriptions {
+                bail!(
+                    "Symfony GraphQL subscriptions are unsupported; use the PHP SDK streaming generator"
+                );
+            }
+            let generator = if package.raw.unwrap_or(false) || style == "raw" {
+                generator.raw()
+            } else if style == "flat" {
+                generator.flat()
+            } else {
+                generator.idiomatic()
+            };
+            let mut target = symfony::package(package.path)
                 .common(common)
                 .with(generator)
                 .with(input);

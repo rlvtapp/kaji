@@ -44,7 +44,7 @@ limitations still apply. GraphQL is a separate contract even when its transport 
 | C# | C# HTTP SDK; GraphQL client | ✅ | ✅ | — | — | — | — |
 | .NET | Deprecated C# target alias | ✅ | ✅ | — | — | — | — |
 | PHP | PHP HTTP SDK; GraphQL client | ✅ | ✅ | — | — | — | — |
-| Symfony | Symfony/PHP package | ✅ | — | — | — | — | — |
+| Symfony | HTTP integration; PHP GraphQL SDK, HttpClient transport and bundle | ✅ | ✅ | — | — | — | — |
 | Ruby | Ruby HTTP SDK; GraphQL client with RBS | ✅ | ✅ | — | — | — | — |
 | Elixir | Elixir HTTP SDK; GraphQL client | ✅ | ✅ | — | — | — | — |
 | Swift | Swift HTTP SDK; GraphQL client | ✅ | ✅ | — | — | — | — |
@@ -87,6 +87,7 @@ use distinct-connection SSE. These columns describe separate opt-in capabilities
 | Go SDK | ✅ | ✅ | ✅ | ✅ |
 | Python SDK | ✅ | ✅ | ✅ | ✅ |
 | PHP SDK | ✅ | ✅ | ✅ | ✅ |
+| Symfony bundle | ✅ | — | ✅ PHP container configuration | — |
 | Java SDK | ✅ | ✅ | ✅ | ✅ |
 | C# SDK / dotnet alias | ✅ | ✅ | ✅ | ✅ |
 | Ruby SDK | ✅ | ✅ | ✅ | ✅ |
@@ -145,6 +146,11 @@ report. An all-skipped run leaves existing files untouched. Invalid input and
 unsupported features in an otherwise supported pipeline still fail explicitly.
 
 ## Verification and release checks
+
+Symfony GraphQL follow-up: **4 Symfony checks passed**, including compiled container
+and local-server execution; PHP/CLI regressions **158 passed, 0 failed, 26 ignored**;
+npm SDK **79 passed, 0 skipped**. See the [scoped verification record](verification-results/graphql-symfony-2026-10-10.json).
+
 
 Latest advanced GraphQL workspace check: **895 passed, 0 failed, 170 ignored**.
 The npm SDK suite passes **78 tests, 0 failures, 0 skips**; release configuration
@@ -227,8 +233,9 @@ contract and only the tested multipart deferSpec=20220824 dialect. TypeScript's
 incremental output is raw only. No bundled WebSocket transport, multiplexing,
 reconnect/replay, newer ID-based incremental protocol or dynamic fields are claimed.
 See the [advanced guide](reference/outputs/graphql-capabilities.md).
-Symfony remains a separate HTTP integration target; adapting the PHP GraphQL transport
-to Symfony HttpClient is possible, but generated Symfony GraphQL DI bindings are not implemented.
+Symfony now generates a PHP GraphQL SDK with Symfony HttpClient transport and DI
+bundle configuration for queries/mutations. Its streaming capabilities remain
+unsupported. See the [Symfony guide](reference/outputs/graphql-symfony.md).
 
 ## GraphQL source organization
 

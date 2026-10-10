@@ -262,4 +262,7 @@ mod oauth;
 pub use oauth::{OAuth, oauth};
 
 mod graphql;
-pub use graphql::{Graphql, GraphqlClient, GraphqlStyle, graphql, graphql_incremental};
+pub use graphql::{
+    Graphql, GraphqlClient, GraphqlStyle, graphql, graphql_incremental, graphql_package_namespace,
+    render_graphql_package,
+};

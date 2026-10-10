@@ -257,6 +257,22 @@ fn method_traits(
         .map(|root| format!("use {root};"))
         .unwrap_or_default())
 }
+/// Namespace used by the portable PHP package.
+pub fn graphql_package_namespace(package: &str) -> String {
+    crate::namespace_for_package(package)
+}
+
+/// Render a portable query/mutation package for framework integrations.
+/// Frameworks add their transport and container wiring without duplicating models.
+pub fn render_graphql_package(
+    contract: &GraphqlOperations,
+    package: &str,
+    style: GraphqlStyle,
+    groups: &BTreeMap<String, BTreeMap<String, String>>,
+) -> Result<GeneratedTree> {
+    Ok(render_advanced(contract, package, style, groups, false, false)?.0)
+}
+
 #[cfg(test)]
 pub(crate) fn render(
     contract: &GraphqlOperations,

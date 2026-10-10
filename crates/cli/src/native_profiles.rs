@@ -26,6 +26,7 @@ pub(super) fn language_compatible(format: &str, language: &str) -> bool {
             "go",
             "python",
             "php",
+            "symfony",
             "java",
             "csharp",
             "dotnet",
@@ -66,7 +67,8 @@ pub(super) fn compatible(format: &str, package: &PackageConfig) -> bool {
     }
     if format == "graphql"
         && [
-            "rust", "go", "python", "php", "java", "csharp", "dotnet", "ruby", "swift", "elixir",
+            "rust", "go", "python", "php", "symfony", "java", "csharp", "dotnet", "ruby", "swift",
+            "elixir",
         ]
         .contains(&package.language.as_str())
     {
@@ -104,7 +106,7 @@ pub(super) fn compatible(format: &str, package: &PackageConfig) -> bool {
 pub(super) fn input_language_compatible(input: &NativeInputConfig, language: &str) -> bool {
     language_compatible(&input.format, language)
         && !(input.options.graphql_incremental
-            && ["postman", "rust-cli", "typescript-cli"].contains(&language))
+            && ["postman", "rust-cli", "typescript-cli", "symfony"].contains(&language))
 }
 pub(super) fn input_compatible(input: &NativeInputConfig, package: &PackageConfig) -> bool {
     compatible(&input.format, package)
@@ -310,6 +312,33 @@ pub(super) fn build(options: &Generate, input: &NativeInputConfig) -> Result<Pro
                 generator.idiomatic()
             };
             let mut package = php::package(path)
+                .common(common)
+                .with(generator)
+                .with(input_provider);
+            if let Some(name) = name {
+                package = package.name(name);
+            }
+            old.package(package)
+        } else if input.format == "graphql" && language == "symfony" {
+            ensure!(
+                plugin.is_none_or(|p| p.scalars.is_empty()),
+                "Symfony GraphQL custom scalar mappings are not supported"
+            );
+            let input_provider = provider::<GraphqlOperations>(input, registry.clone());
+            let generator = symfony::graphql(Some(input_provider.handle()))
+                .groups(plugin.map(|p| p.groups.clone()).unwrap_or_default());
+            ensure!(
+                plugin.and_then(|p| p.subscriptions) != Some(true),
+                "Symfony GraphQL subscriptions are unsupported; use the PHP SDK streaming generator"
+            );
+            let generator = if raw || style == "raw" {
+                generator.raw()
+            } else if style == "flat" {
+                generator.flat()
+            } else {
+                generator.idiomatic()
+            };
+            let mut package = symfony::package(path)
                 .common(common)
                 .with(generator)
                 .with(input_provider);

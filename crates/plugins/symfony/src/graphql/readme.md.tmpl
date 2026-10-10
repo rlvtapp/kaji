@@ -1,0 +1,33 @@
+# Symfony GraphQL SDK
+
+This package includes the portable PHP GraphQL SDK and a Symfony bundle. Models,
+selection-specific variables, result validation and raw/flat/grouped calls come
+from the PHP generator. Enable the bundle:
+
+```php
+// config/bundles.php
+return [__NAMESPACE__\__BUNDLE__::class => ['all' => true]];
+```
+
+```yaml
+# config/packages/graphql.yaml
+__ALIAS__:
+  endpoint: '%env(GRAPHQL_ENDPOINT)%'
+  headers:
+    Authorization: 'Bearer %env(GRAPHQL_TOKEN)%'
+  timeout: 30.0
+  http_client: http_client
+```
+
+Autowire `__SDK__\Client`. A named scoped HttpClient service can replace
+`http_client`. Calls preserve GraphQL errors and partial data; use
+`$response->requireData()` when errors should throw. No mutation retries or
+redirects are added by this bundle. Your supplied HTTP client may have its own
+retry policy; configure it appropriately for mutations.
+
+Runtime scalar callbacks use the portable client's `$scalarCodecs` constructor
+argument. Configure that argument with PHP service configuration or a compiler
+pass when callbacks are needed. Null and missing values bypass callbacks.
+
+Subscriptions and incremental delivery are not enabled by this Symfony generator.
+Use the separate PHP SDK generator for its native streaming transports.

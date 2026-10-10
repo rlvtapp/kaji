@@ -79,7 +79,7 @@ export interface JsPlugin {
   operation?(operation: Operation, context: PluginContext): void | Promise<void>;
 }
 
-export type SdkLanguage = 'typescript' | 'rust' | 'go' | 'python' | 'php' | 'java' | 'csharp' | 'elixir' | 'ruby' | 'swift' | 'postman' | 'rust-cli' | 'typescript-cli';
+export type SdkLanguage = 'typescript' | 'rust' | 'go' | 'python' | 'php' | 'symfony' | 'java' | 'csharp' | 'elixir' | 'ruby' | 'swift' | 'postman' | 'rust-cli' | 'typescript-cli';
 
 export interface SdkPackageOptions {
   language: SdkLanguage;

@@ -230,3 +230,18 @@ test('GraphQL advanced input resolves imports and dispatches ten streaming SDKs'
   assert.deepEqual((await generate(config)).changes,{added:[],modified:[],removed:[]});
  }
 });
+
+test('Symfony GraphQL generates portable SDK and bundle with deterministic regeneration', async (t) => {
+  const {dir,input}=await fixture(t); delete input.scalars;
+  const config={input,output:path.join(dir,'out'),plugins:[{kind:'native-sdk',name:'symfony',package:{language:'symfony',path:'bundle',name:'acme/graphql',contracts:{graphql:{style:'flat'}}}}]};
+  const result=await generate(config);
+  assert.deepEqual(result.skipped,[]);
+  assert.ok(result.files.some(f=>f.path.endsWith('src/Symfony/AcmeGraphqlBundle.php')));
+  assert.ok(result.files.some(f=>f.path.endsWith('src/Client.php')));
+  assert.deepEqual((await generate(config)).changes,{added:[],modified:[],removed:[]});
+  config.plugins[0].package.contracts.graphql.subscriptions=true;
+  await assert.rejects(generate(config),/Symfony GraphQL subscriptions are unsupported/);
+  delete config.plugins[0].package.contracts.graphql.subscriptions;
+  input.incremental=true;
+  assert.equal((await generate(config)).skipped.length,1);
+});

@@ -1,0 +1,54 @@
+{
+  "date": "2026-10-10",
+  "scope": "Symfony GraphQL query/mutation SDK and bundle",
+  "status": "verified",
+  "checks": {
+    "symfony_all_including_native": {
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    "php_and_cli_regressions": {
+      "passed": 158,
+      "failed": 0,
+      "ignored": 26
+    },
+    "npm_sdk": {
+      "passed": 79,
+      "failed": 0,
+      "skipped": 0
+    },
+    "clippy_changed_crates_all_targets": "passed with -D warnings",
+    "formatting": "passed",
+    "diff_whitespace": "passed"
+  },
+  "runtime": [
+    "PHP 8.2.34",
+    "Locked Symfony 6.4.26 components with transitive versions in crates/plugins/symfony/tests/fixtures/symfony64/composer.lock",
+    "GraphQL.js 16.14.2",
+    "Composer 2.8.12"
+  ],
+  "verified": [
+    "Portable PHP model and operation sources reused byte-for-byte",
+    "Raw, flat, grouped and custom-group calls",
+    "Real bundle extension discovery and compiled container private-service autowiring",
+    "Named HttpClient service, authentication, timeout and disabled redirects",
+    "Query and mutation execution against local GraphQL server",
+    "MockHttpClient partial data/errors, non-2xx and malformed JSON",
+    "Runtime scalar decoding through constructor callbacks",
+    "Explicit provider selection and invalid HTTP-only sdk_package rejection",
+    "CLI/npm generation and deterministic regeneration",
+    "npm subscription rejection and incremental skipped-plugin report"
+  ],
+  "boundaries": [
+    "Symfony subscriptions and incremental adaptation are unsupported",
+    "Symfony 7.x dependency range emitted but runtime probe uses locked 6.4.26 components",
+    "Full workspace suite was not rerun for this scoped change; prior all-ten GraphQL batch is separately recorded",
+    "Ignored PHP/CLI tests are not counted as passes"
+  ],
+  "resolved_test_setup": [
+    "Installed unzip into temporary PHP container for Composer archives",
+    "Header assertion uses Symfony-normalized casing",
+    "Local server endpoint explicitly passed to Docker runner"
+  ]
+}

@@ -59,7 +59,7 @@ function sdkPackage(options) {
   for (const key of Object.keys(options)) {
     if (!allowed.has(key)) throw new TypeError(`unknown sdk option ${key}`);
   }
-  if (!['typescript', 'rust', 'go', 'python', 'php', 'java', 'csharp', 'elixir', 'ruby', 'swift', 'postman', 'rust-cli', 'typescript-cli'].includes(options.language)) {
+  if (!['typescript', 'rust', 'go', 'python', 'php', 'symfony', 'java', 'csharp', 'elixir', 'ruby', 'swift', 'postman', 'rust-cli', 'typescript-cli'].includes(options.language)) {
     throw new TypeError(`unsupported SDK language ${options.language}`);
   }
   const { language, path: outputPath = language, name, version, style, transport, clientName, raw, jobs, scalars, groups, contracts, endpoint, commandName, subscriptions } = options;

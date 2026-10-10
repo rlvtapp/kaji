@@ -13,7 +13,8 @@ use napi::{Env, Error, Result, Status};
 use napi_derive::napi;
 use poolster::prelude::*;
 use poolster::{
-    csharp, dotnet, elixir, go, java, php, postman, python, ruby, rust, rust_cli, swift, ts, ts_cli,
+    csharp, dotnet, elixir, go, java, php, postman, python, ruby, rust, rust_cli, swift, symfony,
+    ts, ts_cli,
 };
 use poolster_core::{Api, GeneratedFile, GeneratedTree, SecuritySchemeCatalog};
 use poolster_input_openapi::OpenApiSidecar;

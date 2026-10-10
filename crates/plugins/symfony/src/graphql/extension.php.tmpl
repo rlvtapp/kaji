@@ -1,0 +1,30 @@
+<?php
+
+declare(strict_types=1);
+
+namespace __NAMESPACE__\DependencyInjection;
+
+use __SDK__\Client;
+use __NAMESPACE__\GraphqlTransport;
+use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\Definition;
+use Symfony\Component\DependencyInjection\Extension\Extension;
+use Symfony\Component\DependencyInjection\Reference;
+
+final class __EXTENSION__ extends Extension
+{
+    public function getAlias(): string { return '__ALIAS__'; }
+
+    public function load(array $configs, ContainerBuilder $container): void
+    {
+        $config = $this->processConfiguration(new Configuration(), $configs);
+        $container->setDefinition(GraphqlTransport::class, new Definition(GraphqlTransport::class, [
+            new Reference($config['http_client']),
+        ]));
+        $client = new Definition(Client::class, [
+            $config['endpoint'], $config['headers'], (float) $config['timeout'], new Reference(GraphqlTransport::class),
+        ]);
+        $client->setPublic(false);
+        $container->setDefinition(Client::class, $client);
+    }
+}

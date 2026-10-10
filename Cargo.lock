@@ -1393,6 +1393,10 @@ version = "0.5.0-alpha.1"
 dependencies = [
  "anyhow",
  "poolster-core",
+ "poolster-input-graphql",
+ "poolster-plugin-php",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]

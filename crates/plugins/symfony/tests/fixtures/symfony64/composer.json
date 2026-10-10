@@ -1,0 +1,1 @@
+{"require":{"symfony/config":"6.4.26","symfony/dependency-injection":"6.4.26","symfony/http-client":"6.4.26","symfony/http-kernel":"6.4.26"},"config":{"allow-plugins":false}}

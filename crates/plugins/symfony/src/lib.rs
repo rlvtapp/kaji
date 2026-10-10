@@ -8,7 +8,9 @@
 use anyhow::Result;
 use poolster_core::{Api, GeneratedFile, GeneratedTree};
 
+mod graphql;
 mod package;
+pub use graphql::{Graphql, graphql};
 pub use package::{PackageExt, Sdk, Settings, Symfony, package, sdk};
 
 fn render_sdk(

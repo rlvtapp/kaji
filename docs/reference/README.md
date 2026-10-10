@@ -27,3 +27,5 @@ Use these pages to look up details after a quickstart.
 - [Features](../about/features.md), [migration](../about/migration.md) and [contributing](../about/contributing.md)
 
 [Back to the docs](../README.md)
+
+- [Symfony GraphQL bundles](outputs/graphql-symfony.md)
