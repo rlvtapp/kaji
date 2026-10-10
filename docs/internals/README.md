@@ -24,3 +24,5 @@ A whole contract does not need blocks. A plugin can consume either or both.
 Execution order follows declared dependencies, not the order of plugins in a list.
 
 [All sections](../README.md) · [Detailed architecture](architecture.md)
+
+[Language plugin implementation specification](../specifications/language-plugins.md)

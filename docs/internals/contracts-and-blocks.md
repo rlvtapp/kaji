@@ -3,6 +3,14 @@
 For the concepts, start with [contracts](contracts.md) and
 [building blocks](blocks.md). For code, use [Rust handlers](../plugins/rust/handlers.md).
 
+## Protocol imports
+
+Use `poolster_core::contracts::{common, http, graphql, rpc, events, workflows, capabilities}`
+for cohesive protocol-family imports. These re-export the existing types without
+changing identity, contract names or serialization. Root and `native` imports
+remain compatible. The capability family currently exposes owned Cap’n Proto block
+metadata; this is not a new generated RPC pipeline.
+
 ## Core types
 
 | Type | Responsibility |

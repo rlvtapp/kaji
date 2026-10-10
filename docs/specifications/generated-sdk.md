@@ -2,6 +2,9 @@
 
 **Version 1 · 10 October 2026 · normative target, with implementation gaps.**
 
+The [language plugin implementation specification](language-plugins.md) defines
+the internal architecture of their generators.
+
 This defines what Poolster's generated SDKs should provide. It covers the ten SDK
 languages, the Symfony integration and the deprecated .NET alias. It applies to
 HTTP, GraphQL and future native protocol generators without converting those

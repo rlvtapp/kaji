@@ -6,6 +6,7 @@ pub use api_reference::api_reference;
 pub mod ast;
 pub mod blocks;
 pub mod contract_codec;
+pub mod contracts;
 pub mod customization;
 pub mod engine;
 pub mod extensions;
