@@ -1,5 +1,8 @@
 //! Native generation shares package assembly and generated-file ownership with HTTP.
-use super::native_profiles::{compatible as package_compatible, language_compatible, pipeline};
+use super::native_profiles::{
+    input_compatible as package_compatible, input_language_compatible as language_compatible,
+    pipeline,
+};
 use super::*;
 
 fn skipped_outputs(options: &Generate, input: &NativeInputConfig) -> Vec<serde_json::Value> {
@@ -10,12 +13,12 @@ fn skipped_outputs(options: &Generate, input: &NativeInputConfig) -> Vec<serde_j
         "no usable output pipeline is bundled for this input format"
     };
     if let Some(packages) = &options.config_packages {
-        packages.iter().filter(|package| !package_compatible(&input.format,package)).map(|package| serde_json::json!({
+        packages.iter().filter(|package| !package_compatible(input,package)).map(|package| serde_json::json!({
             "input_format": input.format, "package": package.path, "language": package.language,
             "plugins": package.plugins.iter().map(|plugin| plugin.name.as_str()).collect::<Vec<_>>(), "reason": reason
         })).collect()
     } else {
-        options.languages.iter().filter(|language| !language_compatible(&input.format, language)).map(|language| serde_json::json!({
+        options.languages.iter().filter(|language| !language_compatible(input, language)).map(|language| serde_json::json!({
             "input_format": input.format, "package": language, "language": language,
             "plugins": [pipeline(&input.format).filter(|(target,_)|language.as_str()==*target).map(|(_,plugin)|plugin).unwrap_or("sdk")], "reason": reason
         })).collect()
@@ -54,7 +57,7 @@ pub(super) fn generate(options: Generate) -> Result<()> {
         );
         return report_empty();
     }
-    let compatible = |package: &PackageConfig| package_compatible(&input.format, package);
+    let compatible = |package: &PackageConfig| package_compatible(input, package);
     if let Some(packages) = &options.config_packages {
         ensure!(
             !packages.is_empty(),
@@ -72,7 +75,7 @@ pub(super) fn generate(options: Generate) -> Result<()> {
     } else if !options
         .languages
         .iter()
-        .any(|language| language_compatible(&input.format, language))
+        .any(|language| language_compatible(input, language))
     {
         eprintln!(
             "warning: {} input does not support the requested output languages; no files exported",
@@ -120,7 +123,7 @@ pub(super) fn generate(options: Generate) -> Result<()> {
     for language in options
         .languages
         .iter()
-        .filter(|language| !language_compatible(&input.format, language))
+        .filter(|language| !language_compatible(input, language))
     {
         eprintln!(
             "warning: {} input is incompatible with {language}; package skipped",
@@ -167,6 +170,21 @@ pub(super) fn generate(options: Generate) -> Result<()> {
     for path in input.options.workflow_sources.values() {
         sources.insert(path.display().to_string(), sha256_file(path)?);
     }
+    if input.format == "graphql" {
+        let loaded = poolster_inputs::default_registry()?.load_with_options(
+            &input.format,
+            input.provider.as_deref(),
+            &input.path,
+            &input.options,
+        )?;
+        for (path, source) in &loaded
+            .contract
+            .get::<poolster_inputs::graphql::GraphqlDocument>()?
+            .native_documents
+        {
+            sources.insert(path.clone(), sha256(source.as_bytes()));
+        }
+    }
     if input.format == "protobuf" {
         let loaded = poolster_inputs::default_registry()?.load_with_options(
             &input.format,
@@ -203,7 +221,7 @@ pub(super) fn generate(options: Generate) -> Result<()> {
         for language in options
             .languages
             .iter()
-            .filter(|language| !language_compatible(&input.format, language))
+            .filter(|language| !language_compatible(input, language))
         {
             tree.preserve_owned_prefix(&options.output, Path::new(language))?;
         }

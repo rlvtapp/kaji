@@ -156,6 +156,7 @@ fn go_graphql_against_real_graphql_server() {
     let root = std::env::var("POOLSTER_GRAPHQL_JS_ROOT").expect("set POOLSTER_GRAPHQL_JS_ROOT");
     let temp = tempfile::tempdir().unwrap();
     let mut contract = fixture();
+    contract.operations.push(abstract_operation());
     contract.operations[0].document="query ReadUser($id: ID!, $nickname: String) { readUser(id: $id, nickname: $nickname) { name nickname } }".into();
     let (files, _) = render(
         &contract,
@@ -171,7 +172,7 @@ fn go_graphql_against_real_graphql_server() {
     )
     .unwrap();
     fs::write(temp.path().join("graphql_test.go"),r#"package graphqlclient
-import("context";"errors";"os";"testing")
+import("context";"encoding/json";"errors";"os";"testing")
 func TestRealGraphQLServer(t *testing.T) {
  c:=NewClient(os.Getenv("GRAPHQL_ENDPOINT"),nil)
  success,err:=c.ReadUser(context.Background(),ReadUserVariables{ID:"42",Nickname:Some("Nick")})
@@ -181,17 +182,22 @@ func TestRealGraphQLServer(t *testing.T) {
  if !errors.As(err,&gql)||partial.Data.ReadUser.Name!="Alice" || !partial.Data.ReadUser.Nickname.Set || partial.Data.ReadUser.Nickname.Value!=nil || gql[0].Path[1]!="nickname" {t.Fatalf("partial: %+v %v",partial,err)}
  null,err:=c.ReadUser(context.Background(),ReadUserVariables{ID:"non-null"})
  if !errors.As(err,&gql)||null.Data.ReadUser!=nil {t.Fatalf("non-null propagation: %+v %v",null,err)}
+ search,err:=c.Search(context.Background(),SearchVariables{})
+ if err!=nil {t.Fatal(err)}; robot,ok:=search.Data.Node.Value.(*SearchResultNodeRobot);if !ok||robot.Code!="R2"||robot.Kind!="Robot" {t.Fatalf("union: %+v",search)}
+ for _,kind:=range []string{"Person","Robot"} {var value SearchResultNode;body:=`{"kind":"`+kind+`","name":"Ada","code":"R2"}`;if err:=json.Unmarshal([]byte(body),&value);err!=nil{t.Fatal(err)};if _,err:=json.Marshal(value);err!=nil{t.Fatal(err)}}
+ for _,body:=range []string{`{"kind":"Alien"}`,`{"name":"Ada"}`,`{"kind":null}`} {var value SearchResultNode;if json.Unmarshal([]byte(body),&value)==nil {t.Fatalf("invalid discriminator accepted: %s",body)}}
 }
+
 "#).unwrap();
     let script = r#"
 const root=process.env.POOLSTER_GRAPHQL_JS_ROOT;
 if(require(root+'/graphql/package.json').version!=='16.14.2') throw new Error('expected graphql@16.14.2');
 const {graphql,buildSchema}=require(root+'/graphql');
-const schema=buildSchema('type Query { readUser(id: ID!, nickname: String): User } type User { name: String! nickname: String }');
+const schema=buildSchema('type Query { readUser(id: ID!, nickname: String): User node: Node! } type User { name: String! nickname: String } interface Node { id: ID! } type Person implements Node {id:ID! name:String!} type Robot implements Node {id:ID! code:String!}');
 const server=require('http').createServer(async(req,res)=>{
 let body='';for await(const chunk of req)body+=chunk;
 const value=JSON.parse(body);
-const result=await graphql({schema,source:value.query,operationName:value.operationName,variableValues:value.variables,rootValue:{readUser:({id,nickname})=>({name:id==='non-null'?null:'Alice',nickname:()=>{if(id==='partial')throw new Error('nickname unavailable');return nickname??null;}})}});
+const result=await graphql({schema,source:value.query,operationName:value.operationName,variableValues:value.variables,rootValue:{node:()=>({__typename:'Robot',id:'r',code:'R2'}),readUser:({id,nickname})=>({name:id==='non-null'?null:'Alice',nickname:()=>{if(id==='partial')throw new Error('nickname unavailable');return nickname??null;}})}});
 res.setHeader('Content-Type','application/graphql-response+json');res.end(JSON.stringify(result));
 });server.listen(0,'127.0.0.1',()=>console.log(server.address().port));
 "#;
@@ -362,5 +368,76 @@ fn group_method_filenames_encode_tuple_identity() {
             .filter(|p| p.starts_with("graphql_group_method_"))
             .count(),
         2
+    );
+}
+
+fn abstract_operation() -> GraphqlOperation {
+    let alternatives = [("Person", "name"), ("Robot", "code")]
+        .into_iter()
+        .map(|(name, field)| ModelType {
+            nullable: false,
+            kind: ModelKind::Object(vec![
+                ModelField {
+                    name: "kind".into(),
+                    optional: false,
+                    default_value: None,
+                    ty: ModelType {
+                        nullable: false,
+                        kind: ModelKind::Literal(name.into()),
+                    },
+                },
+                ModelField {
+                    name: field.into(),
+                    optional: false,
+                    default_value: None,
+                    ty: string(false),
+                },
+            ]),
+        })
+        .collect();
+    GraphqlOperation {
+        name: "Search".into(),
+        kind: GraphqlOperationKind::Query,
+        document:
+            "query Search { node { kind:__typename ... on Person { name } ... on Robot { code } } }"
+                .into(),
+        variables: vec![],
+        result: ModelType {
+            nullable: false,
+            kind: ModelKind::Object(vec![ModelField {
+                name: "node".into(),
+                optional: false,
+                default_value: None,
+                ty: ModelType {
+                    nullable: false,
+                    kind: ModelKind::Union(alternatives),
+                },
+            }]),
+        },
+    }
+}
+#[test]
+fn abstract_selections_require_a_stable_typename_discriminator() {
+    let mut models = models::Models::default();
+    let operation = abstract_operation();
+    let ModelKind::Object(fields) = &operation.result.kind else {
+        panic!()
+    };
+    let mut ty = fields[0].ty.clone();
+    let ModelKind::Union(alternatives) = &mut ty.kind else {
+        panic!()
+    };
+    for alternative in alternatives.iter_mut() {
+        let ModelKind::Object(fields) = &mut alternative.kind else {
+            panic!()
+        };
+        fields.remove(0);
+    }
+    assert!(
+        models
+            .ty("Untagged", &ty, false)
+            .unwrap_err()
+            .to_string()
+            .contains("__typename")
     );
 }

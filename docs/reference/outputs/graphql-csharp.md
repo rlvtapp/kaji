@@ -28,12 +28,21 @@ Cancellation propagates to HTTP requests.
 
 Required field presence is checked during JSON decoding; nonnull field values are
 not revalidated at runtime. Custom scalars use `JsonElement`, enums retain strings.
-Abstract union selections, subscriptions, incremental delivery and dynamic selections
-are unsupported in this first implementation.
+Abstract result variants require a selected nonnull `__typename` discriminator
+(including aliases); untagged abstract selections and dynamic fields remain unsupported. Opt-in
+subscriptions use distinct-connection graphql-sse; incremental inputs use experimental
+multipart deferSpec=20220824. `ScalarCodecs` callbacks transform `JsonNode` values;
+generated custom scalar fields retain `JsonElement`.
 
 All four styles compile with warnings treated as errors and execute against pinned
 GraphQL.js 16.14.2, including mutation, partial errors, cancellation and malformed responses.
 See the [support matrix](../../plugin-support-matrix.md).
+
+## Advanced capabilities
+
+See [subscriptions, scalar callbacks and incremental delivery](graphql-capabilities.md)
+for opt-in configuration, native stream lifetime and the tested protocol boundary.
+These additions are unreleased; historical checks below predate them.
 
 ## Generated source layout
 

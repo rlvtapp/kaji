@@ -212,3 +212,21 @@ test('GraphQL collection and CLI factories generate native packages and regenera
   assert.ok(result.files.some(f=>f.path==='typescript-cli/package.json'));
   assert.deepEqual((await generate(configuration)).changes,{added:[],modified:[],removed:[]});
 });
+
+test('GraphQL advanced input resolves imports and dispatches ten streaming SDKs', async(t)=>{
+ const {dir,input}=await fixture(t);delete input.scalars;
+ await fs.mkdir(path.join(dir,'imports'));
+ await fs.writeFile(input.path,'#import "types.graphql"\ndirective @defer(if:Boolean! = true,label:String) on FRAGMENT_SPREAD | INLINE_FRAGMENT type Query{user:User!} type Subscription{ticks:User!}');
+ await fs.writeFile(path.join(dir,'imports/types.graphql'),'type User{id:ID! name:String!}');
+ input.importRoots=[path.join(dir,'imports')];
+ const methods=['TypeScript','Rust','Go','Python','Php','Java','CSharp','Ruby','Swift','Elixir'];
+ for(const incremental of [false,true]){
+  input.incremental=incremental;input.subscriptions=false;
+  await fs.writeFile(input.operations[0],incremental?'query Read{user{id ... @defer(label:"details"){name}}}':'query Read{user{id name}} subscription Ticks{ticks{id name}}');
+  const plugins=methods.map(language=>bundle[`plugin${language}`]({name:language==='Php'?'example/graphql-client':'graphql_client',contracts:{graphql:{style:'raw',subscriptions:!incremental}}}));
+  const config={input,output:path.join(dir,incremental?'incremental':'subscriptions'),plugins};
+  const result=await generate(config);assert.deepEqual(result.skipped,[]);
+  for(const language of methods){assert.ok(result.files.some(f=>f.path.startsWith(language.toLowerCase()+'/')),language);}
+  assert.deepEqual((await generate(config)).changes,{added:[],modified:[],removed:[]});
+ }
+});

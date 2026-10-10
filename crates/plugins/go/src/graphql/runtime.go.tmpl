@@ -21,20 +21,30 @@ func (e GraphQLErrors) Error() string {if len(e)==0{return "GraphQL returned no 
 type GraphQLResponse[T any] struct { Data *T `json:"data"`; Errors GraphQLErrors `json:"errors,omitempty"`; Extensions map[string]any `json:"extensions,omitempty"` }
 type HTTPError struct { StatusCode int; Body string }
 func (e *HTTPError) Error() string {return fmt.Sprintf("GraphQL HTTP status %d: %s",e.StatusCode,e.Body)}
-type Client struct { Endpoint string; HTTPClient *http.Client; Headers http.Header }
+type Client struct { Endpoint string; HTTPClient *http.Client; Headers http.Header; ScalarCodecs map[string]ScalarCodec }
 func NewClient(endpoint string, transport *http.Client) *Client { if transport==nil {transport=http.DefaultClient}; return &Client{Endpoint:endpoint,HTTPClient:transport,Headers:make(http.Header)} }
-func execute[T any](ctx context.Context,c *Client,name,query string,variables any) (*GraphQLResponse[T],error) {
- if c==nil {return nil,fmt.Errorf("nil GraphQL client")}
- body,err:=json.Marshal(struct { Query string `json:"query"`; OperationName string `json:"operationName"`; Variables any `json:"variables"` }{query,name,variables});if err!=nil{return nil,err}
- req,err:=http.NewRequestWithContext(ctx,http.MethodPost,c.Endpoint,bytes.NewReader(body));if err!=nil{return nil,err}
- req.Header=c.Headers.Clone();if req.Header==nil {req.Header=make(http.Header)};req.Header.Set("Content-Type","application/json");req.Header.Set("Accept","application/graphql-response+json, application/json")
- transport:=c.HTTPClient;if transport==nil {transport=http.DefaultClient}
- response,err:=transport.Do(req);if err!=nil{return nil,err};defer response.Body.Close()
+func execute[T any](ctx context.Context,c *Client,name,query string,variables any) (*GraphQLResponse[T],error) {return executeShaped[T](ctx,c,name,query,variables,nil,nil)}
+func executeShaped[T any](ctx context.Context,c *Client,name,query string,variables any,input,resultShape *graphqlScalarShape)(*GraphQLResponse[T],error){
+ response,err:=graphqlRequest(ctx,c,name,query,variables,"application/graphql-response+json, application/json",input);if err!=nil{return nil,err};defer response.Body.Close()
  data,err:=io.ReadAll(io.LimitReader(response.Body,16*1024*1024+1));if err!=nil{return nil,err};if len(data)>16*1024*1024{return nil,fmt.Errorf("GraphQL response exceeds 16 MiB")}
- result:=new(GraphQLResponse[T]);decodeErr:=json.Unmarshal(data,result)
- if response.StatusCode<200 || response.StatusCode>=300 {if decodeErr==nil{return result,&HTTPError{response.StatusCode,string(data)}};return nil,&HTTPError{response.StatusCode,string(data)}}
- if decodeErr!=nil{return nil,fmt.Errorf("invalid GraphQL response: %w",decodeErr)}
- var envelope map[string]json.RawMessage;if err=json.Unmarshal(data,&envelope);err!=nil{return nil,err}
- if _,ok:=envelope["data"];!ok && len(result.Errors)==0 {return nil,fmt.Errorf("GraphQL response contains neither data nor errors")}
+ result,decodeErr:=decodeGraphqlResponse[T](data,c,resultShape)
+ if response.StatusCode<200 || response.StatusCode>=300{return result,&HTTPError{response.StatusCode,string(data)}}
+ return result,decodeErr
+}
+func graphqlRequest(ctx context.Context,c *Client,name,query string,variables any,accept string,input *graphqlScalarShape)(*http.Response,error){
+ if c==nil{return nil,fmt.Errorf("nil GraphQL client")}
+ variableJSON,err:=json.Marshal(variables);if err!=nil{return nil,err};variableJSON,err=c.scalarJSON(variableJSON,input,true);if err!=nil{return nil,err}
+ body,err:=json.Marshal(struct {Query string `json:"query"`;OperationName string `json:"operationName"`;Variables json.RawMessage `json:"variables"`}{query,name,variableJSON});if err!=nil{return nil,err}
+ req,err:=http.NewRequestWithContext(ctx,http.MethodPost,c.Endpoint,bytes.NewReader(body));if err!=nil{return nil,err};req.Header=c.Headers.Clone();if req.Header==nil{req.Header=make(http.Header)};req.Header.Set("Content-Type","application/json");req.Header.Set("Accept",accept)
+ transport:=c.HTTPClient;if transport==nil{transport=http.DefaultClient};return transport.Do(req)
+}
+func decodeGraphqlResponse[T any](data []byte,c *Client,shape *graphqlScalarShape)(*GraphQLResponse[T],error){
+ var envelope map[string]json.RawMessage;if err:=json.Unmarshal(data,&envelope);err!=nil{return nil,fmt.Errorf("invalid GraphQL response: %w",err)};if envelope==nil{return nil,fmt.Errorf("GraphQL response must be an object")}
+ if _,ok:=envelope["hasNext"];ok{return nil,fmt.Errorf("incremental response requires incremental transport")};if _,ok:=envelope["incremental"];ok{return nil,fmt.Errorf("incremental response requires incremental transport")}
+ if raw,ok:=envelope["data"];ok && shape!=nil{converted,err:=c.scalarJSON(raw,shape,false);if err!=nil{return nil,err};envelope["data"]=converted;var marshalErr error;data,marshalErr=json.Marshal(envelope);if marshalErr!=nil{return nil,marshalErr}}
+ result:=new(GraphQLResponse[T]);if err:=json.Unmarshal(data,result);err!=nil{return nil,fmt.Errorf("invalid GraphQL response: %w",err)}
+ if raw,ok:=envelope["extensions"];ok{var object map[string]json.RawMessage;if err:=json.Unmarshal(raw,&object);err!=nil||object==nil{return nil,fmt.Errorf("GraphQL extensions must be object")}}
+ if raw,ok:=envelope["errors"];ok{var errors []map[string]json.RawMessage;if err:=json.Unmarshal(raw,&errors);err!=nil||len(errors)==0{return nil,fmt.Errorf("GraphQL errors must be nonempty array")};for _,entry:=range errors{var message string;if len(entry["message"])==0||entry["message"][0]!='"'{return nil,fmt.Errorf("GraphQL error requires string message")};if err:=json.Unmarshal(entry["message"],&message);err!=nil{return nil,fmt.Errorf("GraphQL error requires message")}}}
+ if result.Data==nil&&len(result.Errors)==0{return nil,fmt.Errorf("GraphQL response requires data or errors")}
  if len(result.Errors)>0{return result,result.Errors};return result,nil
 }

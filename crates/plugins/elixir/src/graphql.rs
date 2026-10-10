@@ -1,6 +1,8 @@
 //! Native GraphQL clients consume selection contracts, never the HTTP AST.
+mod capabilities;
 mod layout;
 mod models;
+pub use capabilities::{GraphqlIncremental, graphql_incremental};
 #[cfg(test)]
 mod tests;
 use crate::Elixir;
@@ -30,6 +32,7 @@ pub struct Graphql {
     provider: Option<Handle<GraphqlOperations>>,
     style: GraphqlStyle,
     groups: BTreeMap<String, BTreeMap<String, String>>,
+    subscriptions: bool,
 }
 pub fn graphql(provider: Option<Handle<GraphqlOperations>>) -> Graphql {
     Graphql {
@@ -37,9 +40,15 @@ pub fn graphql(provider: Option<Handle<GraphqlOperations>>) -> Graphql {
         provider,
         style: GraphqlStyle::default(),
         groups: BTreeMap::new(),
+        subscriptions: false,
     }
 }
 impl Graphql {
+    /// Enable HTTP SSE distinct-connection subscriptions.
+    pub fn subscriptions(mut self) -> Self {
+        self.subscriptions = true;
+        self
+    }
     pub fn raw(mut self) -> Self {
         self.style = GraphqlStyle::Raw;
         self
@@ -92,7 +101,7 @@ impl Plugin<Elixir> for Graphql {
         vec![Provision::of::<GraphqlClient>()]
     }
     fn generate(&self, cx: &mut PluginContext<'_, Elixir>) -> Result<()> {
-        let (mut tree, methods) = render(
+        let (mut tree, methods) = render_capabilities(
             cx.inputs.get::<GraphqlOperations>()?,
             cx.settings
                 .package_name
@@ -100,6 +109,9 @@ impl Plugin<Elixir> for Graphql {
                 .unwrap_or("graphql_client"),
             self.style,
             &self.groups,
+            self.subscriptions,
+            false,
+            None,
         )?;
         if let Some(version) = &cx.common.package_version {
             let path = "mix.exs";
@@ -113,11 +125,23 @@ impl Plugin<Elixir> for Graphql {
         cx.publish(GraphqlClient { methods })
     }
 }
+#[cfg(test)]
 fn render(
     c: &GraphqlOperations,
     package: &str,
     style: GraphqlStyle,
     custom: &BTreeMap<String, BTreeMap<String, String>>,
+) -> Result<(GeneratedTree, BTreeMap<String, String>)> {
+    render_capabilities(c, package, style, custom, false, false, None)
+}
+fn render_capabilities(
+    c: &GraphqlOperations,
+    package: &str,
+    style: GraphqlStyle,
+    custom: &BTreeMap<String, BTreeMap<String, String>>,
+    subscriptions: bool,
+    incremental: bool,
+    selections: Option<&BTreeMap<String, Vec<poolster_core::native::GraphqlIncrementalSelection>>>,
 ) -> Result<(GeneratedTree, BTreeMap<String, String>)> {
     ensure!(
         !c.operations.is_empty(),
@@ -166,7 +190,7 @@ fn render(
     }
     for op in &c.operations {
         ensure!(
-            op.kind != GraphqlOperationKind::Subscription,
+            op.kind != GraphqlOperationKind::Subscription || subscriptions,
             "Elixir GraphQL subscriptions need a separately supported transport"
         );
         let name = crate::pascal_case(&op.name);
@@ -207,11 +231,27 @@ fn render(
             String::new()
         };
         let start = calls.len();
+        let execution = if incremental {
+            "incremental"
+        } else if op.kind == GraphqlOperationKind::Subscription {
+            "subscribe"
+        } else {
+            "execute"
+        };
+        let descriptor = serde_json::to_string(
+            &serde_json::json!({"variables":poolster_core::native::graphql_scalar_fields(&op.variables),"result":poolster_core::native::graphql_scalar_shape(&op.result),"selections":selections.and_then(|s|s.get(&op.name)),"inputs":c.input_objects.iter().map(|(n,f)|(n.clone(),poolster_core::native::graphql_scalar_fields(f))).collect::<BTreeMap<_,_>>() }),
+        )?;
+        let returns = if execution == "execute" {
+            format!("{{:ok, {module}.Envelope.t({result})}} | {{:error, term()}}")
+        } else {
+            "Enumerable.t()".into()
+        };
         writeln!(
             calls,
-            "  @spec {method}({module}.Client.t(), {vars}.t()) :: {{:ok, {module}.Envelope.t({result})}} | {{:error, term()}}\n  def {method}(client, variables{default}) do\n    try do\n      {module}.Runtime.execute(client, {}, {}, {vars}.to_wire(variables), &{module}.Models.{name}Result.from_wire/1)\n    rescue e in ArgumentError -> {{:error, {{:variables, Exception.message(e)}}}}\n    end\n  end",
+            "  @spec {method}({module}.Client.t(), {vars}.t()) :: {returns}\n  def {method}(client, variables{default}) do\n    try do\n      {module}.Runtime.{execution}(client, {}, {}, {vars}.to_wire(variables), &{module}.Models.{name}Result.from_wire/1, Jason.decode!({}))\n    rescue e in ArgumentError -> {{:error, {{:variables, Exception.message(e)}}}}\n    end\n  end",
             elixir_string(&op.document),
-            elixir_string(&op.name)
+            elixir_string(&op.name),
+            elixir_string(&descriptor)
         )?;
         operation_files.push((
             method.clone(),
@@ -226,7 +266,8 @@ fn render(
                 .entry(
                     match op.kind {
                         GraphqlOperationKind::Query => "Query",
-                        _ => "Mutation",
+                        GraphqlOperationKind::Mutation => "Mutation",
+                        GraphqlOperationKind::Subscription => "Subscription",
                     }
                     .into(),
                 )
@@ -326,6 +367,18 @@ fn render(
             source,
         )?)?;
     }
+    for template in [
+        include_str!("graphql/codecs.ex.tmpl"),
+        include_str!("graphql/streaming.ex.tmpl"),
+    ] {
+        for (name, source) in layout::modules(&template.replace("__POOLSTER__", &module))? {
+            let name = name.rsplit('.').next().unwrap();
+            tree.insert(GeneratedFile::new(
+                format!("lib/{app}/{}.ex", layout::stem(name)),
+                source,
+            )?)?;
+        }
+    }
     for (name, source) in operation_files {
         tree.insert(GeneratedFile::new(
             format!("lib/{app}/operations/{}.ex", layout::stem(&name)),
@@ -333,7 +386,7 @@ fn render(
         )?)?;
     }
     tree.insert(GeneratedFile::new("mix.exs",format!("defmodule {module}.MixProject do\n use Mix.Project\n def project, do: [app: :{app},version: \"0.0.0\",elixir: \"~> 1.15\",deps: [{{:finch, \"== 0.24.0\"}},{{:jason, \"== 1.4.5\"}}]]\n def application, do: [extra_applications: [:logger,:inets,:crypto],mod: {{{module}.Application,[]}}]\nend\n"))?)?;
-    tree.insert(GeneratedFile::new("README.md",format!("# GraphQL Elixir client\n\nFixed operation clients in `{style:?}` style. Construct `{module}.Client.new(endpoint)`. Raw functions live in `{module}.Operations`, flat functions in `{module}`, grouped functions in Query/Mutation or your custom modules. Variables and selected results retain their typed struct names below `{module}.Models`, with one module per model file. Execution bodies and documents live in one file per operation; API and group facades use bounded export modules. Optional variables default to `:poolster_absent`; nil means explicit null.\n\nReturns `{{:ok, Envelope}}` even for GraphQL errors/partial results; inspect data_present, data, errors, extensions and status. `{module}.Runtime.require_data/1` returns error for GraphQL errors or absent/null data. HTTP/protocol/variable failures return `{{:error, reason}}`. Finch0.24.0 and Jason1.4.5 are pinned. Custom transport receives a Finch request. Subscriptions rejected; abstract selections require selected __typename; custom scalars remain term().\n"))?)?;
+    tree.insert(GeneratedFile::new("README.md",format!("# GraphQL Elixir client\n\nFixed operation clients in `{style:?}` style. Construct `{module}.Client.new(endpoint)`. Raw functions live in `{module}.Operations`, flat functions in `{module}`, grouped functions in Query/Mutation or your custom modules. Variables and selected results retain their typed struct names below `{module}.Models`, with one module per model file. Execution bodies and documents live in one file per operation; API and group facades use bounded export modules. Optional variables default to `:poolster_absent`; nil means explicit null.\n\nReturns `{{:ok, Envelope}}` even for GraphQL errors/partial results; inspect data_present, data, errors, extensions and status. `{module}.Runtime.require_data/1` returns error for GraphQL errors or absent/null data. HTTP/protocol/variable failures return `{{:error, reason}}`. Finch0.24.0 and Jason1.4.5 are pinned. Custom transport receives a Finch request. Subscriptions use opt-in distinct-connection GraphQL SSE; incremental packages negotiate multipart deferSpec=20220824. Runtime scalar_codecs maps scalar names to encode/decode callbacks, preserving null and omission; custom scalars retain term() types. Abstract selections require selected __typename.\n"))?)?;
     tree.insert(GeneratedFile::new(
         "graphql/schema.graphql",
         c.schema_source.clone(),

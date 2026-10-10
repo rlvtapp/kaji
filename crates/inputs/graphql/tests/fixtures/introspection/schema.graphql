@@ -1,0 +1,10 @@
+"Imported test schema" schema { query: RootQuery }
+scalar DateTime @specifiedBy(url: "https://example.test/time")
+directive @audit(reason: String = "review") repeatable on FIELD_DEFINITION
+interface Node { id: ID! }
+type User implements Node { id: ID! name: String! created: DateTime }
+type Team implements Node { id: ID! title: String! }
+union Entity = User | Team
+enum Mode { OLD @deprecated(reason: "new mode") NEW }
+input Filter { ids: [ID!]! = [] mode: Mode = NEW }
+type RootQuery { node(id:ID!): Node entity:Entity users(filter:Filter): [User!]! }

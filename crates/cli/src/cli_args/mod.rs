@@ -111,6 +111,10 @@ pub(super) fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Act
             continue;
         }
         let flag = text.as_ref();
+        if flag == "--graphql-incremental" {
+            native_options.graphql_incremental = true;
+            continue;
+        }
         if flag == "--raw-sdk" {
             options.raw = true;
             continue;
@@ -329,6 +333,13 @@ pub(super) fn parse(arguments: impl IntoIterator<Item = OsString>) -> Result<Act
     {
         bail!("provider and operation/import options require --input-format");
     }
+    ensure!(
+        !options
+            .native_input
+            .as_ref()
+            .is_some_and(|i| i.options.graphql_incremental && i.format != "graphql"),
+        "--graphql-incremental requires --input-format graphql"
+    );
     ensure!(
         options.native_output == NativeOutputConfig::default()
             || options

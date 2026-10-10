@@ -393,3 +393,103 @@ fn large_packages_use_bounded_files_and_regenerate() {
         assert!(!dir.path().join("src/Operations/Operation299.php").exists());
     }
 }
+
+#[test]
+#[ignore = "requires PHP 8.2, pinned graphql-sse 2.6.0 and local server"]
+fn sse_incremental_and_scalar_codecs_execute() {
+    use std::io::{BufRead, BufReader};
+    let root = std::env::var("POOLSTER_GRAPHQL_SSE_ROOT").unwrap();
+    let php = std::env::var("POOLSTER_TEST_PHP").unwrap_or("php".into());
+    let dir = tempfile::tempdir().unwrap();
+    let mut contract = fixture();
+    contract.operations[0].variables = vec![field("id", scalar("DateTime", true), true)];
+    contract.operations[0].result = ModelType {
+        nullable: false,
+        kind: ModelKind::Object(vec![field("hello", scalar("DateTime", true), false)]),
+    };
+    contract.operations[0].document = "query ReadUser($id:DateTime){hello(id:$id)}".into();
+    let mut sub = contract.operations[0].clone();
+    sub.name = "Changed".into();
+    sub.kind = GraphqlOperationKind::Subscription;
+    sub.document = "subscription Changed($id:DateTime){hello(id:$id)}".into();
+    contract.operations.push(sub);
+    render_advanced(
+        &contract,
+        "poolster/test",
+        GraphqlStyle::Flat,
+        &BTreeMap::new(),
+        true,
+        false,
+    )
+    .unwrap()
+    .0
+    .write_to(dir.path())
+    .unwrap();
+    contract.operations.pop();
+    render_advanced(
+        &contract,
+        "poolster/incremental",
+        GraphqlStyle::Flat,
+        &BTreeMap::new(),
+        false,
+        true,
+    )
+    .unwrap()
+    .0
+    .write_to(dir.path().join("incremental"))
+    .unwrap();
+    let code = r#"
+const {createHandler}=require(process.env.POOLSTER_GRAPHQL_SSE_ROOT+'/graphql-sse/lib/use/http');
+const {buildSchema,graphql}=require(process.env.POOLSTER_GRAPHQL_SSE_ROOT+'/graphql');
+const schema=buildSchema('scalar DateTime type Query {hello(id:DateTime):DateTime} type Subscription {hello(id:DateTime):DateTime}');
+const date=schema.getType('DateTime');date.parseValue=v=>new Date(v);date.serialize=v=>v.toISOString();
+schema.getSubscriptionType().getFields().hello.subscribe=async function*(_source,args){yield{hello:args.id};};
+const handler=createHandler({schema});require('http').createServer(async(req,res)=>{
+if(req.headers.authorization!=='Bearer secret'){res.statusCode=401;res.end();return;}
+if(req.url==='/multipart'){res.setHeader('Content-Type','multipart/mixed; boundary=parts; deferSpec=20220824');for(const frame of[{data:{},hasNext:true},{incremental:[{path:[],data:{hello:'2025-01-01T00:00:00.000Z'}}],hasNext:false}])res.write('--parts\r\nContent-Type: application/json\r\n\r\n'+JSON.stringify(frame)+'\r\n');res.end('--parts--\r\n');return;}
+if(req.headers.accept==='text/event-stream'){await handler(req,res);return;}let body='';for await(const chunk of req)body+=chunk;const v=JSON.parse(body);res.setHeader('Content-Type','application/json');res.end(JSON.stringify(await graphql({schema,source:v.query,operationName:v.operationName,variableValues:v.variables,rootValue:{hello:a=>a.id}})));
+}).listen(0,'0.0.0.0',function(){console.log(this.address().port)});
+"#;
+    let mut server = Command::new("node")
+        .args(["-e", code])
+        .env("POOLSTER_GRAPHQL_SSE_ROOT", root)
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut port = String::new();
+    BufReader::new(server.stdout.take().unwrap())
+        .read_line(&mut port)
+        .unwrap();
+    let host = std::env::var("POOLSTER_GRAPHQL_SERVER_HOST").unwrap_or("127.0.0.1".into());
+    let script = r#"<?php
+require __DIR__.'/src/Graphql.php';require __DIR__.'/incremental/src/Graphql.php';
+function check($ok){if(!$ok)throw new Exception('assertion failed');}
+check(\Poolster\Test\applyIncremental(['items'=>[1]],['path'=>['items',1],'items'=>[2]])===['items'=>[1,2]]);
+check(\Poolster\Test\applyIncremental(['items'=>[]],['path'=>[],'errors'=>[['message'=>'failed']]])===['items'=>[]]);
+$codec=['DateTime'=>['encode'=>fn($v)=>strtoupper($v),'decode'=>fn($v)=>strtolower($v)]];
+$client=new \Poolster\Test\Client(getenv('POOLSTER_GRAPHQL_ENDPOINT'),headers:['Authorization'=>'Bearer secret'],scalarCodecs:$codec);
+$v=new \Poolster\Test\ReadUserVariables(id:\Poolster\Test\Presence::of('2025-01-01t00:00:00.000z'));
+check($client->readUser($v)->requireData()->hello==='2025-01-01t00:00:00.000z');
+$events=iterator_to_array($client->changed(new \Poolster\Test\ChangedVariables(id:\Poolster\Test\Presence::of('2025-01-01t00:00:00.000z'))));check(count($events)===1&&$events[0]->requireData()->hello==='2025-01-01t00:00:00.000z');
+$inc=new \Poolster\Incremental\Client(getenv('POOLSTER_GRAPHQL_ENDPOINT').'/multipart',headers:['Authorization'=>'Bearer secret'],scalarCodecs:$codec);
+$frames=iterator_to_array($inc->readUser(new \Poolster\Incremental\ReadUserVariables()));check($frames[0]->final===null&&$frames[1]->final->requireData()->hello==='2025-01-01t00:00:00.000z');
+foreach(["event: next\ndata: invalid\n\n","event: next\ndata: {}\n\n"] as $text){$s=fopen('php://memory','r+');fwrite($s,$text);rewind($s);$failed=false;try{iterator_to_array(\Poolster\Test\sseFrames($s,100));}catch(Throwable $e){$failed=true;}fclose($s);check($failed);}
+"#;
+    fs::write(dir.path().join("advanced.php"), script).unwrap();
+    let out = Command::new(php)
+        .arg(dir.path().join("advanced.php"))
+        .env(
+            "POOLSTER_GRAPHQL_ENDPOINT",
+            format!("http://{host}:{}", port.trim()),
+        )
+        .output()
+        .unwrap();
+    server.kill().unwrap();
+    server.wait().unwrap();
+    assert!(
+        out.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+}

@@ -2,7 +2,7 @@
 use super::{GraphqlScalarMapping, ModelField, ModelKind, ModelType};
 use std::{collections::BTreeMap, fmt::Write};
 
-pub(super) fn render_fields(
+pub(crate) fn render_fields(
     fields: &[ModelField],
     scalars: &BTreeMap<String, GraphqlScalarMapping>,
     input: bool,
@@ -34,7 +34,7 @@ fn render_fields_at(
     out.push('}');
     out
 }
-pub(super) fn render_type(
+pub(crate) fn render_type(
     ty: &ModelType,
     scalars: &BTreeMap<String, GraphqlScalarMapping>,
     input: bool,

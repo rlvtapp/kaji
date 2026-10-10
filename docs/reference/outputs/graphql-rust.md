@@ -18,7 +18,8 @@ poolster generate schema.graphql --input-format graphql \
 For package naming/versioning, use the same input recipe as TypeScript with
 `language: "rust"` and a `graphql` output plugin. A recipe can include separate
 TypeScript and Rust packages; each consumes the same validated operations.
-Rust rejects TypeScript scalar expressions and subscription options explicitly.
+Rust rejects TypeScript scalar expressions. Subscriptions require the separate
+opt-in capability.
 
 ## Rust plugin use
 
@@ -90,10 +91,12 @@ emitted types use canonical paths to avoid generated-name collisions.
 Unknown/unused scalar names, builtin overrides, malformed expressions and
 unsupported imported types fail before output is written. Borrowed types, custom
 structs and dependencies such as Chrono are not supplied by this mapping API.
-Mappings describe JSON wire values and install no codecs: `String` input and
-`i64` output work only if the server accepts strings and returns integers.
-An incompatible response produces a `GraphqlTransportError::Decode`.
-Subscriptions remain outside this increment.
+Mappings alone describe wire-compatible values. Transport `GraphqlScalarCodecs`
+provide direction-specific conversion callbacks over supported input/output types.
+An incompatible response produces a `GraphqlTransportError::Decode`. Opt-in
+subscriptions use distinct-connection graphql-sse. Experimental incremental inputs
+use multipart deferSpec=20220824 and return raw partial snapshots followed by final
+typed envelopes. See the [advanced capability guide](graphql-capabilities.md).
 
 ## Node entry point
 

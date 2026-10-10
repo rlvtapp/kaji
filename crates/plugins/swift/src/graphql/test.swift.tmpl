@@ -8,6 +8,15 @@ static func main() async throws {
     do { _ = try JSONDecoder().decode(StrictInput.self,from:Data("{\"count\":null}".utf8)); fatalError("missing nonnull decode failure") } catch is DecodingError {}
     var client = GraphqlClient(endpoint:URL(string:"ENDPOINT")!)
     guard try await PING_CALL.data?.ping == "pong" else { fatalError("mutation") }
+    let abstractResult = try await search(client:client)
+    guard case .robot(let robot)? = abstractResult.data?.node, robot.kind == "Robot", robot.code == "R2" else { fatalError("abstract typename dispatch") }
+    for json in [#"{"kind":"Person","name":"Ada"}"#,#"{"kind":"Robot","code":"R2"}"#] {
+        let value = try JSONDecoder().decode(SearchResultNode.self,from:Data(json.utf8))
+        _ = try JSONEncoder().encode(value)
+    }
+    for json in [#"{"kind":"Alien"}"#,#"{"name":"Ada"}"#,#"{"kind":null}"#] {
+        do { _ = try JSONDecoder().decode(SearchResultNode.self,from:Data(json.utf8)); fatalError("invalid discriminator accepted") } catch is DecodingError {}
+    }
     var variables = ReadUserVariables(id:"read")
     let encoded = try JSONSerialization.jsonObject(with:JSONEncoder().encode(variables)) as! [String:Any]
     guard !encoded.keys.contains("nickname") else { fatalError("omission") }

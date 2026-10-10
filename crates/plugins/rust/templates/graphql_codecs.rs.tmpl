@@ -1,0 +1,37 @@
+use serde::{Serialize, de::DeserializeOwned};
+use serde_json::Value;
+use std::{collections::BTreeMap, sync::Arc};
+use crate::graphql_runtime::GraphqlTransportError;
+type Callback = Arc<dyn Fn(Value) -> Result<Value,String> + Send + Sync>;
+#[derive(Clone, Default)]
+pub struct GraphqlScalarCodecs { entries: BTreeMap<String,(Callback,Callback)> }
+impl std::fmt::Debug for GraphqlScalarCodecs { fn fmt(&self,f:&mut std::fmt::Formatter<'_>)->std::fmt::Result { f.debug_struct("GraphqlScalarCodecs").field("scalars",&self.entries.keys()).finish() } }
+impl GraphqlScalarCodecs {
+    pub fn new()->Self {Self::default()}
+    /// The input/output types match generated scalar mappings. Null/omitted values bypass callbacks.
+    pub fn with<I:DeserializeOwned + 'static,O:Serialize + 'static>(mut self,name:impl Into<String>,encode:impl Fn(I)->Result<Value,String> + Send + Sync + 'static,decode:impl Fn(Value)->Result<O,String> + Send + Sync + 'static)->Self {
+        self.entries.insert(name.into(),(Arc::new(move |value| encode(serde_json::from_value::<I>(value).map_err(|e|e.to_string())?)),Arc::new(move |value| serde_json::to_value(decode(value)?).map_err(|e|e.to_string())))); self
+    }
+    pub(crate) fn transform(&self,value:&mut Value,shape:&Value,inputs:&Value,input:bool)->Result<(),GraphqlTransportError> {
+        if value.is_null() {return Ok(())}
+        if shape.is_null(){return Ok(())}
+        if let Some(name)=shape.get("scalar").and_then(Value::as_str) {if let Some((encode,decode))=self.entries.get(name) { *value=(if input {encode} else {decode})(value.clone()).map_err(|message|GraphqlTransportError::Protocol(format!("scalar {name} {} codec failed: {message}",if input {"input"} else {"output"})))?; }}
+        else if let Some(name)=shape.get("named").and_then(Value::as_str) {if let Some(fields)=inputs.get(name) {self.transform(value,fields,inputs,input)?;}}
+        else if let Some(item)=shape.get("list") {if let Some(items)=value.as_array_mut(){for value in items {self.transform(value,item,inputs,input)?;}}}
+        else if let Some(fields)=shape.get("fields") {self.object(value,fields,inputs,input)?;}
+        else if let Some(variants)=shape.get("union").and_then(Value::as_array) {
+            let tagged=variants.iter().find(|variant|variant["fields"].as_array().is_some_and(|fields|fields.iter().any(|field|field[1]["literal"].as_str().is_some_and(|tag|value.get(field[0].as_str().unwrap_or("")).and_then(Value::as_str)==Some(tag)))));
+            if let Some(variant)=tagged {self.transform(value,variant,inputs,input)?;}
+            else {
+                let mut fields=BTreeMap::<String,Value>::new();
+                for variant in variants {if let Some(items)=variant["fields"].as_array(){for field in items {let name=field[0].as_str().unwrap_or("");if value.get(name).is_some(){if let Some(previous)=fields.get(name){if previous[1]!=field[1] {return Err(GraphqlTransportError::Protocol("ambiguous scalar union selection; select __typename".into()));}}else{fields.insert(name.into(),field.clone());}}}}}
+                self.object(value,&Value::Array(fields.into_values().collect()),inputs,input)?;
+            }
+        }
+        Ok(())
+    }
+    fn object(&self,value:&mut Value,fields:&Value,inputs:&Value,input:bool)->Result<(),GraphqlTransportError>{if let (Some(value),Some(fields))=(value.as_object_mut(),fields.as_array()){for field in fields {if let Some(child)=field[0].as_str().and_then(|name|value.get_mut(name)){self.transform(child,&field[1],inputs,input)?;}}}Ok(())}
+}
+#[derive(Clone)]
+pub(crate) struct GraphqlShape { pub input:Value, pub result:Value, pub objects:Value, pub selections:Value }
+impl GraphqlShape {pub fn parse(source:&str)->Result<Self,GraphqlTransportError>{let value:Value=serde_json::from_str(source).map_err(GraphqlTransportError::Decode)?;Ok(Self{input:value["input"].clone(),result:value["result"].clone(),objects:serde_json::from_str(include_str!("graphql_input_shapes.json")).map_err(GraphqlTransportError::Decode)?,selections:value["selections"].clone()})}}

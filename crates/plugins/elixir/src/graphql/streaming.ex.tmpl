@@ -1,0 +1,473 @@
+defmodule __POOLSTER__.IncrementalSnapshot do
+  defstruct data: nil, errors: [], extensions: nil, patches: [], complete: false, decoder: nil
+
+  @type t :: %__MODULE__{
+          data: term(),
+          errors: [map()],
+          extensions: term(),
+          patches: [map()],
+          complete: boolean(),
+          decoder: (term() -> term()) | nil
+        }
+  @doc "Decode the final selected model only after completion without GraphQL errors."
+  def require_data(%__MODULE__{complete: true, errors: [], data: data, decoder: decoder})
+      when not is_nil(data) and is_function(decoder, 1) do
+    {:ok, decoder.(data)}
+  rescue
+    error -> {:error, {:protocol, Exception.message(error)}}
+  end
+
+  def require_data(%__MODULE__{} = snapshot), do: {:error, {:incomplete_or_graphql, snapshot}}
+end
+
+defmodule __POOLSTER__.Streaming do
+  @limit 1_048_576
+  def subscribe(client, document, operation, variables, decoder, shapes),
+    do: stream(client, document, operation, variables, decoder, shapes, :sse)
+
+  def incremental(client, document, operation, variables, decoder, shapes),
+    do: stream(client, document, operation, variables, decoder, shapes, :multipart)
+
+  defp stream(client, document, operation, variables, decoder, shapes, mode) do
+    Stream.resource(
+      fn -> start(client, document, operation, variables, shapes, mode) end,
+      fn state -> next(state, client, decoder, shapes) end,
+      fn state -> if state[:task], do: Task.shutdown(state.task, :brutal_kill) end
+    )
+  end
+
+  defp start(client, document, operation, variables, shapes, mode) do
+    parent = self()
+    ref = make_ref()
+
+    variables =
+      __POOLSTER__.Codecs.walk(
+        variables,
+        shapes["variables"],
+        shapes["inputs"] || %{},
+        client.scalar_codecs,
+        :encode
+      )
+
+    accept =
+      if mode == :sse,
+        do: "text/event-stream",
+        else:
+          "multipart/mixed;deferSpec=20220824, application/graphql-response+json, application/json"
+
+    request =
+      Finch.build(
+        :post,
+        client.endpoint,
+        [{"content-type", "application/json"}, {"accept", accept}] ++ client.headers,
+        Jason.encode!(%{
+          "query" => document,
+          "operationName" => operation,
+          "variables" => variables
+        })
+      )
+
+    task =
+      Task.async(fn ->
+        result =
+          try do
+            Finch.stream_while(
+              request,
+              client.finch,
+              nil,
+              fn event, acc ->
+                send(parent, {ref, event})
+
+                receive do
+                  {^ref, :ack} -> {:cont, acc}
+                  {^ref, :stop} -> {:halt, acc}
+                after
+                  client.timeout -> {:halt, acc}
+                end
+              end,
+              receive_timeout: client.timeout
+            )
+          rescue
+            e -> {:error, Exception.message(e)}
+          end
+
+        send(parent, {ref, {:done, result}})
+      end)
+
+    %{
+      task: task,
+      ref: ref,
+      mode: mode,
+      buffer: "",
+      queue: [],
+      status: nil,
+      boundary: nil,
+      json: false,
+      data: nil,
+      errors: [],
+      extensions: nil,
+      started: false,
+      initialized: false,
+      complete: false,
+      closed: false
+    }
+  end
+
+  defp next(%{queue: [frame | rest]} = state, client, decoder, shapes),
+    do: frame(frame, %{state | queue: rest}, client, decoder, shapes)
+
+  defp next(%{closed: true} = state, _client, _decoder, _shapes), do: {:halt, state}
+
+  defp next(%{complete: true} = state, _client, _decoder, _shapes),
+    do: {:halt, %{state | closed: true}}
+
+  defp next(state, client, decoder, shapes) do
+    receive do
+      {ref, event} when ref == state.ref ->
+        send(state.task.pid, {ref, :ack})
+
+        case event do
+          {:status, status} when status >= 200 and status < 300 ->
+            next(%{state | status: status}, client, decoder, shapes)
+
+          {:status, status} ->
+            failure(state, {:http, status})
+
+          {:headers, headers} ->
+            case headers(state, headers) do
+              {:ok, updated} -> next(updated, client, decoder, shapes)
+              {:error, reason} -> failure(state, reason)
+            end
+
+          {:data, data} ->
+            case chunks(%{state | buffer: state.buffer <> data}) do
+              {:ok, updated} -> next(updated, client, decoder, shapes)
+              {:error, reason} -> failure(state, reason)
+            end
+
+          {:done, {:error, reason}} ->
+            failure(state, {:transport, reason})
+
+          {:done, _} when state.json ->
+            case Jason.decode(state.buffer) do
+              {:ok, value} -> frame(value, %{state | closed: true}, client, decoder, shapes)
+              {:error, _} -> failure(state, {:protocol, :invalid_json})
+            end
+
+          {:done, _} ->
+            if state.complete,
+              do: {:halt, %{state | closed: true}},
+              else: failure(state, {:protocol, :truncated_stream})
+
+          _ ->
+            next(state, client, decoder, shapes)
+        end
+    after
+      client.timeout -> failure(state, {:transport, :timeout})
+    end
+  end
+
+  defp headers(state, headers) do
+    type =
+      Enum.find_value(headers, "", fn {name, value} ->
+        if String.downcase(name) == "content-type", do: value
+      end)
+
+    cond do
+      state.mode == :sse and String.starts_with?(type, "text/event-stream") ->
+        {:ok, state}
+
+      state.mode == :multipart and String.starts_with?(type, "multipart/mixed") and
+          Regex.match?(~r/deferSpec=(?!20220824)[0-9]+/, type) ->
+        {:error, {:protocol, :unsupported_dialect}}
+
+      state.mode == :multipart and String.starts_with?(type, "multipart/mixed") ->
+        case Regex.run(~r/boundary=(?:"([^"]+)"|([^;\s]+))/, type) do
+          nil ->
+            {:error, {:protocol, :missing_boundary}}
+
+          values ->
+            boundary = Enum.find(tl(values), &(&1 != ""))
+
+            if String.length(boundary) > 70 or String.contains?(boundary, ["\r", "\n"]),
+              do: {:error, {:protocol, :invalid_boundary}},
+              else: {:ok, %{state | boundary: "--" <> boundary}}
+        end
+
+      state.mode == :multipart and
+          (String.starts_with?(type, "application/json") or
+             String.starts_with?(type, "application/graphql-response+json")) ->
+        {:ok, %{state | json: true}}
+
+      true ->
+        {:error, {:protocol, :unsupported_content_type}}
+    end
+  end
+
+  defp chunks(%{buffer: buffer}) when byte_size(buffer) > @limit,
+    do: {:error, {:protocol, :frame_too_large}}
+
+  defp chunks(%{json: true} = state), do: {:ok, state}
+
+  defp chunks(%{mode: :sse} = state) do
+    buffer = String.replace(state.buffer, "\r\n", "\n")
+    parts = String.split(buffer, "\n\n")
+    {tail, records} = List.pop_at(parts, -1)
+
+    Enum.reduce_while(records, {:ok, %{state | buffer: tail}}, fn record, {:ok, acc} ->
+      lines = String.split(record, "\n")
+
+      event =
+        Enum.find_value(lines, "message", fn line ->
+          if String.starts_with?(line, "event:"), do: String.trim(String.slice(line, 6..-1//1))
+        end)
+
+      data =
+        lines
+        |> Enum.filter(&String.starts_with?(&1, "data:"))
+        |> Enum.map(&(String.slice(&1, 5..-1//1) |> String.trim_leading(" ")))
+        |> Enum.join("\n")
+
+      cond do
+        Enum.all?(lines, &(&1 == "" or String.starts_with?(&1, ":"))) ->
+          {:cont, {:ok, acc}}
+
+        event == "complete" ->
+          {:cont, {:ok, %{acc | queue: acc.queue ++ [:complete]}}}
+
+        event == "next" ->
+          case Jason.decode(data) do
+            {:ok, value} -> {:cont, {:ok, %{acc | queue: acc.queue ++ [value]}}}
+            {:error, _} -> {:halt, {:error, {:protocol, :invalid_sse_json}}}
+          end
+
+        true ->
+          {:halt, {:error, {:protocol, :unsupported_sse_event}}}
+      end
+    end)
+  end
+
+  defp chunks(%{boundary: nil}), do: {:error, {:protocol, :missing_boundary}}
+
+  defp chunks(%{started: false} = state) do
+    prefix = state.boundary
+
+    cond do
+      byte_size(state.buffer) < byte_size(prefix) + 2 ->
+        {:ok, state}
+
+      not String.starts_with?(state.buffer, prefix) ->
+        {:error, {:protocol, :invalid_multipart_preamble}}
+
+      true ->
+        chunks(%{
+          state
+          | started: true,
+            buffer:
+              binary_part(
+                state.buffer,
+                byte_size(prefix),
+                byte_size(state.buffer) - byte_size(prefix)
+              )
+        })
+    end
+  end
+
+  defp chunks(state) do
+    case :binary.split(state.buffer, "\r\n" <> state.boundary, [:global]) do
+      [_] ->
+        {:ok, state}
+
+      parts ->
+        {tail, completed} = List.pop_at(parts, -1)
+
+        cond do
+          byte_size(tail) < 2 ->
+            {:ok, state}
+
+          not String.starts_with?(tail, ["\r\n", "--"]) ->
+            {:error, {:protocol, :invalid_multipart_delimiter}}
+
+          true ->
+            Enum.reduce_while(completed, {:ok, %{state | buffer: tail}}, fn part, {:ok, acc} ->
+              case String.split(String.trim(part), "\r\n\r\n", parts: 2) do
+                [headers, json] ->
+                  if not Regex.match?(
+                       ~r/(?:^|\r\n)content-type:\s*application\/json(?:;[^\r\n]*)?(?:$|\r\n)/i,
+                       headers
+                     ) do
+                    {:halt, {:error, {:protocol, :invalid_multipart_content_type}}}
+                  else
+                    case Jason.decode(String.trim(json)) do
+                      {:ok, value} -> {:cont, {:ok, %{acc | queue: acc.queue ++ [value]}}}
+                      {:error, _} -> {:halt, {:error, {:protocol, :invalid_multipart_json}}}
+                    end
+                  end
+
+                _ ->
+                  {:halt, {:error, {:protocol, :invalid_multipart_part}}}
+              end
+            end)
+        end
+    end
+  end
+
+  defp frame(:complete, state, _client, _decoder, _shapes), do: {:halt, %{state | complete: true}}
+
+  defp frame(value, %{mode: :sse} = state, client, decoder, shapes) do
+    decoder = fn node ->
+      decoder.(
+        __POOLSTER__.Codecs.walk(
+          node,
+          shapes["result"],
+          shapes["inputs"] || %{},
+          client.scalar_codecs,
+          :decode
+        )
+      )
+    end
+
+    case __POOLSTER__.Runtime.decode_response(value, state.status || 200, decoder) do
+      {:ok, envelope} -> {[{:ok, envelope}], state}
+      {:error, reason} -> failure(state, reason)
+    end
+  rescue
+    e -> failure(state, {:protocol, Exception.message(e)})
+  end
+
+  defp frame(value, state, client, decoder, shapes) when is_map(value) do
+    if not state.json and not Map.has_key?(value, "hasNext"),
+      do: raise(ArgumentError, "Missing incremental hasNext")
+
+    if not state.initialized and not Map.has_key?(value, "data") and
+         not Map.has_key?(value, "errors"),
+       do: raise(ArgumentError, "Missing initial result")
+
+    if Map.has_key?(value, "pending") or Map.has_key?(value, "completed") or
+         Map.has_key?(value, "id"),
+       do: raise(ArgumentError, "Unsupported incremental dialect")
+
+    errors = validate_errors(Map.get(value, "errors", []))
+    data = if Map.has_key?(value, "data"), do: Map.get(value, "data"), else: state.data
+    patches = Map.get(value, "incremental", [])
+    if not is_list(patches), do: raise(ArgumentError, "Invalid incremental patches")
+
+    {data, errors} =
+      Enum.reduce(patches, {data, state.errors ++ errors}, fn patch, {data, errors} ->
+        if not is_map(patch) or Map.has_key?(patch, "id"),
+          do: raise(ArgumentError, "Invalid incremental patch")
+
+        path = Map.fetch!(patch, "path")
+
+        if not is_list(path) or
+             not Enum.all?(path, &(is_binary(&1) or (is_integer(&1) and &1 >= 0))),
+           do: raise(ArgumentError, "Invalid incremental path")
+
+        kind = if Map.has_key?(patch, "items"), do: "Stream", else: "Defer"
+
+        if Map.has_key?(patch, "data") and Map.has_key?(patch, "items"),
+          do: raise(ArgumentError, "Patch cannot contain both data and items")
+
+        if not Enum.any?(shapes["selections"] || [], fn selection ->
+             expected = selection["path"]
+             compared = if kind == "Stream", do: Enum.drop(path, -1), else: path
+
+             selection["kind"] == kind and selection["condition"] != "Never" and
+               (is_nil(selection["label"]) or selection["label"] == patch["label"]) and
+               length(expected) == length(compared) and
+               Enum.all?(Enum.zip(expected, compared), fn {a, b} ->
+                 a == b or (a == "*" and is_integer(b))
+               end)
+           end),
+           do: raise(ArgumentError, "Patch is not a declared incremental selection")
+
+        data =
+          cond do
+            Map.has_key?(patch, "data") ->
+              update(data, path, fn old ->
+                if is_map(old) and is_map(patch["data"]),
+                  do: Map.merge(old, patch["data"]),
+                  else: patch["data"]
+              end)
+
+            Map.has_key?(patch, "items") ->
+              insert(data, path, patch["items"])
+
+            true ->
+              data
+          end
+
+        {data, errors ++ validate_errors(Map.get(patch, "errors", []))}
+      end)
+
+    has_next = Map.get(value, "hasNext", false)
+    if not is_boolean(has_next), do: raise(ArgumentError, "Invalid incremental hasNext")
+    extensions = Map.get(value, "extensions", state.extensions)
+
+    decoded =
+      __POOLSTER__.Codecs.walk(
+        data,
+        shapes["result"],
+        shapes["inputs"] || %{},
+        client.scalar_codecs,
+        :decode
+      )
+
+    snapshot = %__POOLSTER__.IncrementalSnapshot{
+      data: decoded,
+      errors: errors,
+      extensions: extensions,
+      patches: patches,
+      complete: not has_next,
+      decoder: decoder
+    }
+
+    {[{:ok, snapshot}],
+     %{
+       state
+       | data: data,
+         initialized: true,
+         errors: errors,
+         extensions: extensions,
+         complete: not has_next
+     }}
+  rescue
+    e -> failure(state, {:protocol, Exception.message(e)})
+  end
+
+  defp frame(_value, state, _client, _decoder, _shapes),
+    do: failure(state, {:protocol, :invalid_frame})
+
+  defp validate_errors(errors) do
+    if not is_list(errors) or not Enum.all?(errors, &(is_map(&1) and is_binary(&1["message"]))),
+      do: raise(ArgumentError, "Invalid GraphQL errors")
+
+    errors
+  end
+
+  defp update(data, [], fun), do: fun.(data)
+
+  defp update(data, [key | rest], fun) when is_map(data) and is_binary(key),
+    do: Map.put(data, key, update(Map.fetch!(data, key), rest, fun))
+
+  defp update(data, [index | rest], fun)
+       when is_list(data) and is_integer(index) and index < length(data),
+       do: List.update_at(data, index, &update(&1, rest, fun))
+
+  defp update(_data, _path, _fun), do: raise(ArgumentError, "Incremental path is absent")
+
+  defp insert(data, path, items) when is_list(items) do
+    {index, parent} = List.pop_at(path, -1)
+    if not is_integer(index), do: raise(ArgumentError, "Stream path requires an index")
+
+    update(data, parent, fn list ->
+      if not is_list(list) or index != length(list),
+        do: raise(ArgumentError, "Stream items must append contiguously")
+
+      list ++ items
+    end)
+  end
+
+  defp insert(_data, _path, _items), do: raise(ArgumentError, "Invalid stream items")
+  defp failure(state, reason), do: {[{:error, reason}], %{state | closed: true}}
+end

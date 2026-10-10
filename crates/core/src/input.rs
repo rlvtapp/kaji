@@ -134,10 +134,17 @@ impl InputContract {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct InputOptions {
+    /// Opt into the explicitly supported GraphQL incremental delivery dialect.
+    #[serde(skip_serializing_if = "is_false")]
+    pub graphql_incremental: bool,
     pub operation_files: Vec<PathBuf>,
     pub import_roots: Vec<PathBuf>,
     pub broker: Option<serde_json::Value>,
     pub workflow_sources: BTreeMap<String, PathBuf>,
+}
+
+fn is_false(value: &bool) -> bool {
+    !value
 }
 
 pub trait InputPlugin: Send + Sync {
@@ -228,6 +235,10 @@ impl InputRegistry {
         path: &Path,
         options: &InputOptions,
     ) -> Result<LoadedInput> {
+        ensure!(
+            !options.graphql_incremental || format == "graphql",
+            "graphql_incremental is a GraphQL-only input option"
+        );
         let plugin = if let Some(id) = provider {
             let plugin = self
                 .plugins

@@ -18,14 +18,25 @@ concrete variants of interfaces/unions, and conditional presence from
 `@skip`/`@include`. Selected `__typename` fields become concrete string literals.
 Schema and combined operation text remain available for native details.
 
-Query, mutation and subscription operations are represented separately;
-subscription transport support is an output capability. TypeScript and Rust HTTP
-clients support queries and mutations through the CLI and npm language plugins.
-See the [TypeScript guide](../../../docs/reference/outputs/graphql-typescript.md) and
-[Rust guide](../../../docs/reference/outputs/graphql-rust.md). Custom scalar representations are
-unknown unless an output provides a mapping. Executable directives other than
-`@skip` and `@include`, variable directives, and fragment definition directives
-are rejected rather than silently assigned invented execution semantics.
-GraphQL import roots, broker options and workflow source options are rejected.
-Schema-only loading retains its existing inspection contract; generation
-requires at least one executable operation.
+Query, mutation and subscription operations are represented separately. All ten
+SDK language outputs consume these owned contracts; subscriptions are an opt-in
+output capability. See the [support matrix](../../../docs/plugin-support-matrix.md)
+and [advanced guide](../../../docs/reference/outputs/graphql-capabilities.md).
+Custom scalar representations and runtime callbacks are configured by the output.
+
+Schemas accept SDL or local introspection JSON (`__schema` or `data.__schema`).
+Quoted full-file `# import` statements resolve beside each source and through
+`InputOptions.import_roots`; operation fragments are deduplicated across files.
+`GraphqlDocument.native_documents` retains original imported documents, including
+introspection JSON. Selective named imports, broker options and workflow source
+options are rejected. Schema-only loading retains inspection contracts and
+explicitly unavailable operation blocks; usable generation requires operations.
+
+`InputOptions.graphql_incremental = true` publishes the separate owned
+`GraphqlIncrementalOperations` contract for experimental path-based multipart
+`deferSpec=20220824` consumers. It preserves deferred/streamed coordinates, labels,
+conditions and initial counts without treating partial snapshots as final models.
+Abstract incremental selections require an unconditional non-deferred common
+`__typename` (aliases supported). Ordinary lowering still rejects `@defer` and
+`@stream`. Other custom executable directives, variable directives and fragment
+definition directives remain unsupported.

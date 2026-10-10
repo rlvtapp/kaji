@@ -18,7 +18,7 @@ final readonly class GraphqlResponse {
 final class GraphqlException extends \RuntimeException {
     public function __construct(public readonly GraphqlResponse $response) { parent::__construct('GraphQL operation returned errors'); }
 }
-/** Unknown custom scalars remain JSON values; configure them outside the generated transport. */
+/** Custom scalar values retain mixed types; optional transport callbacks perform conversion. */
 function decodeValue(mixed $value, array $type): mixed {
     if ($value === null) { if (!$type['nullable']) throw new \UnexpectedValueException('Non-null GraphQL value is null'); return null; }
     $kind=$type['kind'];
@@ -37,14 +37,15 @@ function encodeValue(mixed $value): mixed {
 }
 class Client {
     /** Standard PHP HTTP streams; a callable transport may replace it for PSR-18 or framework clients. */
-    public function __construct(private string $endpoint, private array $headers=[], private float $timeout=30, private mixed $transport=null) {
-        if ($timeout<=0 || ($transport!==null&&!is_callable($transport))) throw new \InvalidArgumentException('Positive timeout and callable transport required');
+    public function __construct(private string $endpoint, private array $headers=[], private float $timeout=30, private mixed $transport=null, private array $scalarCodecs=[], private int $maxFrameBytes=1048576) {
+        if ($timeout<=0 || $maxFrameBytes<=0 || ($transport!==null&&!is_callable($transport))) throw new \InvalidArgumentException('Positive timeout and callable transport required');
         if (!in_array(parse_url($endpoint,PHP_URL_SCHEME),['http','https'],true)) throw new \InvalidArgumentException('HTTP(S) endpoint required');
         foreach($headers as $name=>$value) if(preg_match('/[\r\n]/',(string)$name.(string)$value)) throw new \InvalidArgumentException('Invalid HTTP header');
     }
     /** @template T @param class-string<T> $result @return GraphqlResponse<T> */
     public function execute(string $operation, string $document, \JsonSerializable $variables, string $result): GraphqlResponse {
-        $body=json_encode(['operationName'=>$operation,'query'=>$document,'variables'=>$variables],JSON_THROW_ON_ERROR);
+        $encoded=scalarWalk($variables,['kind'=>'object','class'=>get_class($variables)],$this->scalarCodecs,'encode');
+        $body=json_encode(['operationName'=>$operation,'query'=>$document,'variables'=>(object)$encoded],JSON_THROW_ON_ERROR);
         if($this->transport !== null) { [$status,$text]=($this->transport)($this->endpoint,$body,$this->headers,$this->timeout); }
         else {
             $headers=['Content-Type: application/json','Accept: application/graphql-response+json, application/json']; foreach($this->headers as $name=>$value) $headers[]=$name.': '.$value;
@@ -53,12 +54,33 @@ class Client {
             $status=0; foreach($http_response_header??[] as $line) if(preg_match('/^HTTP\/\S+ (\d{3})/',$line,$match)) $status=(int)$match[1];
         }
         if($status<200 || $status>=300) throw new \RuntimeException('GraphQL HTTP status '.$status);
-        $envelope=json_decode($text,true,512,JSON_THROW_ON_ERROR);
+        return $this->response(json_decode($text,true,512,JSON_THROW_ON_ERROR),$result);
+    }
+    private function response(mixed $envelope,string $result):GraphqlResponse {
+
         if(!is_array($envelope) || (!array_key_exists('data',$envelope)&&!array_key_exists('errors',$envelope))) throw new \UnexpectedValueException('Malformed GraphQL response');
         $errors=array_key_exists('errors',$envelope)?$envelope['errors']:[]; if(!is_array($errors)||!array_is_list($errors)) throw new \UnexpectedValueException('Malformed GraphQL errors');
         foreach($errors as $error) if(!is_array($error)||!is_string($error['message']??null)) throw new \UnexpectedValueException('Malformed GraphQL error');
-        $data=array_key_exists('data',$envelope)?Presence::of($envelope['data']===null?null:$result::fromArray($envelope['data'])):Presence::missing();
+        $data=array_key_exists('data',$envelope)?Presence::of($envelope['data']===null?null:$result::fromArray(scalarWalk($envelope['data'],['kind'=>'object','class'=>$result],$this->scalarCodecs,'decode'))):Presence::missing();
         return new GraphqlResponse($data,$errors,$envelope['extensions']??null);
+    }
+    private function stream(string $accept,string $operation,string $document,\JsonSerializable $variables):array {
+        $encoded=scalarWalk($variables,['kind'=>'object','class'=>get_class($variables)],$this->scalarCodecs,'encode');
+        $body=json_encode(['operationName'=>$operation,'query'=>$document,'variables'=>(object)$encoded],JSON_THROW_ON_ERROR);
+        $headers=['Content-Type: application/json','Accept: '.$accept];foreach($this->headers as $name=>$value)$headers[]=$name.': '.$value;
+        $context=stream_context_create(['http'=>['method'=>'POST','header'=>implode("\r\n",$headers),'content'=>$body,'timeout'=>$this->timeout,'ignore_errors'=>true,'follow_location'=>0]]);
+        $stream=@fopen($this->endpoint,'rb',false,$context);if($stream===false)throw new \RuntimeException('Streaming transport failed');
+        $status=0;$contentType='';foreach($http_response_header??[] as $line){if(preg_match('/^HTTP\/\S+ (\d{3})/',$line,$match))$status=(int)$match[1];if(stripos($line,'Content-Type:')===0)$contentType=trim(substr($line,13));}
+        if($status<200||$status>=300){fclose($stream);throw new \RuntimeException('GraphQL streaming HTTP status '.$status);}return [$stream,$contentType];
+    }
+    public function subscribe(string $operation,string $document,\JsonSerializable $variables,string $result):\Generator {
+        [$stream,$contentType]=$this->stream('text/event-stream',$operation,$document,$variables);
+        try{if(strtolower(trim(explode(';',$contentType)[0]))!=='text/event-stream')throw new \UnexpectedValueException('Expected text/event-stream');foreach(sseFrames($stream,$this->maxFrameBytes) as $envelope){if(isset($envelope['hasNext'])||isset($envelope['incremental']))throw new \UnexpectedValueException('Incremental results require separate transport');yield $this->response($envelope,$result);}}finally{fclose($stream);}
+    }
+    public function incremental(string $operation,string $document,\JsonSerializable $variables,string $result):\Generator {
+        [$stream,$contentType]=$this->stream('multipart/mixed; deferSpec=20220824',$operation,$document,$variables);$snapshot=[];$errors=[];$extensions=null;
+        try{foreach(multipartFrames($stream,$contentType,$this->maxFrameBytes) as $frame){if(array_key_exists('data',$frame))$snapshot=$frame['data'];foreach($frame['incremental']??[] as $patch){$snapshot=applyIncremental($snapshot,$patch);array_push($errors,...($patch['errors']??[]));}array_push($errors,...($frame['errors']??[]));if(array_key_exists('extensions',$frame))$extensions=$frame['extensions'];$final=$frame['hasNext']?null:$this->response(['data'=>$snapshot,'errors'=>$errors,'extensions'=>$extensions],$result);yield new IncrementalFrame($frame,$snapshot,$final);}}finally{fclose($stream);}
+
     }
 __CLIENT_METHODS__
 }

@@ -58,7 +58,7 @@ this inspection. Workflow inspection does not perform API calls.
 | Format | Provider | Published native contract | Scope |
 | --- | --- | --- | --- |
 | OpenAPI | `openapi.compiler-artifacts` | `AdaptedApi`, schema/operation blocks | Independent input crate reads compiler artifacts; existing CLI compiles source first. `openapi.compiler` is an explicitly registered raw-source provider. |
-| GraphQL SDL + operations | `graphql.apollo` | `GraphqlDocument`, input-model blocks, `GraphqlOperations` and operation blocks when documents are supplied | Validated schema, selection-specific results/variables; schema-only operation collections are unavailable |
+| GraphQL SDL / introspection JSON + operations | `graphql.apollo` | `GraphqlDocument`, input-model blocks, `GraphqlOperations` and operation blocks when documents are supplied | Validated schema, selection-specific results/variables; schema-only operation collections are unavailable |
 | AsyncAPI | `asyncapi.roas` | `AsyncApiDocument`, message blocks, `EventOperations` when Kafka lowering succeeds | Inspection 2.6/3.0/3.1; executable 3.0/3.1 Kafka subset; partial message blocks retain diagnostics |
 | Arazzo | `arazzo.roas` | `ArazzoDocument`, resolved `WorkflowOperations` and step blocks | Inspection 1.0.0/1.0.1/1.1.0; explicit local OpenAPI mappings enable the supported sequential runner subset; unresolved step collections are unavailable |
 | Protobuf | `protobuf.protox` | `ProtobufDocument`, `RpcContract`, method blocks | Proto2/proto3 descriptors, import roots and all RPC streaming directions; official Go gRPC output |
@@ -66,7 +66,8 @@ this inspection. Workflow inspection does not perform API calls.
 
 Cap’n Proto requires `capnp` on PATH. Protobuf and Cap’n Proto support explicit
 `InputOptions.import_roots`. GraphQL uses `InputOptions.operation_files` with
-complete SDL; introspection JSON remains unsupported. AsyncAPI uses `broker`
+SDL or local introspection JSON. Quoted full-file schema/operation imports use
+`import_roots`; selective named imports remain unsupported. AsyncAPI uses `broker`
 configuration; Arazzo uses `workflow_sources`. Unsupported provider options fail.
 Input inspection does not connect to a broker or execute workflow steps.
 

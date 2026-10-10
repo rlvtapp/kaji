@@ -1,0 +1,51 @@
+use crate::{graphql_runtime::{GraphqlHttpTransport,GraphqlResponse,GraphqlTransportError},graphql_codecs::GraphqlShape};
+use serde::{Serialize,de::DeserializeOwned};
+use serde_json::Value;
+use std::marker::PhantomData;
+/// Distinct-connection graphql-sse stream. Dropping it closes the response; no replay/reconnect.
+pub struct GraphqlSubscription<T> { response:Option<reqwest::Response>,buffer:Vec<u8>,event:String,data:Vec<String>,event_bytes:usize,eof:bool,transport:GraphqlHttpTransport,shape:Option<GraphqlShape>,_result:PhantomData<T> }
+impl GraphqlHttpTransport {
+    pub async fn subscribe<T:DeserializeOwned,V:Serialize>(&self,document:&str,name:&str,variables:&V)->Result<GraphqlSubscription<T>,GraphqlTransportError>{self.subscribe_shaped(document,name,variables,None).await}
+    pub async fn subscribe_with_shape<T:DeserializeOwned,V:Serialize>(&self,document:&str,name:&str,variables:&V,shape:&str)->Result<GraphqlSubscription<T>,GraphqlTransportError>{self.subscribe_shaped(document,name,variables,Some(GraphqlShape::parse(shape)?)).await}
+    async fn subscribe_shaped<T:DeserializeOwned,V:Serialize>(&self,document:&str,name:&str,variables:&V,shape:Option<GraphqlShape>)->Result<GraphqlSubscription<T>,GraphqlTransportError>{
+        let response=self.request(document,name,variables,"text/event-stream",shape.as_ref())?.send().await.map_err(GraphqlTransportError::Network)?;
+        if !response.status().is_success(){let status=response.status().as_u16();let body=response.text().await.map_err(GraphqlTransportError::Network)?;return Err(GraphqlTransportError::Http{status,body});}
+        if response.headers().get(reqwest::header::CONTENT_TYPE).and_then(|h|h.to_str().ok()).is_none_or(|h|!h.split(';').next().unwrap_or("").trim().eq_ignore_ascii_case("text/event-stream")){return Err(GraphqlTransportError::Protocol("subscription requires text/event-stream".into()));}
+        Ok(GraphqlSubscription{response:Some(response),buffer:vec![],event:String::new(),data:vec![],event_bytes:0,eof:false,transport:self.clone(),shape,_result:PhantomData})
+    }
+}
+impl<T:DeserializeOwned> GraphqlSubscription<T> {
+    pub async fn next(&mut self)->Result<Option<GraphqlResponse<T>>,GraphqlTransportError>{let result=self.next_inner().await;if result.is_err(){self.response=None;}result}
+    async fn next_inner(&mut self)->Result<Option<GraphqlResponse<T>>,GraphqlTransportError>{
+        if self.response.is_none(){return Ok(None)}
+        loop {
+            if let Some(line)=take_line(&mut self.buffer,self.eof)? {
+                self.event_bytes+=line.len()+1;
+                if self.event_bytes>1024*1024 {return Err(GraphqlTransportError::Protocol("SSE event exceeds 1 MiB".into()));}
+                if line.is_empty(){
+                    let event=std::mem::take(&mut self.event);let data=std::mem::take(&mut self.data).join("\n");self.event_bytes=0;
+                    if event.is_empty() && data.is_empty(){continue}
+                    match event.as_str(){
+                        "complete"=>{if !data.is_empty(){return Err(GraphqlTransportError::Protocol("SSE complete must not contain data".into()));}self.response=None;return Ok(None)}
+                        "next"=>{let value:Value=serde_json::from_str(&data).map_err(|e|GraphqlTransportError::Protocol(format!("invalid SSE JSON: {e}")))?;if value.get("hasNext").is_some()||value.get("incremental").is_some(){return Err(GraphqlTransportError::Protocol("incremental envelopes are not subscription results".into()));}return self.transport.decode_envelope(value,self.shape.as_ref()).map(Some)}
+                        _=>return Err(GraphqlTransportError::Protocol(format!("unknown graphql-sse event {event:?}"))),
+                    }
+                }
+                if line.starts_with(':'){continue}
+                let (key,value)=line.split_once(':').unwrap_or((&line,""));let value=value.strip_prefix(' ').unwrap_or(value);
+                match key {"event"=>self.event=value.into(),"data"=>self.data.push(value.into()),_=>{}}
+            } else {
+                if self.eof {return Err(GraphqlTransportError::Protocol("SSE ended before complete".into()));}
+                let chunk=self.response.as_mut().unwrap().chunk().await.map_err(GraphqlTransportError::Network)?;
+                match chunk {Some(chunk)=>{self.buffer.extend_from_slice(&chunk);if self.buffer.len()+self.event_bytes>1024*1024 {return Err(GraphqlTransportError::Protocol("SSE event exceeds 1 MiB".into()));}},None=>self.eof=true}
+            }
+        }
+    }
+}
+fn take_line(buffer:&mut Vec<u8>,eof:bool)->Result<Option<String>,GraphqlTransportError>{
+    let Some(end)=buffer.iter().position(|b|matches!(*b,b'\r'|b'\n')) else{return Ok(None)};
+    if buffer[end]==b'\r' && end+1==buffer.len() && !eof{return Ok(None)}
+    let width=if buffer[end]==b'\r' && buffer.get(end+1)==Some(&b'\n'){2}else{1};
+    let line=String::from_utf8(buffer[..end].to_vec()).map_err(|e|GraphqlTransportError::Protocol(format!("invalid SSE UTF-8: {e}")))?;
+    buffer.drain(..end+width);Ok(Some(line.trim_start_matches('\u{feff}').into()))
+}

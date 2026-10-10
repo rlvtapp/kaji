@@ -1,0 +1,56 @@
+/** Opt-in codecs walk selected wire fields; absent and null values remain untouched. */
+import { GraphqlProtocolError } from './graphql-runtime.js';
+import type { GraphqlResult, GraphqlTransport, SubscriptionTransport } from './graphql-runtime.js';
+export interface ScalarCodec { encode?: (value: never) => unknown; decode?: (value: unknown) => unknown }
+export type ScalarCodecMap = Readonly<Record<string, ScalarCodec | undefined>>;
+export type ScalarShape = { scalar: string } | { named: string } | { list: ScalarShape } | { fields: ReadonlyArray<readonly [string, ScalarShape]> } | { union: readonly ScalarShape[] } | { literal: string } | null;
+export type ScalarInputShapes = Readonly<Record<string, ScalarShape>>;
+export function withGraphqlScalarCodecs<T extends GraphqlTransport | SubscriptionTransport>(transport: T | undefined, scalarCodecs: ScalarCodecMap | undefined): T | undefined {
+  if (!transport || !scalarCodecs) return transport;
+  return ('execute' in transport ? { scalarCodecs, execute: transport.execute.bind(transport) } : { scalarCodecs, subscribe: transport.subscribe.bind(transport) }) as T;
+}
+function walk(value: unknown, shape: ScalarShape, inputs: ScalarInputShapes, codecs: ScalarCodecMap, direction: 'encode' | 'decode', depth = 0): unknown {
+  if (value === undefined || value === null || shape === null) return value;
+  if (depth > 256) throw new GraphqlProtocolError('GraphQL scalar codec recursion exceeds 256 levels');
+  if ('scalar' in shape) {
+    const codec = codecs[shape.scalar];
+    if (direction === 'encode') return codec?.encode ? codec.encode(value as never) : value;
+    return codec?.decode ? codec.decode(value) : value;
+  }
+  if ('named' in shape) {
+    const input = inputs[shape.named];
+    if (!input) throw new GraphqlProtocolError(`Missing scalar input descriptor: ${shape.named}`);
+    return walk(value, input, inputs, codecs, direction, depth + 1);
+  }
+  if ('list' in shape) {
+    if (!Array.isArray(value)) throw new GraphqlProtocolError('Scalar codec expected a list');
+    return value.map(item => walk(item, shape.list, inputs, codecs, direction, depth + 1));
+  }
+  if ('fields' in shape) {
+    if (typeof value !== 'object' || Array.isArray(value)) throw new GraphqlProtocolError('Scalar codec expected an object');
+    const input = value as Record<string, unknown>;
+    const result = { ...input };
+    for (const [name, field] of shape.fields) {
+      if (Object.prototype.hasOwnProperty.call(input, name)) Object.defineProperty(result, name, { value: walk(input[name], field, inputs, codecs, direction, depth + 1), enumerable: true, configurable: true, writable: true });
+    }
+    return result;
+  }
+  if ('union' in shape) {
+    if (typeof value !== 'object' || Array.isArray(value)) return value;
+    const input = value as Record<string, unknown>;
+    const candidates = shape.union.filter(candidate => candidate && 'fields' in candidate && candidate.fields.every(([name, field]) => !(field && 'literal' in field) || input[name] === field.literal));
+    if (candidates.length !== 1) throw new GraphqlProtocolError('Scalar decoding requires an unambiguous abstract selection; select __typename');
+    return walk(value, candidates[0]!, inputs, codecs, direction, depth + 1);
+  }
+  return value;
+}
+export function encodeGraphqlVariables(value: object, shape: ScalarShape, inputs: ScalarInputShapes, codecs?: ScalarCodecMap): object {
+  return (codecs ? walk(value, shape, inputs, codecs, 'encode') : value) as object;
+}
+export function decodeGraphqlResult<T>(result: GraphqlResult<T>, shape: ScalarShape, inputs: ScalarInputShapes, codecs?: ScalarCodecMap): GraphqlResult<T> {
+  if (!codecs || result.kind === 'error') return result;
+  return { ...result, data: walk(result.data, shape, inputs, codecs, 'decode') as T };
+}
+export async function* decodeGraphqlStream<T>(stream: AsyncIterable<GraphqlResult<T>>, shape: ScalarShape, inputs: ScalarInputShapes, codecs?: ScalarCodecMap): AsyncGenerator<GraphqlResult<T>> {
+  for await (const result of stream) yield decodeGraphqlResult(result, shape, inputs, codecs);
+}

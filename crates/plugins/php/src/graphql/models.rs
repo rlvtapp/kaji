@@ -168,6 +168,7 @@ impl Models {
         let mut encode = vec![];
         let mut used = BTreeSet::new();
         let mut docs = vec![];
+        let mut specs = Vec::new();
         for field in fields {
             let key = ident(&field.name)?;
             ensure!(used.insert(key.clone()), "duplicate field {key}");
@@ -175,6 +176,7 @@ impl Models {
             let doc = doc_type(&spec);
             let spec = php_value(&spec);
             let q = quote(&key);
+            specs.push(format!("{q}=>{spec}"));
             props.push((field.optional, key.clone(), php, doc.clone()));
             docs.push(format!(
                 "@param {} ${key}",
@@ -213,6 +215,7 @@ impl Models {
             }
         }
         writeln!(source,"final readonly class {name} {} {{\n{declarations}/** {} */ public function __construct({}){{{init}}}\npublic static function fromArray(array $data):self{{return new self({});}}",if input{"implements \\JsonSerializable"}else{""},docs.join("\n * "),constructor.join(","),decode.join(",")).unwrap();
+        writeln!(source, "public const FIELD_TYPES=[{}];", specs.join(","))?;
         if input {
             writeln!(
                 source,

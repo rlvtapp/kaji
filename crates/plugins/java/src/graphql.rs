@@ -30,6 +30,7 @@ pub struct Graphql {
     provider: Option<Handle<GraphqlOperations>>,
     style: GraphqlStyle,
     groups: BTreeMap<String, BTreeMap<String, String>>,
+    subscriptions: bool,
 }
 pub fn graphql(provider: Option<Handle<GraphqlOperations>>) -> Graphql {
     Graphql {
@@ -37,9 +38,14 @@ pub fn graphql(provider: Option<Handle<GraphqlOperations>>) -> Graphql {
         provider,
         style: GraphqlStyle::default(),
         groups: BTreeMap::new(),
+        subscriptions: false,
     }
 }
 impl Graphql {
+    pub fn subscriptions(mut self, enabled: bool) -> Self {
+        self.subscriptions = enabled;
+        self
+    }
     pub fn raw(mut self) -> Self {
         self.style = GraphqlStyle::Raw;
         self
@@ -92,7 +98,7 @@ impl Plugin<Java> for Graphql {
         vec![Provision::of::<GraphqlClient>()]
     }
     fn generate(&self, cx: &mut PluginContext<'_, Java>) -> Result<()> {
-        let (mut tree, methods) = render(
+        let (mut tree, methods) = render_advanced(
             cx.inputs.get::<GraphqlOperations>()?,
             cx.settings
                 .package_name
@@ -100,6 +106,8 @@ impl Plugin<Java> for Graphql {
                 .unwrap_or("io.poolster.graphql"),
             self.style,
             &self.groups,
+            self.subscriptions,
+            false,
         )?;
         if let Some(version) = &cx.common.package_version {
             for path in ["pom.xml", "build.gradle"] {
@@ -114,11 +122,22 @@ impl Plugin<Java> for Graphql {
         cx.publish(GraphqlClient { methods })
     }
 }
+#[cfg(test)]
 fn render(
     c: &GraphqlOperations,
     package: &str,
     style: GraphqlStyle,
     custom: &BTreeMap<String, BTreeMap<String, String>>,
+) -> Result<(GeneratedTree, BTreeMap<String, String>)> {
+    render_advanced(c, package, style, custom, false, false)
+}
+fn render_advanced(
+    c: &GraphqlOperations,
+    package: &str,
+    style: GraphqlStyle,
+    custom: &BTreeMap<String, BTreeMap<String, String>>,
+    subscriptions: bool,
+    incremental: bool,
 ) -> Result<(GeneratedTree, BTreeMap<String, String>)> {
     ensure!(
         !c.operations.is_empty(),
@@ -167,7 +186,7 @@ fn render(
     let mut groups: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
     for op in &c.operations {
         ensure!(
-            op.kind != GraphqlOperationKind::Subscription,
+            op.kind != GraphqlOperationKind::Subscription || subscriptions,
             "Java GraphQL subscriptions require a separately supported transport"
         );
         ensure!(
@@ -218,6 +237,32 @@ fn render(
             format!("String.join(\"\",{})", chunks.join(","))
         };
         let name = serde_json::to_string(&op.name)?;
+        let return_type = if incremental {
+            format!("java.util.stream.Stream<IncrementalSnapshot<{result}>>")
+        } else if op.kind == GraphqlOperationKind::Subscription {
+            format!("java.util.stream.Stream<Envelope<{result}>>")
+        } else {
+            format!("Envelope<{result}>")
+        };
+        let execution = if incremental {
+            "incremental"
+        } else if op.kind == GraphqlOperationKind::Subscription {
+            "subscribeWithScalars"
+        } else {
+            "executeWithScalars"
+        };
+        let variable_shape = serde_json::to_string(&serde_json::to_string(
+            &poolster_core::native::graphql_scalar_fields(&op.variables),
+        )?)?;
+        let result_shape = serde_json::to_string(&serde_json::to_string(
+            &poolster_core::native::graphql_scalar_shape(&op.result),
+        )?)?;
+        let input_shapes: BTreeMap<_, _> = c
+            .input_objects
+            .iter()
+            .map(|(name, fields)| (name, poolster_core::native::graphql_scalar_fields(fields)))
+            .collect();
+        let inputs = serde_json::to_string(&serde_json::to_string(&input_shapes)?)?;
         let (receiver, param) = if style == GraphqlStyle::Raw {
             ("client.transport", "Client client, ")
         } else {
@@ -225,7 +270,7 @@ fn render(
         };
         writeln!(
             calls,
-            "public {} Envelope<{result}> {method}({param}{vars} variables) throws java.io.IOException, InterruptedException {{ return {}Operation.execute({receiver}, variables); }}",
+            "public {} {return_type} {method}({param}{vars} variables) throws java.io.IOException, InterruptedException {{ return {}Operation.execute({receiver}, variables); }}",
             if style == GraphqlStyle::Raw {
                 "static"
             } else {
@@ -233,11 +278,11 @@ fn render(
             },
             op.name
         )?;
-        operation_files.push((format!("{}Operation",op.name),format!("package {package}.operations;\nimport {package}.models.*;\nimport static {package}.GraphqlRuntime.*;\npublic final class {}Operation {{ private {}Operation() {{}} public static Envelope<{result}> execute(Transport transport,{vars} variables) throws java.io.IOException,InterruptedException {{ return transport.execute({document},{name},variables.toJson(),{result}::fromJson); }} }}\n",op.name,op.name)));
+        operation_files.push((format!("{}Operation",op.name),format!("package {package}.operations;\nimport {package}.models.*;\nimport static {package}.GraphqlRuntime.*;\npublic final class {}Operation {{ private {}Operation() {{}} public static {return_type} execute(Transport transport,{vars} variables) throws java.io.IOException,InterruptedException {{ return transport.{execution}({document},{name},variables.toJson(),{result}::fromJson,shape({variable_shape}),shape({result_shape}),shape({inputs})); }} }}\n",op.name,op.name)));
         if op.variables.iter().all(|v| v.optional) {
             writeln!(
                 calls,
-                "public {} Envelope<{result}> {method}({}) throws java.io.IOException, InterruptedException {{ return {method}({}new {vars}({})); }}",
+                "public {} {return_type} {method}({}) throws java.io.IOException, InterruptedException {{ return {method}({}new {vars}({})); }}",
                 if style == GraphqlStyle::Raw {
                     "static"
                 } else {
@@ -265,6 +310,7 @@ fn render(
                 .entry(
                     match op.kind {
                         GraphqlOperationKind::Query => "query",
+                        GraphqlOperationKind::Subscription => "subscription",
                         _ => "mutation",
                     }
                     .into(),
@@ -327,9 +373,20 @@ fn render(
             let target = methods
                 .get(&op)
                 .ok_or_else(|| anyhow::anyhow!("Unknown GraphQL operation {op}"))?;
+            let return_type = if incremental {
+                format!("java.util.stream.Stream<IncrementalSnapshot<{op}Result>>")
+            } else if c
+                .operations
+                .iter()
+                .any(|item| item.name == op && item.kind == GraphqlOperationKind::Subscription)
+            {
+                format!("java.util.stream.Stream<Envelope<{op}Result>>")
+            } else {
+                format!("Envelope<{op}Result>")
+            };
             writeln!(
                 group_source,
-                "public Envelope<{op}Result> {method}({op}Variables variables) throws java.io.IOException, InterruptedException {{ return client.{target}(variables); }}"
+                "public {return_type} {method}({op}Variables variables) throws java.io.IOException, InterruptedException {{ return client.{target}(variables); }}"
             )?;
             if c.operations
                 .iter()
@@ -341,7 +398,7 @@ fn render(
             {
                 writeln!(
                     group_source,
-                    "public Envelope<{op}Result> {method}() throws java.io.IOException, InterruptedException {{ return client.{target}(); }}"
+                    "public {return_type} {method}() throws java.io.IOException, InterruptedException {{ return client.{target}(); }}"
                 )?;
             }
         }
@@ -354,12 +411,14 @@ fn render(
     let root = format!("src/main/java/{}", package.replace('.', "/"));
     let mut tree = GeneratedTree::default();
     tree.insert(GeneratedFile::new(format!("{root}/Client.java"), source)?)?;
-    let runtime = include_str!("graphql/runtime.java.tmpl")
-        .replace("private static ", "public static ")
-        .replace(
-            "public static final ObjectMapper JSON",
-            "private static final ObjectMapper JSON",
-        );
+    let runtime = (include_str!("graphql/runtime.java.tmpl").to_owned()
+        + include_str!("graphql/scalars.java.tmpl")
+        + include_str!("graphql/incremental.java.tmpl"))
+    .replace("private static ", "public static ")
+    .replace(
+        "public static final ObjectMapper JSON",
+        "private static final ObjectMapper JSON",
+    );
     tree.insert(GeneratedFile::new(format!("{root}/GraphqlRuntime.java"),format!("package {package};\nimport com.fasterxml.jackson.databind.*;\nimport com.fasterxml.jackson.databind.node.*;\nimport java.util.*;\npublic class GraphqlRuntime {{ public final Transport transport; protected GraphqlRuntime(Transport transport){{this.transport=Objects.requireNonNull(transport);}} public static ObjectNode object(){{return JSON.createObjectNode();}}\n{runtime}\n}}\n"))?)?;
     for (name, source) in layout::declarations(&models.source)? {
         let source = source.replace("JSON.createObjectNode()", "object()");
@@ -389,7 +448,7 @@ fn render(
         "settings.gradle",
         crate::docs::settings_gradle("graphql-client"),
     )?)?;
-    tree.insert(GeneratedFile::new("README.md",format!("# GraphQL Java client\n\nJava 17+; Maven or Gradle; pinned Jackson 2.18.3. Import `{package}.Client`.\n\nSelected style: `{style:?}`. Raw exposes static operation functions taking a client, flat exposes methods on the client, and idiomatic exposes query/mutation or explicitly configured resource groups.\n\nVariables and selected results are individual records in `{package}.models`; import `{package}.models.ReadUserVariables` instead of the previous `Client.ReadUserVariables`. Client call paths and inherited Field/Envelope/Transport helper types remain compatible. Each operation document and execution body lives in a separate operations file; Client is a thin facade. Atomic declarations and exceptionally large public facades exceeding128KiB are reported in .poolster/source-layout-diagnostics.json rather than silently split across incompatible APIs. Optional fields use `Field.absent()` or `Field.of(value)`; explicit null is distinct from absence. HTTP uses JDK HttpClient. Supply `HttpTransport(endpoint, http, headers)` or implement `Transport`.\n\nCalls return `Envelope<T>` with data presence, typed partial data, errors, extensions and HTTP status. `requireData()` rejects GraphQL errors and missing/null data. Transport/protocol failures throw IOException; interruption remains explicit. Abstract selections require selected __typename. Custom scalars remain JsonNode. Subscriptions require a separately supported transport and are rejected.\n"))?)?;
+    tree.insert(GeneratedFile::new("README.md",format!("# GraphQL Java client\n\nJava 17+; Maven or Gradle; pinned Jackson 2.18.3. Import `{package}.Client`.\n\nSelected style: `{style:?}`. Raw exposes static operation functions taking a client, flat exposes methods on the client, and idiomatic exposes query/mutation or explicitly configured resource groups.\n\nVariables and selected results are individual records in `{package}.models`; import `{package}.models.ReadUserVariables` instead of the previous `Client.ReadUserVariables`. Client call paths and inherited Field/Envelope/Transport helper types remain compatible. Each operation document and execution body lives in a separate operations file; Client is a thin facade. Atomic declarations and exceptionally large public facades exceeding128KiB are reported in .poolster/source-layout-diagnostics.json rather than silently split across incompatible APIs. Optional fields use `Field.absent()` or `Field.of(value)`; explicit null is distinct from absence. HTTP uses JDK HttpClient. Supply `HttpTransport(endpoint, http, headers)` or implement `Transport`.\n\nCalls return `Envelope<T>` with data presence, typed partial data, errors, extensions and HTTP status. `requireData()` rejects GraphQL errors and missing/null data. Transport/protocol failures throw IOException; interruption remains explicit. Abstract selections require selected __typename. Custom scalars remain JsonNode. Subscriptions are opt-in via .subscriptions(true), using distinct POST text/event-stream connections. Calls return a closeable Java Stream of typed envelopes; use try-with-resources.\n"))?)?;
     tree.insert(GeneratedFile::new(
         "graphql/schema.graphql",
         c.schema_source.clone(),
@@ -406,4 +465,101 @@ fn render(
         )?)?;
     }
     Ok((tree, methods))
+}
+
+/// Explicit path-based incremental execution using the same Java client call styles.
+pub struct GraphqlIncremental {
+    meta: Meta,
+    provider: Option<Handle<poolster_core::native::GraphqlIncrementalOperations>>,
+    style: GraphqlStyle,
+    groups: BTreeMap<String, BTreeMap<String, String>>,
+}
+pub fn graphql_incremental(
+    provider: Option<Handle<poolster_core::native::GraphqlIncrementalOperations>>,
+) -> GraphqlIncremental {
+    GraphqlIncremental {
+        meta: Meta::new(),
+        provider,
+        style: GraphqlStyle::Idiomatic,
+        groups: BTreeMap::new(),
+    }
+}
+impl GraphqlIncremental {
+    pub fn input(
+        mut self,
+        input: Handle<poolster_core::native::GraphqlIncrementalOperations>,
+    ) -> Self {
+        self.provider = Some(input);
+        self
+    }
+    pub fn raw(mut self) -> Self {
+        self.style = GraphqlStyle::Raw;
+        self
+    }
+    pub fn flat(mut self) -> Self {
+        self.style = GraphqlStyle::Flat;
+        self
+    }
+    pub fn idiomatic(mut self) -> Self {
+        self.style = GraphqlStyle::Idiomatic;
+        self
+    }
+    pub fn group(
+        mut self,
+        group: impl Into<String>,
+        method: impl Into<String>,
+        operation: impl Into<String>,
+    ) -> Self {
+        self.groups
+            .entry(group.into())
+            .or_default()
+            .insert(method.into(), operation.into());
+        self
+    }
+    pub fn groups(mut self, groups: BTreeMap<String, BTreeMap<String, String>>) -> Self {
+        self.groups = groups;
+        self
+    }
+    pub fn handle(&self) -> Handle<GraphqlClient> {
+        self.meta.handle()
+    }
+}
+impl Plugin<Java> for GraphqlIncremental {
+    fn kind(&self) -> &'static str {
+        "java-graphql-incremental"
+    }
+    fn meta(&self) -> &Meta {
+        &self.meta
+    }
+    fn supports_native_input(&self) -> bool {
+        true
+    }
+    fn requires(&self) -> Vec<Requirement> {
+        vec![Requirement::on(self.provider)]
+    }
+    fn provides(&self) -> Vec<Provision> {
+        vec![Provision::of::<GraphqlClient>()]
+    }
+    fn generate(&self, cx: &mut PluginContext<'_, Java>) -> Result<()> {
+        let value = cx
+            .inputs
+            .get::<poolster_core::native::GraphqlIncrementalOperations>()?;
+        let (mut tree, methods) = render_advanced(
+            &value.definition,
+            cx.settings
+                .package_name
+                .as_deref()
+                .unwrap_or("io.poolster.graphql"),
+            self.style,
+            &self.groups,
+            false,
+            true,
+        )?;
+        tree.replace(GeneratedFile::new("README.md","# Incremental Java GraphQL
+
+Explicit deferSpec=20220824 path-based multipart transport. Calls return closeable Stream<IncrementalSnapshot<Result>>; use try-with-resources. Snapshots expose independent partial JsonNode data, accumulated errors, original patches and completion. decodeData() only decodes completed error-free selected data; completion does not imply application success. HttpTransport accepts named ScalarCodec callbacks transforming JsonNode values; defaults preserve raw custom scalar JSON. Callbacks apply once to each emitted snapshot; aggregate wire data is retained separately. Newer pending/id dialects, non-contiguous stream patches and mutations/subscriptions are unsupported for this capability. Ordinary JSON fallback is supported.
+")?)?;
+        cx.files.append(tree)?;
+        cx.publish(GraphqlClient { methods })
+    }
 }

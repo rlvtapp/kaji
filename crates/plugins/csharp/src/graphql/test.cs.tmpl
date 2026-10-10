@@ -3,6 +3,15 @@ using System.Text.Json;
 using var http = new HttpClient();
 var client = new GraphqlClient(http, new Uri("ENDPOINT"));
 if ((await PING_CALL).Data?.Ping != "pong") throw new Exception("no-variable mutation");
+var abstractResult = await GraphqlOperations.SearchAsync(client);
+if (abstractResult.Data?.Node is not SearchResultNodeRobot robot || robot.Kind != "Robot" || robot.Code != "R2") throw new Exception("abstract typename dispatch");
+foreach (var json in new[]{"{\"kind\":\"Person\",\"name\":\"Ada\"}","{\"kind\":\"Robot\",\"code\":\"R2\"}"}) {
+    var value = JsonSerializer.Deserialize<SearchResultNode>(json,GraphqlClient.Json)!;
+    if (JsonSerializer.Serialize(value,GraphqlClient.Json).Length == 0) throw new Exception("union roundtrip");
+}
+foreach(var json in new[]{"{\"kind\":\"Alien\"}","{\"name\":\"Ada\"}","{\"kind\":null}"}) {
+    try { _ = JsonSerializer.Deserialize<SearchResultNode>(json,GraphqlClient.Json); throw new Exception("invalid discriminator accepted"); } catch(JsonException) {}
+}
 var variables = new ReadUserVariables { Id = "read" };
 if (JsonSerializer.Serialize(variables, GraphqlClient.Json).Contains("nickname")) throw new Exception("optional omission");
 var result = await CALL;

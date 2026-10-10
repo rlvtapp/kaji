@@ -28,6 +28,7 @@ pub struct Graphql {
     provider: Option<Handle<GraphqlOperations>>,
     style: GraphqlStyle,
     groups: BTreeMap<String, BTreeMap<String, String>>,
+    subscriptions: bool,
 }
 pub fn graphql(provider: Option<Handle<GraphqlOperations>>) -> Graphql {
     Graphql {
@@ -35,9 +36,14 @@ pub fn graphql(provider: Option<Handle<GraphqlOperations>>) -> Graphql {
         provider,
         style: GraphqlStyle::Flat,
         groups: BTreeMap::new(),
+        subscriptions: false,
     }
 }
 impl Graphql {
+    pub fn subscriptions(mut self, enabled: bool) -> Self {
+        self.subscriptions = enabled;
+        self
+    }
     pub fn raw(mut self) -> Self {
         self.style = GraphqlStyle::Raw;
         self
@@ -121,12 +127,19 @@ impl Graphql {
         let contract = cx.inputs.get::<GraphqlOperations>()?;
         let namespace =
             crate::dotnet_namespace(cx.settings.package_name.as_deref().unwrap_or("GraphqlSdk"));
-        let (files, symbols) = render(contract, &namespace, self.style, &self.groups)?;
+        let (files, symbols) = render_advanced(
+            contract,
+            &namespace,
+            self.style,
+            &self.groups,
+            self.subscriptions,
+            false,
+        )?;
         for (path, source) in files {
             cx.files.emit(GeneratedFile::new(path, source)?)?;
         }
         cx.files.emit(GeneratedFile::new("GraphqlSdk.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup></Project>")?)?;
-        cx.files.emit(GeneratedFile::new("README.md", "# C# GraphQL client\n\nSources are organized into Runtime/, Client/, Operations/, Models/, and Groups/. Public APIs stay unchanged across files; wide records use partial declarations with a 128 KiB budget. Indivisible oversized declarations are listed in .poolster/source-layout-diagnostics.json.\n\n.NET 8, HttpClient and CancellationToken. Raw operation functions are static GraphqlOperations methods. Flat style uses GraphqlClient.ReadUserAsync; grouped style uses GraphqlClient.Query.ReadUserAsync or custom groups. Calls return GraphqlResponse<T> containing Data, Errors and Extensions: GraphQL errors and partial data remain explicit; call EnsureSuccess() to throw. HTTP failures throw HttpRequestException. Optional<T> preserves missing versus explicit null; default values omit optional input properties. Selection-specific records reflect fixed operation documents. Custom scalars use JsonElement, enums retain string wire values. Subscriptions, incremental responses and abstract union selections are unsupported.\n")?)?;
+        cx.files.emit(GeneratedFile::new("README.md", "# C# GraphQL client\n\nSources are organized into Runtime/, Client/, Operations/, Models/, and Groups/. Public APIs stay unchanged across files; wide records use partial declarations with a 128 KiB budget. Indivisible oversized declarations are listed in .poolster/source-layout-diagnostics.json.\n\n.NET 8, HttpClient and CancellationToken. Raw operation functions are static GraphqlOperations methods. Flat style uses GraphqlClient.ReadUserAsync; grouped style uses GraphqlClient.Query.ReadUserAsync or custom groups. Calls return GraphqlResponse<T> containing Data, Errors and Extensions: GraphQL errors and partial data remain explicit; call EnsureSuccess() to throw. HTTP failures throw HttpRequestException. Optional<T> preserves missing versus explicit null; default values omit optional input properties. Selection-specific records reflect fixed operation documents. Custom scalars use JsonElement, enums retain string wire values. Subscriptions are opt-in via .subscriptions(true), returning IAsyncEnumerable typed envelopes using distinct POST SSE connections. Named ScalarCodecs callbacks transform JsonNode values without changing public JsonElement model types. Abstract selections generate typed alternatives when every variant selects a required __typename (aliases supported); unknown or missing discriminators fail decoding. Untagged abstract unions are rejected during generation.\n")?)?;
         cx.publish(GraphqlClient {
             operations: symbols,
             style: self.style,
@@ -136,11 +149,22 @@ impl Graphql {
 fn ident(value: &str) -> String {
     crate::pascal_case(value)
 }
+#[cfg(test)]
 fn render(
     contract: &GraphqlOperations,
     namespace: &str,
     style: GraphqlStyle,
     groups: &BTreeMap<String, BTreeMap<String, String>>,
+) -> Result<(BTreeMap<String, String>, BTreeMap<String, String>)> {
+    render_advanced(contract, namespace, style, groups, false, false)
+}
+fn render_advanced(
+    contract: &GraphqlOperations,
+    namespace: &str,
+    style: GraphqlStyle,
+    groups: &BTreeMap<String, BTreeMap<String, String>>,
+    subscriptions: bool,
+    incremental: bool,
 ) -> Result<(BTreeMap<String, String>, BTreeMap<String, String>)> {
     ensure!(
         !contract.operations.is_empty(),
@@ -171,6 +195,10 @@ fn render(
         "Client/GraphqlClient.cs".into(),
         header.clone() + &runtime[client_start..],
     );
+    files.insert(
+        "Runtime/GraphqlAdvanced.cs".into(),
+        header.clone() + include_str!("graphql/advanced.cs.tmpl"),
+    );
     let mut models = models::Models::default();
     for (name, fields) in &contract.input_objects {
         models.object(&ident(name), fields)?;
@@ -179,7 +207,7 @@ fn render(
     let mut functions = String::from("public static class GraphqlOperations {\n");
     for op in &contract.operations {
         ensure!(
-            op.kind != GraphqlOperationKind::Subscription,
+            op.kind != GraphqlOperationKind::Subscription || subscriptions,
             "C# GraphQL subscriptions require a separate unsupported transport"
         );
         let name = ident(&op.name);
@@ -213,11 +241,37 @@ fn render(
         } else {
             "variables"
         };
+        let return_type = if incremental {
+            format!("IAsyncEnumerable<GraphqlIncrementalSnapshot<{result}>>")
+        } else if op.kind == GraphqlOperationKind::Subscription {
+            format!("IAsyncEnumerable<GraphqlResponse<{result}>>")
+        } else {
+            format!("Task<GraphqlResponse<{result}>>")
+        };
+        let execution = if incremental {
+            "IncrementalAsync"
+        } else if op.kind == GraphqlOperationKind::Subscription {
+            "SubscribeAsync"
+        } else {
+            "ExecuteWithScalarsAsync"
+        };
+        let variable_shape = serde_json::to_string(&serde_json::to_string(
+            &poolster_core::native::graphql_scalar_fields(&op.variables),
+        )?)?;
+        let result_shape = serde_json::to_string(&serde_json::to_string(
+            &poolster_core::native::graphql_scalar_shape(&op.result),
+        )?)?;
+        let inputs: BTreeMap<_, _> = contract
+            .input_objects
+            .iter()
+            .map(|(name, fields)| (name, poolster_core::native::graphql_scalar_fields(fields)))
+            .collect();
+        let inputs = serde_json::to_string(&serde_json::to_string(&inputs)?)?;
         let functions_start = functions.len();
         let source_start = source.len();
-        writeln!(functions,"public static Task<GraphqlResponse<{result}>> {name}Async(GraphqlClient client, {args}CancellationToken cancellationToken = default) => client.ExecuteAsync<{result}>({}, {}, {variables}, cancellationToken);",serde_json::to_string(&op.name)?,serde_json::to_string(&op.document)?).unwrap();
+        writeln!(functions,"public static {return_type} {name}Async(GraphqlClient client, {args}CancellationToken cancellationToken = default) => client.{execution}<{result}>({}, {}, {variables}, cancellationToken,{variable_shape},{result_shape},{inputs});",serde_json::to_string(&op.name)?,serde_json::to_string(&op.document)?).unwrap();
         if style == GraphqlStyle::Flat {
-            writeln!(source,"public sealed partial class GraphqlClient {{ public Task<GraphqlResponse<{result}>> {name}Async({args}CancellationToken cancellationToken = default) => GraphqlOperations.{name}Async(this, {}cancellationToken); }}",if op.variables.is_empty(){""}else{"variables, "}).unwrap();
+            writeln!(source,"public sealed partial class GraphqlClient {{ public {return_type} {name}Async({args}CancellationToken cancellationToken = default) => GraphqlOperations.{name}Async(this, {}cancellationToken); }}",if op.variables.is_empty(){""}else{"variables, "}).unwrap();
         }
         let operation = header.clone()
             + "public static partial class GraphqlOperations {\n"
@@ -238,6 +292,8 @@ fn render(
                     .entry(
                         if op.kind == GraphqlOperationKind::Query {
                             "Query"
+                        } else if op.kind == GraphqlOperationKind::Subscription {
+                            "Subscription"
                         } else {
                             "Mutation"
                         }
@@ -286,8 +342,15 @@ fn render(
                 } else {
                     format!("{name}Variables variables, ")
                 };
+                let return_type = if incremental {
+                    format!("IAsyncEnumerable<GraphqlIncrementalSnapshot<{result}>>")
+                } else if op.kind == GraphqlOperationKind::Subscription {
+                    format!("IAsyncEnumerable<GraphqlResponse<{result}>>")
+                } else {
+                    format!("Task<GraphqlResponse<{result}>>")
+                };
                 let method_start = source.len();
-                writeln!(source,"public Task<GraphqlResponse<{result}>> {method}Async({args}CancellationToken cancellationToken = default) => GraphqlOperations.{name}Async(client, {}cancellationToken);",if op.variables.is_empty(){""}else{"variables, "}).unwrap();
+                writeln!(source,"public {return_type} {method}Async({args}CancellationToken cancellationToken = default) => GraphqlOperations.{name}Async(client, {}cancellationToken);",if op.variables.is_empty(){""}else{"variables, "}).unwrap();
                 files.insert(
                     format!(
                         "Groups/{}/{}",
@@ -342,3 +405,113 @@ fn render(
     }
     Ok((files, symbols))
 }
+
+pub struct GraphqlIncremental {
+    meta: Meta,
+    provider: Option<Handle<poolster_core::native::GraphqlIncrementalOperations>>,
+    style: GraphqlStyle,
+    groups: BTreeMap<String, BTreeMap<String, String>>,
+}
+pub fn graphql_incremental(
+    provider: Option<Handle<poolster_core::native::GraphqlIncrementalOperations>>,
+) -> GraphqlIncremental {
+    GraphqlIncremental {
+        meta: Meta::new(),
+        provider,
+        style: GraphqlStyle::Flat,
+        groups: BTreeMap::new(),
+    }
+}
+impl GraphqlIncremental {
+    pub fn input(
+        mut self,
+        input: Handle<poolster_core::native::GraphqlIncrementalOperations>,
+    ) -> Self {
+        self.provider = Some(input);
+        self
+    }
+    pub fn raw(mut self) -> Self {
+        self.style = GraphqlStyle::Raw;
+        self
+    }
+    pub fn flat(mut self) -> Self {
+        self.style = GraphqlStyle::Flat;
+        self
+    }
+    pub fn idiomatic(mut self) -> Self {
+        self.style = GraphqlStyle::Idiomatic;
+        self
+    }
+    pub fn groups(mut self, groups: BTreeMap<String, BTreeMap<String, String>>) -> Self {
+        self.groups = groups;
+        self
+    }
+    pub fn group(
+        mut self,
+        group: impl Into<String>,
+        method: impl Into<String>,
+        op: impl Into<String>,
+    ) -> Self {
+        self.groups
+            .entry(group.into())
+            .or_default()
+            .insert(method.into(), op.into());
+        self
+    }
+    pub fn handle(&self) -> Handle<GraphqlClient> {
+        self.meta.handle()
+    }
+    fn render_into<L: poolster_core::engine::Language<Settings = crate::Settings>>(
+        &self,
+        cx: &mut PluginContext<'_, L>,
+    ) -> Result<()> {
+        let value = cx
+            .inputs
+            .get::<poolster_core::native::GraphqlIncrementalOperations>()?;
+        let namespace =
+            crate::dotnet_namespace(cx.settings.package_name.as_deref().unwrap_or("GraphqlSdk"));
+        let (files, operations) = render_advanced(
+            &value.definition,
+            &namespace,
+            self.style,
+            &self.groups,
+            false,
+            true,
+        )?;
+        for (path, source) in files {
+            cx.files.emit(GeneratedFile::new(path, source)?)?;
+        }
+        cx.files.emit(GeneratedFile::new("GraphqlSdk.csproj","<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup></Project>")?)?;
+        cx.files.emit(GeneratedFile::new("README.md","# Incremental C# GraphQL\n\nExplicit deferSpec=20220824 path-based multipart. Calls return IAsyncEnumerable<GraphqlIncrementalSnapshot<Result>> with CancellationToken. Snapshots expose independent partial JsonNode Data, accumulated Errors, original Patches and Complete. DecodeData() only decodes complete error-free selected data. Configure client.ScalarCodecs with named JsonNode callbacks via object initializer; public custom scalars stay JsonElement. Completion does not mean application success. Newer pending/id formats and non-contiguous stream patches fail. JSON fallback supported.\n")?)?;
+        cx.publish(GraphqlClient {
+            operations,
+            style: self.style,
+        })
+    }
+}
+macro_rules! incremental_plugin {
+    ($language:ty,$kind:literal) => {
+        impl Plugin<$language> for GraphqlIncremental {
+            fn kind(&self) -> &'static str {
+                $kind
+            }
+            fn meta(&self) -> &Meta {
+                &self.meta
+            }
+            fn supports_native_input(&self) -> bool {
+                true
+            }
+            fn requires(&self) -> Vec<Requirement> {
+                vec![Requirement::on(self.provider)]
+            }
+            fn provides(&self) -> Vec<Provision> {
+                vec![Provision::of::<GraphqlClient>()]
+            }
+            fn generate(&self, cx: &mut PluginContext<'_, $language>) -> Result<()> {
+                self.render_into(cx)
+            }
+        }
+    };
+}
+incremental_plugin!(crate::CSharp, "csharp-graphql-incremental");
+incremental_plugin!(crate::DotNet, "dotnet-graphql-incremental");

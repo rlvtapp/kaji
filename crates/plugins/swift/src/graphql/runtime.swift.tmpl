@@ -44,10 +44,11 @@ public struct GraphqlHTTPError: Error { public let statusCode: Int; public let b
 struct GraphqlRequest<V: Encodable>: Encodable { let query: String; let operationName: String; let variables: V }
 struct GraphqlEmptyVariables: Encodable {}
 public final class GraphqlClient {
-    private let endpoint: URL
-    private let session: URLSession
-    private let headers: [String:String]
-    public init(endpoint: URL, session: URLSession = .shared, headers: [String:String] = [:]) { self.endpoint = endpoint; self.session = session; self.headers = headers }
+    let endpoint: URL
+    let session: URLSession
+    let headers: [String:String]
+    public let scalarCodecs: [String:GraphqlScalarCodec]
+    public init(endpoint: URL, session: URLSession = .shared, headers: [String:String] = [:], scalarCodecs: [String:GraphqlScalarCodec] = [:]) { self.endpoint = endpoint; self.session = session; self.headers = headers; self.scalarCodecs = scalarCodecs }
     public func execute<T:Decodable,V:Encodable>(operationName: String, document: String, variables: V, resultType: T.Type) async throws -> GraphqlResponse<T> {
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"; request.setValue("application/json",forHTTPHeaderField:"Content-Type")

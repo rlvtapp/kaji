@@ -13,8 +13,11 @@ See the [integration guide](reference/outputs/graphql-integrations.md) for API a
 GraphQL clients are implemented for all ten SDK languages: TypeScript, Rust, Go,
 Python, PHP, Java, C#, Ruby, Swift and Elixir. The deprecated `dotnet` target aliases
 C#. All use the existing language plugin packages through Rust, CLI and npm entry points.
-TypeScript and Rust have separate input/output scalar mappings; other languages
-retain custom scalar JSON values without mapping codecs. All styles use fixed operation documents.
+All ten SDKs provide opt-in distinct-connection SSE subscriptions, direction-specific
+runtime scalar callbacks and experimental multipart deferSpec=20220824 incremental
+delivery. TypeScript incremental generation is raw only; scalar value boundaries
+vary by language. All selections remain fixed operation documents. See the
+[advanced capability guide](reference/outputs/graphql-capabilities.md).
 See the [language guides](reference/README.md) and [verification](verification/verification.md#graphql-client-completion-checks)
 for tested features and per-language limits. These additions are not yet published.
 
@@ -76,7 +79,7 @@ selection, block consumption, finalization and compatibility boundaries.
 | Input format | Parsing / inspection | Usable bundled output |
 | --- | :---: | --- |
 | OpenAPI | ✅ | HTTP output plugins above |
-| GraphQL SDL + operation documents | ✅ | All ten SDK languages through Rust API, CLI and npm entry points |
+| GraphQL SDL / local introspection JSON + operation documents | ✅ | All ten SDK languages through Rust API, CLI and npm entry points |
 | Protobuf proto2/proto3 | ✅ | Go messages and gRPC clients/server interfaces |
 | AsyncAPI 2.6 / 3.0 / 3.1 | ✅ | TypeScript Kafka for the supported 3.0/3.1 subset |
 | Arazzo 1.0.0 / 1.0.1 / 1.1.0 | ✅ | TypeScript sequential runners with resolved local OpenAPI sources |
@@ -97,12 +100,15 @@ select one input source; Rust plugins can compose multiple typed contracts.
 - [x] Compile generated packages for all ten SDK languages and execute against a local GraphQL server.
 - [x] Modular GraphQL source layouts, deterministic filenames and regeneration checks.
 - [x] Separate TypeScript subscription capability with an injected async-iterable transport.
-- [ ] Bundle a WebSocket or SSE subscription transport.
+- [x] Bundle distinct-connection graphql-sse subscription transports for all ten SDKs.
+- [ ] Bundle WebSocket, multiplexing or reconnect/replay support.
 - [x] Separate input/output TypeScript scalar mappings.
 - [x] Separate input/output Rust scalar mappings for validated self-contained wire types.
-- [ ] Runtime scalar codecs.
-- [ ] Introspection JSON and schema imports.
-- [ ] Incremental delivery (`@defer` / `@stream`) and custom executable directives.
+- [x] Direction-specific runtime scalar callbacks with target-specific value boundaries.
+- [x] Local introspection JSON and quoted full-file schema/operation imports.
+- [ ] Remote introspection and selective named imports.
+- [x] Experimental `@defer` / `@stream` with multipart deferSpec=20220824.
+- [ ] Newer ID-based incremental dialects and custom executable directives.
 - [x] GraphQL support in Zod, Faker, MSW, Cypress and query-hook outputs (current checkout; unreleased).
 - [x] GraphQL generation through the npm configuration engine (current checkout; unreleased).
 
@@ -171,19 +177,23 @@ heuristic invents resource groups.
 | --- | --- | --- | --- |
 | TypeScript | Configurable input/output types | Selected concrete alternatives | Static types; optional Zod validators |
 | Rust | JSON or configured wire types | Selected concrete alternatives | Serde decoding and presence wrappers |
-| Go | json.RawMessage | Unsupported; rejects | JSON decoding; required primitives can default to zero |
+| Go | JSON or supported mapped types | Requires selected nonnull typename | JSON decoding; required primitives can default to zero |
 | Python | Any | Selected typed dictionary alternatives | Static TypedDict annotations |
-| PHP | JSON values | Requires selected typename | Generated model decoding/validation |
+| PHP | mixed / JSON values | Requires selected typename | Generated model decoding/validation |
 | Java | JsonNode | Requires selected typename | Generated record decoding/validation |
-| C# / dotnet | JsonElement | Unsupported; rejects | Required presence; nonnull values are not revalidated |
+| C# / dotnet | JsonElement | Requires selected nonnull typename | Required presence; nonnull values are not revalidated |
 | Ruby | Untyped JSON | Selected variants | Generated model validation and RBS signatures |
-| Swift | GraphqlJSON | Unsupported; rejects | Codable plus presence/null checks |
+| Swift | GraphqlJSON | Requires selected nonnull typename | Codable plus presence/null checks |
 | Elixir | JSON terms | Requires selected typename | Generated struct/scalar decoding/validation |
 
-Subscriptions require a distinct transport capability. Only TypeScript currently
-accepts an injected subscription transport; other language generators reject subscriptions.
-No language in this table has a bundled WebSocket/SSE subscription transport, dynamic
-field selection, incremental delivery or runtime custom scalar codecs.
+Subscriptions are a separately enabled capability with bundled distinct-connection
+graphql-sse transports in all ten SDKs. Runtime callbacks preserve absence and null;
+Python/PHP/Ruby remain statically Any/mixed/untyped, and Java/C#/Swift codecs stay
+within their JSON value domain. Experimental incremental inputs use a separate
+contract and only the tested multipart deferSpec=20220824 dialect. TypeScript's
+incremental output is raw only. No bundled WebSocket transport, multiplexing,
+reconnect/replay, newer ID-based incremental protocol or dynamic fields are claimed.
+See the [advanced guide](reference/outputs/graphql-capabilities.md).
 Symfony remains a separate HTTP integration target; adapting the PHP GraphQL transport
 to Symfony HttpClient is possible, but generated Symfony GraphQL DI bindings are not implemented.
 

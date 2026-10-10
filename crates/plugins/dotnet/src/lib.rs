@@ -7,7 +7,8 @@
 use poolster_core::engine::Package;
 use poolster_plugin_csharp::dotnet_package;
 pub use poolster_plugin_csharp::{
-    DotNet, Graphql, GraphqlClient, GraphqlStyle, PackageExt, Sdk, Settings, graphql, sdk,
+    DotNet, Graphql, GraphqlClient, GraphqlIncremental, GraphqlStyle, PackageExt, Sdk, Settings,
+    graphql, graphql_incremental, sdk,
 };
 
 /// Creates a package using the legacy `dotnet` language identity.

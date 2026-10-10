@@ -51,14 +51,23 @@ errors are distinct failures. Responses are bounded to 16 MiB.
 
 ## Limits
 
-Subscriptions, incremental delivery and dynamic selections are unsupported.
-Interface/union result selections are explicitly rejected in this first increment.
-Enums retain wire strings; custom scalars use `json.RawMessage`, with no custom
-mapping API yet. No third-party GraphQL runtime is required in generated packages.
+Opt-in subscriptions use distinct-connection graphql-sse; incremental inputs use
+experimental multipart deferSpec=20220824. Dynamic selections remain unsupported.
+Interface/union result variants require a selected nonnull `__typename`
+discriminator; aliases are retained. Untagged abstract selections are rejected.
+Enums retain wire strings; custom scalars default to `json.RawMessage`. Supported
+scalar mappings and `ScalarCodec` / `TypedScalarCodec` callbacks provide separate
+input/output conversion; `WithScalarCodecs` configures the client. No third-party GraphQL runtime is required in generated packages.
 
 Generated-code tests cover all styles, presence/null behavior, exact documents,
 errors, cancellation and regeneration. The [support matrix](../../plugin-support-matrix.md)
 records the validation boundary.
+
+## Advanced capabilities
+
+See [subscriptions, scalar callbacks and incremental delivery](graphql-capabilities.md)
+for opt-in configuration, native stream lifetime and the tested protocol boundary.
+These additions are unreleased; historical checks below predate them.
 
 ## Generated source layout
 

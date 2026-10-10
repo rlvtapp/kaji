@@ -324,3 +324,110 @@ fn filenames_are_portable_and_case_collisions_reject() {
             .contains("atom name limit")
     );
 }
+
+const ADVANCED_SCHEMA: &str = "directive @defer(if:Boolean! = true,label:String) on FRAGMENT_SPREAD | INLINE_FRAGMENT directive @stream(if:Boolean! = true,label:String,initialCount:Int! = 0) on FIELD scalar DateTime input Filter {when:DateTime! list:[DateTime] next:Filter} type Stamp {when:DateTime! maybe:DateTime list:[DateTime] name:String!} type User{id:ID! when:DateTime!} type Query{stamp(input:Filter!):Stamp! user:User! values:[Int!]!} type Subscription{ticks(start:DateTime!):Stamp!}";
+fn advanced_tree(incremental: bool) -> GeneratedTree {
+    let schema = poolster_input_graphql::parse(ADVANCED_SCHEMA).unwrap();
+    if incremental {
+        let c=poolster_input_graphql::lower_incremental_operations(&schema.schema,ADVANCED_SCHEMA,"query Feed($count:Int!){user{id ... @defer(label:\"details\"){when}} values @stream(label:\"values\",initialCount:$count)}").unwrap();
+        render_capabilities(
+            &c.definition,
+            "example",
+            GraphqlStyle::Raw,
+            &BTreeMap::new(),
+            false,
+            true,
+            Some(&c.selections),
+        )
+        .unwrap()
+        .0
+    } else {
+        let c=poolster_input_graphql::lower_operations(&schema.schema,ADVANCED_SCHEMA,"query Read($input:Filter!,$include:Boolean!){stamp(input:$input){when maybe @include(if:$include) list name}} subscription Ticks($start:DateTime!){ticks(start:$start){when maybe list name}}").unwrap();
+        render_capabilities(
+            &c,
+            "example",
+            GraphqlStyle::Raw,
+            &BTreeMap::new(),
+            true,
+            false,
+            None,
+        )
+        .unwrap()
+        .0
+    }
+}
+#[test]
+fn advanced_regeneration_is_deterministic() {
+    for mode in [false, true] {
+        assert_eq!(advanced_tree(mode), advanced_tree(mode));
+    }
+}
+#[test]
+#[ignore = "requires pinned GraphQL.js16.14.2/graphql-sse2.6.0 and Mix Finch0.24.0/Jason1.4.5 toolchains"]
+fn advanced_streams_codecs_compile_and_execute() {
+    use std::io::{BufRead, BufReader};
+    use std::process::{Command, Stdio};
+    let output =
+        std::env::var("POOLSTER_ELIXIR_GRAPHQL_OUTPUT").expect("set generated package output");
+    let root = std::path::Path::new(&output);
+    std::fs::create_dir_all(root).unwrap();
+    let schema = root.join("advanced.graphql");
+    std::fs::write(&schema, ADVANCED_SCHEMA).unwrap();
+    let server_source = root.join("advanced-server.cjs");
+    std::fs::write(
+        &server_source,
+        include_str!("../../../rust/tests/fixtures/graphql_capabilities/server.cjs"),
+    )
+    .unwrap();
+    let mut server = Command::new("node")
+        .args([server_source.to_str().unwrap(), schema.to_str().unwrap()])
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    struct Stop<'a>(&'a mut std::process::Child);
+    impl Drop for Stop<'_> {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+    let mut endpoint = String::new();
+    BufReader::new(server.stdout.take().unwrap())
+        .read_line(&mut endpoint)
+        .unwrap();
+    let _stop = Stop(&mut server);
+    let endpoint = endpoint.trim().replace(
+        "127.0.0.1",
+        &std::env::var("POOLSTER_GRAPHQL_HOST").unwrap_or("127.0.0.1".into()),
+    );
+    for incremental in [false, true] {
+        let dir = root.join(if incremental {
+            "incremental"
+        } else {
+            "subscriptions"
+        });
+        std::fs::create_dir_all(&dir).unwrap();
+        advanced_tree(incremental).write_to(&dir).unwrap();
+        let template = include_str!("advanced_test.exs.tmpl");
+        let (header, body) = template.split_once("if __INCREMENTAL__ do\n").unwrap();
+        let (inc, regular) = body.split_once("\nelse\n").unwrap();
+        let regular = regular.rsplit_once("\nend\n").unwrap().0;
+        let script = format!(
+            "{header}{}\nIO.puts(\"Elixir advanced GraphQL runtime passed\")\n",
+            if incremental { inc } else { regular }
+        );
+        std::fs::write(dir.join("probe.exs"), script).unwrap();
+        let runner = std::env::var("POOLSTER_ELIXIR_RUNNER").expect("set Mix runner");
+        let result = Command::new(runner)
+            .arg(&dir)
+            .env("POOLSTER_GRAPHQL_ADVANCED_ENDPOINT", &endpoint)
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}\n{}",
+            String::from_utf8_lossy(&result.stdout),
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
+}

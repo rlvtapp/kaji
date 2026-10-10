@@ -1,0 +1,52 @@
+defmodule __POOLSTER__.Codecs do
+  def walk(value, shape, inputs, codecs, direction),
+    do: walk(value, shape, inputs, codecs, direction, 0)
+
+  defp walk(nil, _shape, _inputs, _codecs, _direction, _depth), do: nil
+
+  defp walk(_value, _shape, _inputs, _codecs, _direction, depth) when depth > 256,
+    do: raise(ArgumentError, "GraphQL codec nesting exceeds256")
+
+  defp walk(value, %{"scalar" => name}, _inputs, codecs, direction, _depth) do
+    codec =
+      if name in ["String", "ID", "Int", "Float", "Boolean"],
+        do: nil,
+        else: get_in(codecs, [name, direction])
+
+    if is_function(codec, 1), do: codec.(value), else: value
+  end
+
+  defp walk(value, %{"named" => name}, inputs, codecs, direction, depth),
+    do: walk(value, Map.fetch!(inputs, name), inputs, codecs, direction, depth + 1)
+
+  defp walk(value, %{"list" => shape}, inputs, codecs, direction, depth) when is_list(value),
+    do: Enum.map(value, &walk(&1, shape, inputs, codecs, direction, depth + 1))
+
+  defp walk(value, %{"fields" => fields}, inputs, codecs, direction, depth) when is_map(value) do
+    Enum.reduce(fields, value, fn [key, shape], result ->
+      case Map.fetch(value, key) do
+        {:ok, field} ->
+          Map.put(result, key, walk(field, shape, inputs, codecs, direction, depth + 1))
+
+        :error ->
+          result
+      end
+    end)
+  end
+
+  defp walk(value, %{"union" => alternatives}, inputs, codecs, direction, depth)
+       when is_map(value) do
+    alternative =
+      Enum.find(alternatives, fn %{"fields" => fields} ->
+        Enum.any?(fields, fn [key, shape] ->
+          match?(%{"literal" => _}, shape) and value[key] == shape["literal"]
+        end)
+      end)
+
+    if alternative,
+      do: walk(value, alternative, inputs, codecs, direction, depth + 1),
+      else: raise(ArgumentError, "Unknown GraphQL codec discriminator")
+  end
+
+  defp walk(value, _shape, _inputs, _codecs, _direction, _depth), do: value
+end

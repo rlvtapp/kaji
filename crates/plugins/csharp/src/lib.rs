@@ -2555,4 +2555,6 @@ mod bundled_middleware;
 mod source_layout_tests;
 
 mod graphql;
-pub use graphql::{Graphql, GraphqlClient, GraphqlStyle, graphql};
+pub use graphql::{
+    Graphql, GraphqlClient, GraphqlIncremental, GraphqlStyle, graphql, graphql_incremental,
+};

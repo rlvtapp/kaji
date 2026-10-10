@@ -4,7 +4,10 @@ use anyhow::{Result, ensure};
 use poolster_core::{
     GeneratedFile, GeneratedTree,
     engine::{Contract, Handle, Meta, Plugin, PluginContext, Provision, Requirement},
-    native::{GraphqlOperationKind, GraphqlOperations, ModelField, ModelKind, ModelType},
+    native::{
+        GraphqlIncrementalOperations, GraphqlOperationKind, GraphqlOperations, ModelField,
+        ModelKind, ModelType,
+    },
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -27,6 +30,9 @@ impl Contract for GraphqlClient {
 pub struct Graphql {
     meta: Meta,
     provider: Option<Handle<GraphqlOperations>>,
+    incremental_provider: Option<Handle<GraphqlIncrementalOperations>>,
+    subscriptions: bool,
+    incremental: bool,
     style: GraphqlStyle,
     groups: BTreeMap<String, BTreeMap<String, String>>,
 }
@@ -34,11 +40,29 @@ pub fn graphql(provider: Option<Handle<GraphqlOperations>>) -> Graphql {
     Graphql {
         meta: Meta::new(),
         provider,
+        incremental_provider: None,
+        subscriptions: false,
+        incremental: false,
         style: GraphqlStyle::default(),
         groups: BTreeMap::new(),
     }
 }
+pub fn graphql_incremental(provider: Option<Handle<GraphqlIncrementalOperations>>) -> Graphql {
+    let mut plugin = graphql(None);
+    plugin.incremental_provider = provider;
+    plugin.incremental = true;
+    plugin
+}
 impl Graphql {
+    pub fn subscriptions(mut self) -> Self {
+        self.subscriptions = true;
+        self
+    }
+    pub fn incremental_input(mut self, input: Handle<GraphqlIncrementalOperations>) -> Self {
+        self.incremental_provider = Some(input);
+        self.incremental = true;
+        self
+    }
     pub fn raw(mut self) -> Self {
         self.style = GraphqlStyle::Raw;
         self
@@ -85,14 +109,22 @@ impl Plugin<Python> for Graphql {
         true
     }
     fn requires(&self) -> Vec<Requirement> {
-        vec![Requirement::on(self.provider)]
+        if self.incremental {
+            vec![Requirement::on(self.incremental_provider)]
+        } else {
+            vec![Requirement::on(self.provider)]
+        }
     }
     fn provides(&self) -> Vec<Provision> {
         vec![Provision::of::<GraphqlClient>()]
     }
     fn generate(&self, cx: &mut PluginContext<'_, Python>) -> Result<()> {
-        let contract = cx.inputs.get::<GraphqlOperations>()?;
-        let (mut tree, methods) = render(
+        let contract = if self.incremental {
+            &cx.inputs.get::<GraphqlIncrementalOperations>()?.definition
+        } else {
+            cx.inputs.get::<GraphqlOperations>()?
+        };
+        let (mut tree, methods) = render_advanced(
             contract,
             cx.settings
                 .package_name
@@ -100,6 +132,8 @@ impl Plugin<Python> for Graphql {
                 .unwrap_or("graphql_client"),
             self.style,
             &self.groups,
+            self.subscriptions,
+            self.incremental,
         )?;
         if let Some(version) = &cx.common.package_version {
             let manifest = tree.get("pyproject.toml").unwrap().replace(
@@ -114,6 +148,7 @@ impl Plugin<Python> for Graphql {
 }
 mod models;
 use models::Models;
+mod codec_layout;
 mod layout;
 fn base_import(root: Option<(String, String)>, group: bool) -> (String, String) {
     if let Some((path, class)) = root {
@@ -136,11 +171,22 @@ fn base_import(root: Option<(String, String)>, group: bool) -> (String, String) 
         (String::new(), String::new())
     }
 }
+#[cfg(test)]
 fn render(
     contract: &GraphqlOperations,
     distribution: &str,
     style: GraphqlStyle,
     groups: &BTreeMap<String, BTreeMap<String, String>>,
+) -> Result<(GeneratedTree, BTreeMap<String, String>)> {
+    render_advanced(contract, distribution, style, groups, false, false)
+}
+fn render_advanced(
+    contract: &GraphqlOperations,
+    distribution: &str,
+    style: GraphqlStyle,
+    groups: &BTreeMap<String, BTreeMap<String, String>>,
+    subscriptions: bool,
+    incremental: bool,
 ) -> Result<(GeneratedTree, BTreeMap<String, String>)> {
     ensure!(
         !contract.operations.is_empty(),
@@ -150,8 +196,8 @@ fn render(
         contract
             .operations
             .iter()
-            .all(|op| op.kind != GraphqlOperationKind::Subscription),
-        "Python GraphQL subscriptions require a separate unsupported transport"
+            .all(|op| subscriptions || op.kind != GraphqlOperationKind::Subscription),
+        "Python GraphQL subscriptions require explicit subscriptions capability"
     );
     let module = python_module_name(distribution);
     ensure!(
@@ -226,22 +272,45 @@ fn render(
         } else {
             format!("variables: {vars}")
         };
+        let mode = if op.kind == GraphqlOperationKind::Subscription {
+            "subscribe"
+        } else if incremental {
+            "incremental"
+        } else {
+            "execute"
+        };
+        let annotation = if op.kind == GraphqlOperationKind::Subscription {
+            format!("Iterator[GraphqlResponse[{result}]]")
+        } else if incremental {
+            "Iterator[IncrementalFrame]".into()
+        } else {
+            format!("GraphqlResponse[{result}]")
+        };
+        let shapes = format!(
+            "VARIABLE_SHAPE = json.loads({})\nRESULT_SHAPE = json.loads({})\n",
+            serde_json::to_string(&serde_json::to_string(
+                &poolster_core::native::graphql_scalar_fields(&op.variables)
+            )?)?,
+            serde_json::to_string(&serde_json::to_string(
+                &poolster_core::native::graphql_scalar_shape(&op.result)
+            )?)?
+        );
         let mut code = format!(
-            "from typing import Optional\nfrom ..models import *\nfrom ..runtime import GraphqlResponse, Transport\n\ndef {name}(transport: Transport, {parameter}) -> GraphqlResponse[{result}]:\n    return transport.execute({}, {}, {{}} if variables is None else variables)\n",
+            "from typing import Optional, Iterator\nimport json\nfrom ..models import *\nfrom ..runtime import GraphqlResponse, Transport, IncrementalFrame\nfrom ..codec_shapes import INPUT_SHAPES\n{shapes}\ndef {name}(transport: Transport, {parameter}) -> {annotation}:\n    return transport.{mode}({}, {}, {{}} if variables is None else variables, VARIABLE_SHAPE, RESULT_SHAPE, INPUT_SHAPES)\n",
             serde_json::to_string(&op.document)?,
             serde_json::to_string(&op.name)?
         );
         if !matches!(style, GraphqlStyle::Raw) {
             writeln!(
                 code,
-                "class _OperationMixin:\n    _transport: Transport\n    def {name}(self, {parameter}) -> GraphqlResponse[{result}]:\n        return {name}(self._transport, variables)\n"
+                "class _OperationMixin:\n    _transport: Transport\n    def {name}(self, {parameter}) -> {annotation}:\n        return {name}(self._transport, variables)\n"
             )?;
             client_bases.push((format!("..operations.{name}"), "_OperationMixin".into()));
         }
         files.insert(format!("operations/{name}.py"), code);
         operation_exports.push((name.clone(), vec![name.clone()]));
         methods.insert(op.name.clone(), name);
-        signatures.insert(op.name.clone(), (vars, result));
+        signatures.insert(op.name.clone(), (vars, result, annotation));
     }
     if matches!(style, GraphqlStyle::Idiomatic) {
         let mut selected = groups.clone();
@@ -249,10 +318,10 @@ fn render(
             for op in &selected_operations {
                 selected
                     .entry(
-                        if op.kind == GraphqlOperationKind::Query {
-                            "query"
-                        } else {
-                            "mutation"
+                        match op.kind {
+                            GraphqlOperationKind::Query => "query",
+                            GraphqlOperationKind::Mutation => "mutation",
+                            GraphqlOperationKind::Subscription => "subscription",
                         }
                         .into(),
                     )
@@ -277,7 +346,7 @@ fn render(
                     normalized.insert(method.clone()) && method != "_transport",
                     "Python GraphQL group method collision"
                 );
-                let (vars, result) = signatures.get(operation).ok_or_else(|| {
+                let (vars, _result, annotation) = signatures.get(operation).ok_or_else(|| {
                     anyhow::anyhow!("unknown GraphQL grouped operation {operation}")
                 })?;
                 let op = selected_operations
@@ -290,7 +359,7 @@ fn render(
                     format!("variables: {vars}")
                 };
                 let file = format!("{group_name}_{method}");
-                files.insert(format!("groups/{file}.py"),format!("from typing import Optional\nfrom ..models import *\nfrom ..operations.{} import {}\nfrom ..runtime import GraphqlResponse, Transport\nclass _MethodMixin:\n    _transport: Transport\n    def {method}(self, {parameter}) -> GraphqlResponse[{result}]:\n        return {}(self._transport, variables)\n",methods[operation],methods[operation],methods[operation]));
+                files.insert(format!("groups/{file}.py"),format!("from typing import Optional, Iterator\nfrom ..models import *\nfrom ..operations.{} import {}\nfrom ..runtime import GraphqlResponse, Transport, IncrementalFrame\nclass _MethodMixin:\n    _transport: Transport\n    def {method}(self, {parameter}) -> {annotation}:\n        return {}(self._transport, variables)\n",methods[operation],methods[operation],methods[operation]));
                 group_bases.push((format!("..groups.{file}"), "_MethodMixin".into()));
             }
             let root = layout::mixins(&mut files, &format!("group_{group_name}"), group_bases)?;
@@ -301,7 +370,7 @@ fn render(
     }
     let root = layout::mixins(&mut files, "client", client_bases)?;
     let (imports, base) = base_import(root, false);
-    files.insert("client.py".into(),format!("from .runtime import Transport\n{imports}class Client{base}:\n    def __init__(self, endpoint: str, *, headers=None, timeout: float=30):\n        self._transport=Transport(endpoint, headers=headers, timeout=timeout)\n"));
+    files.insert("client.py".into(),format!("from .runtime import Transport\n{imports}class Client{base}:\n    def __init__(self, endpoint: str, *, headers=None, timeout: float=30, scalar_codecs=None, max_frame_bytes=1024*1024):\n        self._transport=Transport(endpoint, headers=headers, timeout=timeout, scalar_codecs=scalar_codecs, max_frame_bytes=max_frame_bytes)\n"));
     let model_exports = layout::facade(&mut models.files, "models", &models.exports);
     models.files.insert("models/__init__.py".into(),format!("{model_exports}\nimport sys as _sys\n_exports = {{name: globals()[name] for name in __all__}}\nfor _name, _module in list(_sys.modules.items()):\n    if _name.startswith(__name__ + '.'):\n        vars(_module).update({{name: _exports[name] for name in getattr(_module, '__poolster_refs__', ())}})\n"));
     models
@@ -316,13 +385,37 @@ fn render(
         "runtime.py".into(),
         include_str!("../templates/graphql_runtime.py").into(),
     );
+    files.insert(
+        "codecs.py".into(),
+        include_str!("../templates/graphql_codecs.py").into(),
+    );
+    files.insert(
+        "streaming.py".into(),
+        include_str!("../templates/graphql_streaming.py").into(),
+    );
+    let inputs = contract
+        .input_objects
+        .iter()
+        .map(|(name, fields)| {
+            (
+                name.clone(),
+                poolster_core::native::graphql_scalar_fields(fields),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    files.insert("_codec_inputs/__init__.py".into(), String::new());
+    codec_layout::emit(&serde_json::to_value(inputs)?, "all", &mut files)?;
+    files.insert(
+        "codec_shapes.py".into(),
+        "from ._codec_inputs.all import VALUE as INPUT_SHAPES\n".into(),
+    );
     files.insert("__init__.py".into(),"from .client import Client\nfrom .runtime import GraphqlResponse, GraphqlErrors, Transport\nfrom .models import *\n".into());
     files.insert("py.typed".into(), String::new());
     let mut tree = GeneratedTree::default();
     for (path, source) in files {
         tree.insert(GeneratedFile::new(format!("src/{module}/{path}"), source)?)?;
     }
-    tree.insert(GeneratedFile::new("README.md", "# GraphQL Python client\n\nRequires Python 3.9+. Flat clients expose snake_case operation methods; idiomatic clients additionally expose query/mutation or configured groups. Raw exports use an explicit Transport. Variables and selection-specific results are TypedDicts: omitted keys differ from explicit None. GraphqlResponse preserves data, errors and extensions; inspect status or call require_data() to reject partial results. urllib transport exceptions remain distinct. Custom scalars retain Any JSON wire values. Subscriptions, incremental delivery and async transports are not supported.\n")?)?;
+    tree.insert(GeneratedFile::new("README.md", "# GraphQL Python client\n\nRequires Python 3.9+. Flat clients expose snake_case operation methods; idiomatic clients additionally expose query/mutation or configured groups. Raw exports use an explicit Transport. Variables and selection-specific results are TypedDicts: omitted keys differ from explicit None. GraphqlResponse preserves data, errors and extensions; inspect status or call require_data() to reject partial results. urllib transport exceptions remain distinct. Custom scalars retain Any application values; per-client scalar_codecs encode/decode callbacks walk selected fields and recursive input models. Opt-in subscriptions use graphql-sse distinct connections; incremental input uses multipart/mixed deferSpec=20220824 frames with final envelopes. No reconnect/replay, single-connection SSE or async transport.\n")?)?;
     tree.insert(GeneratedFile::new("pyproject.toml",format!("[build-system]\nrequires = [\"setuptools>=68\"]\nbuild-backend = \"setuptools.build_meta\"\n[project]\nname = {distribution:?}\nversion = \"0.0.0\"\nrequires-python = \">=3.9\"\n[tool.setuptools.packages.find]\nwhere = [\"src\"]\n[tool.setuptools.package-data]\n\"*\" = [\"py.typed\"]\n"))?)?;
     source_layout::diagnostics(&mut tree)?;
     Ok((tree, methods))

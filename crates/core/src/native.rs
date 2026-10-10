@@ -2,6 +2,10 @@
 pub mod capnproto;
 pub mod events;
 mod graphql_blocks;
+mod graphql_scalar_shapes;
+pub use graphql_scalar_shapes::{graphql_scalar_fields, graphql_scalar_shape};
+mod graphql_incremental;
+pub use graphql_incremental::*;
 pub mod rpc;
 pub mod workflows;
 use serde::{Deserialize, Serialize};

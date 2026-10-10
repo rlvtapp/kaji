@@ -1,10 +1,10 @@
-//! Explicit wire-type mappings; transport serialization and scalar coercion stay unchanged.
+//! Explicit application-type mappings; runtime callbacks provide optional conversion.
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 
-/// TypeScript wire types for a custom GraphQL scalar's two independent directions.
-/// These expressions must describe values the transport actually sends/receives.
-/// They do not install serializers, deserializers or runtime scalar validation.
+/// TypeScript application types for a custom GraphQL scalar's independent directions.
+/// Mappings do not install conversion callbacks. Supply runtime scalar codecs when
+/// application types differ from wire JSON; otherwise use wire-compatible mappings.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct GraphqlScalarMapping {
@@ -34,7 +34,7 @@ impl GraphqlScalarMapping {
         validate_expression(&self.output, name, "output")
     }
 }
-pub(super) fn validate_mappings(
+pub(crate) fn validate_mappings(
     mappings: &std::collections::BTreeMap<String, GraphqlScalarMapping>,
     contract: &poolster_core::native::GraphqlOperations,
 ) -> Result<()> {

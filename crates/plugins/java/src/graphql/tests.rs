@@ -437,3 +437,131 @@ fn rejects_unportable_type_names_before_writing() {
     let error = render(&c, "io.test", GraphqlStyle::Flat, &BTreeMap::new()).unwrap_err();
     assert!(error.to_string().contains("portable filename limit"));
 }
+
+#[test]
+fn opt_in_subscriptions_and_incremental_keep_call_styles() {
+    let mut c = fixture();
+    c.operations[0].kind = GraphqlOperationKind::Subscription;
+    let (tree, _) = render_advanced(
+        &c,
+        "io.test",
+        GraphqlStyle::Idiomatic,
+        &BTreeMap::new(),
+        true,
+        false,
+    )
+    .unwrap();
+    assert!(
+        tree.get("src/main/java/io/test/Client.java")
+            .unwrap()
+            .contains("Stream<Envelope<ReadUserResult>>")
+    );
+    assert!(
+        tree.get("src/main/java/io/test/groups/SubscriptionGroup.java")
+            .is_some()
+    );
+    c.operations[0].kind = GraphqlOperationKind::Query;
+    let (tree, _) = render_advanced(
+        &c,
+        "io.test",
+        GraphqlStyle::Idiomatic,
+        &BTreeMap::new(),
+        false,
+        true,
+    )
+    .unwrap();
+    assert!(
+        tree.get("src/main/java/io/test/groups/QueryGroup.java")
+            .unwrap()
+            .contains("Stream<IncrementalSnapshot<ReadUserResult>>")
+    );
+}
+#[test]
+#[ignore = "requires JDK17, pinned Jackson2.18.3 and GraphQL.js16.14.2 local server"]
+fn advanced_transports_compile_and_execute() {
+    for incremental in [false, true] {
+        for style in [
+            GraphqlStyle::Raw,
+            GraphqlStyle::Flat,
+            GraphqlStyle::Idiomatic,
+        ] {
+            let mut c = fixture();
+            c.operations[0].kind = if incremental {
+                GraphqlOperationKind::Query
+            } else {
+                GraphqlOperationKind::Subscription
+            };
+            c.operations[0].document = if incremental {
+                "query ReadUser($id:ID!){readUser(id:$id){... @defer {name nickname}}}"
+            } else {
+                "subscription ReadUser($id:ID!){readUser(id:$id){name nickname}}"
+            }
+            .into();
+            let ModelKind::Object(fields) = &mut c.operations[0].result.kind else {
+                panic!()
+            };
+            let ModelKind::Object(fields) = &mut fields[0].ty.kind else {
+                panic!()
+            };
+            fields[0].ty = scalar("Date", false);
+            let (tree, _) = render_advanced(
+                &c,
+                "io.test",
+                style,
+                &BTreeMap::new(),
+                !incremental,
+                incremental,
+            )
+            .unwrap();
+            let dir = tempfile::tempdir().unwrap();
+            tree.write_to(dir.path()).unwrap();
+            let call = match style {
+                GraphqlStyle::Raw => "Client.readUser(client,new ReadUserVariables(\"1\"))",
+                GraphqlStyle::Flat => "client.readUser(new ReadUserVariables(\"1\"))",
+                GraphqlStyle::Idiomatic => {
+                    if incremental {
+                        "client.query().readUser(new ReadUserVariables(\"1\"))"
+                    } else {
+                        "client.subscription().readUser(new ReadUserVariables(\"1\"))"
+                    }
+                }
+            };
+            let check = if incremental {
+                "var frames=stream.toList();if(frames.size()!=2||frames.get(0).complete()||!frames.get(1).complete()||frames.get(0).data().path(\"readUser\").has(\"name\"))throw new AssertionError();if(!frames.get(1).decodeData().readUser().name().asText().equals(\"decoded:Ada\"))throw new AssertionError();"
+            } else {
+                "var frames=stream.toList();if(frames.size()!=2||!frames.get(0).data().readUser().name().asText().equals(\"decoded:Ada\")||!frames.get(1).hasErrors()||frames.get(1).data().readUser().nickname().value()!=null)throw new AssertionError();"
+            };
+            let extra = if incremental {
+                r#"if(args.length>1 && args[1].equals("json")){var frames=stream.toList();if(frames.size()!=1||!frames.get(0).complete()||!frames.get(0).decodeData().readUser().name().asText().equals("decoded:Ada"))throw new AssertionError();}else "#
+            } else {
+                ""
+            };
+            let check = format!(
+                "if(args.length>1 && args[1].equals(\"cancel\")){{stream.limit(1).toList();}}else {extra}if(args.length>1){{try{{stream.toList();throw new AssertionError(\"Expected malformed stream\");}}catch(java.io.UncheckedIOException expected){{}}}}else{{{check}}}"
+            );
+            fs::write(dir.path().join("Test.java"),format!("import io.test.Client;import io.test.models.*;import com.fasterxml.jackson.databind.node.TextNode;public class Test {{public static void main(String[] args)throws Exception{{var codecs=java.util.Map.of(\"ID\",new Client.ScalarCodec(n->TextNode.valueOf(n.asText()+\"!\"),n->n),\"Date\",new Client.ScalarCodec(n->n,n->TextNode.valueOf(\"decoded:\"+n.asText())));var client=new Client(new Client.HttpTransport(args[0],java.net.http.HttpClient.newHttpClient(),java.util.Map.of(),codecs));try{{try(var stream={call}){{{check}}}}}catch(java.io.IOException error){{if(args.length<2||!args[1].equals(\"version\"))throw error;}}}}}}")).unwrap();
+            let output = compile(dir.path());
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let output = Command::new(std::env::var("POOLSTER_TEST_NODE").unwrap_or("node".into()))
+                .arg(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/src/graphql/advanced-test.cjs"
+                ))
+                .arg(dir.path())
+                .arg(classpath())
+                .arg(if incremental { "incremental" } else { "sse" })
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{} {}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+    }
+}

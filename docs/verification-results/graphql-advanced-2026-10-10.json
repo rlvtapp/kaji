@@ -1,0 +1,131 @@
+{
+  "date": "2026-10-10",
+  "scope": "All ten GraphQL SDKs: opt-in subscriptions, incremental delivery, scalar codecs and native schema resolution",
+  "status": "verified",
+  "checks": {
+    "workspace_default": {
+      "status": "passed",
+      "command": "cargo test --workspace --offline",
+      "passed": 895,
+      "failed": 0,
+      "ignored": 170
+    },
+    "npm_sdk": {
+      "passed": 78,
+      "failed": 0,
+      "skipped": 0
+    },
+    "cli": {
+      "passed": 129,
+      "failed": 0,
+      "ignored": 9
+    },
+    "schema_loading": {
+      "passed": 4,
+      "failed": 0
+    },
+    "clippy_all_changed_crates": {
+      "status": "passed",
+      "all_targets": true,
+      "warnings_as_errors": true
+    },
+    "release_configuration": {
+      "passed": 4,
+      "failed": 0,
+      "dependency": "release-please 17.6.0 (CI pin)"
+    },
+    "formatting": "passed",
+    "diff_whitespace": "passed"
+  },
+  "explicit_toolchain_checks": {
+    "typescript": {
+      "sse_scalar_suite_passed": 2,
+      "incremental_suite_passed": 2
+    },
+    "rust": {
+      "advanced_runtime_passed": 1,
+      "normal_all_styles_runtime": "passed"
+    },
+    "go": {
+      "capability_suite_passed": 2,
+      "styles": [
+        "raw",
+        "flat",
+        "grouped",
+        "custom groups"
+      ]
+    },
+    "python": {
+      "graphql_suite_passed": 7
+    },
+    "php": {
+      "graphql_suite_passed": 8
+    },
+    "ruby": {
+      "graphql_suite_passed": 7
+    },
+    "java": {
+      "advanced_runtime_passed": 1,
+      "normal_all_styles_runtime": "passed",
+      "default_library_passed": 35,
+      "default_library_ignored": 16
+    },
+    "csharp": {
+      "advanced_runtime_passed": 1,
+      "normal_all_styles_runtime": "passed",
+      "default_library_passed": 28,
+      "default_library_ignored": 16
+    },
+    "swift": {
+      "advanced_runtime_passed": 1,
+      "normal_all_styles_runtime": "passed",
+      "default_library_passed": 19,
+      "default_library_ignored": 22
+    },
+    "elixir": {
+      "advanced_runtime_passed": 1,
+      "normal_all_styles_runtime_passed": 1,
+      "default_library_passed": 24,
+      "default_library_ignored": 16
+    }
+  },
+  "toolchain_boundary": [
+    "GraphQL.js 16.14.2",
+    "graphql-sse 2.6.0",
+    "TypeScript 5.9.3",
+    "Java Jackson 2.18.3",
+    "Finch 0.24.0",
+    "Jason 1.4.5",
+    "Python 3.9.6",
+    "PHP 8.2.34",
+    "Ruby 3.3.12"
+  ],
+  "semantics_verified": [
+    "Selection-specific variable/result types and retained operation documents",
+    "Distinct-connection SSE: next/complete events, partial results, cancellation and malformed framing",
+    "Directional scalar callbacks recurse selected fields, named inputs and lists while preserving absence/null",
+    "Incremental partial snapshots, deferred object merge and streamed list append; final model decoding does not happen early",
+    "Local introspection JSON and full-file imports, missing imports, import cycles and malformed JSON",
+    "Required tagged abstract variants in Go/C#/Swift",
+    "Provider substitution, deterministic regeneration and existing HTTP package contracts"
+  ],
+  "limitations": [
+    "SSE distinct connections only: no WebSocket, multiplexing, replay or reconnect",
+    "Experimental path-based multipart deferSpec=20220824 only; newer pending/completed ID protocols are rejected",
+    "Multipart fixtures simulate this dialect with GraphQL.js execution results; GraphQL.js16 is not a native defer/stream executor",
+    "TypeScript incremental generation exposes raw operation functions, without query-hook/mock/validator auxiliaries",
+    "Incremental abstract selections require a common unconditional non-deferred __typename; aliases supported",
+    "Java/C#/Swift scalar callbacks remain in their native JSON value domains; Python/PHP/Ruby model scalar annotations remain Any/mixed/untyped",
+    "Introspection is local-file only; full-file imports supported, selective named imports unsupported",
+    "Postman and generated CLI outputs remain query/mutation-only",
+    "Historical 205-test guru and release reports were not re-executed or rewritten for this batch"
+  ],
+  "resolved_verification_findings": [
+    "Schema-only GraphQL block references were aligned with the document revision hash; public-block tests caught and verified the mismatch",
+    "Imported operation documents now advance both retained-document and operation-contract revisions",
+    "Local npm tests first needed the existing Go OpenAPI compiler binary built",
+    "Native addon builds now replace the binary atomically to avoid macOS code-signature cache invalidation when overwriting a loaded library",
+    "Default PHP GraphQL tests require PHP 8.2 on PATH or POOLSTER_TEST_PHP; the complete workspace rerun uses pinned PHP/Ruby container wrappers"
+  ],
+  "ignored_test_policy": "Default workspace ignored tests are counted separately. Explicit capability runs enable relevant ignored native tests; ignored does not mean passed."
+}

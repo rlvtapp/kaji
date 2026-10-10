@@ -1709,6 +1709,11 @@
                 "type": "string",
                 "minLength": 1
               }
+            },
+            "graphql_incremental": {
+              "type": "boolean",
+              "default": false,
+              "description": "Opt into GraphQL multipart deferSpec=20220824 incremental operation contracts."
             }
           }
         }

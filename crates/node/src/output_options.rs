@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 pub(super) struct ContractOptions {
     style: Option<String>,
     raw: Option<bool>,
+    subscriptions: Option<bool>,
     transport: Option<String>,
     client_name: Option<String>,
     jobs: Option<usize>,
@@ -44,6 +45,14 @@ pub(super) fn apply(package: &mut SdkPackage, contract: &str) -> AnyResult<()> {
     }
     merge(&mut package.style, scoped.style, "style")?;
     merge(&mut package.raw, scoped.raw, "raw")?;
+    if contract == "http" && scoped.subscriptions.is_some() {
+        bail!("subscriptions applies only to GraphQL");
+    }
+    merge(
+        &mut package.subscriptions,
+        scoped.subscriptions,
+        "subscriptions",
+    )?;
     merge(&mut package.transport, scoped.transport, "transport")?;
     merge(&mut package.client_name, scoped.client_name, "clientName")?;
     merge(&mut package.jobs, scoped.jobs, "jobs")?;

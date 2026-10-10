@@ -1,0 +1,19 @@
+import("bufio";"context";"encoding/json";"fmt";"io";"mime";"net/http";"strings";"unicode/utf8")
+// Subscription owns a distinct graphql-sse connection. Close cancels it; no reconnect/replay.
+type Subscription[T any] struct{response *http.Response;reader *bufio.Reader;cancel context.CancelFunc;client *Client;shape *graphqlScalarShape;done bool}
+func subscribe[T any](ctx context.Context,c *Client,name,document string,variables any,input,result *graphqlScalarShape)(*Subscription[T],error){
+ ctx,cancel:=context.WithCancel(ctx);response,err:=graphqlRequest(ctx,c,name,document,variables,"text/event-stream",input);if err!=nil{cancel();return nil,err}
+ if response.StatusCode<200||response.StatusCode>=300{defer response.Body.Close();cancel();body,_:=io.ReadAll(io.LimitReader(response.Body,1024*1024));return nil,&HTTPError{response.StatusCode,string(body)}}
+ media,_,err:=mime.ParseMediaType(response.Header.Get("Content-Type"));if err!=nil||media!="text/event-stream"{response.Body.Close();cancel();return nil,fmt.Errorf("subscription requires text/event-stream")}
+ return &Subscription[T]{response:response,reader:bufio.NewReader(response.Body),cancel:cancel,client:c,shape:result},nil
+}
+func(s *Subscription[T])Close()error{if s.done{return nil};s.done=true;s.cancel();return s.response.Body.Close()}
+func(s *Subscription[T])Next()(*GraphQLResponse[T],error){
+ if s.done{return nil,io.EOF};event:="";data:=[]string{};size:=0
+ for{
+  line,err:=s.line();if err!=nil{s.Close();if err==io.EOF{return nil,fmt.Errorf("SSE ended before complete")};return nil,err};size+=len(line)+1;if size>1024*1024{s.Close();return nil,fmt.Errorf("SSE event exceeds 1 MiB")}
+  if line==""{payload:=strings.Join(data,"\n");if event==""&&payload==""{size=0;continue};switch event{case "complete":s.Close();if payload!=""{return nil,fmt.Errorf("SSE complete must not contain data")};return nil,io.EOF;case "next":var envelope map[string]json.RawMessage;if err:=json.Unmarshal([]byte(payload),&envelope);err!=nil{s.Close();return nil,fmt.Errorf("invalid SSE JSON: %w",err)};value,err:=decodeGraphqlResponse[T]([]byte(payload),s.client,s.shape);if err!=nil&&value==nil{s.Close()};return value,err;default:s.Close();return nil,fmt.Errorf("unknown graphql-sse event %q",event)}}
+  if strings.HasPrefix(line,":"){continue};key,value,found:=strings.Cut(line,":");if !found{value=""};value=strings.TrimPrefix(value," ");switch key{case "event":event=value;case "data":data=append(data,value)}
+ }
+}
+func(s *Subscription[T])line()(string,error){line:=make([]byte,0,128);for{byte,err:=s.reader.ReadByte();if err!=nil{return "",err};if byte=='\r'||byte=='\n'{if byte=='\r'{if next,err:=s.reader.Peek(1);err==nil&&next[0]=='\n'{s.reader.ReadByte()}};if !utf8.Valid(line){return "",fmt.Errorf("invalid SSE UTF-8")};return strings.TrimPrefix(string(line),"\ufeff"),nil};line=append(line,byte);if len(line)>1024*1024{return "",fmt.Errorf("SSE line exceeds 1 MiB")}}}

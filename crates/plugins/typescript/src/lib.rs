@@ -5,6 +5,8 @@ pub use asyncapi::{AsyncApi, KafkaClient, KafkaOperationSymbols, asyncapi};
 mod workflow;
 pub use workflow::{WorkflowClient, WorkflowRunner, workflow};
 mod graphql;
+mod graphql_incremental;
+pub use graphql_incremental::{GraphqlIncremental, GraphqlIncrementalClient, graphql_incremental};
 mod graphql_helpers;
 pub use graphql::{
     Graphql, GraphqlClient, GraphqlOperationSymbols, GraphqlScalarMapping, GraphqlStyle, graphql,

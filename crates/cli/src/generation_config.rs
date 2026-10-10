@@ -77,7 +77,7 @@ pub(super) fn load_config_options(
         if config
             .input
             .as_ref()
-            .is_some_and(|input| !native_profiles::compatible(&input.format, package))
+            .is_some_and(|input| !native_profiles::input_compatible(input, package))
         {
             continue;
         }

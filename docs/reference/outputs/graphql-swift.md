@@ -28,9 +28,18 @@ Custom scalars use `GraphqlJSON`, enums retain strings.
 `GraphqlHTTPError`. Client configuration supplies endpoint, session and headers.
 Task cancellation propagates through URLSession.
 
-Abstract unions, subscriptions, incremental delivery and dynamic selections are
-unsupported. Generated code compiles with warnings treated as errors and runs
+Abstract result variants require a selected nonnull `__typename` discriminator
+(including aliases); untagged abstract selections and dynamic fields remain unsupported. Opt-in subscriptions
+use distinct-connection graphql-sse; incremental inputs use experimental multipart
+deferSpec=20220824. `scalarCodecs` callbacks transform `GraphqlJSON` values without
+changing generated fields to arbitrary domain types. Generated code compiles with warnings treated as errors and runs
 against pinned GraphQL.js 16.14.2. See the [support matrix](../../plugin-support-matrix.md).
+
+## Advanced capabilities
+
+See [subscriptions, scalar callbacks and incremental delivery](graphql-capabilities.md)
+for opt-in configuration, native stream lifetime and the tested protocol boundary.
+These additions are unreleased; historical checks below predate them.
 
 ## Generated source layout
 

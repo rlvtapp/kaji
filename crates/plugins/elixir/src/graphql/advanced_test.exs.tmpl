@@ -1,0 +1,53 @@
+endpoint=System.fetch_env!("POOLSTER_GRAPHQL_ADVANCED_ENDPOINT")
+codecs=%{"DateTime"=>%{encode: fn value -> "wire-"<>Integer.to_string(value) end,decode: fn "wire-"<>value -> String.to_integer(value) end}}
+client=Example.Client.new(endpoint,headers: [{"authorization","Bearer secret"}],scalar_codecs: codecs)
+if __INCREMENTAL__ do
+ for suffix <- ["","/plain","/invalid-path","/dialect","/eof"] do
+  client=%{client|endpoint: endpoint<>suffix}
+  frames=Example.Operations.feed(client,%Example.Models.FeedVariables{count: 1}) |> Enum.to_list()
+  if suffix in ["","/plain"] do
+   {:ok,last}=List.last(frames)
+   true=last.complete
+   {:ok,typed}=Example.IncrementalSnapshot.require_data(last)
+   7=typed.user.when_
+   [1,2,3]=typed.values
+   %{"user"=>%{"id"=>"7","when"=>7},"values"=>[1,2,3]}=last.data
+   if suffix=="" do
+    [{:ok,first}|_]=frames
+    false=Map.has_key?(first.data["user"],"when")
+    {:error,_}=Example.IncrementalSnapshot.require_data(first)
+   end
+  else
+   {:error,_}=List.last(frames)
+  end
+ end
+else
+ input=%Example.Models.Filter{when_: 7,list: [nil,9],next: %Example.Models.Filter{when_: 8}}
+ {:ok,response}=Example.Operations.read(client,%Example.Models.ReadVariables{input: input,include: false})
+ []=response.errors
+ 7=response.data.stamp.when_
+ :poolster_absent=response.data.stamp.maybe
+ [nil,9]=response.data.stamp.list
+ frames=Example.Operations.ticks(client,%Example.Models.TicksVariables{start: 7}) |> Enum.to_list()
+ [{:ok,first},{:ok,partial}]=frames
+ 7=first.data.ticks.when_
+ "é"=first.data.ticks.name
+ [_]=partial.errors
+ nil=partial.data.ticks.maybe
+ for suffix <- ["/sse-split","/sse-eof","/sse-bad"] do
+  stream=Example.Operations.ticks(%{client|endpoint: endpoint<>suffix},%Example.Models.TicksVariables{start: 7}) |> Enum.to_list()
+  if suffix=="/sse-split" do
+   [{:ok,result}]=stream
+   "é"=result.data.ticks.name
+  else
+   {:error,_}=List.last(stream)
+  end
+ end
+ [{:ok,_}]=Example.Operations.ticks(client,%Example.Models.TicksVariables{start: 99}) |> Enum.take(1)
+ Process.sleep(150)
+ {:ok,closed}=Finch.request(Finch.build(:get,endpoint<>"/closed"),Example.Finch)
+ true=Jason.decode!(closed.body)["closed"]>=2
+ failing=%{client|scalar_codecs: %{"DateTime"=>%{encode: fn _->raise "bad encode" end}}}
+ {:error,_}=Example.Operations.read(failing,%Example.Models.ReadVariables{input: input,include: false})
+end
+IO.puts("Elixir advanced GraphQL runtime passed")

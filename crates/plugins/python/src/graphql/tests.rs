@@ -396,3 +396,109 @@ assert typing.get_type_hints(operations.read_operation299)['return'].__args__[0]
         );
     }
 }
+
+#[test]
+#[ignore = "requires pinned graphql-sse/GraphQL server and loopback sockets"]
+fn python_sse_incremental_and_scalar_codecs_execute() {
+    let root = std::env::var("POOLSTER_GRAPHQL_SSE_ROOT").unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let mut input = contract();
+    input.operations[0].variables[0].ty.kind = ModelKind::Scalar("DateTime".into());
+    input.operations[0].document = "query ReadUser($id:DateTime){hello(id:$id)}".into();
+    if let ModelKind::Object(fields) = &mut input.operations[0].result.kind {
+        fields[0].ty.kind = ModelKind::Scalar("DateTime".into());
+    }
+    let mut subscription = input.operations[0].clone();
+    subscription.name = "Changed".into();
+    subscription.kind = GraphqlOperationKind::Subscription;
+    subscription.document = "subscription Changed($id:DateTime){changed(id:$id)}".into();
+    if let ModelKind::Object(fields) = &mut subscription.result.kind {
+        fields[0].name = "changed".into();
+    }
+    input.operations.push(subscription);
+    render_advanced(
+        &input,
+        "example",
+        GraphqlStyle::Flat,
+        &BTreeMap::new(),
+        true,
+        false,
+    )
+    .unwrap()
+    .0
+    .write_to(temp.path())
+    .unwrap();
+    input
+        .operations
+        .retain(|op| op.kind != GraphqlOperationKind::Subscription);
+    render_advanced(
+        &input,
+        "incremental",
+        GraphqlStyle::Flat,
+        &BTreeMap::new(),
+        false,
+        true,
+    )
+    .unwrap()
+    .0
+    .write_to(temp.path().join("incremental"))
+    .unwrap();
+    let script = r#"
+import json, subprocess, datetime, io
+from example import Client
+from example.streaming import sse_events, apply_incremental
+from incremental import Client as IncrementalClient
+server_code=r'''
+const {createHandler}=require(process.env.POOLSTER_GRAPHQL_SSE_ROOT+'/graphql-sse/lib/use/http');
+const {buildSchema,graphql}=require(process.env.POOLSTER_GRAPHQL_SSE_ROOT+'/graphql');
+const schema=buildSchema('scalar DateTime type Query {hello(id:DateTime):DateTime} type Subscription {changed(id:DateTime):DateTime}');
+const scalar=schema.getType('DateTime');scalar.parseValue=v=>new Date(v);scalar.serialize=v=>v.toISOString();
+schema.getSubscriptionType().getFields().changed.subscribe=async function*(_source,args){yield{changed:args.id};};
+const sse=createHandler({schema});
+require('http').createServer(async(req,res)=>{
+if(req.headers.authorization!=='Bearer secret'){res.statusCode=401;res.end();return;}
+if(req.url==='/multipart'){res.setHeader('Content-Type','multipart/mixed; boundary="parts"; deferSpec=20220824');for(const frame of [{data:{},hasNext:true},{incremental:[{path:[],data:{hello:'2025-01-01T00:00:00.000Z'}}],hasNext:false}])res.write('--parts\r\nContent-Type: application/json\r\n\r\n'+JSON.stringify(frame)+'\r\n');res.end('--parts--\r\n');return;}
+if(req.headers.accept==='text/event-stream'){await sse(req,res);return;}
+let body='';for await(const chunk of req)body+=chunk;const value=JSON.parse(body);const result=await graphql({schema,source:value.query,operationName:value.operationName,variableValues:value.variables,rootValue:{hello:args=>args.id}});res.setHeader('Content-Type','application/json');res.end(JSON.stringify(result));
+}).listen(0,'127.0.0.1',function(){console.log(this.address().port)});
+'''
+assert apply_incremental({'items':[1]}, {'incremental':[{'path':['items',1],'items':[2]}]}) == {'items':[1,2]}
+assert apply_incremental({'items':[]}, {'incremental':[{'path':[],'errors':[{'message':'failed'}]}]}) == {'items':[]}
+assert apply_incremental({}, {'incremental':[{'path':[],'data':None}]}) is None
+server=subprocess.Popen(['node','-e',server_code],stdout=subprocess.PIPE,text=True)
+try:
+    endpoint='http://127.0.0.1:'+server.stdout.readline().strip()
+    date=datetime.datetime(2025,1,1,tzinfo=datetime.timezone.utc)
+    codecs={'DateTime':{'encode':lambda value:value.isoformat(),'decode':lambda value:datetime.datetime.fromisoformat(value.replace('Z','+00:00'))}}
+    client=Client(endpoint,headers={'Authorization':'Bearer secret'},scalar_codecs=codecs)
+    assert client.read_user({'id':date}).data['hello']==date
+    events=list(client.changed({'id':date}));assert events[0].data['changed']==date
+    frames=list(IncrementalClient(endpoint+'/multipart',headers={'Authorization':'Bearer secret'},scalar_codecs=codecs).read_user({'id':date}))
+    assert frames[0].final is None and frames[0].data=={}
+    assert frames[-1].final.data['hello']==date
+    try:list(sse_events(io.BytesIO(b'event: next\ndata: invalid\n\n'),100))
+    except ValueError:pass
+    else:raise AssertionError('malformed SSE must fail')
+    try:list(sse_events(io.BytesIO(b'event: next\ndata: {}\n\n'),100))
+    except ValueError:pass
+    else:raise AssertionError('EOF before complete must fail')
+finally:server.terminate();server.wait(timeout=5)
+"#;
+    let paths =
+        std::env::join_paths([temp.path().join("src"), temp.path().join("incremental/src")])
+            .unwrap();
+    let output = Command::new("python3")
+        .args(["-c", script])
+        .env("POOLSTER_GRAPHQL_SSE_ROOT", root)
+        .env("PYTHONPATH", paths)
+        .env("PYTHONPYCACHEPREFIX", temp.path().join("pycache"))
+        .current_dir(temp.path())
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}

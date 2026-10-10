@@ -7,7 +7,10 @@ use anyhow::{Result, ensure};
 use poolster_core::{
     GeneratedFile,
     engine::{Contract, Handle, Meta, Plugin, PluginContext, Provision, Requirement},
-    native::{GraphqlOperationKind, GraphqlOperations},
+    native::{
+        GraphqlIncrementalOperations, GraphqlOperationKind, GraphqlOperations,
+        graphql_scalar_fields, graphql_scalar_shape,
+    },
 };
 pub use scalars::GraphqlScalarMapping;
 use std::{
@@ -21,6 +24,7 @@ pub struct GraphqlOperationSymbols {
     pub variables: String,
     pub result: String,
     pub kind: GraphqlOperationKind,
+    pub incremental: bool,
 }
 #[derive(Clone, Debug)]
 pub struct GraphqlClient {
@@ -34,6 +38,9 @@ impl Contract for GraphqlClient {
 pub struct Graphql {
     meta: Meta,
     provider: Option<Handle<GraphqlOperations>>,
+    incremental_provider: Option<Handle<GraphqlIncrementalOperations>>,
+    subscriptions: bool,
+    incremental_mode: bool,
     scalars: BTreeMap<String, GraphqlScalarMapping>,
     style: GraphqlStyle,
     groups: BTreeMap<String, BTreeMap<String, String>>,
@@ -42,12 +49,27 @@ pub fn graphql(provider: Option<Handle<GraphqlOperations>>) -> Graphql {
     Graphql {
         meta: Meta::new(),
         provider,
+        incremental_provider: None,
+        subscriptions: false,
+        incremental_mode: false,
         scalars: BTreeMap::new(),
         style: GraphqlStyle::Idiomatic,
         groups: BTreeMap::new(),
     }
 }
+/// Generate multipart incremental operations from the distinct capability contract.
+pub fn graphql_incremental(provider: Option<Handle<GraphqlIncrementalOperations>>) -> Graphql {
+    let mut generator = graphql(None);
+    generator.incremental_provider = provider;
+    generator.incremental_mode = true;
+    generator
+}
 impl Graphql {
+    /// Enable distinct-connection graphql-sse subscription operations.
+    pub fn subscriptions(mut self) -> Self {
+        self.subscriptions = true;
+        self
+    }
     /// Emit free operation functions taking an explicit HTTP transport.
     pub fn raw(mut self) -> Self {
         self.style = GraphqlStyle::Raw;
@@ -115,24 +137,38 @@ impl Plugin<Rust> for Graphql {
         true
     }
     fn requires(&self) -> Vec<Requirement> {
-        vec![Requirement::on(self.provider)]
+        if self.incremental_mode {
+            vec![Requirement::on(self.incremental_provider)]
+        } else {
+            vec![Requirement::on(self.provider)]
+        }
     }
     fn provides(&self) -> Vec<Provision> {
         vec![Provision::of::<GraphqlClient>()]
     }
     fn generate(&self, cx: &mut PluginContext<'_, Rust>) -> Result<()> {
         let mut oversized = Vec::new();
-        let contract = cx.inputs.get::<GraphqlOperations>()?;
+        let incremental = if self.incremental_mode {
+            Some(cx.inputs.get::<GraphqlIncrementalOperations>()?)
+        } else {
+            None
+        };
+        let contract = if let Some(incremental) = incremental {
+            &incremental.definition
+        } else {
+            cx.inputs.get::<GraphqlOperations>()?
+        };
         ensure!(
             !contract.operations.is_empty(),
             "Rust GraphQL generation requires operations"
         );
         ensure!(
-            contract.operations.iter().all(|op| matches!(
-                op.kind,
-                GraphqlOperationKind::Query | GraphqlOperationKind::Mutation
-            )),
-            "Rust GraphQL supports query/mutation HTTP operations; subscriptions require an unsupported separate transport"
+            contract
+                .operations
+                .iter()
+                .all(|op| op.kind != GraphqlOperationKind::Subscription
+                    || (self.subscriptions && !self.incremental_mode)),
+            "Rust GraphQL subscriptions require .subscriptions(); incremental subscriptions are unsupported"
         );
         ensure!(
             cx.workspace.graphql_package.is_none(),
@@ -191,12 +227,28 @@ impl Plugin<Rust> for Graphql {
                 function = format!("{base}{suffix}");
                 suffix += 1;
             }
+            let shape = serde_json::json!({"input":graphql_scalar_fields(&op.variables),"result":graphql_scalar_shape(&op.result),"selections":incremental.and_then(|value|value.selections.get(&op.name))});
+            let response = if self.incremental_mode {
+                format!("crate::graphql_incremental::GraphqlIncrementalStream<{result}>")
+            } else if op.kind == GraphqlOperationKind::Subscription {
+                format!("crate::graphql_sse::GraphqlSubscription<{result}>")
+            } else {
+                format!("crate::graphql_runtime::GraphqlResponse<{result}>")
+            };
+            let execute = if self.incremental_mode {
+                "incremental_with_shape"
+            } else if op.kind == GraphqlOperationKind::Subscription {
+                "subscribe_with_shape"
+            } else {
+                "execute_with_shape"
+            };
             let mut operation_source = String::new();
             writeln!(
                 operation_source,
-                "pub async fn {function}(transport: &crate::graphql_runtime::GraphqlHttpTransport, variables: &{variables}) -> Result<crate::graphql_runtime::GraphqlResponse<{result}>, crate::graphql_runtime::GraphqlTransportError> {{\n    transport.execute({}, {}, variables).await\n}}\n",
+                "pub async fn {function}(transport: &crate::graphql_runtime::GraphqlHttpTransport, variables: &{variables}) -> Result<{response}, crate::graphql_runtime::GraphqlTransportError> {{\n    transport.{execute}({}, {}, variables, {}).await\n}}\n",
                 serde_json::to_string(&op.document)?,
-                serde_json::to_string(&op.name)?
+                serde_json::to_string(&op.name)?,
+                serde_json::to_string(&serde_json::to_string(&shape)?)?
             )?;
             operation_files.insert(function.clone(), operation_source);
             operations.insert(
@@ -206,6 +258,7 @@ impl Plugin<Rust> for Graphql {
                     variables,
                     result,
                     kind: op.kind,
+                    incremental: self.incremental_mode,
                 },
             );
         }
@@ -272,11 +325,44 @@ impl Plugin<Rust> for Graphql {
             )?,
             &mut oversized,
         )?;
+        for (path, source) in [
+            (
+                "src/graphql_codecs.rs",
+                include_str!("../templates/graphql_codecs.rs.tmpl"),
+            ),
+            (
+                "src/graphql_sse.rs",
+                include_str!("../templates/graphql_sse.rs.tmpl"),
+            ),
+            (
+                "src/graphql_incremental.rs",
+                include_str!("../templates/graphql_incremental.rs.tmpl"),
+            ),
+        ] {
+            emit_source(
+                &mut cx.files,
+                GeneratedFile::new(path, source)?,
+                &mut oversized,
+            )?;
+        }
+        let input_shapes = contract
+            .input_objects
+            .iter()
+            .map(|(name, fields)| (name.clone(), graphql_scalar_fields(fields)))
+            .collect::<BTreeMap<_, _>>();
+        emit_source(
+            &mut cx.files,
+            GeneratedFile::new(
+                "src/graphql_input_shapes.json",
+                serde_json::to_string(&input_shapes)?,
+            )?,
+            &mut oversized,
+        )?;
         emit_source(
             &mut cx.files,
             GeneratedFile::new(
                 "README.md",
-                "# Rust GraphQL client\n\nSelection-specific query/mutation functions use a caller-provided reqwest Client and endpoint. Results distinguish Success, Partial and Error; transport failures are separate. Presence::Absent, Null and Value preserve nullable input and conditional-result presence. Optional::Absent/Value preserves nonnullable optional fields. Unmapped custom scalars retain serde_json::Value. Configured input/output scalar mappings describe self-contained Rust JSON wire types; they do not install codecs. Subscription and incremental transports are unsupported. Abstract selections without __typename use structural untagged unions; structurally indistinguishable variants cannot identify a concrete GraphQL type. Native schema/operation documents remain in the input contract.\n",
+                "# Rust GraphQL client\n\nSelection-specific query/mutation functions use a caller-provided reqwest Client and endpoint. Results distinguish Success, Partial and Error; transport failures are separate. Presence::Absent, Null and Value preserve nullable input and conditional-result presence. Optional::Absent/Value preserves nonnullable optional fields. Unmapped custom scalars retain serde_json::Value. Configured input/output mappings define Rust model types; GraphqlScalarCodecs registers typed runtime encode/decode callbacks without changing null or omission semantics. Enabled subscriptions use distinct-connection graphql-sse next/complete streams; dropping a stream closes its connection, with no automatic reconnect/replay. Incremental packages negotiate multipart/mixed deferSpec=20220824; snapshots are recursively partial JSON and Complete validates the final selected model. Other incremental dialects are rejected. Abstract selections without __typename use structural untagged unions; structurally indistinguishable variants cannot identify a concrete GraphQL type. Native schema/operation documents remain in the input contract.\n",
             )?,
             &mut oversized,
         )?;
@@ -307,7 +393,7 @@ impl NativePackage {
             !cx.workspace.models && !cx.workspace.operations && cx.workspace.http_api.is_none(),
             "HTTP and GraphQL generators require separate Rust packages"
         );
-        cx.files.emit(GeneratedFile::new("src/lib.rs", "pub mod graphql;\npub mod graphql_runtime;\npub use graphql::*;\npub use graphql_runtime::*;\npub use reqwest;\n")?)?;
+        cx.files.emit(GeneratedFile::new("src/lib.rs", "pub mod graphql;\npub mod graphql_runtime;\npub mod graphql_codecs;\npub mod graphql_sse;\npub mod graphql_incremental;\npub use graphql_codecs::*;\npub use graphql_sse::*;\npub use graphql_incremental::*;\npub use graphql::*;\npub use graphql_runtime::*;\npub use reqwest;\n")?)?;
         let manifest = format!(
             "[package]\nname = {:?}\nversion = {:?}\nedition = \"2024\"\n\n[dependencies]\nreqwest = {{ version = \"=0.12.28\", default-features = false, features = [\"json\", \"rustls-tls\"] }}\nserde = {{ version = \"=1.0.229\", features = [\"derive\"] }}\nserde_json = \"=1.0.151\"\n",
             self.name, self.version

@@ -1,0 +1,26 @@
+import ("encoding/json";"bytes";"fmt";"io")
+// ScalarCodec transforms non-null scalar JSON only. Missing/null values bypass callbacks.
+type ScalarCodec struct { Encode func(json.RawMessage)(json.RawMessage,error); Decode func(json.RawMessage)(json.RawMessage,error) }
+func TypedScalarCodec[I any,O any](encode func(I)(json.RawMessage,error),decode func(json.RawMessage)(O,error)) ScalarCodec {
+ return ScalarCodec{Encode:func(raw json.RawMessage)(json.RawMessage,error){if encode==nil{return raw,nil};var value I;if err:=json.Unmarshal(raw,&value);err!=nil{return nil,err};return encode(value)},Decode:func(raw json.RawMessage)(json.RawMessage,error){if decode==nil{return raw,nil};value,err:=decode(raw);if err!=nil{return nil,err};return json.Marshal(value)}}
+}
+func(c *Client)WithScalarCodecs(codecs map[string]ScalarCodec)*Client {copy:=*c;copy.ScalarCodecs=make(map[string]ScalarCodec,len(codecs));for name,codec:=range codecs{copy.ScalarCodecs[name]=codec};return &copy}
+type graphqlScalarShape struct{Scalar string `json:"scalar"`;Named string `json:"named"`;List *graphqlScalarShape `json:"list"`;Fields [][2]json.RawMessage `json:"fields"`;Union []graphqlScalarShape `json:"union"`;Literal string `json:"literal"`}
+func parseScalarShape(raw string)*graphqlScalarShape{var shape graphqlScalarShape;if raw!="null"{if err:=json.Unmarshal([]byte(raw),&shape);err!=nil{panic("invalid generated scalar shape")}};return &shape}
+func decodeScalarJSON(raw []byte)(any,error){var value any;decoder:=json.NewDecoder(bytes.NewReader(raw));decoder.UseNumber();err:=decoder.Decode(&value);if err==nil{var extra any;if trailing:=decoder.Decode(&extra);trailing!=io.EOF{if trailing==nil{trailing=fmt.Errorf("trailing JSON value")};err=trailing}};return value,err}
+func scalarTransform(value any,shape *graphqlScalarShape,codecs map[string]ScalarCodec,input bool)(any,error){
+ if value==nil||shape==nil{return value,nil}
+ if shape.Scalar!=""{codec,ok:=codecs[shape.Scalar];if !ok{return value,nil};callback:=codec.Decode;if input{callback=codec.Encode};if callback==nil{return value,nil};raw,err:=json.Marshal(value);if err!=nil{return nil,err};raw,err=callback(raw);if err!=nil{return nil,fmt.Errorf("GraphQL scalar %s codec failed: %w",shape.Scalar,err)};value,err=decodeScalarJSON(raw);if err!=nil{return nil,fmt.Errorf("GraphQL scalar %s codec returned invalid JSON: %w",shape.Scalar,err)};return value,nil}
+ if shape.Named!=""{return scalarTransform(value,graphqlInputShapes[shape.Named],codecs,input)}
+ if shape.List!=nil{if values,ok:=value.([]any);ok{for i,item:=range values{var err error;values[i],err=scalarTransform(item,shape.List,codecs,input);if err!=nil{return nil,err}}};return value,nil}
+ if object,ok:=value.(map[string]any);ok{
+  fields:=shape.Fields
+  if len(shape.Union)>0{
+   found:=false;for _,variant:=range shape.Union{for _,field:=range variant.Fields{var key string;var tag graphqlScalarShape;json.Unmarshal(field[0],&key);json.Unmarshal(field[1],&tag);if tag.Literal!=""&&object[key]==tag.Literal{fields=variant.Fields;found=true;break}};if found{break}}
+   if !found{seen:=map[string]json.RawMessage{};for _,variant:=range shape.Union{for _,field:=range variant.Fields{var key string;json.Unmarshal(field[0],&key);if _,present:=object[key];!present{continue};if previous,exists:=seen[key];exists{if !bytes.Equal(previous,field[1]){return nil,fmt.Errorf("ambiguous GraphQL scalar union; select __typename")}}else{seen[key]=field[1];fields=append(fields,field)}}}}
+  }
+  for _,field:=range fields{var key string;var child graphqlScalarShape;if err:=json.Unmarshal(field[0],&key);err!=nil{return nil,err};if err:=json.Unmarshal(field[1],&child);err!=nil{return nil,err};if item,present:=object[key];present{result,err:=scalarTransform(item,&child,codecs,input);if err!=nil{return nil,err};object[key]=result}}
+ }
+ return value,nil
+}
+func(c *Client)scalarJSON(raw []byte,shape *graphqlScalarShape,input bool)([]byte,error){value,err:=decodeScalarJSON(raw);if err!=nil{return nil,err};value,err=scalarTransform(value,shape,c.ScalarCodecs,input);if err!=nil{return nil,err};return json.Marshal(value)}

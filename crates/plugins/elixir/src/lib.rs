@@ -3078,3 +3078,4 @@ pub use oauth::{OAuth, oauth};
 
 mod graphql;
 pub use graphql::{Graphql, GraphqlClient, GraphqlStyle, graphql};
+pub use graphql::{GraphqlIncremental, graphql_incremental};

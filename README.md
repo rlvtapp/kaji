@@ -53,6 +53,7 @@ have their own supported pipelines.
 
 [Plugin support matrix](docs/plugin-support-matrix.md) ·
 [GraphQL package layouts](docs/reference/outputs/graphql-layout.md) ·
+[Advanced GraphQL capabilities](docs/reference/outputs/graphql-capabilities.md) ·
 [Examples](examples/README.md)
 
 <a id="build-your-own-plugin"></a>

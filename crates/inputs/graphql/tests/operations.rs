@@ -182,7 +182,7 @@ fn provider_options_publish_owned_contract_and_support_replacement() {
             .is_ok()
     );
     let unsupported = InputOptions {
-        import_roots: vec![dir.path().into()],
+        broker: Some(serde_json::json!({"protocol":"kafka"})),
         ..options
     };
     assert!(

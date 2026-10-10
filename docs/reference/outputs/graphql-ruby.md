@@ -35,11 +35,19 @@ RBS signatures. `.present?(field)` distinguishes absent fields from explicit nil
 
 Envelopes preserve errors, partial data, extensions and data-key presence.
 Transport/HTTP/JSON failures remain separate. Headers and timeouts are configurable.
-Custom scalars retain JSON values without codecs. Subscriptions, incremental
-responses and dynamic caller-selected fields are unsupported.
+Custom scalar signatures remain untyped; per-client `scalar_codecs` callbacks
+encode/decode values. Opt-in subscriptions return enumerators using distinct-connection
+graphql-sse; experimental incremental inputs return multipart deferSpec=20220824
+frames with raw partial data and final typed envelopes. Dynamic fields remain unsupported.
 
 Generated code and RBS were checked using Ruby 3.3.12 / RBS 3.4.0, including all
 four surfaces against pinned GraphQL.js 16.14.2. See the [support matrix](../../plugin-support-matrix.md).
+
+## Advanced capabilities
+
+See [subscriptions, scalar callbacks and incremental delivery](graphql-capabilities.md)
+for opt-in configuration, native stream lifetime and the tested protocol boundary.
+These additions are unreleased; historical checks below predate them.
 
 ## Generated source layout
 

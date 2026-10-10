@@ -34,6 +34,8 @@ function defineConfig(config) {
   validateInput(config.input);
   if (config.input.plugin?.format === 'graphql') {
     if (config.input.operations != null && (!Array.isArray(config.input.operations) || config.input.operations.some((file) => typeof file !== 'string' || !file))) throw new TypeError('GraphQL operations must be nonempty file paths');
+    if (config.input.importRoots != null && (!Array.isArray(config.input.importRoots) || config.input.importRoots.some(p=>typeof p!=='string'||!p))) throw new TypeError('GraphQL importRoots must be directory paths');
+    if (config.input.incremental != null && typeof config.input.incremental !== 'boolean') throw new TypeError('GraphQL incremental must be boolean');
     if (config.input.subscriptions != null && typeof config.input.subscriptions !== 'boolean') throw new TypeError('GraphQL subscriptions must be boolean');
   }
   if (!config.input.plugin && (typeof config.name !== 'string' || !config.name.trim())) throw new TypeError('name is required');
@@ -53,16 +55,16 @@ function sdkPackage(options) {
   if (typeof options.language !== 'string' || !options.language) {
     throw new TypeError('sdk language is required');
   }
-  const allowed = new Set(['language', 'path', 'name', 'version', 'style', 'transport', 'clientName', 'raw', 'jobs', 'scalars', 'groups', 'contracts', 'endpoint', 'commandName']);
+  const allowed = new Set(['language', 'path', 'name', 'version', 'style', 'transport', 'clientName', 'raw', 'jobs', 'scalars', 'groups', 'contracts', 'endpoint', 'commandName', 'subscriptions']);
   for (const key of Object.keys(options)) {
     if (!allowed.has(key)) throw new TypeError(`unknown sdk option ${key}`);
   }
   if (!['typescript', 'rust', 'go', 'python', 'php', 'java', 'csharp', 'elixir', 'ruby', 'swift', 'postman', 'rust-cli', 'typescript-cli'].includes(options.language)) {
     throw new TypeError(`unsupported SDK language ${options.language}`);
   }
-  const { language, path: outputPath = language, name, version, style, transport, clientName, raw, jobs, scalars, groups, contracts, endpoint, commandName } = options;
+  const { language, path: outputPath = language, name, version, style, transport, clientName, raw, jobs, scalars, groups, contracts, endpoint, commandName, subscriptions } = options;
   if (typeof outputPath !== 'string' || !outputPath) throw new TypeError('sdk path must be a nonempty string');
-  return { language, path: outputPath, name, version, style, transport, clientName, raw, jobs, scalars, groups, contracts, endpoint, commandName };
+  return { language, path: outputPath, name, version, style, transport, clientName, raw, jobs, scalars, groups, contracts, endpoint, commandName, subscriptions };
 }
 
 function normalizedPackagePath(value) {
@@ -115,7 +117,7 @@ async function loadConfig(configFile) {
   return {
     ...config,
     input: typeof config.input === 'string' ? resolve(config.input) : config.input.plugin
-      ? { ...config.input, path: resolve(config.input.path), ...(config.input.operations ? { operations: config.input.operations.map(resolve) } : {}) }
+      ? { ...config.input, path: resolve(config.input.path), ...(config.input.operations ? { operations: config.input.operations.map(resolve) } : {}), ...(config.input.importRoots ? {importRoots: config.input.importRoots.map(resolve)} : {}) }
       : { artifacts: resolve(config.input.artifacts) },
     output: typeof config.output === 'string' ? resolve(config.output) : { ...config.output, path: resolve(config.output.path) },
     ...(config.compiler ? { compiler: resolve(config.compiler) } : {}),

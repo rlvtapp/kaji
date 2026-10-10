@@ -155,7 +155,7 @@ fn render_internal(
         .any(|op| op.kind == GraphqlOperationKind::Subscription);
     writeln!(
         out,
-        "\nimport {{ createGraphqlHttpTransport }} from './graphql-runtime.js';"
+        "\nimport {{ createGraphqlHttpTransport }} from './graphql-runtime.js';\nimport {{ withGraphqlScalarCodecs }} from './graphql-scalar-runtime.js';\nimport type {{ GraphqlScalarCodecs }} from './graphql-codecs.js';"
     )?;
     let connection = if http {
         "({ transport: GraphqlTransport; endpoint?: never } | { endpoint: string; transport?: never })"
@@ -164,7 +164,7 @@ fn render_internal(
     };
     writeln!(
         out,
-        "export type GraphqlClientOptions = {connection} & {{ headers?: HeadersInit; fetch?: typeof globalThis.fetch; subscriptionTransport{}: SubscriptionTransport }};",
+        "export type GraphqlClientOptions = {connection} & {{ headers?: HeadersInit; fetch?: typeof globalThis.fetch; scalarCodecs?: GraphqlScalarCodecs; subscriptionTransport{}: SubscriptionTransport }};",
         if subscriptions { "" } else { "?" }
     )?;
     let mut modular_bindings = Vec::new();
@@ -241,7 +241,7 @@ fn render_internal(
     }
     writeln!(
         out,
-        "export function createClient(config: GraphqlClientOptions): GraphqlBoundClient {{\n  const transport = config.transport ?? (config.endpoint !== undefined ? createGraphqlHttpTransport(config.endpoint, config) : undefined);\n  const subscriptionTransport = config.subscriptionTransport;"
+        "export function createClient(config: GraphqlClientOptions): GraphqlBoundClient {{\n  const transport = withGraphqlScalarCodecs(config.transport ?? (config.endpoint !== undefined ? createGraphqlHttpTransport(config.endpoint, config) : undefined), config.scalarCodecs);\n  const subscriptionTransport = withGraphqlScalarCodecs(config.subscriptionTransport, config.scalarCodecs);"
     )?;
     if http {
         writeln!(

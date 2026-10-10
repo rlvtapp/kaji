@@ -484,3 +484,99 @@ fn large_packages_use_bounded_files_and_regenerate() {
         );
     }
 }
+
+#[test]
+#[ignore = "requires Ruby 3.1+, pinned graphql-sse 2.6.0 and local server"]
+fn sse_incremental_and_scalar_codecs_execute() {
+    use std::io::{BufRead, BufReader};
+    let root = std::env::var("POOLSTER_GRAPHQL_SSE_ROOT").unwrap();
+    let ruby = std::env::var("POOLSTER_RUBY_BINARY").unwrap_or("ruby".into());
+    let dir = tempfile::tempdir().unwrap();
+    let mut c = contract();
+    c.operations[0].variables[0].ty.kind = ModelKind::Scalar("DateTime".into());
+    c.operations[0].document = "query ReadUser($id:DateTime){hello(id:$id)}".into();
+    if let ModelKind::Object(fields) = &mut c.operations[0].result.kind {
+        fields.truncate(1);
+        fields[0].ty.kind = ModelKind::Scalar("DateTime".into());
+    }
+    let mut sub = c.operations[0].clone();
+    sub.name = "Changed".into();
+    sub.kind = GraphqlOperationKind::Subscription;
+    sub.document = "subscription Changed($id:DateTime){hello(id:$id)}".into();
+    c.operations.push(sub);
+    render_advanced(
+        &c,
+        "example_graphql",
+        GraphqlStyle::Flat,
+        &BTreeMap::new(),
+        true,
+        false,
+    )
+    .unwrap()
+    .0
+    .write_to(dir.path())
+    .unwrap();
+    c.operations.pop();
+    render_advanced(
+        &c,
+        "incremental_graphql",
+        GraphqlStyle::Flat,
+        &BTreeMap::new(),
+        false,
+        true,
+    )
+    .unwrap()
+    .0
+    .write_to(dir.path().join("incremental"))
+    .unwrap();
+    let mut server = Command::new("node")
+        .args(["-e", include_str!("advanced-server.cjs")])
+        .env("POOLSTER_GRAPHQL_SSE_ROOT", root)
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut port = String::new();
+    BufReader::new(server.stdout.take().unwrap())
+        .read_line(&mut port)
+        .unwrap();
+    let host = std::env::var("POOLSTER_GRAPHQL_SERVER_HOST").unwrap_or("127.0.0.1".into());
+    let script = r#"
+require_relative 'lib/example_graphql'
+require_relative 'incremental/lib/incremental_graphql'
+def check(value);raise 'assertion failed' unless value;end
+codecs={'DateTime'=>{encode:->(value){value.upcase},decode:->(value){value.downcase}}}
+client=ExampleGraphql::Client.new(ENV.fetch('POOLSTER_GRAPHQL_ENDPOINT'),headers:{'Authorization'=>'Bearer secret'},scalar_codecs:codecs)
+check(client.transport.apply_patch({'items'=>[1]},{'path'=>['items',1],'items'=>[2]})=={'items'=>[1,2]})
+check(client.transport.apply_patch({'items'=>[]},{'path'=>[],'errors'=>[{'message'=>'failed'}]})=={'items'=>[]})
+vars={id:'2025-01-01t00:00:00.000z'}
+check(client.read_user(vars).require_data.hello==vars[:id])
+events=client.changed(vars).to_a;check(events.length==1&&events[0].require_data.hello==vars[:id])
+inc=IncrementalGraphql::Client.new(ENV.fetch('POOLSTER_GRAPHQL_ENDPOINT')+'/multipart',headers:{'Authorization'=>'Bearer secret'},scalar_codecs:codecs)
+frames=inc.read_user.to_a;check(frames[0].final.nil?&&frames[0].data=={}&&frames[1].final.require_data.hello==vars[:id])
+['event: unknown\n\n',"event: next\ndata: invalid\n\n","event: next\ndata: {}\n\n"].each do |text|
+ failed=false;parser=ExampleGraphql::StreamParser.new('text/event-stream',100,false)
+ begin;parser.feed(text){|frame|};parser.finish;rescue ArgumentError,JSON::ParserError;failed=true;end
+ check(failed)
+end
+parser=ExampleGraphql::StreamParser.new('text/event-stream',100,false);events=[]
+"event: next\r\ndata: {\"data\":{\"name\":\"é\"}}\r\n\r\nevent: complete\r\n\r\n".bytes.each{|byte|parser.feed(byte.chr){|frame|events<<frame}};parser.finish;check(events[0]['data']['name']=='é')
+"#;
+    std::fs::write(dir.path().join("advanced.rb"), script).unwrap();
+    let out = Command::new(ruby)
+        .arg(dir.path().join("advanced.rb"))
+        .env(
+            "POOLSTER_GRAPHQL_ENDPOINT",
+            format!("http://{host}:{}", port.trim()),
+        )
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    server.kill().unwrap();
+    server.wait().unwrap();
+    assert!(
+        out.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+}

@@ -55,6 +55,8 @@ struct SdkPackage {
     #[serde(default)]
     raw: Option<bool>,
     #[serde(default)]
+    subscriptions: Option<bool>,
+    #[serde(default)]
     jobs: Option<usize>,
     #[serde(default)]
     plugins: Vec<NativePlugin>,
@@ -139,6 +141,9 @@ fn profiles(packages: Vec<SdkPackage>) -> AnyResult<ProfileSet> {
     let mut profiles = ProfileSet::new(".");
     for mut package in packages {
         output_options::apply(&mut package, "http")?;
+        if package.subscriptions.is_some() {
+            bail!("subscriptions applies only to GraphQL output");
+        }
         validate_options(&package)?;
         let common = package_common(&package)?;
         let path = package.path.clone();
@@ -297,6 +302,7 @@ pub fn available_input_plugins() -> Result<String> {
 }
 
 pub struct InspectInput {
+    options: Option<String>,
     format: String,
     provider: Option<String>,
     source: String,
@@ -308,11 +314,19 @@ impl Task for InspectInput {
 
     fn compute(&mut self) -> Result<Self::Output> {
         let registry = default_registry().map_err(napi_anyhow)?;
+        let options = self
+            .options
+            .as_ref()
+            .map(|v| serde_json::from_str::<poolster_core::input::InputOptions>(v))
+            .transpose()
+            .map_err(napi_error)?
+            .unwrap_or_default();
         let loaded = registry
-            .load(
+            .load_with_options(
                 &self.format,
                 self.provider.as_deref(),
                 Path::new(&self.source),
+                &options,
             )
             .map_err(napi_anyhow)?;
         serde_json::to_string(&serde_json::json!({
@@ -334,8 +348,10 @@ pub fn inspect_input(
     format: String,
     provider: Option<String>,
     source: String,
+    options: Option<String>,
 ) -> AsyncTask<InspectInput> {
     AsyncTask::new(InspectInput {
+        options,
         format,
         provider,
         source,

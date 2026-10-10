@@ -202,18 +202,34 @@ impl Layout {
     ) -> Result<()> {
         for (operation, method) in members {
             let symbols = &operations[operation];
+            let response = if symbols.incremental {
+                format!(
+                    "crate::graphql_incremental::GraphqlIncrementalStream<{}>",
+                    symbols.result
+                )
+            } else if symbols.kind == GraphqlOperationKind::Subscription {
+                format!(
+                    "crate::graphql_sse::GraphqlSubscription<{}>",
+                    symbols.result
+                )
+            } else {
+                format!(
+                    "crate::graphql_runtime::GraphqlResponse<{}>",
+                    symbols.result
+                )
+            };
             if self.without_variables.contains(operation) {
                 writeln!(
                     source,
-                    "    pub async fn {method}(&self) -> std::result::Result<crate::graphql_runtime::GraphqlResponse<{}>, crate::graphql_runtime::GraphqlTransportError> {{ {}({transport}, &{} {{}}).await }}",
-                    symbols.result, symbols.function, symbols.variables
+                    "    pub async fn {method}(&self) -> std::result::Result<{response}, crate::graphql_runtime::GraphqlTransportError> {{ {}({transport}, &{} {{}}).await }}",
+                    symbols.function, symbols.variables
                 )?;
                 continue;
             }
             writeln!(
                 source,
-                "    pub async fn {method}(&self, variables: &{}) -> std::result::Result<crate::graphql_runtime::GraphqlResponse<{}>, crate::graphql_runtime::GraphqlTransportError> {{ {}({transport}, variables).await }}",
-                symbols.variables, symbols.result, symbols.function
+                "    pub async fn {method}(&self, variables: &{}) -> std::result::Result<{response}, crate::graphql_runtime::GraphqlTransportError> {{ {}({transport}, variables).await }}",
+                symbols.variables, symbols.function
             )?;
         }
         Ok(())

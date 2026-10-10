@@ -123,6 +123,7 @@ Generate options (both modes):
       --input-format <format>         Native format: graphql, protobuf, asyncapi or arazzo
       --provider <id>                 Registered native input provider
       --operation <file>              Repeatable GraphQL operation documents
+      --graphql-incremental           Opt-in multipart deferSpec=20220824 contract
       --import-root <directory>       Repeatable provider import roots
       --broker-config <file>          Provider broker configuration as JSON
       --workflow-source <name=path>   Provider workflow source resolution

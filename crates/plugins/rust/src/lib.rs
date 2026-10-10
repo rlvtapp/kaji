@@ -2,6 +2,7 @@
 mod graphql;
 pub use graphql::{
     Graphql, GraphqlClient, GraphqlOperationSymbols, GraphqlScalarMapping, GraphqlStyle, graphql,
+    graphql_incremental,
 };
 mod model_compatibility;
 mod native_names;

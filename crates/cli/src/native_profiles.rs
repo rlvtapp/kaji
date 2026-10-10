@@ -1,5 +1,6 @@
 //! Select native contract consumers without adapting protocols into HTTP APIs.
 use super::*;
+mod incremental;
 use poolster_core::{
     engine::Contract,
     input::{InputProvider, InputRegistry},
@@ -100,6 +101,16 @@ pub(super) fn compatible(format: &str, package: &PackageConfig) -> bool {
             && package.plugins[0].name == plugin
     })
 }
+pub(super) fn input_language_compatible(input: &NativeInputConfig, language: &str) -> bool {
+    language_compatible(&input.format, language)
+        && !(input.options.graphql_incremental
+            && ["postman", "rust-cli", "typescript-cli"].contains(&language))
+}
+pub(super) fn input_compatible(input: &NativeInputConfig, package: &PackageConfig) -> bool {
+    compatible(&input.format, package)
+        && input_language_compatible(input, &package.language)
+        && (!input.options.graphql_incremental || package.plugins.len() == 1)
+}
 fn provider<C: Contract>(
     input: &NativeInputConfig,
     registry: Arc<InputRegistry>,
@@ -146,7 +157,20 @@ pub(super) fn build(options: &Generate, input: &NativeInputConfig) -> Result<Pro
             ..Default::default()
         };
         let old = std::mem::replace(&mut profiles, ProfileSet::new("."));
-        profiles = if input.format == "graphql"
+        profiles = if input.format == "graphql" && input.options.graphql_incremental {
+            incremental::append(
+                old,
+                input,
+                registry.clone(),
+                language,
+                path,
+                name,
+                common,
+                plugin,
+                raw,
+                style,
+            )?
+        } else if input.format == "graphql"
             && ["postman", "rust-cli", "typescript-cli"].contains(&language)
         {
             append_graphql_tools(
@@ -178,6 +202,11 @@ pub(super) fn build(options: &Generate, input: &NativeInputConfig) -> Result<Pro
                     .unwrap_or_default(),
             );
             let generator = generator.groups(plugin.map(|p| p.groups.clone()).unwrap_or_default());
+            let generator = if plugin.and_then(|p| p.subscriptions).unwrap_or(false) {
+                generator.subscriptions()
+            } else {
+                generator
+            };
             let generator = if raw || style == "raw" {
                 generator.raw()
             } else if style == "flat" {
@@ -194,13 +223,29 @@ pub(super) fn build(options: &Generate, input: &NativeInputConfig) -> Result<Pro
             }
             old.package(package)
         } else if input.format == "graphql" && language == "go" {
-            ensure!(
-                plugin.is_none_or(|p| p.scalars.is_empty()),
-                "go GraphQL custom scalar mappings are not supported"
-            );
             let input_provider = provider::<GraphqlOperations>(input, registry.clone());
             let generator = go::graphql(Some(input_provider.handle()))
-                .groups(plugin.map(|p| p.groups.clone()).unwrap_or_default());
+                .groups(plugin.map(|p| p.groups.clone()).unwrap_or_default())
+                .scalars(
+                    plugin
+                        .map(|p| {
+                            p.scalars
+                                .iter()
+                                .map(|(name, m)| {
+                                    (
+                                        name.clone(),
+                                        go::GraphqlScalarMapping::new(&m.input, &m.output),
+                                    )
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default(),
+                );
+            let generator = if plugin.and_then(|p| p.subscriptions).unwrap_or(false) {
+                generator.subscriptions()
+            } else {
+                generator
+            };
             let generator = if raw || style == "raw" {
                 generator.raw()
             } else if style == "flat" {
@@ -224,6 +269,11 @@ pub(super) fn build(options: &Generate, input: &NativeInputConfig) -> Result<Pro
             let input_provider = provider::<GraphqlOperations>(input, registry.clone());
             let generator = python::graphql(Some(input_provider.handle()))
                 .groups(plugin.map(|p| p.groups.clone()).unwrap_or_default());
+            let generator = if plugin.and_then(|p| p.subscriptions).unwrap_or(false) {
+                generator.subscriptions()
+            } else {
+                generator
+            };
             let generator = if raw || style == "raw" {
                 generator.raw()
             } else if style == "flat" {
@@ -247,6 +297,11 @@ pub(super) fn build(options: &Generate, input: &NativeInputConfig) -> Result<Pro
             let input_provider = provider::<GraphqlOperations>(input, registry.clone());
             let generator = php::graphql(Some(input_provider.handle()))
                 .groups(plugin.map(|p| p.groups.clone()).unwrap_or_default());
+            let generator = if plugin.and_then(|p| p.subscriptions).unwrap_or(false) {
+                generator.subscriptions()
+            } else {
+                generator
+            };
             let generator = if raw || style == "raw" {
                 generator.raw()
             } else if style == "flat" {
@@ -270,6 +325,11 @@ pub(super) fn build(options: &Generate, input: &NativeInputConfig) -> Result<Pro
             let input_provider = provider::<GraphqlOperations>(input, registry.clone());
             let generator = java::graphql(Some(input_provider.handle()))
                 .groups(plugin.map(|p| p.groups.clone()).unwrap_or_default());
+            let generator = if plugin.and_then(|p| p.subscriptions).unwrap_or(false) {
+                generator.subscriptions(true)
+            } else {
+                generator
+            };
             let generator = if raw || style == "raw" {
                 generator.raw()
             } else if style == "flat" {
@@ -293,6 +353,11 @@ pub(super) fn build(options: &Generate, input: &NativeInputConfig) -> Result<Pro
             let input_provider = provider::<GraphqlOperations>(input, registry.clone());
             let generator = csharp::graphql(Some(input_provider.handle()))
                 .groups(plugin.map(|p| p.groups.clone()).unwrap_or_default());
+            let generator = if plugin.and_then(|p| p.subscriptions).unwrap_or(false) {
+                generator.subscriptions(true)
+            } else {
+                generator
+            };
             let generator = if raw || style == "raw" {
                 generator.raw()
             } else if style == "flat" {
@@ -316,6 +381,11 @@ pub(super) fn build(options: &Generate, input: &NativeInputConfig) -> Result<Pro
             let input_provider = provider::<GraphqlOperations>(input, registry.clone());
             let generator = dotnet::graphql(Some(input_provider.handle()))
                 .groups(plugin.map(|p| p.groups.clone()).unwrap_or_default());
+            let generator = if plugin.and_then(|p| p.subscriptions).unwrap_or(false) {
+                generator.subscriptions(true)
+            } else {
+                generator
+            };
             let generator = if raw || style == "raw" {
                 generator.raw()
             } else if style == "flat" {
@@ -339,6 +409,11 @@ pub(super) fn build(options: &Generate, input: &NativeInputConfig) -> Result<Pro
             let input_provider = provider::<GraphqlOperations>(input, registry.clone());
             let generator = ruby::graphql(Some(input_provider.handle()))
                 .groups(plugin.map(|p| p.groups.clone()).unwrap_or_default());
+            let generator = if plugin.and_then(|p| p.subscriptions).unwrap_or(false) {
+                generator.subscriptions()
+            } else {
+                generator
+            };
             let generator = if raw || style == "raw" {
                 generator.raw()
             } else if style == "flat" {
@@ -362,6 +437,11 @@ pub(super) fn build(options: &Generate, input: &NativeInputConfig) -> Result<Pro
             let input_provider = provider::<GraphqlOperations>(input, registry.clone());
             let generator = swift::graphql(Some(input_provider.handle()))
                 .groups(plugin.map(|p| p.groups.clone()).unwrap_or_default());
+            let generator = if plugin.and_then(|p| p.subscriptions).unwrap_or(false) {
+                generator.subscriptions(true)
+            } else {
+                generator
+            };
             let generator = if raw || style == "raw" {
                 generator.raw()
             } else if style == "flat" {
@@ -385,6 +465,11 @@ pub(super) fn build(options: &Generate, input: &NativeInputConfig) -> Result<Pro
             let input_provider = provider::<GraphqlOperations>(input, registry.clone());
             let generator = elixir::graphql(Some(input_provider.handle()))
                 .groups(plugin.map(|p| p.groups.clone()).unwrap_or_default());
+            let generator = if plugin.and_then(|p| p.subscriptions).unwrap_or(false) {
+                generator.subscriptions()
+            } else {
+                generator
+            };
             let generator = if raw || style == "raw" {
                 generator.raw()
             } else if style == "flat" {
@@ -480,7 +565,7 @@ pub(super) fn build(options: &Generate, input: &NativeInputConfig) -> Result<Pro
     if let Some(packages) = &options.config_packages {
         for package in packages
             .iter()
-            .filter(|package| compatible(&input.format, package))
+            .filter(|package| input_compatible(input, package))
         {
             append(
                 &package.language,
@@ -500,7 +585,7 @@ pub(super) fn build(options: &Generate, input: &NativeInputConfig) -> Result<Pro
         for language in options
             .languages
             .iter()
-            .filter(|language| language_compatible(&input.format, language))
+            .filter(|language| input_language_compatible(input, language))
         {
             append(language, language, None, None, None, None)?;
         }
@@ -530,7 +615,7 @@ pub(super) fn validate_recipe(document: &serde_json::Value, config: &ProjectConf
         .flatten()
         .zip(&config.packages)
     {
-        if !compatible(&input.format, package) {
+        if !input_compatible(input, package) {
             continue;
         }
         for key in ["layout", "idempotency", "middleware", "api_reference"] {
@@ -624,11 +709,6 @@ pub(super) fn validate_recipe(document: &serde_json::Value, config: &ProjectConf
             ]
             .contains(&package.language.as_str())
         {
-            ensure!(
-                plugin.subscriptions != Some(true),
-                "{} GraphQL subscriptions are not supported",
-                package.language
-            );
             ensure!(
                 plugin.transport.is_none(),
                 "{} GraphQL transport options are not supported",

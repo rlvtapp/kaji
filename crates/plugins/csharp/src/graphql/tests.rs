@@ -48,6 +48,7 @@ fn generated_clients_compile_and_execute_against_graphql_server() {
     let dotnet = std::env::var("POOLSTER_DOTNET").unwrap_or_else(|_| "dotnet".into());
     let root = std::env::var("POOLSTER_GRAPHQL_JS_ROOT").expect("GraphQL.js node_modules root");
     let mut input = fixture();
+    input.operations.push(abstract_operation());
     input.operations.push(GraphqlOperation {
         name: "Ping".into(),
         kind: GraphqlOperationKind::Mutation,
@@ -66,11 +67,11 @@ fn generated_clients_compile_and_execute_against_graphql_server() {
     let server = r#"
 const {graphql,buildSchema,version}=require(process.env.POOLSTER_GRAPHQL_JS_ROOT+'/graphql');
 if(version!=='16.14.2')throw Error('Expected pinned GraphQL.js 16.14.2');
-const schema=buildSchema('type Query { readUser(id: ID!, nickname: String): User } type User { name: String! nickname: String } type Mutation { ping: String! }');
+const schema=buildSchema('type Query { readUser(id: ID!, nickname: String): User node:Node! } type User { name: String! nickname: String } type Mutation { ping: String! } interface Node{id:ID!} type Person implements Node{id:ID! name:String!} type Robot implements Node{id:ID! code:String!}');
 const server=require('http').createServer(async(req,res)=>{let body='';for await(const chunk of req)body+=chunk;const v=JSON.parse(body);
 if(req.url==='/http'){res.writeHead(503);res.end('unavailable');return;}
 if(req.url==='/malformed'){res.end('invalid');return;}
-const result=await graphql({schema,source:v.query,operationName:v.operationName,variableValues:v.variables,rootValue:{ping:()=>'pong',readUser:()=>({name:v.variables.id,nickname:()=>{if(v.variables.id==='partial')throw Error('partial failure');return v.variables.nickname??null;}})}});
+const result=await graphql({schema,source:v.query,operationName:v.operationName,variableValues:v.variables,rootValue:{node:()=>({__typename:'Robot',id:'r',code:'R2'}),ping:()=>'pong',readUser:()=>({name:v.variables.id,nickname:()=>{if(v.variables.id==='partial')throw Error('partial failure');return v.variables.nickname??null;}})}});
 res.setHeader('content-type','application/json');res.end(JSON.stringify(result));});server.listen(0,'127.0.0.1',()=>console.log(server.address().port));
 "#;
     struct Server(std::process::Child);
@@ -298,4 +299,163 @@ fn large_records_split_at_property_boundaries() {
             > 1
     );
     assert!(files.values().all(|s| s.len() <= 128 * 1024));
+}
+
+fn abstract_operation() -> GraphqlOperation {
+    let alternatives = [("Person", "name"), ("Robot", "code")]
+        .into_iter()
+        .map(|(name, field)| ModelType {
+            nullable: false,
+            kind: ModelKind::Object(vec![
+                ModelField {
+                    name: "kind".into(),
+                    optional: false,
+                    default_value: None,
+                    ty: ModelType {
+                        nullable: false,
+                        kind: ModelKind::Literal(name.into()),
+                    },
+                },
+                ModelField {
+                    name: field.into(),
+                    optional: false,
+                    default_value: None,
+                    ty: string(false),
+                },
+            ]),
+        })
+        .collect();
+    GraphqlOperation {
+        name: "Search".into(),
+        kind: GraphqlOperationKind::Query,
+        document:
+            "query Search { node { kind:__typename ... on Person { name } ... on Robot { code } } }"
+                .into(),
+        variables: vec![],
+        result: ModelType {
+            nullable: false,
+            kind: ModelKind::Object(vec![ModelField {
+                name: "node".into(),
+                optional: false,
+                default_value: None,
+                ty: ModelType {
+                    nullable: false,
+                    kind: ModelKind::Union(alternatives),
+                },
+            }]),
+        },
+    }
+}
+#[test]
+fn abstract_selections_require_a_stable_typename_discriminator() {
+    let mut models = models::Models::default();
+    let operation = abstract_operation();
+    let ModelKind::Object(fields) = &operation.result.kind else {
+        panic!()
+    };
+    let mut ty = fields[0].ty.clone();
+    let ModelKind::Union(alternatives) = &mut ty.kind else {
+        panic!()
+    };
+    for alternative in alternatives.iter_mut() {
+        let ModelKind::Object(fields) = &mut alternative.kind else {
+            panic!()
+        };
+        fields.remove(0);
+    }
+    assert!(
+        models
+            .ty("Untagged", &ty)
+            .unwrap_err()
+            .to_string()
+            .contains("__typename")
+    );
+}
+
+#[test]
+#[ignore = "requires .NET8 and pinned GraphQL.js16.14.2 local SSE/multipart server"]
+fn advanced_transports_compile_and_execute() {
+    for incremental in [false, true] {
+        for style in [
+            GraphqlStyle::Raw,
+            GraphqlStyle::Flat,
+            GraphqlStyle::Idiomatic,
+        ] {
+            let mut c = fixture();
+            c.operations[0].variables[0].ty.kind = ModelKind::Scalar("ID".into());
+            c.operations[0].variables.truncate(1);
+            c.operations[0].kind = if incremental {
+                GraphqlOperationKind::Query
+            } else {
+                GraphqlOperationKind::Subscription
+            };
+            c.operations[0].document = if incremental {
+                "query ReadUser($id:ID!){readUser(id:$id){... @defer {name nickname}}}"
+            } else {
+                "subscription ReadUser($id:ID!){readUser(id:$id){name nickname}}"
+            }
+            .into();
+            let ModelKind::Object(fields) = &mut c.operations[0].result.kind else {
+                panic!()
+            };
+            let ModelKind::Object(fields) = &mut fields[0].ty.kind else {
+                panic!()
+            };
+            fields[0].ty.kind = ModelKind::Scalar("Date".into());
+            let dir = tempfile::tempdir().unwrap();
+            for (path, source) in render_advanced(
+                &c,
+                "TestSdk",
+                style,
+                &BTreeMap::new(),
+                !incremental,
+                incremental,
+            )
+            .unwrap()
+            .0
+            {
+                let path = dir.path().join(path);
+                fs::create_dir_all(path.parent().unwrap()).unwrap();
+                fs::write(path, source).unwrap();
+            }
+            fs::write(dir.path().join("Test.csproj"),"<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors></PropertyGroup></Project>").unwrap();
+            let call = match style {
+                GraphqlStyle::Raw => "GraphqlOperations.ReadUserAsync(client,variables)",
+                GraphqlStyle::Flat => "client.ReadUserAsync(variables)",
+                GraphqlStyle::Idiomatic => {
+                    if incremental {
+                        "client.Query.ReadUserAsync(variables)"
+                    } else {
+                        "client.Subscription.ReadUserAsync(variables)"
+                    }
+                }
+            };
+            let check=if incremental{"var frames=new List<GraphqlIncrementalSnapshot<ReadUserResult>>();await foreach(var item in CALL)frames.Add(item);if(frames.Count!=2||frames[0].Complete||!frames[1].Complete||frames[0].Data![\"readUser\"]![\"name\"] is not null||frames[1].DecodeData().ReadUser!.Name.GetString()!=\"decoded:Ada\")throw new Exception(\"incremental\");"}else{"var frames=new List<GraphqlResponse<ReadUserResult>>();await foreach(var item in CALL)frames.Add(item);if(frames.Count!=2||frames[0].Data!.ReadUser!.Name.GetString()!=\"decoded:Ada\"||frames[1].Errors?.Count!=1)throw new Exception(\"SSE\");"}.replace("CALL",call);
+            let json = if incremental {
+                r#"else if(args.Length>1 && args[1]=="json"){var frames=new List<GraphqlIncrementalSnapshot<ReadUserResult>>();await foreach(var item in CALL)frames.Add(item);if(frames.Count!=1||!frames[0].Complete||frames[0].DecodeData().ReadUser!.Name.GetString()!="decoded:Ada")throw new Exception("JSON fallback");}"#
+            } else {
+                ""
+            };
+            let branches=format!("if(args.Length>1&&args[1]==\"cancel\"){{await foreach(var item in CALL){{break;}}}}{json}else if(args.Length>1){{bool failed=false;try{{await foreach(var item in CALL){{}}}}catch(System.Text.Json.JsonException){{failed=true;}}if(!failed)throw new Exception(\"Expected malformed stream failure\");}}else{{{check}}}").replace("CALL",call);
+            let check = branches;
+            fs::write(dir.path().join("Program.cs"),format!("using TestSdk;using System.Text.Json.Nodes;using var http=new HttpClient();var client=new GraphqlClient(http,new Uri(args[0])){{ScalarCodecs=new Dictionary<string,GraphqlScalarCodec>{{[\"ID\"]=new(n=>JsonValue.Create(n.GetValue<string>()+\"!\")!,n=>n),[\"Date\"]=new(n=>n,n=>JsonValue.Create(\"decoded:\"+n.GetValue<string>())!)}}}};var variables=new ReadUserVariables{{Id=\"1\"}};{check}")).unwrap();
+            let output = Command::new(std::env::var("POOLSTER_TEST_NODE").unwrap_or("node".into()))
+                .arg(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/src/graphql/advanced-test.cjs"
+                ))
+                .arg(dir.path())
+                .arg(std::env::var("POOLSTER_DOTNET").unwrap_or("dotnet".into()))
+                .arg(if incremental { "incremental" } else { "sse" })
+                .env("DOTNET_CLI_HOME", dir.path().join("home"))
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{} {}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+    }
 }

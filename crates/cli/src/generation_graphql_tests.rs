@@ -224,3 +224,64 @@ fn graphql_recipe_generates_collections_and_both_executable_clis() {
     assert!(root.join("rust-command/Cargo.toml").exists());
     assert!(root.join("js-command/package.json").exists());
 }
+
+#[test]
+fn graphql_advanced_recipes_dispatch_all_sdk_languages_and_skip_unary_tools() {
+    let directory = tempfile::tempdir().unwrap();
+    let languages = [
+        "typescript",
+        "rust",
+        "go",
+        "python",
+        "php",
+        "java",
+        "csharp",
+        "ruby",
+        "swift",
+        "elixir",
+    ];
+    for incremental in [false, true] {
+        let mut packages=languages.iter().map(|language|serde_json::json!({"language":language,"path":language,"name":if *language=="php"{"example/graphql-client"}else{"graphql_client"},"plugins":[{"name":"graphql","style":"raw","subscriptions":!incremental}]})).collect::<Vec<_>>();
+        if incremental {
+            packages.push(serde_json::json!({"language":"postman","path":"collection","plugins":[{"name":"collection"}]}));
+        }
+        let path = recipe(directory.path(), serde_json::json!(packages));
+        std::fs::write(directory.path().join("schema.graphql"),"#import \"types.graphql\"\ndirective @defer(if:Boolean! = true,label:String) on FRAGMENT_SPREAD | INLINE_FRAGMENT type Query{user:User!} type Subscription{ticks:User!}").unwrap();
+        std::fs::write(
+            directory.path().join("types.graphql"),
+            "type User{id:ID! name:String!}",
+        )
+        .unwrap();
+        std::fs::write(
+            directory.path().join("operations.graphql"),
+            if incremental {
+                "query Read{user{id ... @defer(label:\"details\"){name}}}"
+            } else {
+                "query Read{user{id name}} subscription Ticks{ticks{id name}}"
+            },
+        )
+        .unwrap();
+        let mut document: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        document["input"]["options"]["graphql_incremental"] = incremental.into();
+        std::fs::write(&path, serde_json::to_vec_pretty(&document).unwrap()).unwrap();
+        generate_from_config(&path, ColorChoice::Never, false, false).unwrap();
+        generate_from_config(&path, ColorChoice::Never, true, false).unwrap();
+        for language in languages {
+            assert!(
+                directory.path().join("generated").join(language).is_dir(),
+                "{language}"
+            );
+        }
+        if incremental {
+            assert!(!directory.path().join("generated/collection").exists());
+        }
+        let metadata = std::fs::read_to_string(
+            directory
+                .path()
+                .join("generated/.poolster-native-generation.json"),
+        )
+        .unwrap();
+        assert!(metadata.contains("types.graphql"));
+    }
+}

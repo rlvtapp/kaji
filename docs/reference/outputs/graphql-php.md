@@ -28,11 +28,19 @@ GraphQL dependency-injection generator is not implemented.
 
 `Presence::missing()` differs from `Presence::of(null)`. Selected nested objects,
 lists and input models retain nullability; abstract variants require a selected
-`__typename` discriminator. Custom scalars retain JSON values without mapping codecs.
-Subscriptions, incremental delivery and dynamic selections are unsupported.
+`__typename` discriminator. Custom scalars remain `mixed`; per-client `scalarCodecs` callbacks can encode and
+decode them. Opt-in subscriptions use distinct-connection graphql-sse; incremental
+inputs use experimental multipart deferSpec=20220824. Dynamic selections remain
+unsupported.
 
 All four styles compile and execute against pinned GraphQL.js 16.14.2.
 See the [support matrix](../../plugin-support-matrix.md) for the verification boundary.
+
+## Advanced capabilities
+
+See [subscriptions, scalar callbacks and incremental delivery](graphql-capabilities.md)
+for opt-in configuration, native stream lifetime and the tested protocol boundary.
+These additions are unreleased; historical checks below predate them.
 
 ## Generated source layout
 

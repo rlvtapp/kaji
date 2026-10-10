@@ -1,5 +1,6 @@
 //! Scoped native GraphQL generation; HTTP contracts and JavaScript hooks remain separate.
 use super::*;
+mod incremental;
 use poolster_core::{
     input::{InputOptions, InputProvider},
     native::GraphqlOperations,
@@ -12,6 +13,10 @@ struct Request {
     source: String,
     provider: String,
     operation_files: Vec<String>,
+    #[serde(default)]
+    import_roots: Vec<String>,
+    #[serde(default)]
+    incremental: bool,
     packages: Vec<SdkPackage>,
     #[serde(default)]
     scalars: BTreeMap<String, ts::GraphqlScalarMapping>,
@@ -35,11 +40,12 @@ impl Task for GenerateGraphql {
     }
 }
 fn generate(request: &str) -> AnyResult<String> {
-    let request: Request = serde_json::from_str(request)?;
+    let mut request: Request = serde_json::from_str(request)?;
     let registry = Arc::new(default_registry()?);
     let mut profiles = ProfileSet::new(".");
-    for mut package in request.packages {
+    for mut package in std::mem::take(&mut request.packages) {
         output_options::apply(&mut package, "graphql")?;
+        let subscriptions = package.subscriptions.unwrap_or(request.subscriptions);
         if ![
             "typescript",
             "rust",
@@ -73,11 +79,16 @@ fn generate(request: &str) -> AnyResult<String> {
         {
             bail!("GraphQL HTTP transport must be fetch");
         }
+        if request.incremental {
+            profiles = incremental::append(profiles, &request, package, registry.clone())?;
+            continue;
+        }
         let input =
             InputProvider::<GraphqlOperations>::new(registry.clone(), "graphql", &request.source)
                 .using(&request.provider)
                 .with_options(InputOptions {
                     operation_files: request.operation_files.iter().map(Into::into).collect(),
+                    import_roots: request.import_roots.iter().map(Into::into).collect(),
                     ..Default::default()
                 });
         if package.raw.unwrap_or(false) && package.style.is_some() {
@@ -92,7 +103,7 @@ fn generate(request: &str) -> AnyResult<String> {
             ..Default::default()
         };
         if ["postman", "rust-cli", "typescript-cli"].contains(&package.language.as_str()) {
-            if request.subscriptions
+            if subscriptions
                 || package.transport.is_some()
                 || package.style.is_some()
                 || package.raw.is_some()
@@ -110,8 +121,8 @@ fn generate(request: &str) -> AnyResult<String> {
             bail!("commandName and endpoint are GraphQL collection/CLI options");
         }
         if package.language == "rust" {
-            if request.subscriptions || package.transport.is_some() {
-                bail!("Rust GraphQL does not support subscriptions or transport options");
+            if package.transport.is_some() {
+                bail!("rust GraphQL does not support transport options");
             }
             let mut mappings = request.rust_scalars.clone();
             for (name, mapping) in &package.scalars {
@@ -124,6 +135,9 @@ fn generate(request: &str) -> AnyResult<String> {
             let mut generator = rust::graphql(Some(input.handle()))
                 .scalars(mappings)
                 .groups(package.groups.clone());
+            if subscriptions {
+                generator = generator.subscriptions();
+            }
             generator = if package.raw.unwrap_or(false) || style == "raw" {
                 generator.raw()
             } else if style == "flat" {
@@ -142,13 +156,28 @@ fn generate(request: &str) -> AnyResult<String> {
             continue;
         }
         if package.language == "go" {
-            if request.subscriptions || package.transport.is_some() {
-                bail!("go GraphQL does not support subscriptions or transport options");
+            if package.transport.is_some() {
+                bail!("go GraphQL does not support transport options");
             }
-            if !package.scalars.is_empty() {
-                bail!("go GraphQL custom scalar mappings are not supported");
-            }
-            let generator = go::graphql(Some(input.handle())).groups(package.groups.clone());
+            let generator = go::graphql(Some(input.handle()))
+                .groups(package.groups.clone())
+                .scalars(
+                    package
+                        .scalars
+                        .iter()
+                        .map(|(name, m)| {
+                            (
+                                name.clone(),
+                                go::GraphqlScalarMapping::new(&m.input, &m.output),
+                            )
+                        })
+                        .collect(),
+                );
+            let generator = if subscriptions {
+                generator.subscriptions()
+            } else {
+                generator
+            };
             let generator = if package.raw.unwrap_or(false) || style == "raw" {
                 generator.raw()
             } else if style == "flat" {
@@ -167,13 +196,18 @@ fn generate(request: &str) -> AnyResult<String> {
             continue;
         }
         if package.language == "python" {
-            if request.subscriptions || package.transport.is_some() {
-                bail!("python GraphQL does not support subscriptions or transport options");
+            if package.transport.is_some() {
+                bail!("python GraphQL does not support transport options");
             }
             if !package.scalars.is_empty() {
                 bail!("python GraphQL custom scalar mappings are not supported");
             }
             let generator = python::graphql(Some(input.handle())).groups(package.groups.clone());
+            let generator = if subscriptions {
+                generator.subscriptions()
+            } else {
+                generator
+            };
             let generator = if package.raw.unwrap_or(false) || style == "raw" {
                 generator.raw()
             } else if style == "flat" {
@@ -192,13 +226,18 @@ fn generate(request: &str) -> AnyResult<String> {
             continue;
         }
         if package.language == "php" {
-            if request.subscriptions || package.transport.is_some() {
-                bail!("php GraphQL does not support subscriptions or transport options");
+            if package.transport.is_some() {
+                bail!("php GraphQL does not support transport options");
             }
             if !package.scalars.is_empty() {
                 bail!("php GraphQL custom scalar mappings are not supported");
             }
             let generator = php::graphql(Some(input.handle())).groups(package.groups.clone());
+            let generator = if subscriptions {
+                generator.subscriptions()
+            } else {
+                generator
+            };
             let generator = if package.raw.unwrap_or(false) || style == "raw" {
                 generator.raw()
             } else if style == "flat" {
@@ -217,13 +256,18 @@ fn generate(request: &str) -> AnyResult<String> {
             continue;
         }
         if package.language == "java" {
-            if request.subscriptions || package.transport.is_some() {
-                bail!("java GraphQL does not support subscriptions or transport options");
+            if package.transport.is_some() {
+                bail!("java GraphQL does not support transport options");
             }
             if !package.scalars.is_empty() {
                 bail!("java GraphQL custom scalar mappings are not supported");
             }
             let generator = java::graphql(Some(input.handle())).groups(package.groups.clone());
+            let generator = if subscriptions {
+                generator.subscriptions(true)
+            } else {
+                generator
+            };
             let generator = if package.raw.unwrap_or(false) || style == "raw" {
                 generator.raw()
             } else if style == "flat" {
@@ -242,13 +286,18 @@ fn generate(request: &str) -> AnyResult<String> {
             continue;
         }
         if package.language == "csharp" {
-            if request.subscriptions || package.transport.is_some() {
-                bail!("csharp GraphQL does not support subscriptions or transport options");
+            if package.transport.is_some() {
+                bail!("csharp GraphQL does not support transport options");
             }
             if !package.scalars.is_empty() {
                 bail!("csharp GraphQL custom scalar mappings are not supported");
             }
             let generator = csharp::graphql(Some(input.handle())).groups(package.groups.clone());
+            let generator = if subscriptions {
+                generator.subscriptions(true)
+            } else {
+                generator
+            };
             let generator = if package.raw.unwrap_or(false) || style == "raw" {
                 generator.raw()
             } else if style == "flat" {
@@ -267,13 +316,18 @@ fn generate(request: &str) -> AnyResult<String> {
             continue;
         }
         if package.language == "dotnet" {
-            if request.subscriptions || package.transport.is_some() {
-                bail!("dotnet GraphQL does not support subscriptions or transport options");
+            if package.transport.is_some() {
+                bail!("dotnet GraphQL does not support transport options");
             }
             if !package.scalars.is_empty() {
                 bail!("dotnet GraphQL custom scalar mappings are not supported");
             }
             let generator = dotnet::graphql(Some(input.handle())).groups(package.groups.clone());
+            let generator = if subscriptions {
+                generator.subscriptions(true)
+            } else {
+                generator
+            };
             let generator = if package.raw.unwrap_or(false) || style == "raw" {
                 generator.raw()
             } else if style == "flat" {
@@ -292,13 +346,18 @@ fn generate(request: &str) -> AnyResult<String> {
             continue;
         }
         if package.language == "ruby" {
-            if request.subscriptions || package.transport.is_some() {
-                bail!("ruby GraphQL does not support subscriptions or transport options");
+            if package.transport.is_some() {
+                bail!("ruby GraphQL does not support transport options");
             }
             if !package.scalars.is_empty() {
                 bail!("ruby GraphQL custom scalar mappings are not supported");
             }
             let generator = ruby::graphql(Some(input.handle())).groups(package.groups.clone());
+            let generator = if subscriptions {
+                generator.subscriptions()
+            } else {
+                generator
+            };
             let generator = if package.raw.unwrap_or(false) || style == "raw" {
                 generator.raw()
             } else if style == "flat" {
@@ -317,13 +376,18 @@ fn generate(request: &str) -> AnyResult<String> {
             continue;
         }
         if package.language == "swift" {
-            if request.subscriptions || package.transport.is_some() {
-                bail!("swift GraphQL does not support subscriptions or transport options");
+            if package.transport.is_some() {
+                bail!("swift GraphQL does not support transport options");
             }
             if !package.scalars.is_empty() {
                 bail!("swift GraphQL custom scalar mappings are not supported");
             }
             let generator = swift::graphql(Some(input.handle())).groups(package.groups.clone());
+            let generator = if subscriptions {
+                generator.subscriptions(true)
+            } else {
+                generator
+            };
             let generator = if package.raw.unwrap_or(false) || style == "raw" {
                 generator.raw()
             } else if style == "flat" {
@@ -342,13 +406,18 @@ fn generate(request: &str) -> AnyResult<String> {
             continue;
         }
         if package.language == "elixir" {
-            if request.subscriptions || package.transport.is_some() {
-                bail!("elixir GraphQL does not support subscriptions or transport options");
+            if package.transport.is_some() {
+                bail!("elixir GraphQL does not support transport options");
             }
             if !package.scalars.is_empty() {
                 bail!("elixir GraphQL custom scalar mappings are not supported");
             }
             let generator = elixir::graphql(Some(input.handle())).groups(package.groups.clone());
+            let generator = if subscriptions {
+                generator.subscriptions()
+            } else {
+                generator
+            };
             let generator = if package.raw.unwrap_or(false) || style == "raw" {
                 generator.raw()
             } else if style == "flat" {
@@ -383,7 +452,7 @@ fn generate(request: &str) -> AnyResult<String> {
         } else {
             generator.idiomatic()
         };
-        if request.subscriptions {
+        if subscriptions {
             generator = generator.subscriptions();
         }
         let client = generator.handle();

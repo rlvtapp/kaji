@@ -94,9 +94,9 @@ presence remain separate from the scalar mapping. Unconfigured scalars stay
 `unknown`. Mapping names must match custom scalars reachable from the generated
 contract; unknown/unused names and overrides of built-in scalars are rejected.
 
-Mappings describe JSON wire values; they do not add runtime codecs. An output
-mapping of `Date` does not convert a JSON string into a JavaScript date. Use a
-wire-compatible type such as `string`, and convert it in application code.
+Mappings describe application types; conversion requires caller-supplied runtime
+`scalarCodecs` encode/decode callbacks. Without callbacks, a mapping alone does not
+convert a JSON string into `Date`. Use wire-compatible mappings when omitting codecs.
 
 Through the Rust API, configure the same generator:
 
@@ -167,10 +167,13 @@ from core client compilation and runtime tests.
 
 Aliases, fragments, concrete abstract-type selections, conditional field presence,
 variables/defaults, nullability and queries/mutations are supported. Subscription
-functions require explicit enablement and an injected `SubscriptionTransport`;
-a bundled WebSocket/SSE transport is not included. Introspection/schema imports,
-custom executable directives, defer/stream and runtime scalar codecs remain
-outside this increment. See the [support matrix](../../plugin-support-matrix.md) and
+functions require explicit enablement and a `SubscriptionTransport`; the bundled
+`createGraphqlSseTransport` implements distinct-connection graphql-sse. Local
+introspection JSON, full-file imports and direction-specific scalar callbacks are
+supported. Experimental defer/stream uses a separate raw-only incremental output
+and multipart deferSpec=20220824. WebSockets, multiplexing/reconnect, newer
+ID-based incremental protocols and custom executable directives remain unsupported.
+See the [advanced capability guide](graphql-capabilities.md). See the [support matrix](../../plugin-support-matrix.md) and
 [remaining work](../inputs/native-pipelines.md#remaining-work).
 
 Changes in this checkout are not part of the already published alpha.1 packages.

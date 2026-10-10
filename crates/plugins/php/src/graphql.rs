@@ -4,7 +4,10 @@ use anyhow::{Result, ensure};
 use poolster_core::{
     GeneratedFile, GeneratedTree,
     engine::{Contract, Handle, Meta, Plugin, PluginContext, Provision, Requirement},
-    native::{GraphqlOperationKind, GraphqlOperations, ModelField, ModelKind, ModelType},
+    native::{
+        GraphqlIncrementalOperations, GraphqlOperationKind, GraphqlOperations, ModelField,
+        ModelKind, ModelType,
+    },
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -27,6 +30,9 @@ impl Contract for GraphqlClient {
 pub struct Graphql {
     meta: Meta,
     provider: Option<Handle<GraphqlOperations>>,
+    incremental_provider: Option<Handle<GraphqlIncrementalOperations>>,
+    subscriptions: bool,
+    incremental: bool,
     style: GraphqlStyle,
     groups: BTreeMap<String, BTreeMap<String, String>>,
 }
@@ -34,11 +40,30 @@ pub fn graphql(provider: Option<Handle<GraphqlOperations>>) -> Graphql {
     Graphql {
         meta: Meta::new(),
         provider,
+        incremental_provider: None,
+        subscriptions: false,
+        incremental: false,
         style: GraphqlStyle::default(),
         groups: BTreeMap::new(),
     }
 }
+pub fn graphql_incremental(provider: Option<Handle<GraphqlIncrementalOperations>>) -> Graphql {
+    let mut plugin = graphql(None);
+    plugin.incremental_provider = provider;
+    plugin.incremental = true;
+    plugin
+}
 impl Graphql {
+    pub fn subscriptions(mut self) -> Self {
+        self.subscriptions = true;
+        self
+    }
+    pub fn incremental_input(mut self, input: Handle<GraphqlIncrementalOperations>) -> Self {
+        self.incremental_provider = Some(input);
+        self.incremental = true;
+        self
+    }
+
     pub fn raw(mut self) -> Self {
         self.style = GraphqlStyle::Raw;
         self
@@ -85,20 +110,31 @@ impl Plugin<Php> for Graphql {
         true
     }
     fn requires(&self) -> Vec<Requirement> {
-        vec![Requirement::on(self.provider)]
+        if self.incremental {
+            vec![Requirement::on(self.incremental_provider)]
+        } else {
+            vec![Requirement::on(self.provider)]
+        }
     }
     fn provides(&self) -> Vec<Provision> {
         vec![Provision::of::<GraphqlClient>()]
     }
     fn generate(&self, cx: &mut PluginContext<'_, Php>) -> Result<()> {
-        let (mut tree, methods) = render(
-            cx.inputs.get::<GraphqlOperations>()?,
+        let contract = if self.incremental {
+            &cx.inputs.get::<GraphqlIncrementalOperations>()?.definition
+        } else {
+            cx.inputs.get::<GraphqlOperations>()?
+        };
+        let (mut tree, methods) = render_advanced(
+            contract,
             cx.settings
                 .package_name
                 .as_deref()
                 .unwrap_or("poolster/graphql-client"),
             self.style,
             &self.groups,
+            self.subscriptions,
+            self.incremental,
         )?;
         if let Some(version) = &cx.common.package_version {
             let manifest = tree.get("composer.json").unwrap().replace("0.0.0", version);
@@ -221,11 +257,22 @@ fn method_traits(
         .map(|root| format!("use {root};"))
         .unwrap_or_default())
 }
+#[cfg(test)]
 pub(crate) fn render(
     contract: &GraphqlOperations,
     package: &str,
     style: GraphqlStyle,
     groups: &BTreeMap<String, BTreeMap<String, String>>,
+) -> Result<(GeneratedTree, BTreeMap<String, String>)> {
+    render_advanced(contract, package, style, groups, false, false)
+}
+fn render_advanced(
+    contract: &GraphqlOperations,
+    package: &str,
+    style: GraphqlStyle,
+    groups: &BTreeMap<String, BTreeMap<String, String>>,
+    subscriptions: bool,
+    incremental: bool,
 ) -> Result<(GeneratedTree, BTreeMap<String, String>)> {
     ensure!(
         package.split('/').count() == 2
@@ -262,7 +309,7 @@ pub(crate) fn render(
     let mut used = BTreeSet::new();
     for op in &contract.operations {
         ensure!(
-            op.kind != GraphqlOperationKind::Subscription,
+            subscriptions || op.kind != GraphqlOperationKind::Subscription,
             "PHP GraphQL subscriptions require a separately supported transport"
         );
         let name = ident(&op.name)?;
@@ -279,6 +326,10 @@ pub(crate) fn render(
                         | "__construct"
                         | "query"
                         | "mutation"
+                        | "subscribe"
+                        | "incremental"
+                        | "response"
+                        | "stream"
                         | "decodevalue"
                         | "encodevalue"
                 ),
@@ -294,10 +345,22 @@ pub(crate) fn render(
         } else {
             format!("{name}Variables $variables")
         };
+        let mode = if op.kind == GraphqlOperationKind::Subscription {
+            "subscribe"
+        } else if incremental {
+            "incremental"
+        } else {
+            "execute"
+        };
+        let annotation = if mode == "execute" {
+            "GraphqlResponse"
+        } else {
+            "\\Generator"
+        };
         let mut functions = String::new();
-        writeln!(functions,"/** @return GraphqlResponse<{name}Result> */\nfunction {method}(Client $client,{variables}):GraphqlResponse{{return $client->execute({},{},$variables??new {name}Variables(),{name}Result::class);}}",quote(&name),quote(&op.document)).unwrap();
+        writeln!(functions,"/** @return GraphqlResponse<{name}Result> */\nfunction {method}(Client $client,{variables}):{annotation}{{return $client->{mode}({},{},$variables??new {name}Variables(),{name}Result::class);}}",quote(&name),quote(&op.document)).unwrap();
         if matches!(style, GraphqlStyle::Flat) {
-            methods.insert(name.clone(),format!("/** @return GraphqlResponse<{name}Result> */ public function {method}({variables}):GraphqlResponse{{return {method}($this,$variables);}}"));
+            methods.insert(name.clone(),format!("/** @return GraphqlResponse<{name}Result> */ public function {method}({variables}):{annotation}{{return {method}($this,$variables);}}"));
         }
         files.insert(format!("Operations/{name}.php"), functions);
         symbols.insert(name, method);
@@ -308,10 +371,10 @@ pub(crate) fn render(
             for op in &contract.operations {
                 groups
                     .entry(
-                        if op.kind == GraphqlOperationKind::Query {
-                            "query"
-                        } else {
-                            "mutation"
+                        match op.kind {
+                            GraphqlOperationKind::Query => "query",
+                            GraphqlOperationKind::Mutation => "mutation",
+                            GraphqlOperationKind::Subscription => "subscription",
                         }
                         .into(),
                     )
@@ -360,7 +423,12 @@ pub(crate) fn render(
                 } else {
                     format!("{operation}Variables $variables")
                 };
-                group_methods.insert(upper(&method),format!("/** @return GraphqlResponse<{operation}Result> */ public function {method}({vars}):GraphqlResponse{{return {function}($this->client,$variables);}}"));
+                let annotation = if op.kind == GraphqlOperationKind::Subscription || incremental {
+                    "\\Generator"
+                } else {
+                    "GraphqlResponse"
+                };
+                group_methods.insert(upper(&method),format!("/** @return GraphqlResponse<{operation}Result> */ public function {method}({vars}):{annotation}{{return {function}($this->client,$variables);}}"));
             }
             let inherited = method_traits(&class, &group_methods, &mut files, &mut models.names)?;
             files.insert(format!("Groups/{class}.php"),format!("final readonly class {class} {{ public function __construct(private Client $client){{}} {inherited} }}"));
@@ -371,13 +439,20 @@ pub(crate) fn render(
     let runtime =
         include_str!("../templates/graphql.php.tmpl").replace("__NAMESPACE__", &namespace);
     let (runtime, client) = runtime.split_once("class Client {").unwrap();
-    tree.insert(GeneratedFile::new("src/Runtime.php", runtime)?)?;
+    tree.insert(GeneratedFile::new(
+        "src/Runtime.php",
+        format!("{runtime}\nrequire_once __DIR__ . '/Streaming.php';\n"),
+    )?)?;
     files.insert(
         "Client.php".into(),
         format!(
             "class Client {{{}",
             client.replace("__CLIENT_METHODS__", &inherited)
         ),
+    );
+    files.insert(
+        "Streaming.php".into(),
+        include_str!("../templates/graphql_streaming.php.tmpl").into(),
     );
     for (name, source) in models.files {
         files.insert(format!("Models/{name}.php"), source);
@@ -390,7 +465,7 @@ pub(crate) fn render(
     }
     tree.insert(GeneratedFile::new("src/Graphql.php","<?php\ndeclare(strict_types=1);\nrequire_once __DIR__.'/Runtime.php';\nforeach(['Models','Operations','Methods','Groups'] as $dir) foreach(glob(__DIR__.'/'. $dir .'/*.php') ?: [] as $file) require_once $file;\nrequire_once __DIR__.'/Client.php';\n")?)?;
     tree.insert(GeneratedFile::new("composer.json",serde_json::to_string_pretty(&serde_json::json!({"name":package,"version":"0.0.0","require":{"php":">=8.2"},"autoload":{"files":["src/Graphql.php"]}}))?)?)?;
-    tree.insert(GeneratedFile::new("README.md","# GraphQL client\n\nPHP 8.2+, Composer autoload. Query/mutation fixed-operation clients use selection-specific immutable models. Optional fields use Presence::missing() versus Presence::of(null). Responses preserve partial data and errors; requireData() rejects errors. Raw functions, flat Client methods or grouped accessors. HTTP streams by default, injectable callable transport for PSR-18/Symfony. Subscriptions unsupported. Custom scalars retain JSON values.\n")?)?;
+    tree.insert(GeneratedFile::new("README.md","# GraphQL client\n\nPHP 8.2+, Composer autoload. Query/mutation fixed-operation clients use selection-specific immutable models. Optional fields use Presence::missing() versus Presence::of(null). Responses preserve partial data and errors; requireData() rejects errors. Raw functions, flat Client methods or grouped accessors. HTTP streams by default, injectable callable transport for PSR-18/Symfony. Opt-in subscriptions use distinct-connection graphql-sse. Incremental inputs use multipart/mixed deferSpec=20220824 with raw partial snapshots and final typed envelopes. Per-client scalarCodecs encode/decode callbacks walk model shapes; null and absence are retained. No reconnect, multiplexing or alternate incremental dialect.\n")?)?;
     source_layout::diagnostics(&mut tree)?;
     Ok((tree, symbols))
 }

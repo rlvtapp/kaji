@@ -56,7 +56,7 @@ capabilities and release checklists.
 | Pipeline | Native parsing/inspection | Usable package generation | Remaining work |
 | --- | --- | --- | --- |
 | OpenAPI → existing languages | Existing compiler and adapter | Existing SDK pipelines preserved | Existing target-specific limits still apply |
-| GraphQL → all ten SDK languages | Validated SDL and operation documents | Selected query/mutation clients; TypeScript/Rust scalar mappings; TypeScript injected subscriptions | Runtime codecs, bundled subscriptions, introspection/imports, incremental delivery and other native output contracts |
+| GraphQL → all ten SDK languages | SDL / local introspection JSON, full-file imports and operation documents | Selected clients; opt-in distinct SSE, directional scalar callbacks, experimental multipart 20220824 | WebSockets/reconnect, selective imports, newer incremental variants, dynamic fields and other native output contracts |
 | Protobuf → Go gRPC | Proto2/proto3 descriptors, imports and RPC metadata | Official messages, clients and server interfaces; unary and all streaming directions | Editions, broader official fixture coverage and additional output languages |
 | AsyncAPI → TypeScript | 2.6/3.0/3.1 native document and message blocks | 3.0/3.1 JSON messages and Kafka producer/consumer | Types-only output, broader schemas/bindings, security and other brokers |
 | Arazzo → TypeScript | Native document and explicit local source resolution | Sequential HTTP runners with local workflow dependencies | Actions/retries, richer expressions/criteria and additional source types |
@@ -82,6 +82,10 @@ codecs are available, but typed Node hook dispatch is still follow-up work.
 
 ## GraphQL feature matrix
 
+The transport/result examples below describe TypeScript. Advanced capabilities
+across all ten SDKs are detailed in the [capability guide](../outputs/graphql-capabilities.md);
+TypeScript incremental output is raw only.
+
 | Feature | Support and boundary |
 | --- | --- |
 | SDL + operation files | Schema validated by Apollo; operation files combined and validated against it |
@@ -94,10 +98,10 @@ codecs are available, but typed Node hook dispatch is still follow-up work.
 | HTTP | Fetch POST transport; configurable fetch/headers and AbortSignal; no automatic retries |
 | Results | Discriminated `success`, `partial`, `error` results preserve GraphQL errors, partial data and extensions |
 | Transport errors | HTTP failures throw `GraphqlHttpError`; malformed envelopes/JSON throw `GraphqlProtocolError` |
-| Subscriptions | Separately enabled, injected `SubscriptionTransport` yielding async results; no bundled WebSocket/SSE transport |
-| Custom scalars | Separate input/output TypeScript mappings; defaults to `unknown`; no automatic runtime codecs |
-| Introspection/imports | Introspection JSON and schema imports are unsupported; supply complete SDL |
-| Executable extensions | Custom executable directives, defer/stream and operation/variable/fragment-definition directives are rejected |
+| Subscriptions | Separately enabled distinct-connection graphql-sse in all ten SDKs; TypeScript retains injected `SubscriptionTransport` |
+| Custom scalars | Direction-specific runtime callbacks; static mapping/value boundaries differ by language; defaults are unchanged |
+| Introspection/imports | Local introspection JSON and quoted full-file schema/operation imports; no remote fetch or selective named imports |
+| Executable extensions | Opt-in defer/stream contract with multipart deferSpec=20220824; custom executable directives and newer incremental variants remain rejected |
 | TypeScript symbol names | Unsupported identifiers/collisions fail explicitly rather than emitting invalid code |
 | Node generation API | Schema + operation files generate TypeScript clients through the existing TypeScript plugin package; general typed Node hook dispatch remains open |
 
@@ -124,7 +128,7 @@ codecs are available, but typed Node hook dispatch is still follow-up work.
 ```
 
 Paths resolve relative to the recipe. Existing `openapi` recipes remain valid;
-set either `input` or `openapi`. Enable injected subscription functions with
+set either `input` or `openapi`. Enable subscription functions with
 `"subscriptions": true` on the GraphQL output plugin. Client styles are configured
 under `contracts.graphql`; existing top-level options remain shorthand. HTTP-only
 middleware, transport and SDK options remain subject to protocol compatibility checks.
@@ -139,7 +143,7 @@ poolster generate --config poolster.json --check
 `--operation` and `--import-root` repeat. `--broker-config` reads a JSON file and
 `--workflow-source name=path` supplies local source mappings. Recipe equivalents
 are `input.options.operation_files`, `import_roots`, `broker` and
-`workflow_sources`. GraphQL accepts operation files; Protobuf accepts import roots; AsyncAPI
+`workflow_sources`. GraphQL accepts operation files and import roots; Protobuf accepts import roots; AsyncAPI
 accepts Kafka broker configuration; Arazzo accepts workflow source mappings.
 Each provider rejects options outside its supported pipeline.
 
@@ -172,8 +176,8 @@ and GraphQL errors; HTTP/network/protocol/decoding failures are separate.
 Nullable optional input and conditional-result fields preserve absent/null/value;
 optional non-null fields preserve absent/value. Required nullable results must be
 present. Custom scalars default to `serde_json::Value`; separate input/output
-Rust mappings support validated self-contained wire types without codecs or extra
-dependencies. Subscriptions are rejected. Structurally ambiguous abstract selections
+Rust mappings support validated self-contained types; transport callbacks provide
+optional conversion. Subscriptions are separately enabled distinct-connection SSE. Structurally ambiguous abstract selections
 need `__typename`; untagged variants reject unknown fields rather than discard
 selected data. HTTP and GraphQL generators require separate Rust packages.
 
@@ -265,7 +269,7 @@ servers. This does not establish support for the complete upstream OAuth workflo
 
 | Input | Package language | Recipe plugin name | Required configuration |
 | --- | --- | --- | --- |
-| GraphQL | `typescript`, `rust`, `go`, `python`, `php`, `java`, `csharp`, `dotnet`, `ruby`, `swift`, `elixir` | `graphql` | `input.options.operation_files`; TypeScript/Rust scalar mappings; injected subscriptions are TypeScript-only |
+| GraphQL | `typescript`, `rust`, `go`, `python`, `php`, `java`, `csharp`, `dotnet`, `ruby`, `swift`, `elixir` | `graphql` | `input.options.operation_files`; Runtime scalar callbacks; separately enabled SSE; incremental input selects a separate contract |
 | Protobuf | `go` | `grpc` | Plugin `module`; toolchain paths if not on PATH; source `go_package` or plugin `go_packages` |
 | AsyncAPI | `typescript` | `asyncapi` | Supported Kafka servers or `input.options.broker` |
 | Arazzo | `typescript` | `workflow` | `input.options.workflow_sources` |
@@ -306,9 +310,13 @@ These are the remaining implementation and release gaps:
 - [ ] **RPC-1:** Assess editions/toolchain alignment and additional RPC outputs;
   broaden pinned upstream fixtures without treating parser support as generation support.
 - [x] **GRAPHQL-SCALARS:** Separate input/output TypeScript and Rust scalar mappings,
-  preserving nullability and presence; runtime codecs remain unsupported.
-- [ ] **GRAPHQL-1:** Runtime scalar codecs, introspection/imports, incremental
-  delivery and bundled subscription transport; each needs independent runtime tests.
+  preserving nullability and presence; runtime callbacks are separately configured.
+- [x] **GRAPHQL-ADVANCED:** Directional runtime scalar callbacks, local introspection,
+  full-file imports, distinct-connection SSE and experimental multipart 20220824
+  incremental delivery. See [target boundaries](../outputs/graphql-capabilities.md).
+- [ ] **GRAPHQL-PROTOCOLS:** WebSocket/multiplexing/reconnect, selective imports,
+  newer ID-based incremental variants and custom executable directives; each
+  needs its own contracts and generated-runtime checks.
 - [ ] **GRAPHQL-SELECTIONS:** Optional TypeScript selection builder with typed
   fields in a second parameter, inferred results and runtime document generation.
   See the [planned proposal](../../proposals/graphql-selection-builder-proposal.md); this is not
@@ -377,13 +385,16 @@ operations without variables now omit the empty variables argument.
 
 Go uses standard-library HTTP/context and selection-specific structs. Optional
 fields distinguish absence from null; required result presence is not runtime
-revalidated. Unions/interfaces, subscriptions and incremental delivery are
-explicitly unsupported. Custom scalars use `json.RawMessage`.
+revalidated. Abstract variants require a selected nonnull `__typename`; untagged
+selections are rejected. Custom scalars default to
+`json.RawMessage`; supported typed mappings and runtime callbacks are available.
+Subscriptions and multipart 20220824 incremental delivery are opt-in capabilities.
 
 Python uses synchronous urllib, selection-specific `TypedDict` models and response
 envelopes. Optional-only variables may be omitted. Type annotations do not perform
-runtime result schema validation; custom scalars use `Any`. Subscriptions,
-incremental delivery and mapping codecs remain unsupported.
+runtime result schema validation; custom scalars use `Any`. Runtime scalar callbacks,
+distinct-connection SSE and experimental multipart 20220824 incremental frames are
+available; static custom scalar type remapping is not implemented.
 
 Both generated outputs compile and execute against pinned GraphQL.js 16.14.2.
 See [Go usage](../outputs/graphql-go.md) and [Python usage](../outputs/graphql-python.md).

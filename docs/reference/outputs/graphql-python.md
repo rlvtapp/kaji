@@ -63,13 +63,21 @@ key was present. Network failures, invalid envelopes and non-GraphQL HTTP errors
 raise exceptions; valid GraphQL errors remain in `response.errors`. Selected model
 annotations are static typing information, not runtime schema validation.
 
-Synchronous HTTP only. Subscriptions, incremental delivery, dynamic caller-selected
-fields and custom scalar mappings are unsupported. Unmapped scalars use `Any`.
-The default transport uses urllib; it does not retry mutations automatically.
+Synchronous urllib HTTP and opt-in streaming transports are available. Subscriptions
+use distinct-connection graphql-sse; experimental incremental inputs use multipart
+deferSpec=20220824. Runtime `scalar_codecs` callbacks encode/decode selected values,
+while custom scalars remain statically `Any`. Dynamic caller-selected fields and
+static custom scalar type mappings remain unsupported. No automatic retries.
 
 Tests include generated Python compilation, presence/null cases, regeneration,
 recursive inputs, grouped methods, and pinned GraphQL.js 16.14.2 local-server calls.
 See the [support matrix](../../plugin-support-matrix.md).
+
+## Advanced capabilities
+
+See [subscriptions, scalar callbacks and incremental delivery](graphql-capabilities.md)
+for opt-in configuration, native stream lifetime and the tested protocol boundary.
+These additions are unreleased; historical checks below predate them.
 
 ## Generated source layout
 

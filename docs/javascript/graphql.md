@@ -90,3 +90,17 @@ plugins: [pluginGo({ contracts: { graphql: {
 `ReadUser` is an operation name from a supplied document. Group names are explicit.
 `raw` exposes standalone operations; `flat` exposes direct client functions/methods;
 `grouped` exposes query/mutation or custom groups in the language's own conventions.
+
+## Advanced opt-in inputs and transports
+
+Local introspection JSON and quoted full-file imports are supported, with
+`input.importRoots` for lookup. All ten SDKs provide opt-in subscriptions, runtime
+scalar callbacks and experimental multipart deferSpec=20220824 incremental delivery.
+Enable subscriptions with `contracts.graphql.subscriptions: true`; incremental
+generation selects a separate input contract using `input.incremental: true`.
+TypeScript incremental output is raw only. These SDK capabilities do not extend
+query-hook integrations or CLI/Postman output generators.
+
+See the [advanced guide](../reference/outputs/graphql-capabilities.md) for runtime
+configuration and target-specific callback boundaries. WebSockets, reconnect/replay,
+selective imports, newer incremental protocols and dynamic fields remain unsupported.

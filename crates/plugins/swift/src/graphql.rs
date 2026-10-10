@@ -28,6 +28,7 @@ pub struct Graphql {
     provider: Option<Handle<GraphqlOperations>>,
     style: GraphqlStyle,
     groups: BTreeMap<String, BTreeMap<String, String>>,
+    subscriptions: bool,
 }
 pub fn graphql(provider: Option<Handle<GraphqlOperations>>) -> Graphql {
     Graphql {
@@ -35,9 +36,14 @@ pub fn graphql(provider: Option<Handle<GraphqlOperations>>) -> Graphql {
         provider,
         style: GraphqlStyle::Flat,
         groups: BTreeMap::new(),
+        subscriptions: false,
     }
 }
 impl Graphql {
+    pub fn subscriptions(mut self, enabled: bool) -> Self {
+        self.subscriptions = enabled;
+        self
+    }
     pub fn raw(mut self) -> Self {
         self.style = GraphqlStyle::Raw;
         self
@@ -92,7 +98,13 @@ impl Plugin<crate::Swift> for Graphql {
     fn generate(&self, cx: &mut PluginContext<'_, crate::Swift>) -> Result<()> {
         let contract = cx.inputs.get::<GraphqlOperations>()?;
         let module = ident(cx.settings.package_name.as_deref().unwrap_or("GraphqlSdk"));
-        let (files, symbols) = render(contract, self.style, &self.groups)?;
+        let (files, symbols) = render_advanced(
+            contract,
+            self.style,
+            &self.groups,
+            self.subscriptions,
+            false,
+        )?;
         for (path, source) in files {
             let path = if path.ends_with(".swift") {
                 format!("Sources/{module}/{path}")
@@ -102,7 +114,7 @@ impl Plugin<crate::Swift> for Graphql {
             cx.files.emit(GeneratedFile::new(path, source)?)?;
         }
         cx.files.emit(GeneratedFile::new("Package.swift", format!("// swift-tools-version: 5.9\nimport PackageDescription\nlet package = Package(name: \"{module}\", platforms: [.macOS(.v12), .iOS(.v15)], products: [.library(name: \"{module}\", targets: [\"{module}\"])], targets: [.target(name: \"{module}\")])\n"))?)?;
-        cx.files.emit(GeneratedFile::new("README.md", "# Swift GraphQL client\n\nSources/<module>/ contains Runtime/, Client/, Operations/, Models/, and Groups/. Swift Package Manager discovers all sources. Each operation and model has its own file; indivisible models larger than the 128 KiB grouping budget are retained and listed in .poolster/source-layout-diagnostics.json.\n\nSwift 5.9+, Foundation URLSession async transport. GraphqlClient takes endpoint, session and headers. Raw calls are free functions; flat style exposes client.readUser(variables:); grouped style exposes client.query.readUser(variables:) or custom groups. No-variable calls omit variables. Results are selection-specific Codable classes with explicit GraphqlResponse data/errors/extensions; ensureSuccess() throws GraphqlFailure for GraphQL errors while preserving partial data on the envelope. HTTP failures throw GraphqlHTTPError. GraphqlField<T> distinguishes omitted, null, and value for optional input/result fields. Custom scalars use GraphqlJSON and enums use strings. Subscription, incremental and abstract union selections are unsupported. Fixed operation documents are retained and sent unchanged. Required presence is validated while decoding; nonnull reference properties remain subject to Codable decoding.\n")?)?;
+        cx.files.emit(GeneratedFile::new("README.md", "# Swift GraphQL client\n\nSources/<module>/ contains Runtime/, Client/, Operations/, Models/, and Groups/. Swift Package Manager discovers all sources. Each operation and model has its own file; indivisible models larger than the 128 KiB grouping budget are retained and listed in .poolster/source-layout-diagnostics.json.\n\nSwift 5.9+, Foundation URLSession async transport. GraphqlClient takes endpoint, session and headers. Raw calls are free functions; flat style exposes client.readUser(variables:); grouped style exposes client.query.readUser(variables:) or custom groups. No-variable calls omit variables. Results are selection-specific Codable classes with explicit GraphqlResponse data/errors/extensions; ensureSuccess() throws GraphqlFailure for GraphQL errors while preserving partial data on the envelope. HTTP failures throw GraphqlHTTPError. GraphqlField<T> distinguishes omitted, null, and value for optional input/result fields. Custom scalars use GraphqlJSON and enums use strings. Subscriptions are opt-in via .subscriptions(true) and return AsyncThrowingStream typed envelopes over distinct POST SSE connections. Configure named GraphqlScalarCodec callbacks via client scalarCodecs while keeping custom scalar model values as GraphqlJSON. Abstract selections generate Codable enums with associated payloads when every variant selects a required __typename (aliases supported); unknown or missing discriminators fail decoding. Untagged abstract unions are rejected during generation. Fixed operation documents are retained and sent unchanged. Required presence is validated while decoding; nonnull reference properties remain subject to Codable decoding.\n")?)?;
         cx.publish(GraphqlClient {
             methods: symbols,
             style: self.style,
@@ -140,10 +152,20 @@ fn literal(value: &str) -> String {
     out
 }
 
+#[cfg(test)]
 fn render(
     contract: &GraphqlOperations,
     style: GraphqlStyle,
     groups: &BTreeMap<String, BTreeMap<String, String>>,
+) -> Result<(BTreeMap<String, String>, BTreeMap<String, String>)> {
+    render_advanced(contract, style, groups, false, false)
+}
+fn render_advanced(
+    contract: &GraphqlOperations,
+    style: GraphqlStyle,
+    groups: &BTreeMap<String, BTreeMap<String, String>>,
+    subscriptions: bool,
+    incremental: bool,
 ) -> Result<(BTreeMap<String, String>, BTreeMap<String, String>)> {
     ensure!(
         !contract.operations.is_empty(),
@@ -163,6 +185,10 @@ fn render(
         "Client/GraphqlClient.swift".into(),
         header.to_owned() + &runtime[client_start..],
     );
+    files.insert(
+        "Runtime/GraphqlAdvanced.swift".into(),
+        header.to_owned() + include_str!("graphql/advanced.swift.tmpl"),
+    );
     let mut models = models::Models::default();
     for (name, fields) in &contract.input_objects {
         models.object(&ident(name), fields)?;
@@ -170,7 +196,7 @@ fn render(
     let mut symbols = BTreeMap::new();
     for op in &contract.operations {
         ensure!(
-            op.kind != GraphqlOperationKind::Subscription,
+            op.kind != GraphqlOperationKind::Subscription || subscriptions,
             "Swift GraphQL subscriptions require a separate unsupported transport"
         );
         let name = ident(&op.name);
@@ -195,11 +221,37 @@ fn render(
             "variables"
         };
         let method = member(&op.name);
+        let return_type = if incremental {
+            format!("AsyncThrowingStream<GraphqlIncrementalSnapshot<{result}>,Error>")
+        } else if op.kind == GraphqlOperationKind::Subscription {
+            format!("AsyncThrowingStream<GraphqlResponse<{result}>,Error>")
+        } else {
+            format!("GraphqlResponse<{result}>")
+        };
+        let execution = if incremental {
+            "incremental"
+        } else if op.kind == GraphqlOperationKind::Subscription {
+            "subscribe"
+        } else {
+            "executeWithScalars"
+        };
+        let variable_shape = literal(&serde_json::to_string(
+            &poolster_core::native::graphql_scalar_fields(&op.variables),
+        )?);
+        let result_shape = literal(&serde_json::to_string(
+            &poolster_core::native::graphql_scalar_shape(&op.result),
+        )?);
+        let input_shapes: BTreeMap<_, _> = contract
+            .input_objects
+            .iter()
+            .map(|(name, fields)| (name, poolster_core::native::graphql_scalar_fields(fields)))
+            .collect();
+        let inputs = literal(&serde_json::to_string(&input_shapes)?);
         let operation_start = source.len();
-        writeln!(source,"public func {method}(client: GraphqlClient{args}) async throws -> GraphqlResponse<{result}> {{ try await client.execute(operationName:{},document:{},variables:{vars},resultType:{result}.self) }}",literal(&op.name),literal(&op.document)).unwrap();
+        writeln!(source,"public func {method}(client: GraphqlClient{args}) async throws -> {return_type} {{ try await client.{execution}(operationName:{},document:{},variables:{vars},resultType:{result}.self,variableShape:{variable_shape},resultShape:{result_shape},inputs:{inputs}) }}",literal(&op.name),literal(&op.document)).unwrap();
         if style == GraphqlStyle::Flat {
             let args = args.trim_start_matches(", ");
-            writeln!(source,"extension GraphqlClient {{ public func {method}({args}) async throws -> GraphqlResponse<{result}> {{ try await self.execute(operationName:{},document:{},variables:{vars},resultType:{result}.self) }} }}",literal(&op.name),literal(&op.document)).unwrap();
+            writeln!(source,"extension GraphqlClient {{ public func {method}({args}) async throws -> {return_type} {{ try await self.{execution}(operationName:{},document:{},variables:{vars},resultType:{result}.self,variableShape:{variable_shape},resultShape:{result_shape},inputs:{inputs}) }} }}",literal(&op.name),literal(&op.document)).unwrap();
         }
         files.insert(
             format!("Operations/{}", filename(&format!("Operation{name}"))),
@@ -215,6 +267,8 @@ fn render(
                     .entry(
                         if op.kind == GraphqlOperationKind::Query {
                             "query"
+                        } else if op.kind == GraphqlOperationKind::Subscription {
+                            "subscription"
                         } else {
                             "mutation"
                         }
@@ -260,7 +314,35 @@ fn render(
                     "variables"
                 };
                 let method_start = source.len();
-                writeln!(source,"public func {method}({args}) async throws -> GraphqlResponse<{name}Result> {{ try await client.execute(operationName:{},document:{},variables:{vars},resultType:{name}Result.self) }}",literal(&op.name),literal(&op.document)).unwrap();
+                let return_type = if incremental {
+                    format!("AsyncThrowingStream<GraphqlIncrementalSnapshot<{name}Result>,Error>")
+                } else if op.kind == GraphqlOperationKind::Subscription {
+                    format!("AsyncThrowingStream<GraphqlResponse<{name}Result>,Error>")
+                } else {
+                    format!("GraphqlResponse<{name}Result>")
+                };
+                let execution = if incremental {
+                    "incremental"
+                } else if op.kind == GraphqlOperationKind::Subscription {
+                    "subscribe"
+                } else {
+                    "executeWithScalars"
+                };
+                let variable_shape = literal(&serde_json::to_string(
+                    &poolster_core::native::graphql_scalar_fields(&op.variables),
+                )?);
+                let result_shape = literal(&serde_json::to_string(
+                    &poolster_core::native::graphql_scalar_shape(&op.result),
+                )?);
+                let input_shapes: BTreeMap<_, _> = contract
+                    .input_objects
+                    .iter()
+                    .map(|(name, fields)| {
+                        (name, poolster_core::native::graphql_scalar_fields(fields))
+                    })
+                    .collect();
+                let inputs = literal(&serde_json::to_string(&input_shapes)?);
+                writeln!(source,"public func {method}({args}) async throws -> {return_type} {{ try await client.{execution}(operationName:{},document:{},variables:{vars},resultType:{name}Result.self,variableShape:{variable_shape},resultShape:{result_shape},inputs:{inputs}) }}",literal(&op.name),literal(&op.document)).unwrap();
                 files.insert(
                     format!(
                         "Groups/{}/{}",
@@ -317,4 +399,100 @@ fn filename(value: &str) -> String {
             (h ^ u64::from(*b)).wrapping_mul(0x100000001b3)
         });
     format!("{prefix}_{hash:016x}.swift")
+}
+
+pub struct GraphqlIncremental {
+    meta: Meta,
+    provider: Option<Handle<poolster_core::native::GraphqlIncrementalOperations>>,
+    style: GraphqlStyle,
+    groups: BTreeMap<String, BTreeMap<String, String>>,
+}
+pub fn graphql_incremental(
+    provider: Option<Handle<poolster_core::native::GraphqlIncrementalOperations>>,
+) -> GraphqlIncremental {
+    GraphqlIncremental {
+        meta: Meta::new(),
+        provider,
+        style: GraphqlStyle::Flat,
+        groups: BTreeMap::new(),
+    }
+}
+impl GraphqlIncremental {
+    pub fn input(
+        mut self,
+        input: Handle<poolster_core::native::GraphqlIncrementalOperations>,
+    ) -> Self {
+        self.provider = Some(input);
+        self
+    }
+    pub fn raw(mut self) -> Self {
+        self.style = GraphqlStyle::Raw;
+        self
+    }
+    pub fn flat(mut self) -> Self {
+        self.style = GraphqlStyle::Flat;
+        self
+    }
+    pub fn idiomatic(mut self) -> Self {
+        self.style = GraphqlStyle::Idiomatic;
+        self
+    }
+    pub fn groups(mut self, groups: BTreeMap<String, BTreeMap<String, String>>) -> Self {
+        self.groups = groups;
+        self
+    }
+    pub fn group(
+        mut self,
+        group: impl Into<String>,
+        method: impl Into<String>,
+        op: impl Into<String>,
+    ) -> Self {
+        self.groups
+            .entry(group.into())
+            .or_default()
+            .insert(method.into(), op.into());
+        self
+    }
+    pub fn handle(&self) -> Handle<GraphqlClient> {
+        self.meta.handle()
+    }
+}
+impl Plugin<crate::Swift> for GraphqlIncremental {
+    fn kind(&self) -> &'static str {
+        "swift-graphql-incremental"
+    }
+    fn meta(&self) -> &Meta {
+        &self.meta
+    }
+    fn supports_native_input(&self) -> bool {
+        true
+    }
+    fn requires(&self) -> Vec<Requirement> {
+        vec![Requirement::on(self.provider)]
+    }
+    fn provides(&self) -> Vec<Provision> {
+        vec![Provision::of::<GraphqlClient>()]
+    }
+    fn generate(&self, cx: &mut PluginContext<'_, crate::Swift>) -> Result<()> {
+        let contract = cx
+            .inputs
+            .get::<poolster_core::native::GraphqlIncrementalOperations>()?;
+        let module = ident(cx.settings.package_name.as_deref().unwrap_or("GraphqlSdk"));
+        let (files, methods) =
+            render_advanced(&contract.definition, self.style, &self.groups, false, true)?;
+        for (path, source) in files {
+            let path = if path.ends_with(".swift") {
+                format!("Sources/{module}/{path}")
+            } else {
+                path
+            };
+            cx.files.emit(GeneratedFile::new(path, source)?)?;
+        }
+        cx.files.emit(GeneratedFile::new("Package.swift",format!("// swift-tools-version: 5.9\nimport PackageDescription\nlet package=Package(name:\"{module}\",platforms:[.macOS(.v12),.iOS(.v15)],products:[.library(name:\"{module}\",targets:[\"{module}\"])],targets:[.target(name:\"{module}\")])\n"))?)?;
+        cx.files.emit(GeneratedFile::new("README.md","# Incremental Swift GraphQL\n\nExplicit path-based deferSpec=20220824 multipart. Calls return AsyncThrowingStream<GraphqlIncrementalSnapshot<Result>,Error>. Snapshots contain independent partial GraphqlJSON data, accumulated errors, original patches and complete; decodeData() decodes completed error-free selected data. Completion is distinct from application success. Configure named GraphqlScalarCodec callbacks in GraphqlClient scalarCodecs; custom scalar models stay GraphqlJSON. Cancellation closes the distinct streaming connection. Newer pending/id dialects and non-contiguous stream patches fail. JSON fallback is supported when the server delivers all selections at once.\n")?)?;
+        cx.publish(GraphqlClient {
+            methods,
+            style: self.style,
+        })
+    }
 }

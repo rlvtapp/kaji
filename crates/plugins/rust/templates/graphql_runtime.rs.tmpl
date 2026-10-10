@@ -85,21 +85,27 @@ impl std::error::Error for GraphqlTransportError {
     }
 }
 #[derive(Debug, Clone)]
-pub struct GraphqlHttpTransport { endpoint: String, client: reqwest::Client }
+pub struct GraphqlHttpTransport { pub(crate) endpoint: String, pub(crate) client: reqwest::Client, pub(crate) codecs: crate::graphql_codecs::GraphqlScalarCodecs }
 impl GraphqlHttpTransport {
-    pub fn new(endpoint: impl Into<String>, client: reqwest::Client) -> Self { Self { endpoint: endpoint.into(), client } }
-    pub async fn execute<T: serde::de::DeserializeOwned, V: Serialize>(&self, document: &str, operation_name: &str, variables: &V) -> Result<GraphqlResponse<T>, GraphqlTransportError> {
-        #[derive(Serialize)]
-        struct Request<'a, V> { query: &'a str, #[serde(rename = "operationName")] operation_name: &'a str, variables: &'a V }
-        let body = serde_json::to_vec(&Request { query: document, operation_name, variables }).map_err(GraphqlTransportError::Encode)?;
-        let response = self.client.post(&self.endpoint)
-            .header(reqwest::header::CONTENT_TYPE, "application/json")
-            .header(reqwest::header::ACCEPT, "application/graphql-response+json, application/json")
-            .body(body).send().await.map_err(GraphqlTransportError::Network)?;
-        let status = response.status();
-        let body = response.bytes().await.map_err(GraphqlTransportError::Network)?;
-        if !status.is_success() { return Err(GraphqlTransportError::Http { status: status.as_u16(), body: String::from_utf8_lossy(&body).into_owned() }); }
-        let envelope: Value = serde_json::from_slice(&body).map_err(|error| GraphqlTransportError::Protocol(format!("invalid JSON: {error}")))?;
+    pub fn new(endpoint: impl Into<String>, client: reqwest::Client) -> Self { Self { endpoint: endpoint.into(), client, codecs: Default::default() } }
+    pub fn with_codecs(mut self, codecs: crate::graphql_codecs::GraphqlScalarCodecs)->Self {self.codecs=codecs;self}
+    pub async fn execute<T: serde::de::DeserializeOwned,V:Serialize>(&self,document:&str,operation_name:&str,variables:&V)->Result<GraphqlResponse<T>,GraphqlTransportError>{self.execute_shaped(document,operation_name,variables,None).await}
+    pub async fn execute_with_shape<T:serde::de::DeserializeOwned,V:Serialize>(&self,document:&str,operation_name:&str,variables:&V,shape:&str)->Result<GraphqlResponse<T>,GraphqlTransportError>{self.execute_shaped(document,operation_name,variables,Some(crate::graphql_codecs::GraphqlShape::parse(shape)?)).await}
+    pub(crate) fn request<V:Serialize>(&self,document:&str,operation_name:&str,variables:&V,accept:&str,shape:Option<&crate::graphql_codecs::GraphqlShape>)->Result<reqwest::RequestBuilder,GraphqlTransportError>{
+        let mut variables=serde_json::to_value(variables).map_err(GraphqlTransportError::Encode)?;
+        if let Some(shape)=shape {self.codecs.transform(&mut variables,&shape.input,&shape.objects,true)?;}
+        Ok(self.client.post(&self.endpoint).header(reqwest::header::CONTENT_TYPE,"application/json").header(reqwest::header::ACCEPT,accept).json(&serde_json::json!({"query":document,"operationName":operation_name,"variables":variables})))
+    }
+    async fn execute_shaped<T:serde::de::DeserializeOwned,V:Serialize>(&self,document:&str,operation_name:&str,variables:&V,shape:Option<crate::graphql_codecs::GraphqlShape>)->Result<GraphqlResponse<T>,GraphqlTransportError>{
+        let response=self.request(document,operation_name,variables,"application/graphql-response+json, application/json",shape.as_ref())?.send().await.map_err(GraphqlTransportError::Network)?;
+        let status=response.status(); let body=response.bytes().await.map_err(GraphqlTransportError::Network)?;
+        if !status.is_success(){return Err(GraphqlTransportError::Http{status:status.as_u16(),body:String::from_utf8_lossy(&body).into_owned()});}
+        let envelope:Value=serde_json::from_slice(&body).map_err(|e|GraphqlTransportError::Protocol(format!("invalid JSON: {e}")))?;
+        if envelope.get("hasNext").is_some()||envelope.get("incremental").is_some(){return Err(GraphqlTransportError::Protocol("incremental response requires an incremental operation transport".into()));}
+        self.decode_envelope(envelope,shape.as_ref())
+    }
+    pub(crate) fn decode_envelope<T:serde::de::DeserializeOwned>(&self,mut envelope:Value,shape:Option<&crate::graphql_codecs::GraphqlShape>)->Result<GraphqlResponse<T>,GraphqlTransportError>{
+        if let (Some(shape),Some(data))=(shape,envelope.get_mut("data")){self.codecs.transform(data,&shape.result,&shape.objects,false)?;}
         let object = envelope.as_object().ok_or_else(|| GraphqlTransportError::Protocol("response must be an object".into()))?;
         let extensions = match object.get("extensions") {
             None => None,

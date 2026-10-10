@@ -62,7 +62,7 @@ async function loadInput(input) {
   if (typeof input === 'string' || input.artifacts) throw new TypeError('inspectInput requires a selected input plugin');
   const source = path.resolve(input.path);
   if (input.plugin.kind === 'native-input') {
-    return { report: JSON.parse(await native().inspectInput(input.plugin.format, input.plugin.provider, source)), api: null, securitySchemes: {} };
+    return { report: JSON.parse(await native().inspectInput(input.plugin.format, input.plugin.provider, source, JSON.stringify({import_roots: (input.importRoots ?? []).map(p => path.resolve(p))}))), api: null, securitySchemes: {} };
   }
   const loaded = await input.plugin.load(source);
   if (!loaded || typeof loaded !== 'object' || !loaded.summary || loaded.summary.format !== input.plugin.format ||
@@ -175,6 +175,12 @@ function compile(input, artifacts, compiler) {
   });
 }
 
+function graphqlOutputCompatible(input, p) {
+  const sdk = ['typescript','rust','go','python','php','java','csharp','dotnet','ruby','swift','elixir'];
+  return (input.incremental ? sdk : [...sdk,'postman','rust-cli','typescript-cli']).includes(p.language)
+    && (!input.incremental || !p.plugins?.length);
+}
+
 async function generate(config, options = {}) {
   defineConfig(config);
   if (options.write != null && typeof options.write !== 'boolean') throw new TypeError('write must be boolean');
@@ -226,7 +232,7 @@ async function generate(config, options = {}) {
   const jsPlugins = plan.order;
   const output = path.resolve(typeof config.output === 'string' ? config.output : config.output.path);
   if (config.input.plugin?.format === 'graphql' && packages.length &&
-      packages.every((p) => !['typescript', 'rust', 'go', 'python', 'php', 'java', 'csharp', 'dotnet', 'ruby', 'swift', 'elixir', 'postman', 'rust-cli', 'typescript-cli'].includes(p.language)) &&
+      packages.every((p) => !graphqlOutputCompatible(config.input, p)) &&
       nativeAddons.length === 0 && jsPlugins.length === 0) {
     const skipped = packages.map((p) => ({ path: p.path, language: p.language,
       reason: 'GraphQL output does not yet support this language' }));
@@ -241,8 +247,8 @@ async function generate(config, options = {}) {
     if (config.input.plugin) {
       const loaded = await loadInput(config.input);
       if (!loaded.api && config.input.plugin.format === 'graphql' && packages.length) {
-        const compatible = packages.filter((p) => ['typescript', 'rust', 'go', 'python', 'php', 'java', 'csharp', 'dotnet', 'ruby', 'swift', 'elixir', 'postman', 'rust-cli', 'typescript-cli'].includes(p.language));
-        for (const p of packages.filter((p) => !['typescript', 'rust', 'go', 'python', 'php', 'java', 'csharp', 'dotnet', 'ruby', 'swift', 'elixir', 'postman', 'rust-cli', 'typescript-cli'].includes(p.language))) {
+        const compatible = packages.filter((p) => graphqlOutputCompatible(config.input, p));
+        for (const p of packages.filter((p) => !graphqlOutputCompatible(config.input, p))) {
           const entry = { path: p.path, language: p.language, reason: 'GraphQL output does not yet support this language' };
           skipped.push(entry);
           console.warn(`Poolster: skipping ${p.path}: ${entry.reason}`);
@@ -250,6 +256,7 @@ async function generate(config, options = {}) {
         graphqlFiles = compatible.length ? JSON.parse(await native().generateGraphql(JSON.stringify({
           source: path.resolve(config.input.path), provider: config.input.plugin.provider,
           operationFiles: (config.input.operations ?? []).map((file) => path.resolve(file)),
+          importRoots: (config.input.importRoots ?? []).map(p => path.resolve(p)), incremental: config.input.incremental ?? false,
           scalars: config.input.scalars ?? {}, rustScalars: config.input.rustScalars ?? {}, subscriptions: config.input.subscriptions ?? false, packages: compatible,
         }))) : [];
       }

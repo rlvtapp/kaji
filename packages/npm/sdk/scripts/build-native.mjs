@@ -12,5 +12,13 @@ const library = process.platform === 'win32' ? 'poolster_node.dll' : process.pla
 const source = path.join(root, 'target', 'debug', library);
 const output = path.join(packageRoot, 'native', 'poolster_node.node');
 fs.mkdirSync(path.dirname(output), { recursive: true });
-fs.copyFileSync(source, output);
+// Replace the binary atomically: overwriting a loaded Mach-O image can invalidate
+// macOS code-signature caches and kill subsequent Node processes.
+const temporary = `${output}.${process.pid}.tmp`;
+try {
+  fs.copyFileSync(source, temporary);
+  fs.renameSync(temporary, output);
+} finally {
+  fs.rmSync(temporary, { force: true });
+}
 console.log(`Built ${output}`);

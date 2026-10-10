@@ -40,7 +40,7 @@ pub(super) fn run(arguments: Vec<OsString>) -> Result<()> {
     if let (Some(input), Some(packages)) = (&options.native_input, &options.config_packages) {
         for package in packages
             .iter()
-            .filter(|p| !native_profiles::compatible(&input.format, p))
+            .filter(|p| !native_profiles::input_compatible(input, p))
         {
             plan.packages
                 .push(poolster_core::engine::overview::PackagePlan {

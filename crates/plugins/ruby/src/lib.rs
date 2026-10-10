@@ -5,7 +5,7 @@
 //! both direct operations and optional resource namespaces.
 
 pub mod graphql;
-pub use graphql::{Graphql, GraphqlClient, GraphqlStyle, graphql};
+pub use graphql::{Graphql, GraphqlClient, GraphqlStyle, graphql, graphql_incremental};
 
 mod oauth;
 pub use oauth::{OAuth, oauth};

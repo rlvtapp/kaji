@@ -1,0 +1,157 @@
+  IncrementalFrame = Struct.new(:frame, :data, :final, keyword_init: true)
+  class StreamParser
+    def initialize(content_type, limit, incremental)
+      @limit, @incremental, @buffer, @done = limit, incremental, ''.b, false
+      @event, @data, @size = '', [], 0
+      if incremental
+        raise ArgumentError, 'Expected multipart/mixed; deferSpec=20220824' unless content_type.match?(/^multipart\/mixed\b/i) && content_type.match?(/deferSpec\s*=\s*"?20220824"?/i)
+        boundary = content_type.match(/boundary\s*=\s*(?:"([^"\r\n]+)"|([^;\s]+))/i)
+        raise ArgumentError, 'Missing multipart boundary' unless boundary
+        @delimiter, @state, @body, @json = '--' + (boundary[1] || boundary[2]), :preamble, '', false
+      else
+        raise ArgumentError, 'Expected text/event-stream' unless content_type.split(';').first.downcase.strip == 'text/event-stream'
+      end
+    end
+    def feed(chunk)
+      return if @done
+      @buffer << chunk.b
+      while (newline = @buffer.index("\n"))
+        line = @buffer.slice!(0, newline + 1).force_encoding(Encoding::UTF_8)
+        raise ArgumentError, 'Invalid streaming UTF-8' unless line.valid_encoding?
+        line = line.delete_suffix("\n").delete_suffix("\r")
+        @incremental ? multipart_line(line) { |value| yield value } : sse_line(line) { |value| yield value }
+      end
+      raise ArgumentError, 'Streaming line exceeds limit' if @buffer.bytesize > @limit
+    end
+    def finish; raise ArgumentError, 'Stream closed before complete' unless @done; end
+    def sse_line(line)
+      return if line.start_with?(':')
+      @size += line.bytesize + 1
+      raise ArgumentError, 'SSE event exceeds limit' if @size > @limit
+      if line.empty?
+        case @event
+        when 'complete' then @done = true
+        when 'next' then yield JSON.parse(@data.join("\n"))
+        when '' then nil
+        else raise ArgumentError, 'Unsupported SSE event'
+        end
+        @event, @data, @size = '', [], 0
+      else
+        field, value = line.split(':', 2); value = (value || '').delete_prefix(' ')
+        @event = value if field == 'event'; @data << value if field == 'data'
+      end
+    end
+    def multipart_line(line)
+      case @state
+      when :preamble
+        @state = :headers if line == @delimiter
+      when :headers
+        @size += line.bytesize + 1
+        raise ArgumentError, 'Multipart headers exceed limit' if @size > @limit
+        @json = true if line.match?(/^Content-Type:\s*application\/json/i)
+        if line.empty?
+          raise ArgumentError, 'Expected JSON multipart part' unless @json
+          @state, @body = :body, ''
+        end
+      when :body
+        if [@delimiter, @delimiter + '--'].include?(line)
+          frame = JSON.parse(@body)
+          raise ArgumentError, 'Invalid incremental frame/dialect' unless frame.is_a?(Hash) && [true, false].include?(frame['hasNext']) && !frame.key?('pending') && !frame.key?('completed')
+          closed = line == @delimiter + '--'
+          raise ArgumentError, 'Boundary contradicts hasNext' unless closed == !frame['hasNext']
+          @done = closed
+          yield frame
+          @state, @json, @size = :headers, false, 0
+        else
+          @body << line << "\n"
+          raise ArgumentError, 'Multipart frame exceeds limit' if @body.bytesize > @limit
+        end
+      end
+    end
+  end
+  class Transport
+    def scalar_walk(value, type, direction, depth = 0)
+      return value if value.nil? || type.nil? || @scalar_codecs.empty?
+      raise ArgumentError, 'Scalar codec depth exceeded' if depth > 256
+      value = Model.wire(value)
+      tag, argument = type.fetch('kind').first
+      case tag
+      when 'Scalar'
+        codec = @scalar_codecs[argument] || @scalar_codecs[argument.to_sym] || {}
+        callback = codec[direction] || codec[direction.to_s]
+        callback ? callback.call(value) : value
+      when 'Named' then scalar_walk(value, INPUT_CLASSES.fetch(argument)::TYPE, direction, depth + 1)
+      when 'List' then value.map { |item| scalar_walk(item, argument, direction, depth + 1) }
+      when 'Object'
+        result = value.transform_keys(&:to_s)
+        argument.each { |field| name = field['name']; result[name] = scalar_walk(result[name], field['ty'], direction, depth + 1) if result.key?(name) }
+        result
+      when 'Union'
+        variants = argument.select do |variant|
+          fields = variant.dig('kind', 'Object') || []
+          literals = fields.select { |field| field['ty'].dig('kind', 'Literal') }
+          !literals.empty? && literals.all? { |field| value[field['name']] == field['ty']['kind']['Literal'] }
+        end
+        raise ArgumentError, 'Scalar union requires unambiguous selected discriminator' unless variants.length == 1
+        scalar_walk(value, variants.first, direction, depth + 1)
+      else value
+      end
+    end
+    def subscribe(document, operation, variables, result_type, variables_type: nil)
+      stream(document, operation, variables, variables_type, false) do |frame|
+        raise ArgumentError, 'Incremental results require separate transport' if frame.is_a?(Hash) && (frame.key?('hasNext') || frame.key?('incremental'))
+        response(frame, result_type)
+      end
+    end
+    def incremental(document, operation, variables, result_type, variables_type: nil)
+      snapshot, errors, extensions = nil, [], nil
+      stream(document, operation, variables, variables_type, true) do |frame|
+        snapshot = frame['data'] if frame.key?('data')
+        (frame['incremental'] || []).each do |patch|
+          snapshot = apply_patch(snapshot, patch)
+          errors.concat(patch.fetch('errors', []))
+        end
+        errors.concat(frame.fetch('errors', [])); extensions = frame['extensions'] if frame.key?('extensions')
+        final = frame['hasNext'] ? nil : response({'data' => snapshot, 'errors' => errors, 'extensions' => extensions}, result_type)
+        IncrementalFrame.new(frame: frame, data: Marshal.load(Marshal.dump(snapshot)), final: final)
+      end
+    end
+    def stream(document, operation, variables, variables_type, incremental)
+      Enumerator.new do |output|
+        request = Net::HTTP::Post.new(@uri)
+        request['Content-Type'] = 'application/json'
+        request['Accept'] = incremental ? 'multipart/mixed; deferSpec=20220824' : 'text/event-stream'
+        @headers.each { |key, value| request[key] = value }
+        request.body = JSON.generate(query: document, operationName: operation, variables: scalar_walk(variables, variables_type, :encode))
+        Net::HTTP.start(@uri.host, @uri.port, use_ssl: @uri.scheme == 'https', open_timeout: @timeout, read_timeout: @timeout) do |http|
+          http.request(request) do |raw|
+            raise HttpError.new(raw.code.to_i, nil) unless (200..299).include?(raw.code.to_i)
+            parser = StreamParser.new(raw['Content-Type'].to_s, @max_frame_bytes, incremental)
+            raw.read_body { |chunk| parser.feed(chunk) { |frame| output << yield(frame) } }
+            parser.finish
+          end
+        end
+      end
+    end
+    def apply_patch(snapshot, patch)
+      path = patch['path']
+      raise ArgumentError, 'Patch requires valid path' unless path.is_a?(Array) && path.all? { |key| key.is_a?(String) || (key.is_a?(Integer) && key >= 0) }
+      target = snapshot
+      if patch.key?('items')
+        index = path.last; path[0...-1].each { |key| target = target.fetch(key) }
+        raise ArgumentError, 'Stream patches must append next items' unless target.is_a?(Array) && index == target.length && patch['items'].is_a?(Array)
+        target.concat(patch['items']); return snapshot
+      end
+      unless patch.key?('data')
+        return snapshot if patch['errors'].is_a?(Array) && !patch['errors'].empty?
+        raise ArgumentError, 'Patch requires data, items or errors'
+      end
+      if path.empty?
+        return target.is_a?(Hash) && patch['data'].is_a?(Hash) ? target.merge(patch['data']) : patch['data']
+      end
+      path[0...-1].each { |key| target = target.fetch(key) }
+      key = path.last; current = target.fetch(key)
+      target[key] = current.is_a?(Hash) && patch['data'].is_a?(Hash) ? current.merge(patch['data']) : patch['data']
+      snapshot
+    end
+  end

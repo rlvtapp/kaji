@@ -1,5 +1,5 @@
 use super::{ident, member};
-use anyhow::{Result, bail, ensure};
+use anyhow::{Result, ensure};
 use poolster_core::native::{ModelField, ModelKind, ModelType};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -102,6 +102,37 @@ impl Models {
         );
         Ok(())
     }
+    fn union(&mut self, name: &str, alternatives: &[ModelType]) -> Result<()> {
+        ensure!(
+            self.names.insert(name.into()),
+            "GraphQL type naming collision {name}"
+        );
+        let variants = union_variants(alternatives)?;
+        let key = &variants[0].0;
+        let mut body = format!("public enum {name}: Codable {{\n");
+        let mut decode = String::new();
+        let mut encode = String::new();
+        for (_, label, fields) in &variants {
+            let variant = format!("{name}{}", ident(label));
+            let case = member(label);
+            self.object(&variant, fields)?;
+            writeln!(body, "case {case}({variant})").unwrap();
+            writeln!(
+                decode,
+                "case {}: self = .{case}(try {variant}(from:decoder))",
+                literal(label)
+            )
+            .unwrap();
+            writeln!(encode,"case .{case}(let value): guard value.{} == {} else {{ throw EncodingError.invalidValue(value,.init(codingPath:encoder.codingPath,debugDescription: \"Invalid GraphQL typename\")) }}; try value.encode(to:encoder)",member(key),literal(label)).unwrap();
+        }
+        writeln!(body,"private enum CodingKeys: String, CodingKey {{ case typename = {} }}\npublic init(from decoder: Decoder) throws {{ let c = try decoder.container(keyedBy:CodingKeys.self); let typename = try c.decode(String.self,forKey:.typename); switch typename {{\n{decode}default: throw DecodingError.dataCorruptedError(forKey:.typename,in:c,debugDescription: \"Unknown GraphQL typename\")\n}} }}\npublic func encode(to encoder: Encoder) throws {{ switch self {{\n{encode}}} }}\n}}",literal(key)).unwrap();
+        self.source.push_str(&body);
+        self.files.insert(
+            format!("Models/{}", super::filename(&format!("Model{name}"))),
+            body,
+        );
+        Ok(())
+    }
     pub fn ty(&mut self, name: &str, ty: &ModelType) -> Result<String> {
         let base = match &ty.kind {
             ModelKind::Scalar(s) => match s.as_str() {
@@ -118,8 +149,9 @@ impl Models {
                 self.object(name, fields)?;
                 name.into()
             }
-            ModelKind::Union(_) => {
-                bail!("Swift GraphQL abstract union selections are not supported yet")
+            ModelKind::Union(alternatives) => {
+                self.union(name, alternatives)?;
+                name.into()
             }
         };
         Ok(if ty.nullable {
@@ -131,4 +163,45 @@ impl Models {
 }
 fn literal(s: &str) -> String {
     serde_json::to_string(s).unwrap()
+}
+
+fn union_variants(alternatives: &[ModelType]) -> Result<Vec<(String, String, Vec<ModelField>)>> {
+    ensure!(
+        !alternatives.is_empty(),
+        "GraphQL union has no alternatives"
+    );
+    let mut values = BTreeSet::new();
+    let mut key = None;
+    alternatives
+        .iter()
+        .map(|ty| {
+            let ModelKind::Object(fields) = &ty.kind else {
+                anyhow::bail!("GraphQL union alternatives must be selected objects")
+            };
+            let (field, value) = fields
+                .iter()
+                .find_map(|f| {
+                    if let ModelKind::Literal(v) = &f.ty.kind {
+                        (!f.optional && !f.ty.nullable).then_some((f, v))
+                    } else {
+                        None
+                    }
+                })
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "GraphQL abstract selections require a nonoptional __typename discriminator"
+                    )
+                })?;
+            ensure!(
+                key.as_ref().is_none_or(|k| k == &field.name),
+                "GraphQL union discriminator aliases must agree"
+            );
+            key = Some(field.name.clone());
+            ensure!(
+                values.insert(value.clone()),
+                "duplicate GraphQL typename {value}"
+            );
+            Ok((field.name.clone(), value.clone(), fields.clone()))
+        })
+        .collect()
 }

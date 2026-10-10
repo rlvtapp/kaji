@@ -3,7 +3,22 @@
 Generation, compilation and API behavior are separate checks. Run all three
 for the package you ship.
 
-## Current alpha.2 verification (9 October 2026)
+## Advanced GraphQL checks (10 October 2026)
+
+The full workspace suite passes **895 tests, 0 failures, 170 ignored**.
+The npm SDK suite passes 78 tests, release configuration passes 4 tests, and
+Clippy for all changed crates and targets passes with warnings treated as errors.
+
+All ten SDK outputs have explicit compilation and local-server checks for opt-in
+SSE subscriptions, runtime scalar callbacks and experimental incremental delivery.
+Local introspection JSON, full-file imports, tagged abstract models and entrypoint
+regeneration are covered too. The [batch record](../verification-results/graphql-advanced-2026-10-10.json)
+separates default workspace results, ignored tests and explicitly enabled native
+probes. See the [capability guide](../reference/outputs/graphql-capabilities.md)
+for protocol and language limits. These checks supersede the earlier GraphQL
+transport boundaries below; historical records remain unchanged.
+
+## Earlier alpha.2 verification (9 October 2026)
 
 After client styles, contract-scoped configuration and GraphQL ecosystem completion,
 the full workspace suite passes **816 tests, 0 failures, 143 ignored**. Formatting

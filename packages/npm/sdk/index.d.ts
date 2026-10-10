@@ -99,12 +99,16 @@ export interface SdkPackageOptions {
   transport?: 'fetch' | 'axios';
   clientName?: string;
   raw?: boolean;
+  /** GraphQL distinct-connection SSE generation capability. */
+  subscriptions?: boolean;
   jobs?: number;
 }
 
 export interface ContractOutputOptions {
   style?: 'raw' | 'flat' | 'idiomatic' | 'namespaced' | 'grouped';
   raw?: boolean;
+  /** GraphQL distinct-connection SSE generation capability. */
+  subscriptions?: boolean;
   scalars?: Record<string, GraphqlScalarMapping>;
   groups?: Record<string, Record<string, string>>;
   transport?: 'fetch' | 'axios';
@@ -176,7 +180,10 @@ export interface NativeInputConfig {
   path: string; plugin: NativeInputPlugin | JsInputPlugin;
   /** GraphQL operation files, resolved beside a loaded config file. */
   operations?: string[];
-  /** TypeScript wire types; does not perform runtime scalar conversion. */
+  importRoots?: string[];
+  /** Opt into multipart deferSpec=20220824 incremental operations. */
+  incremental?: boolean;
+  /** TypeScript application types; does not install callbacks; supply runtime scalarCodecs to the generated client for conversion. */
   scalars?: Record<string, GraphqlScalarMapping>;
   /** Supported Rust wire types; independent of TypeScript scalar mappings. */
   rustScalars?: Record<string, GraphqlScalarMapping>;

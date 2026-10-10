@@ -34,9 +34,17 @@ data-key presence, errors, extensions and HTTP status; `require_data` returns an
 error containing the envelope when GraphQL errors exist. Transport failures return
 error tuples independently. Headers, timeout, Finch instance and transport are configurable.
 
-Custom scalars retain JSON terms without codecs. Abstract variants require selected
-`__typename`. Subscriptions, incremental delivery and dynamic selections are unsupported.
+Custom scalars retain JSON terms and support direction-specific `scalar_codecs`
+callbacks. Abstract variants require selected `__typename`. Opt-in subscriptions
+use distinct-connection graphql-sse; incremental inputs use experimental multipart
+deferSpec=20220824. Dynamic selections remain unsupported.
 See the [support matrix](../../plugin-support-matrix.md) for the verification boundary.
+
+## Advanced capabilities
+
+See [subscriptions, scalar callbacks and incremental delivery](graphql-capabilities.md)
+for opt-in configuration, native stream lifetime and the tested protocol boundary.
+These additions are unreleased; historical checks below predate them.
 
 ## Generated source layout
 
