@@ -9,7 +9,7 @@ description = "Native arazzo input provider for Poolster"
 publish = ["crates-io"]
 
 [dependencies]
-poolster-core = { version = "0.5.0-alpha.1", path = "../../core" }
+poolster-core = { version = "0.5.0", path = "../../core" }
 anyhow = "1.0.102"
 roas-arazzo = { version = "=0.3.0", default-features = false, features = ["v1_0", "v1_1"] }
 serde_json = "1.0.138"

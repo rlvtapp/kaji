@@ -38,7 +38,7 @@ root = Path(__file__).parent
 
 setup(
     name="poolster",
-    version="0.5.0-alpha.1",  # x-release-please-version
+    version="0.5.0",  # x-release-please-version
     description="Native Poolster OpenAPI SDK generator for Python environments",
     long_description=(root / "README.md").read_text(encoding="utf-8"),
     long_description_content_type="text/markdown",

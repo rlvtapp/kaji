@@ -11,11 +11,11 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-poolster-input-openapi = { version = "0.5.0-alpha.1", path = "../inputs/openapi" }
+poolster-input-openapi = { version = "0.5.0", path = "../inputs/openapi" }
 anyhow = "1.0.102"
-poolster = { version = "0.5.0-alpha.1", path = "../facade", features = ["all-plugins"] }
-poolster-core = { version = "0.5.0-alpha.1", path = "../core" }
-poolster-inputs = { version = "0.5.0-alpha.1", path = "../inputs/bundle" }
+poolster = { version = "0.5.0", path = "../facade", features = ["all-plugins"] }
+poolster-core = { version = "0.5.0", path = "../core" }
+poolster-inputs = { version = "0.5.0", path = "../inputs/bundle" }
 napi = { version = "3", default-features = false, features = ["napi4", "async", "compat-mode"] }
 napi-derive = "3"
 serde = { version = "1.0.219", features = ["derive"] }

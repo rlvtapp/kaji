@@ -10,7 +10,7 @@ publish = ["crates-io"]
 
 [dependencies]
 serde_json = "1.0.138"
-poolster-core = { version = "0.5.0-alpha.1", path = "../../core" }
+poolster-core = { version = "0.5.0", path = "../../core" }
 anyhow = "1.0.102"
 protox = "0.9"
 
