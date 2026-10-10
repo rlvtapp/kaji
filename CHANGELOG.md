@@ -2,6 +2,90 @@
 
 ## Unreleased
 
+## [0.5.0](https://github.com/rlvtapp/poolster/compare/v0.4.0...v0.5.0) (2026-10-10)
+
+
+### Features
+
+* add Go and Python GraphQL clients and refine Rust styles ([2b050d8](https://github.com/rlvtapp/poolster/commit/2b050d8345630aeef84d89770d40b475336b8167))
+* add GraphQL client styles and JavaScript integrations ([cc494a3](https://github.com/rlvtapp/poolster/commit/cc494a3b6bfa184567715088645b779850d4e041))
+* add GraphQL clients for remaining SDK languages ([afd1268](https://github.com/rlvtapp/poolster/commit/afd126854065b51fde5da8813b34faf72b8888fb))
+* add protocol contracts, blocks and native generation pipelines ([54a3e4b](https://github.com/rlvtapp/poolster/commit/54a3e4be0c0e17d233539598c411d653dbf6000a))
+* add Rust GraphQL scalar wire type mappings ([4d61654](https://github.com/rlvtapp/poolster/commit/4d616542e5518715bdda3e40bac7c6f12aab6fd6))
+* **artifacts:** add API references, Terraform data sources and Newman checks ([1b49647](https://github.com/rlvtapp/poolster/commit/1b4964741b9ba23b731ee975adb4627759c37051))
+* **artifacts:** scaffold registry releases and reviewed Postman sync ([bbb91b3](https://github.com/rlvtapp/poolster/commit/bbb91b32de86c3bf846bd7f5f59bda3860a3c2d4))
+* automate SDK checks releases and per-language repository delivery ([e7dc4a7](https://github.com/rlvtapp/poolster/commit/e7dc4a7edaf7488dcecff0bbf58caf7b3e1c0bf3))
+* **cli:** eject rebuildable sources and expose runtime capabilities ([3838761](https://github.com/rlvtapp/poolster/commit/3838761aca76655b9e4b24b28d1488c07943b493))
+* **cli:** expose native operation tests and verify replay-safe runtimes ([365469d](https://github.com/rlvtapp/poolster/commit/365469d6e4e50b6f5e9e639d5b796d72dd339e07))
+* complete GraphQL clients for TypeScript and Rust ([0557214](https://github.com/rlvtapp/poolster/commit/05572149ded34461a1a15cbcae0f4956abf5025d))
+* **core:** resolve package-local idempotency policies ([8d91d41](https://github.com/rlvtapp/poolster/commit/8d91d410fc601eaa1249dde6f05ca58fa5b321d1))
+* **delivery:** add doctor, API release notes and gated workflow template ([54ea102](https://github.com/rlvtapp/poolster/commit/54ea102da6c78ac397c24dcf57c46db887a59e28))
+* expand SDK customization and add Postman and typed Terraform generators ([8293ce7](https://github.com/rlvtapp/poolster/commit/8293ce7ad0e667a035b9c762bfd588b254a758b1))
+* expose generation plans for CLI and SDK viewers ([2f1f352](https://github.com/rlvtapp/poolster/commit/2f1f352d3c08a5dbec1f225d3cca50bc4b5f0a89))
+* generate native GraphQL TypeScript packages ([0938fcb](https://github.com/rlvtapp/poolster/commit/0938fcb9f77debfea4acdf5b612e2a2d1252fff5))
+* **generators:** improve output layouts and runtime contracts ([3c84389](https://github.com/rlvtapp/poolster/commit/3c84389c202eae91a54fd590d664e9159bd78063))
+* **inputs:** add native contracts and parsers to the Rust engine ([e45d398](https://github.com/rlvtapp/poolster/commit/e45d398f408b703d31cd480b91d5fb1ce2b2bd56))
+* **migration:** reuse vendor configs and normalize SDK annotations ([6037bfb](https://github.com/rlvtapp/poolster/commit/6037bfbd5330f98c2a347369d337e9ed0891ab4a))
+* **node:** add NAPI embedding and explicit JS plugins ([60cd1ad](https://github.com/rlvtapp/poolster/commit/60cd1ad5bfe2358af1148257dda460236a7e5741))
+* **openapi:** normalize 3.2 contracts and local reference closures ([0a29a8e](https://github.com/rlvtapp/poolster/commit/0a29a8e81329dcc4ae27f1c6c821ae0af9c20fa9))
+* **openapi:** preserve 3.2 content and reference metadata ([fd2400d](https://github.com/rlvtapp/poolster/commit/fd2400dd28fc39e925a6e65c7ff373d12eff76a5))
+* **pagination:** add native page helpers across remaining SDK targets ([80036f1](https://github.com/rlvtapp/poolster/commit/80036f1101b45d343824aae2f82fed48436daff2))
+* **postman:** add reviewed environment sync and document feature boundaries ([833b885](https://github.com/rlvtapp/poolster/commit/833b8858034d32a3005327535615ce0d75dd4d24))
+* **release:** add crates.io SDK publication and Poolster release notes ([722aaf4](https://github.com/rlvtapp/poolster/commit/722aaf484c0d1d4ff9e005f362ba01d02db8c667))
+* **release:** prepare public Rust crates for ordered publication ([b523e32](https://github.com/rlvtapp/poolster/commit/b523e328dc2550b1e90ee842c9084bc4a70d3743))
+* render generation plans as plugin and handler flowcharts ([74586c9](https://github.com/rlvtapp/poolster/commit/74586c937e05ef01eac9113780a21ad54289cb74))
+* **sdk:** add model compatibility and 3.2 native transports ([ea6975f](https://github.com/rlvtapp/poolster/commit/ea6975f2b537b7750cab6de2d9fb06092f5c4788))
+* **sdk:** add native OAuth, scoped HTTP controls and buffered uploads ([3728f4f](https://github.com/rlvtapp/poolster/commit/3728f4f366008d2c3077866f97e7b92515612047))
+* **sdk:** add response checks, page pagination and operation smoke tests ([17e0206](https://github.com/rlvtapp/poolster/commit/17e0206401c6997112a3f0c5ac50f80f2428b68c))
+* **sdk:** add webhook verifiers OAuth providers and native operation tests ([4d7ddb2](https://github.com/rlvtapp/poolster/commit/4d7ddb2bf53b52b36241f4d0d6af1afa99f94ad9))
+* **sdk:** bundle idempotency keys and honor bounded retry delays ([1f12047](https://github.com/rlvtapp/poolster/commit/1f12047b5262fae21a4aa027b01591268598ab76))
+* **sdk:** complete operation test plugins and expand native runtime behavior ([ebeb8e1](https://github.com/rlvtapp/poolster/commit/ebeb8e166d08577c72b312906c5afc04b18b5653))
+* **sdk:** expand native protocols and resolve remote and custom HTTP contracts ([8b1211c](https://github.com/rlvtapp/poolster/commit/8b1211cf636c87f0498ac58a1ed6debe43905e2f))
+* **sdk:** extend native streaming pagination models multipart and OAuth ([c36859c](https://github.com/rlvtapp/poolster/commit/c36859cadc824eca19266eb03b7106ac8acb1d69))
+* **terraform:** generate nested schemas composite identities and state renames ([fc23d5a](https://github.com/rlvtapp/poolster/commit/fc23d5a5793201c3276bb3dff4b419433ae7dd74))
+* **terraform:** wait for asynchronous lifecycle completion with bounded polling ([4c2de75](https://github.com/rlvtapp/poolster/commit/4c2de753da18b04e6b04f3874d3eba44c87e3713))
+* **typescript:** bound generated modules and expand query factories ([996af56](https://github.com/rlvtapp/poolster/commit/996af564105af3c34e8526ec44f92238499f2820))
+* validate SDK response shapes and strengthen consumer middleware tests ([7e60802](https://github.com/rlvtapp/poolster/commit/7e60802a5f6cb796166be06f4621e0e903e5468b))
+
+
+### Bug Fixes
+
+* accept native Windows scaffold paths ([a1821be](https://github.com/rlvtapp/poolster/commit/a1821be37250c2418bc808c04cdc10515352937e))
+* **ci:** build compiler before probes and handle workspace releases ([4264e67](https://github.com/rlvtapp/poolster/commit/4264e67377fe45f86bf8f8a3fcceb694429e3c96))
+* **ci:** install Go for Swift compiler integration ([2c085d6](https://github.com/rlvtapp/poolster/commit/2c085d60797f51fc478284ea46bbd0380160ba0f))
+* **ci:** keep release preparation manual ([6f35b6a](https://github.com/rlvtapp/poolster/commit/6f35b6acdd08c0aef716458d62146d96af6d74f0))
+* **ci:** satisfy current Clippy resource plan lint ([e4586a8](https://github.com/rlvtapp/poolster/commit/e4586a8e560b775c806c25dc3961ffbe7da48ea3))
+* **ci:** select Swift 6 and load Elixir probe dependencies ([340e91d](https://github.com/rlvtapp/poolster/commit/340e91dd3ce0b19c97b91dd791451b3c6e54f388))
+* **ci:** update release preparation while keeping publication gated ([c585810](https://github.com/rlvtapp/poolster/commit/c5858108a7867260820e7bcc74078607202b3a92))
+* **ci:** use a byte string in CLI fixture hashing ([847adb2](https://github.com/rlvtapp/poolster/commit/847adb2be8e96b7a62dd6a99dccb3621ba48efe6))
+* compile large contracts with stable symbols and faithful references ([6875b9f](https://github.com/rlvtapp/poolster/commit/6875b9fbc3a242bfc097976896bb822c2871f39e))
+* **csharp:** preserve repeated array query values in native requests ([2acb175](https://github.com/rlvtapp/poolster/commit/2acb175007f21a753cdab0f9d7c346aa9f6f0130))
+* inherit 0.5.0 workspace versions across all crates ([77aec8f](https://github.com/rlvtapp/poolster/commit/77aec8f3d122fa5cdcc2017ab0cd9fb9ccc3c4cb))
+* invoke Node directly in Windows package smoke tests ([0668ca4](https://github.com/rlvtapp/poolster/commit/0668ca48d56b474a18244297de86153664db189b))
+* normalize SDK installation paths across platforms ([b9314fb](https://github.com/rlvtapp/poolster/commit/b9314fb288169464384ea1873472562c3040e9b3))
+* **openapi:** preserve parameter identities and deterministic overrides ([23f4886](https://github.com/rlvtapp/poolster/commit/23f48865d06c03ae8427c0cf08953ad8a8019af4))
+* **pagination:** validate selectors and prevent invalid continuation counters ([2242f15](https://github.com/rlvtapp/poolster/commit/2242f157a55f6df953f0a1fee98ee7282cc8defa))
+* **python:** accept canonical Poolster extensions with legacy aliases ([4f6e67d](https://github.com/rlvtapp/poolster/commit/4f6e67d7b567c1cbd58e87d69e268c126e5f81f1))
+* **python:** brand emitted runtime as Poolster ([3653c40](https://github.com/rlvtapp/poolster/commit/3653c40914882dcf527c4334372a88372b26c0f9))
+* **release:** publish verified tags without an enable flag ([dc64cc3](https://github.com/rlvtapp/poolster/commit/dc64cc38cf70188ec76560d23ae7cb133b448399))
+* **rust:** allow native dependency downloads on fresh CI runners ([9417729](https://github.com/rlvtapp/poolster/commit/9417729334fef99969c9ccb900777a0af343d64a))
+* **sdk:** allocate native model names and preserve recursive shapes ([1d851f6](https://github.com/rlvtapp/poolster/commit/1d851f636c84fdc9217c0bcb9564340cde6bf3d9))
+* **sdk:** correct native serialization cancellation and ESM packaging ([6d3f5e0](https://github.com/rlvtapp/poolster/commit/6d3f5e0c7cb608981e897dbee496bfb9ddd0c78e))
+* **sdk:** preserve native symbols and wire values in dynamic languages ([8b45ed4](https://github.com/rlvtapp/poolster/commit/8b45ed424633f149185c32adc322fac04bb289ae))
+* **sdk:** resolve native Java Csharp and Elixir generation failures ([5cdcd19](https://github.com/rlvtapp/poolster/commit/5cdcd19dee603fb879d65270091ff96a3ea70f55))
+* **sdk:** retain allocated idempotency header arguments ([8177a32](https://github.com/rlvtapp/poolster/commit/8177a32dce865798dec254a10755d9ade8af3d62))
+* **swift:** bound compiler complexity for large query operations ([84ca00a](https://github.com/rlvtapp/poolster/commit/84ca00a6ddf413ac0e6036600384148828138fb8))
+* **swift:** bound query code generation and preserve native wire names ([5330255](https://github.com/rlvtapp/poolster/commit/5330255c74c6555ad7a06ca660c4329f4ccc5b16))
+* **test:** allow generated Rust CLI dependency downloads ([82e4fa9](https://github.com/rlvtapp/poolster/commit/82e4fa94c91ac6e87a51cd776fa8ac292d73b7f1))
+* **test:** honor Go cache settings on all platforms ([bc26647](https://github.com/rlvtapp/poolster/commit/bc266471efb524b2bd0962911065025a6eb1291f))
+* **typescript:** align generated helper names with Poolster templates ([cbf6423](https://github.com/rlvtapp/poolster/commit/cbf6423d06a6c965eecdfa3e375215bfef0b2b1b))
+* validate alpha releases across platforms ([97295c9](https://github.com/rlvtapp/poolster/commit/97295c9d10bfe55ea7fd3a3fb0d58f09690ef873))
+
+
+### Performance Improvements
+
+* **generators:** split validation registries and large command trees ([72cfa8f](https://github.com/rlvtapp/poolster/commit/72cfa8ff5ab5d2f2de6cc4fb77acdb1d1d810eeb))
+
 ## 0.5.0 — 2026-10-08
 
 ### Changed

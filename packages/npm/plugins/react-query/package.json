@@ -1,6 +1,6 @@
 {
   "name": "@relevate/poolster-plugin-react-query",
-  "version": "0.5.0-alpha.1",
+  "version": "0.5.0",
   "description": "Poolster plugin exports for query",
   "license": "MIT",
   "repository": {
@@ -27,7 +27,7 @@
     "node": ">=18"
   },
   "peerDependencies": {
-    "@relevate/poolster": "0.5.0-alpha.1"
+    "@relevate/poolster": "0.5.0"
   },
   "publishConfig": {
     "access": "public"
