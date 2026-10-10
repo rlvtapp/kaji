@@ -728,3 +728,6 @@ mod tests {
 
 #[path = "lib_input.rs"]
 mod http_input;
+
+mod graphql;
+pub use graphql::{Graphql, graphql};

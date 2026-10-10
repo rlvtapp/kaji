@@ -204,3 +204,23 @@ fn graphql_recipe_ecosystem_generates_with_cypress_mutation_optin() {
     generate_from_config(&path, ColorChoice::Never, true, false).unwrap();
     assert!(directory.path().join("generated/ts/package.json").exists());
 }
+
+#[test]
+fn graphql_recipe_generates_collections_and_both_executable_clis() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = recipe(
+        directory.path(),
+        serde_json::json!([
+            {"language":"postman","path":"postman","plugins":[{"name":"collection","base_url":"http://localhost:4000/graphql"},{"name":"environment"}]},
+            {"language":"rust-cli","path":"rust-command","name":"users-cli","plugins":[{"name":"cli","command_name":"users","base_url":"http://localhost:4000/graphql"}]},
+            {"language":"typescript-cli","path":"js-command","plugins":[{"name":"cli","command_name":"users","base_url":"http://localhost:4000/graphql"}]}
+        ]),
+    );
+    generate_from_config(&path, ColorChoice::Never, false, false).unwrap();
+    generate_from_config(&path, ColorChoice::Never, true, false).unwrap();
+    let root = directory.path().join("generated");
+    assert!(root.join("postman/collection.json").exists());
+    assert!(root.join("postman/environment.json").exists());
+    assert!(root.join("rust-command/Cargo.toml").exists());
+    assert!(root.join("js-command/package.json").exists());
+}

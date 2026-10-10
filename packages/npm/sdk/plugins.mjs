@@ -22,3 +22,7 @@ export const inputAsyncApi = api.inputAsyncApi;
 export const inputArazzo = api.inputArazzo;
 export const inputProtobuf = api.inputProtobuf;
 export const inputCapnProto = api.inputCapnProto;
+
+export const pluginGraphqlPostman = api.pluginGraphqlPostman;
+export const pluginGraphqlRustCli = api.pluginGraphqlRustCli;
+export const pluginGraphqlTypeScriptCli = api.pluginGraphqlTypeScriptCli;

@@ -1,0 +1,74 @@
+{
+  "date": "2026-10-10",
+  "scope": "Native GraphQL Postman collections and Rust/TypeScript executable CLIs",
+  "status": "verified",
+  "checks": {
+    "postman_default": {
+      "passed": 15,
+      "ignored": 4
+    },
+    "postman_explicit_native": {
+      "passed": 7,
+      "ignored": 0,
+      "toolchains": [
+        "Postman collection v2.1.0 pinned schema",
+        "Newman 6.2.1",
+        "GraphQL.js 16.14.2"
+      ]
+    },
+    "rust_cli_explicit_native": {
+      "passed": 4,
+      "ignored": 0,
+      "generated_operations": 305
+    },
+    "rust_cli_http": {
+      "passed": 6,
+      "ignored": 1
+    },
+    "typescript_cli_default": {
+      "passed": 9,
+      "ignored": 2
+    },
+    "typescript_cli_explicit_native": {
+      "passed": 4,
+      "ignored": 0,
+      "generated_operations": 301,
+      "toolchains": [
+        "GraphQL.js 16.14.2",
+        "TypeScript 5.9.3",
+        "Commander 13.1"
+      ]
+    },
+    "typescript_cli_existing_http_compile": "Explicitly executed and passed",
+    "cli": {
+      "passed": 128,
+      "ignored": 9
+    },
+    "npm_sdk": {
+      "passed": 77,
+      "skipped": 0
+    },
+    "lint": "All changed crates, CLI and Node pass all-target Clippy with warnings denied",
+    "format_and_links": "Formatting, diff whitespace and changed documentation links pass"
+  },
+  "behavior": [
+    "Named fixed query/mutation documents become flat kebab-case commands",
+    "JSON variables/file preserve omission and explicit null",
+    "Endpoint, bearer and custom headers configurable",
+    "Complete envelopes and exit codes distinguish partial/error/protocol results",
+    "Provider substitution, operation block completeness/provenance, regeneration and bounded deterministic sources checked",
+    "Postman native graphql bodies execute inside actual Newman; response hook records status, not application-specific success assertions"
+  ],
+  "limitations": [
+    "Subscriptions and incremental responses unsupported",
+    "CLI output is JSON, no SDK return typing or per-variable flags",
+    "No generated GraphQL OAuth login discovery",
+    "Full workspace and 205-spec HTTP corpus not rerun",
+    "Ignored default-suite tests are not passes; explicit native checks overlap those suites"
+  ],
+  "resolved_integration_findings": [
+    "Recipe option validation needed to accept GraphQL CLI command_name/base_url and Postman options",
+    "Old unsupported-Postman fixtures moved to unsupported Terraform, preserving skipped-output tests",
+    "JS SDK config whitelist extended for GraphQL tool languages, endpoint and commandName"
+  ]
+}

@@ -18,6 +18,9 @@ function createAddon(plugin, name) {
 }
 
 module.exports = {
+  pluginGraphqlPostman: create('postman', 'poolster-graphql-postman'),
+  pluginGraphqlRustCli: create('rust-cli', 'poolster-graphql-rust-cli'),
+  pluginGraphqlTypeScriptCli: create('typescript-cli', 'poolster-graphql-typescript-cli'),
   pluginTypeScript: create('typescript', '@relevate/poolster-plugin-typescript'),
   pluginRust: create('rust', '@relevate/poolster-plugin-rust'),
   pluginGo: create('go', '@relevate/poolster-plugin-go'),

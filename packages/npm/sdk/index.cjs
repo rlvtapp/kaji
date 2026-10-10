@@ -226,7 +226,7 @@ async function generate(config, options = {}) {
   const jsPlugins = plan.order;
   const output = path.resolve(typeof config.output === 'string' ? config.output : config.output.path);
   if (config.input.plugin?.format === 'graphql' && packages.length &&
-      packages.every((p) => !['typescript', 'rust', 'go', 'python', 'php', 'java', 'csharp', 'dotnet', 'ruby', 'swift', 'elixir'].includes(p.language)) &&
+      packages.every((p) => !['typescript', 'rust', 'go', 'python', 'php', 'java', 'csharp', 'dotnet', 'ruby', 'swift', 'elixir', 'postman', 'rust-cli', 'typescript-cli'].includes(p.language)) &&
       nativeAddons.length === 0 && jsPlugins.length === 0) {
     const skipped = packages.map((p) => ({ path: p.path, language: p.language,
       reason: 'GraphQL output does not yet support this language' }));
@@ -241,8 +241,8 @@ async function generate(config, options = {}) {
     if (config.input.plugin) {
       const loaded = await loadInput(config.input);
       if (!loaded.api && config.input.plugin.format === 'graphql' && packages.length) {
-        const compatible = packages.filter((p) => ['typescript', 'rust', 'go', 'python', 'php', 'java', 'csharp', 'dotnet', 'ruby', 'swift', 'elixir'].includes(p.language));
-        for (const p of packages.filter((p) => !['typescript', 'rust', 'go', 'python', 'php', 'java', 'csharp', 'dotnet', 'ruby', 'swift', 'elixir'].includes(p.language))) {
+        const compatible = packages.filter((p) => ['typescript', 'rust', 'go', 'python', 'php', 'java', 'csharp', 'dotnet', 'ruby', 'swift', 'elixir', 'postman', 'rust-cli', 'typescript-cli'].includes(p.language));
+        for (const p of packages.filter((p) => !['typescript', 'rust', 'go', 'python', 'php', 'java', 'csharp', 'dotnet', 'ruby', 'swift', 'elixir', 'postman', 'rust-cli', 'typescript-cli'].includes(p.language))) {
           const entry = { path: p.path, language: p.language, reason: 'GraphQL output does not yet support this language' };
           skipped.push(entry);
           console.warn(`Poolster: skipping ${p.path}: ${entry.reason}`);

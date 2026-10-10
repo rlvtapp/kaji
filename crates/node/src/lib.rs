@@ -12,7 +12,9 @@ use napi::bindgen_prelude::{AsyncTask, Task};
 use napi::{Env, Error, Result, Status};
 use napi_derive::napi;
 use poolster::prelude::*;
-use poolster::{csharp, dotnet, elixir, go, java, php, python, ruby, rust, swift, ts};
+use poolster::{
+    csharp, dotnet, elixir, go, java, php, postman, python, ruby, rust, rust_cli, swift, ts, ts_cli,
+};
 use poolster_core::{Api, GeneratedFile, GeneratedTree, SecuritySchemeCatalog};
 use poolster_input_openapi::OpenApiSidecar;
 use poolster_inputs::default_registry;
@@ -29,6 +31,10 @@ struct Contract {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct SdkPackage {
     language: String,
+    #[serde(default)]
+    command_name: Option<String>,
+    #[serde(default)]
+    endpoint: Option<String>,
     path: String,
     #[serde(default)]
     name: Option<String>,
@@ -101,6 +107,9 @@ fn package_common(package: &SdkPackage) -> AnyResult<Common> {
 }
 
 fn validate_options(package: &SdkPackage) -> AnyResult<()> {
+    if package.command_name.is_some() || package.endpoint.is_some() {
+        bail!("commandName and endpoint require GraphQL tool output");
+    }
     if !package.scalars.is_empty() || !package.groups.is_empty() {
         bail!("scalar mappings and groups require GraphQL input");
     }

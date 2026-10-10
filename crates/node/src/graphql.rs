@@ -52,6 +52,9 @@ fn generate(request: &str) -> AnyResult<String> {
             "ruby",
             "swift",
             "elixir",
+            "postman",
+            "rust-cli",
+            "typescript-cli",
         ]
         .contains(&package.language.as_str())
         {
@@ -88,6 +91,24 @@ fn generate(request: &str) -> AnyResult<String> {
             package_version: package.version.clone(),
             ..Default::default()
         };
+        if ["postman", "rust-cli", "typescript-cli"].contains(&package.language.as_str()) {
+            if request.subscriptions
+                || package.transport.is_some()
+                || package.style.is_some()
+                || package.raw.is_some()
+                || !package.groups.is_empty()
+                || !package.scalars.is_empty()
+            {
+                bail!(
+                    "GraphQL collections/CLIs do not support SDK styles, scalar mappings, groups or subscriptions"
+                );
+            }
+            profiles = tools::append(profiles, package, common, input)?;
+            continue;
+        }
+        if package.command_name.is_some() || package.endpoint.is_some() {
+            bail!("commandName and endpoint are GraphQL collection/CLI options");
+        }
         if package.language == "rust" {
             if request.subscriptions || package.transport.is_some() {
                 bail!("Rust GraphQL does not support subscriptions or transport options");
@@ -392,3 +413,6 @@ fn generate(request: &str) -> AnyResult<String> {
 pub fn generate_graphql(request: String) -> AsyncTask<GenerateGraphql> {
     AsyncTask::new(GenerateGraphql { request })
 }
+
+#[path = "graphql_tools.rs"]
+mod tools;

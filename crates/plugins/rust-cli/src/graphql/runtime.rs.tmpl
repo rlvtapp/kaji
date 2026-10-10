@@ -1,0 +1,62 @@
+use anyhow::{Context, Result, bail, ensure};
+use clap::{Arg, ArgAction, Command};
+use serde_json::{Value, json};
+
+pub fn run(command: &str, default_endpoint: Option<&str>) -> Result<i32> {
+    let mut cli = Command::new(command.to_owned()).subcommand_required(true)
+        .arg(Arg::new("endpoint").long("endpoint").global(true).value_name("URL"))
+        .arg(Arg::new("header").long("header").global(true).action(ArgAction::Append).value_name("NAME:VALUE"))
+        .arg(Arg::new("bearer-token").long("bearer-token").global(true).value_name("TOKEN"));
+    for op in crate::operations::operations() {
+        cli = cli.subcommand(Command::new(op.command)
+            .arg(Arg::new("variables").long("variables").value_name("JSON").conflicts_with("variables-file"))
+            .arg(Arg::new("variables-file").long("variables-file").value_name("FILE")));
+    }
+    let args = cli.get_matches();
+    let (name, sub) = args.subcommand().context("operation is required")?;
+    let operation = crate::operations::operations().find(|op| op.command == name).context("unknown operation")?;
+    let source = if let Some(path) = sub.get_one::<String>("variables-file") {
+        std::fs::read_to_string(path).context("cannot read variables file")?
+    } else { sub.get_one::<String>("variables").cloned().unwrap_or_else(|| "{}".into()) };
+    let variables: Value = serde_json::from_str(&source).context("variables must contain valid JSON")?;
+    let object = variables.as_object().context("variables must be a JSON object")?;
+    for key in object.keys() { ensure!(operation.variables.contains(&key.as_str()), "unknown variable {key:?} for {}", operation.name); }
+    let endpoint = args.get_one::<String>("endpoint").cloned().or_else(|| std::env::var("GRAPHQL_ENDPOINT").ok()).or_else(|| default_endpoint.map(str::to_owned)).context("provide --endpoint or GRAPHQL_ENDPOINT")?;
+    let url = reqwest::Url::parse(&endpoint).context("invalid GraphQL endpoint")?;
+    ensure!(matches!(url.scheme(), "http" | "https"), "GraphQL endpoint must use HTTP or HTTPS");
+    let client = reqwest::blocking::Client::builder().timeout(std::time::Duration::from_secs(30)).build()?;
+    let mut request = client.post(url).json(&json!({"query":operation.document,"operationName":operation.name,"variables":variables}));
+    if let Some(headers) = args.get_many::<String>("header") {
+        for header in headers {
+            let (key, value) = header.split_once(':').context("header must be NAME:VALUE")?;
+            let key = reqwest::header::HeaderName::from_bytes(key.trim().as_bytes()).context("invalid header name")?;
+            let value = reqwest::header::HeaderValue::from_str(value.trim()).context("invalid header value")?;
+            request = request.header(key, value);
+        }
+    }
+    if let Some(token) = args.get_one::<String>("bearer-token").cloned().or_else(|| std::env::var("GRAPHQL_TOKEN").ok()) {
+        request = request.bearer_auth(token);
+    }
+    let response = request.send().context("GraphQL HTTP request failed")?;
+    let status = response.status();
+    let envelope: Value = response.json().context("GraphQL response must be JSON")?;
+    let object = envelope.as_object().context("GraphQL response must be an object")?;
+    ensure!(!object.contains_key("hasNext") && !object.contains_key("incremental"), "incremental GraphQL responses are unsupported");
+    let errors = match object.get("errors") {
+        None => false,
+        Some(Value::Array(errors)) => {
+            for error in errors { ensure!(error.get("message").is_some_and(Value::is_string), "invalid GraphQL error entry"); }
+            !errors.is_empty()
+        }
+        Some(_) => bail!("GraphQL errors must be an array"),
+    };
+    let data = match object.get("data") {
+        Some(Value::Object(_)) => true,
+        Some(Value::Null) | None => false,
+        Some(_) => bail!("GraphQL data must be an object or null"),
+    };
+    ensure!(data || errors, "GraphQL response contains neither data nor errors");
+    println!("{}", serde_json::to_string_pretty(&envelope)?);
+    if !status.is_success() { eprintln!("GraphQL HTTP status {status}"); return Ok(2); }
+    Ok(if errors { if data {3} else {4} } else {0})
+}

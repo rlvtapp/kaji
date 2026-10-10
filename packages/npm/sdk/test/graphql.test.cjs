@@ -195,3 +195,20 @@ test('Other language GraphQL factories share the native input and regenerate', a
   for (const ext of ['.php','.java','.cs','.rb','.swift','.ex']) assert.ok(result.files.some(file => file.path.endsWith(ext)),ext);
   assert.deepEqual((await generate(configuration)).changes,{added:[],modified:[],removed:[]});
 });
+
+test('GraphQL collection and CLI factories generate native packages and regenerate', async (t) => {
+  const {dir,input} = await fixture(t); delete input.scalars;
+  const tools = require('../plugins.cjs');
+  const configuration = {input, output:path.join(dir,'out'), plugins:[
+    tools.pluginGraphqlPostman({endpoint:'http://localhost:4000/graphql'}),
+    tools.pluginGraphqlRustCli({commandName:'users'}),
+    tools.pluginGraphqlTypeScriptCli({commandName:'users'}),
+  ]};
+  const result = await generate(configuration);
+  assert.deepEqual(result.skipped,[]);
+  assert.ok(result.files.some(f=>f.path==='postman/collection.json'));
+  assert.ok(result.files.some(f=>f.path==='postman/environment.json'));
+  assert.ok(result.files.some(f=>f.path==='rust-cli/Cargo.toml'));
+  assert.ok(result.files.some(f=>f.path==='typescript-cli/package.json'));
+  assert.deepEqual((await generate(configuration)).changes,{added:[],modified:[],removed:[]});
+});

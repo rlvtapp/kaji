@@ -29,6 +29,7 @@ Both launchers bundle the generator and OpenAPI compiler.
 | Load a private contract | [Remote input recipe](recipes.md#private-remote-contract) |
 | Bundle middleware or custom source | [SDK customization](../reference/regeneration/sdk-customization.md) |
 | Protect edits during regeneration | [Safe regeneration](../reference/regeneration/safe-regeneration.md) |
+| Generate GraphQL collections or executable CLIs | [GraphQL tools](../reference/outputs/graphql-tools.md) |
 | Inspect native non-OpenAPI contracts | [Input plugins](../reference/inputs/input-plugins.md) |
 
 The HTTP SDK workflow accepts Swagger 2.0 and OpenAPI 3.0/3.1/3.2.

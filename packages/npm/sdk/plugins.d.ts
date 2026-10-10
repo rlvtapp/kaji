@@ -56,3 +56,10 @@ export function inputAsyncApi(): NativeInputPlugin;
 export function inputArazzo(): NativeInputPlugin;
 export function inputProtobuf(): NativeInputPlugin;
 export function inputCapnProto(): NativeInputPlugin;
+
+/** GraphQL-only collection and executable CLI outputs. */
+export interface GraphqlToolOptions { path?: string; name?: string; version?: string; endpoint?: string }
+export interface GraphqlCliOptions extends GraphqlToolOptions { commandName?: string }
+export function pluginGraphqlPostman(options?: GraphqlToolOptions): NativePlugin;
+export function pluginGraphqlRustCli(options?: GraphqlCliOptions): NativePlugin;
+export function pluginGraphqlTypeScriptCli(options?: GraphqlCliOptions): NativePlugin;

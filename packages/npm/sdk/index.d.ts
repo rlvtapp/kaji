@@ -79,10 +79,13 @@ export interface JsPlugin {
   operation?(operation: Operation, context: PluginContext): void | Promise<void>;
 }
 
-export type SdkLanguage = 'typescript' | 'rust' | 'go' | 'python' | 'php' | 'java' | 'csharp' | 'elixir' | 'ruby' | 'swift';
+export type SdkLanguage = 'typescript' | 'rust' | 'go' | 'python' | 'php' | 'java' | 'csharp' | 'elixir' | 'ruby' | 'swift' | 'postman' | 'rust-cli' | 'typescript-cli';
 
 export interface SdkPackageOptions {
   language: SdkLanguage;
+  /** GraphQL collection/CLI endpoint; CLI command binary name. */
+  endpoint?: string;
+  commandName?: string;
   /** Options for the selected bundled HTTP or GraphQL exporter. */
   contracts?: { http?: ContractOutputOptions; graphql?: ContractOutputOptions };
   path?: string;

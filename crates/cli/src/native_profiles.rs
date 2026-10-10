@@ -21,12 +21,48 @@ pub(super) fn pipeline(format: &str) -> Option<(&'static str, &'static str)> {
 pub(super) fn language_compatible(format: &str, language: &str) -> bool {
     (format == "graphql"
         && [
-            "rust", "go", "python", "php", "java", "csharp", "dotnet", "ruby", "swift", "elixir",
+            "rust",
+            "go",
+            "python",
+            "php",
+            "java",
+            "csharp",
+            "dotnet",
+            "ruby",
+            "swift",
+            "elixir",
+            "postman",
+            "rust-cli",
+            "typescript-cli",
         ]
         .contains(&language))
         || pipeline(format).is_some_and(|(target, _)| language == target)
 }
 pub(super) fn compatible(format: &str, package: &PackageConfig) -> bool {
+    if format == "graphql" && ["rust-cli", "typescript-cli"].contains(&package.language.as_str()) {
+        return package.plugins.len() == 1
+            && matches!(package.plugins[0].name.as_str(), "cli" | "graphql");
+    }
+    if format == "graphql" && package.language == "postman" {
+        return package
+            .plugins
+            .iter()
+            .filter(|p| matches!(p.name.as_str(), "collection" | "graphql" | "sdk"))
+            .count()
+            == 1
+            && package
+                .plugins
+                .iter()
+                .filter(|p| p.name == "environment")
+                .count()
+                <= 1
+            && package.plugins.iter().all(|p| {
+                matches!(
+                    p.name.as_str(),
+                    "collection" | "graphql" | "sdk" | "environment"
+                )
+            });
+    }
     if format == "graphql"
         && [
             "rust", "go", "python", "php", "java", "csharp", "dotnet", "ruby", "swift", "elixir",
@@ -110,7 +146,21 @@ pub(super) fn build(options: &Generate, input: &NativeInputConfig) -> Result<Pro
             ..Default::default()
         };
         let old = std::mem::replace(&mut profiles, ProfileSet::new("."));
-        profiles = if input.format == "graphql" && language == "rust" {
+        profiles = if input.format == "graphql"
+            && ["postman", "rust-cli", "typescript-cli"].contains(&language)
+        {
+            append_graphql_tools(
+                old,
+                input,
+                registry.clone(),
+                language,
+                path,
+                name,
+                common,
+                plugin,
+                package_config,
+            )?
+        } else if input.format == "graphql" && language == "rust" {
             let input_provider = provider::<GraphqlOperations>(input, registry.clone());
             let generator = rust::graphql(Some(input_provider.handle())).scalars(
                 plugin
@@ -440,7 +490,7 @@ pub(super) fn build(options: &Generate, input: &NativeInputConfig) -> Result<Pro
                 package.plugins.iter().find(|p| {
                     matches!(
                         p.name.as_str(),
-                        "graphql" | "sdk" | "workflow" | "asyncapi" | "grpc"
+                        "graphql" | "sdk" | "workflow" | "asyncapi" | "grpc" | "cli" | "collection"
                     )
                 }),
                 Some(package),
@@ -490,8 +540,17 @@ pub(super) fn validate_recipe(document: &serde_json::Value, config: &ProjectConf
                 input.format
             );
         }
-        let allowed: &[&str] = match input.format.as_str() {
-            "graphql" => &[
+        let allowed: &[&str] = match (input.format.as_str(), package.language.as_str()) {
+            ("graphql", "postman") => &[
+                "name",
+                "output",
+                "base_url",
+                "strict",
+                "group_by_tag",
+                "split_by_group",
+            ],
+            ("graphql", "rust-cli" | "typescript-cli") => &["name", "command_name", "base_url"],
+            ("graphql", _) => &[
                 "name",
                 "transport",
                 "subscriptions",
@@ -501,7 +560,7 @@ pub(super) fn validate_recipe(document: &serde_json::Value, config: &ProjectConf
                 "groups",
                 "contracts",
             ],
-            "protobuf" => &["name", "module", "toolchain", "go_packages"],
+            ("protobuf", _) => &["name", "module", "toolchain", "go_packages"],
             _ => &["name"],
         };
         for (raw_plugin, plugin) in raw["plugins"]
@@ -512,7 +571,7 @@ pub(super) fn validate_recipe(document: &serde_json::Value, config: &ProjectConf
         {
             let supported = if matches!(
                 plugin.name.as_str(),
-                "graphql" | "sdk" | "workflow" | "asyncapi" | "grpc"
+                "graphql" | "sdk" | "workflow" | "asyncapi" | "grpc" | "cli" | "collection"
             ) {
                 allowed
             } else {
@@ -540,7 +599,7 @@ pub(super) fn validate_recipe(document: &serde_json::Value, config: &ProjectConf
             .find(|p| {
                 matches!(
                     p.name.as_str(),
-                    "graphql" | "sdk" | "workflow" | "asyncapi" | "grpc"
+                    "graphql" | "sdk" | "workflow" | "asyncapi" | "grpc" | "cli" | "collection"
                 )
             })
             .context("missing native generator")?;
@@ -591,3 +650,7 @@ pub(super) fn validate_recipe(document: &serde_json::Value, config: &ProjectConf
     }
     Ok(())
 }
+
+#[path = "native_graphql_tools.rs"]
+mod tools;
+use tools::append_graphql_tools;

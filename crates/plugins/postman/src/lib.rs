@@ -389,3 +389,6 @@ fn resolve<'a>(api: &'a Api, schema: &'a SchemaValue) -> Result<&'a SchemaValue>
     }
     Ok(current)
 }
+
+mod graphql;
+pub use graphql::{GraphqlCollection, GraphqlEnvironment, graphql, graphql_environment};

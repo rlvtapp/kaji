@@ -489,3 +489,33 @@ Rust library tests pass **30**, with **8 ignored**; TypeScript library tests pas
 **50**, with **20 ignored**. The first Rust attempt had five generated-package
 dependency-download failures because crates.io DNS was blocked. Rerunning with
 cached dependencies and offline child Cargo calls passed.
+
+## GraphQL Postman and generated CLI outputs
+
+The [tool-output test record](../verification-results/graphql-tools-2026-10-10.json)
+covers native GraphQL Postman collections/environments and Rust/TypeScript CLI
+packages. Postman validates against the pinned official collection2.1 schema and
+executes native GraphQL requests in Newman6.2.1 against GraphQL.js16.14.2. CLI
+checks compile generated packages and exercise queries, mutations, omission/null,
+variables files, authentication, partial data, GraphQL errors and malformed responses.
+Large CLI fixtures contain 301–305 operations and test deterministic ordering and
+bounded modules. Provider substitution, revision-checked operation blocks and
+regeneration are covered separately.
+
+Ordinary Postman tests pass **15**, with **4 ignored**; explicit native checks pass
+**7**. Rust CLI explicit native checks pass **4**; existing HTTP checks pass **6**,
+with **1 ignored**. TypeScript CLI ordinary checks pass **9**, with **2 ignored**;
+explicit GraphQL checks pass **4**, and the existing ignored HTTP compilation
+probe was separately executed successfully. Explicit native totals overlap the
+ordinary suites and are not additional distinct tests.
+
+Postman response hooks classify protocol status rather than asserting application
+success. CLIs print JSON envelopes with nonzero error/partial exit codes. Subscriptions,
+incremental delivery and GraphQL OAuth login discovery remain unsupported.
+The full workspace and 205-spec HTTP corpus were not rerun.
+
+Final entrypoint checks: CLI **128 passed, 9 ignored**; rebuilt npm SDK
+**77 passed, 0 skipped**. All changed crates, CLI and Node pass all-target Clippy
+with warnings denied. Formatting, whitespace and changed documentation links pass.
+Integration validation gaps and updated unsupported-output fixtures are recorded
+in the test record. Changes are unreleased.

@@ -1117,3 +1117,6 @@ mod tests {
         assert_eq!(command_parts(&operation), ["admin", "users", "get"]);
     }
 }
+
+mod graphql;
+pub use graphql::{Graphql, graphql};

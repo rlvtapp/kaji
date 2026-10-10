@@ -46,7 +46,9 @@ await generate({
 OpenAPI supports the established HTTP SDKs and helpers. GraphQL supports
 clients for all ten SDK languages and TypeScript query, validation and testing companions
 in this checkout. Generated GraphQL packages separate models, operations, transport
-and client code, with raw, flat and grouped call styles. RPC, events and workflows
+and client code, with raw, flat and grouped call styles. GraphQL also generates
+[Postman collections and executable CLIs](docs/reference/outputs/graphql-tools.md).
+RPC, events and workflows
 have their own supported pipelines.
 
 [Plugin support matrix](docs/plugin-support-matrix.md) ·

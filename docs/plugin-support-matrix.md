@@ -1,6 +1,6 @@
 # Poolster plugin support matrix
 
-Audited **9 October 2026**, against the unreleased alpha.2 implementation in this checkout.
+Audited **10 October 2026**, against the unreleased alpha.2 implementation in this checkout.
 Manifests still use `0.5.0-alpha.1`; the additions below are unreleased alpha.2
 work. This matrix describes implemented generation, not parser availability.
 For remaining work, start with the [native pipeline backlog](reference/inputs/native-pipelines.md#remaining-work).
@@ -45,9 +45,9 @@ limitations still apply. GraphQL is a separate contract even when its transport 
 | Ruby | Ruby HTTP SDK; GraphQL client with RBS | ✅ | ✅ | — | — | — | — |
 | Elixir | Elixir HTTP SDK; GraphQL client | ✅ | ✅ | — | — | — | — |
 | Swift | Swift HTTP SDK; GraphQL client | ✅ | ✅ | — | — | — | — |
-| Rust CLI | Rust command-line client | ✅ | — | — | — | — | — |
-| TypeScript CLI | TypeScript command-line client | ✅ | — | — | — | — | — |
-| Postman | Collections, environments and examples | ✅ | — | — | — | — | — |
+| Rust CLI | HTTP and fixed-operation GraphQL command-line client | ✅ | ✅ | — | — | — | — |
+| TypeScript CLI | HTTP and fixed-operation GraphQL command-line client | ✅ | ✅ | — | — | — | — |
+| Postman | HTTP collections/examples; GraphQL collections and environments | ✅ | ✅ | — | — | — | — |
 | Terraform | Terraform provider scaffolding | ✅ | — | — | — | — | — |
 
 The TypeScript output package contains several generators: `ts::sdk()` /
@@ -206,3 +206,20 @@ Latest source-layout verification: npm SDK **76 passed, 0 skipped**; CLI **127 p
 languages have generated compilation and local-server checks. Ignored full-suite
 tests are recorded separately. This batch did not rerun the full workspace or the
 205-spec HTTP corpus. See the [verification record](verification-results/graphql-source-layout-2026-10-09.json).
+
+## GraphQL collections and executable CLIs
+
+Postman and both CLI output plugins consume native `GraphqlOperations`. Named
+queries/mutations retain their fixed documents and variables. Generated Rust and
+TypeScript commands accept JSON variables or a variables file, endpoint and
+authentication headers; they print envelopes and return nonzero status for errors
+or partial results. Postman uses native GraphQL request bodies and editable
+environments. These outputs do not include subscriptions, incremental delivery,
+GraphQL OAuth login discovery or dynamically selected fields.
+
+See [configuration and usage](reference/outputs/graphql-tools.md). These additions
+are unreleased; HTTP generators retain their existing behavior.
+
+The [GraphQL tool verification record](verification-results/graphql-tools-2026-10-10.json)
+records generated compilation/runtime probes, actual Newman execution and preserved
+HTTP checks. Full-workspace and 205-spec HTTP corpus checks were not rerun for this addition.
