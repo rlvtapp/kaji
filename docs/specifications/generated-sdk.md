@@ -106,6 +106,94 @@ MUST remain distinguishable even when native tooling requires one source directo
 | Public exports | Thin entry points/barrels/loaders. Keep private helpers private; partition large export collections. |
 | Framework integration | Separate adapters and DI/configuration from portable models/operations. Reuse the portable generator. |
 
+### Per-file artifact rules
+
+Directory output SHOULD be the default. Each artifact has one clear role and a
+stable entity identity. “One type per file” means one public named model, enum or
+alias; an anonymous nested field shape does not automatically need a new file.
+Hoisting must preserve its selection/parent identity and recursive references.
+
+| File role | What belongs in it | What must stay elsewhere |
+| --- | --- | --- |
+| Named model | One public model and its own serialization/validation helpers or native partial declarations. | Unrelated models, operations and client configuration. |
+| Enum / named alias | One enum or alias with exact wire values and required conversion helpers. | Client methods and unrelated declarations. |
+| Variables / request | One operation's variables or request parameters, with required/optional/default semantics. | Selected result types and transport execution. |
+| Result / response | One operation's selected result or declared response shape, with related nested shapes where practical. | Input parameters and shared transport code. |
+| Operation | One raw callable and its exact document/wire descriptor; import its models and shared executor. | A copy of the HTTP client, shared codecs or other operations. |
+| Client facade | Constructor/configuration and forwarding methods, split into bounded parts when needed. | Embedded copies of every operation document and decoder. |
+| Group facade | One group, its client/context reference and forwarding methods. | Guessed protocol semantics or duplicate execution bodies. |
+| Runtime helper | One cohesive concern: transport, envelope/errors, presence, scalar codecs, SSE or incremental framing. | Entity-specific models and growing collections of operations. |
+| Validator / fixture | One model or operation's validator/fixture when supplied by a companion. | Invented support for unknown scalar domains. |
+| Hook / mock / CLI helper | One operation's integration plus imports of the selected SDK symbols. Shared adapters live separately. | Independent renaming or a duplicate SDK implementation. |
+| Export / loader | Imports/re-exports and any minimal initialization required by the language. | Business logic, request execution and large model declarations. |
+| Manifest / tool config | Native dependency, export, formatter and build settings owned by the package assembler. | Multiple plugins independently overwriting the same manifest. |
+| User extension | Clearly marked customization code with create-once/preservation behavior. | Code that regeneration silently overwrites. |
+
+For example, a TypeScript GraphQL package may expose:
+
+```text
+src/
+  index.ts
+  graphql/
+    models/User.ts
+    models/UserRole.ts
+    models/ReadUserVariables.ts
+    models/ReadUserResult.ts
+    operations/readUser.ts
+    client/Client.ts
+    groups/Users.ts
+    runtime/transport.ts
+    runtime/errors.ts
+    runtime/presence.ts
+    runtime/scalarCodecs.ts
+```
+
+This is a target layout illustration, not a claim about today's exact filenames.
+A GraphQL schema `User` model is emitted only if the generator actually needs it;
+`ReadUserResult` must describe its selection rather than import an over-broad
+schema model. Go maps these roles to separate same-package `.go` files; Java maps
+public types to class-matching files; other languages follow their profile below.
+Do not add empty directories or unused helpers merely to resemble the example.
+
+### Small source-quality rules
+
+- Filenames/extensions and namespace/module paths must agree with target tooling.
+  Export identifiers and filenames may have different native casing, but their
+  relationship must be deterministic and collision checked.
+- Every artifact needs a known owner, stable relative path, exported symbols and
+  dependencies. Companion plugins must use that metadata rather than guess paths.
+  This is a target requirement; the conformance audit must identify missing metadata.
+- Imports must be minimal, ordered by target conventions and rewritten together
+  with configured paths. Model files must not depend on operation/client facades;
+  shared presence/codec helpers are permitted.
+- Use UTF-8, deterministic line endings, a final newline and no trailing whitespace.
+  Do not include timestamps, machine-specific paths or secrets in generated banners.
+- Preserve useful descriptions/deprecation notes. Escape documentation and source
+  literals correctly; input text must not accidentally terminate comments or strings.
+- Export only intended public symbols. TypeScript should use named/type-only exports
+  where appropriate; native loaders must not depend on filesystem traversal order.
+- A generated-file banner should identify Poolster and ownership/customization
+  rules without a large repeated header. License notices remain configurable.
+- Changing one model/operation should primarily change its own files and necessary
+  dependents. Reordering input must not renumber unrelated files or facade parts.
+
+### Configurable layout target
+
+SDK authors SHOULD be able to configure output root, per-role directories,
+file/symbol naming, explicit grouping and public export depth through a validated
+layout resolver. All affected imports, manifests and companion references must
+follow the resolved layout. A filename resolver must not change the wire identity.
+
+Single-file output may be an explicit target-supported option for small packages;
+it must not be the default workaround for missing splitting. Incompatible grouping,
+namespace or size settings must produce diagnostics. These layout controls are
+specification requirements for future adoption, not newly implemented config keys.
+
+Kubb is a useful reference: its TypeScript generator offers directory output with
+one file per operation/schema, grouping and configurable barrel exports. Poolster
+uses the same small-artifact principle with native language layouts. See
+[Kubb's output options](https://www.kubb.dev/plugins/plugin-ts/reference/options).
+
 **Size rules:** the source grouping budget is **128 KiB per file**, measured on
 final formatted source. Split collections before exceeding that budget. A facade
 SHOULD contain at most **64 forwarding methods per implementation part**; native
@@ -255,7 +343,7 @@ Concrete adoption work:
 1. **Formatting first:** remove compact one-line PHP model/method/runtime generation,
    including Symfony's reused SDK. Audit all other targets against their formatter
    profile and verify final emitted source, not Rust template formatting.
-2. **Enforce final-source budgets:** confirm every generator measures post-format
+2. **Enforce per-file roles and final-source budgets:** confirm every generator measures post-format
    bytes and partitions facades/exports consistently; keep atomic diagnostics.
 3. **Publish naming and style conformance:** audit stable name reservation, grouped
    mappings, raw availability and clean public imports per target and protocol.
